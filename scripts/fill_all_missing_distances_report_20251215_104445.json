@@ -1,0 +1,13 @@
+{
+    "started_at": "2025-12-15T10:44:45+00:00",
+    "factor": 1.3,
+    "total_places": 322,
+    "total_missing_pairs": 1264,
+    "filled_symmetric": 706,
+    "filled_haversine": 558,
+    "skipped_no_coords": 0,
+    "errors": [],
+    "sample_errors": [],
+    "processed_pairs": 32340,
+    "finished_at": "2025-12-15T10:44:48+00:00"
+}

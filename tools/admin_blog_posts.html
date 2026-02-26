@@ -1,0 +1,2855 @@
+<!DOCTYPE html>
+<html
+    lang="pl"
+    dir="ltr"
+    class="fi min-h-screen"
+>
+    <head>
+        
+
+        <meta charset="utf-8" />
+        <meta name="csrf-token" content="q79a9ePNzPalFTcT6FdGkdzp9ftNHAxHkvwXKiZ3" />
+        <meta name="viewport" content="width=device-width, initial-scale=1" />
+
+        
+        
+        <title>
+            Blog Posts -  Laravel
+        </title>
+
+        
+
+        <style>
+            [x-cloak=''],
+            [x-cloak='x-cloak'],
+            [x-cloak='1'] {
+                display: none !important;
+            }
+
+            @media (max-width: 1023px) {
+                [x-cloak='-lg'] {
+                    display: none !important;
+                }
+            }
+
+            @media (min-width: 1024px) {
+                [x-cloak='lg'] {
+                    display: none !important;
+                }
+            }
+        </style>
+
+        <link
+            href="http://localhost/css/filament/forms/forms.css?v=3.3.20.0"
+            rel="stylesheet"
+            data-navigate-track
+        />
+                <link
+            href="http://localhost/css/filament/support/support.css?v=3.3.20.0"
+            rel="stylesheet"
+            data-navigate-track
+        />
+                <link
+            href="http://localhost/css/mokhosh/filament-kanban/filament-kanban-styles.css?v=2.10.0.0"
+            rel="stylesheet"
+            data-navigate-track
+        />
+                <link
+            href="https://sor3v1b.test/build/assets/css/app.Cwavedx7.css"
+            rel="stylesheet"
+            data-navigate-track
+        />
+    
+<style>
+    :root {
+         --danger-50:254, 242, 242;  --danger-100:254, 226, 226;  --danger-200:254, 202, 202;  --danger-300:252, 165, 165;  --danger-400:248, 113, 113;  --danger-500:239, 68, 68;  --danger-600:220, 38, 38;  --danger-700:185, 28, 28;  --danger-800:153, 27, 27;  --danger-900:127, 29, 29;  --danger-950:69, 10, 10;  --gray-50:250, 250, 250;  --gray-100:244, 244, 245;  --gray-200:228, 228, 231;  --gray-300:212, 212, 216;  --gray-400:161, 161, 170;  --gray-500:113, 113, 122;  --gray-600:82, 82, 91;  --gray-700:63, 63, 70;  --gray-800:39, 39, 42;  --gray-900:24, 24, 27;  --gray-950:9, 9, 11;  --info-50:239, 246, 255;  --info-100:219, 234, 254;  --info-200:191, 219, 254;  --info-300:147, 197, 253;  --info-400:96, 165, 250;  --info-500:59, 130, 246;  --info-600:37, 99, 235;  --info-700:29, 78, 216;  --info-800:30, 64, 175;  --info-900:30, 58, 138;  --info-950:23, 37, 84;  --primary-50:255, 251, 235;  --primary-100:254, 243, 199;  --primary-200:253, 230, 138;  --primary-300:252, 211, 77;  --primary-400:251, 191, 36;  --primary-500:245, 158, 11;  --primary-600:217, 119, 6;  --primary-700:180, 83, 9;  --primary-800:146, 64, 14;  --primary-900:120, 53, 15;  --primary-950:69, 26, 3;  --success-50:240, 253, 244;  --success-100:220, 252, 231;  --success-200:187, 247, 208;  --success-300:134, 239, 172;  --success-400:74, 222, 128;  --success-500:34, 197, 94;  --success-600:22, 163, 74;  --success-700:21, 128, 61;  --success-800:22, 101, 52;  --success-900:20, 83, 45;  --success-950:5, 46, 22;  --warning-50:255, 251, 235;  --warning-100:254, 243, 199;  --warning-200:253, 230, 138;  --warning-300:252, 211, 77;  --warning-400:251, 191, 36;  --warning-500:245, 158, 11;  --warning-600:217, 119, 6;  --warning-700:180, 83, 9;  --warning-800:146, 64, 14;  --warning-900:120, 53, 15;  --warning-950:69, 26, 3;     }
+</style>
+
+        <link
+            href="http://localhost/css/filament/filament/app.css?v=3.3.20.0"
+            rel="stylesheet"
+            data-navigate-track
+        />
+        
+            <link rel="preconnect" href="https://fonts.bunny.net">
+            <link href="https://fonts.bunny.net/css?family=inter:400,500,600,700&display=swap" rel="stylesheet" />
+        
+
+        <style>
+            :root {
+                --font-family: 'Inter';
+                --sidebar-width: 20rem;
+                --collapsed-sidebar-width: 4.5rem;
+                --default-theme-mode: system;
+            }
+        </style>
+
+        
+        
+
+                    <script>
+                const loadDarkMode = () => {
+                    window.theme = localStorage.getItem('theme') ?? 'system'
+                    if (
+                        window.theme === 'dark' ||
+                        (window.theme === 'system' &&
+                            window.matchMedia('(prefers-color-scheme: dark)')
+                                .matches)
+                    ) {
+                        document.documentElement.classList.add('dark')
+                    }
+                }
+
+                loadDarkMode()
+
+                document.addEventListener('livewire:navigated', loadDarkMode)
+            </script>
+        
+        
+    <!-- Livewire Styles --><style >[wire\:loading][wire\:loading], [wire\:loading\.delay][wire\:loading\.delay], [wire\:loading\.inline-block][wire\:loading\.inline-block], [wire\:loading\.inline][wire\:loading\.inline], [wire\:loading\.block][wire\:loading\.block], [wire\:loading\.flex][wire\:loading\.flex], [wire\:loading\.table][wire\:loading\.table], [wire\:loading\.grid][wire\:loading\.grid], [wire\:loading\.inline-flex][wire\:loading\.inline-flex] {display: none;}[wire\:loading\.delay\.none][wire\:loading\.delay\.none], [wire\:loading\.delay\.shortest][wire\:loading\.delay\.shortest], [wire\:loading\.delay\.shorter][wire\:loading\.delay\.shorter], [wire\:loading\.delay\.short][wire\:loading\.delay\.short], [wire\:loading\.delay\.default][wire\:loading\.delay\.default], [wire\:loading\.delay\.long][wire\:loading\.delay\.long], [wire\:loading\.delay\.longer][wire\:loading\.delay\.longer], [wire\:loading\.delay\.longest][wire\:loading\.delay\.longest] {display: none;}[wire\:offline][wire\:offline] {display: none;}[wire\:dirty]:not(textarea):not(input):not(select) {display: none;}:root {--livewire-progress-bar-color: #2299dd;}[x-cloak] {display: none !important;}[wire\:cloak] {display: none !important;}</style>
+</head>
+
+    <body
+        class="fi-body fi-panel-admin min-h-screen bg-gray-50 font-normal text-gray-950 antialiased dark:bg-gray-950 dark:text-white"
+    >
+        
+
+        <div
+        class="fi-layout flex min-h-screen w-full flex-row-reverse overflow-x-clip"
+    >
+        <div
+                            x-data="{}"
+                x-bind:style="'display: flex; opacity:1;'" 
+                        class="fi-main-ctn w-screen flex-1 flex-col opacity-0"
+        >
+                            
+
+                <div
+    class="fi-topbar sticky top-0 z-20 overflow-x-clip"
+>
+    <nav
+        class="flex h-16 items-center gap-x-4 bg-white px-4 shadow-sm ring-1 ring-gray-950/5 dark:bg-gray-900 dark:ring-white/10 md:px-6 lg:px-8"
+    >
+        
+
+                    <button
+                                style="--c-300:var(--gray-300);--c-400:var(--gray-400);--c-500:var(--gray-500);--c-600:var(--gray-600);" class="fi-icon-btn relative flex items-center justify-center rounded-lg outline-none transition duration-75 focus-visible:ring-2 -m-1.5 h-9 w-9 text-gray-400 hover:text-gray-500 focus-visible:ring-primary-600 dark:text-gray-500 dark:hover:text-gray-400 dark:focus-visible:ring-primary-500 fi-color-gray fi-topbar-open-sidebar-btn lg:hidden" title="Rozwiń pasek boczny" type="button" wire:loading.attr="disabled" x-cloak="x-cloak" x-data="{}" x-on:click="$store.sidebar.open()" x-show="! $store.sidebar.isOpen"
+    >
+                    <span class="sr-only">
+                Rozwiń pasek boczny
+            </span>
+        
+        <!--[if BLOCK]><![endif]-->    <svg class="fi-icon-btn-icon h-6 w-6" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" aria-hidden="true" data-slot="icon">
+  <path stroke-linecap="round" stroke-linejoin="round" d="M3.75 6.75h16.5M3.75 12h16.5m-16.5 5.25h16.5"/>
+</svg><!--[if ENDBLOCK]><![endif]-->
+
+        
+            </button>
+
+            <button
+                                style="--c-300:var(--gray-300);--c-400:var(--gray-400);--c-500:var(--gray-500);--c-600:var(--gray-600);" class="fi-icon-btn relative flex items-center justify-center rounded-lg outline-none transition duration-75 focus-visible:ring-2 -m-1.5 h-9 w-9 text-gray-400 hover:text-gray-500 focus-visible:ring-primary-600 dark:text-gray-500 dark:hover:text-gray-400 dark:focus-visible:ring-primary-500 fi-color-gray fi-topbar-close-sidebar-btn lg:hidden" title="Zwiń pasek boczny" type="button" wire:loading.attr="disabled" x-cloak="x-cloak" x-data="{}" x-on:click="$store.sidebar.close()" x-show="$store.sidebar.isOpen"
+    >
+                    <span class="sr-only">
+                Zwiń pasek boczny
+            </span>
+        
+        <!--[if BLOCK]><![endif]-->    <svg class="fi-icon-btn-icon h-6 w-6" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" aria-hidden="true" data-slot="icon">
+  <path stroke-linecap="round" stroke-linejoin="round" d="M6 18 18 6M6 6l12 12"/>
+</svg><!--[if ENDBLOCK]><![endif]-->
+
+        
+            </button>
+        
+        
+        <div
+                            x-persist="topbar.end.panel-admin"
+                        class="ms-auto flex items-center gap-x-4"
+        >
+            
+
+            
+            
+
+                            
+                <div
+    x-data="{
+        toggle: function (event) {
+            $refs.panel.toggle(event)
+        },
+
+        open: function (event) {
+            $refs.panel.open(event)
+        },
+
+        close: function (event) {
+            $refs.panel.close(event)
+        },
+    }"
+    class="fi-dropdown fi-user-menu"
+>
+    <div
+        x-on:click="toggle"
+        class="fi-dropdown-trigger flex cursor-pointer"
+    >
+        <button
+            aria-label="Menu użytkownika"
+            type="button"
+            class="shrink-0"
+        >
+            <img
+    class="fi-avatar object-cover object-center fi-circular rounded-full h-8 w-8 fi-user-avatar" src="https://ui-avatars.com/api/?name=M+J&amp;color=FFFFFF&amp;background=09090b" alt="Awatar Marcin Jaszczynski"
+/>
+        </button>
+    </div>
+
+            <div
+            x-cloak
+            x-float.placement.bottom-end.flip.teleport.offset="{ offset: 8,  }"
+            x-ref="panel"
+            x-transition:enter-start="opacity-0"
+            x-transition:leave-end="opacity-0"
+                        class="fi-dropdown-panel absolute z-10 w-screen divide-y divide-gray-100 rounded-lg bg-white shadow-lg ring-1 ring-gray-950/5 transition dark:divide-white/5 dark:bg-gray-900 dark:ring-white/10 !max-w-[14rem]"
+            style=""
+        >
+            <div
+    class="fi-dropdown-header flex w-full gap-2 p-3 text-sm  fi-dropdown-header-color-gray fi-color-gray"
+>
+            <!--[if BLOCK]><![endif]-->    <svg class="fi-dropdown-header-icon h-5 w-5 text-gray-400 dark:text-gray-500" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true" data-slot="icon">
+  <path fill-rule="evenodd" d="M18 10a8 8 0 1 1-16 0 8 8 0 0 1 16 0Zm-5.5-2.5a2.5 2.5 0 1 1-5 0 2.5 2.5 0 0 1 5 0ZM10 12a5.99 5.99 0 0 0-4.793 2.39A6.483 6.483 0 0 0 10 16.5a6.483 6.483 0 0 0 4.793-2.11A5.99 5.99 0 0 0 10 12Z" clip-rule="evenodd"/>
+</svg><!--[if ENDBLOCK]><![endif]-->
+    
+    <span
+        class="fi-dropdown-header-label flex-1 truncate text-start text-gray-700 dark:text-gray-200"
+        style=""
+    >
+        Marcin Jaszczynski
+    </span>
+</div>
+        
+        
+    
+            <div class="fi-dropdown-list p-1">
+    <div
+    x-data="{ theme: null }"
+    x-init="
+        $watch('theme', () => {
+            $dispatch('theme-changed', theme)
+        })
+
+        theme = localStorage.getItem('theme') || 'system'    "
+    class="fi-theme-switcher grid grid-flow-col gap-x-1"
+>
+    <button
+    aria-label="Tryb jasny"
+    type="button"
+    x-on:click="(theme = 'light') && close()"
+    x-tooltip="{
+        content: 'Tryb jasny',
+        theme: $store.theme,
+    }"
+    class="fi-theme-switcher-btn flex justify-center rounded-md p-2 outline-none transition duration-75 hover:bg-gray-50 focus-visible:bg-gray-50 dark:hover:bg-white/5 dark:focus-visible:bg-white/5"
+    x-bind:class="
+        theme === 'light'            ? 'fi-active bg-gray-50 text-primary-500 dark:bg-white/5 dark:text-primary-400'
+            : 'text-gray-400 hover:text-gray-500 focus-visible:text-gray-500 dark:text-gray-500 dark:hover:text-gray-400 dark:focus-visible:text-gray-400'
+    "
+>
+    <!--[if BLOCK]><![endif]-->    <svg class="h-5 w-5" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true" data-slot="icon">
+  <path d="M10 2a.75.75 0 0 1 .75.75v1.5a.75.75 0 0 1-1.5 0v-1.5A.75.75 0 0 1 10 2ZM10 15a.75.75 0 0 1 .75.75v1.5a.75.75 0 0 1-1.5 0v-1.5A.75.75 0 0 1 10 15ZM10 7a3 3 0 1 0 0 6 3 3 0 0 0 0-6ZM15.657 5.404a.75.75 0 1 0-1.06-1.06l-1.061 1.06a.75.75 0 0 0 1.06 1.06l1.06-1.06ZM6.464 14.596a.75.75 0 1 0-1.06-1.06l-1.06 1.06a.75.75 0 0 0 1.06 1.06l1.06-1.06ZM18 10a.75.75 0 0 1-.75.75h-1.5a.75.75 0 0 1 0-1.5h1.5A.75.75 0 0 1 18 10ZM5 10a.75.75 0 0 1-.75.75h-1.5a.75.75 0 0 1 0-1.5h1.5A.75.75 0 0 1 5 10ZM14.596 15.657a.75.75 0 0 0 1.06-1.06l-1.06-1.061a.75.75 0 1 0-1.06 1.06l1.06 1.06ZM5.404 6.464a.75.75 0 0 0 1.06-1.06l-1.06-1.06a.75.75 0 1 0-1.061 1.06l1.06 1.06Z"/>
+</svg><!--[if ENDBLOCK]><![endif]-->
+</button>
+
+    <button
+    aria-label="Tryb ciemny"
+    type="button"
+    x-on:click="(theme = 'dark') && close()"
+    x-tooltip="{
+        content: 'Tryb ciemny',
+        theme: $store.theme,
+    }"
+    class="fi-theme-switcher-btn flex justify-center rounded-md p-2 outline-none transition duration-75 hover:bg-gray-50 focus-visible:bg-gray-50 dark:hover:bg-white/5 dark:focus-visible:bg-white/5"
+    x-bind:class="
+        theme === 'dark'            ? 'fi-active bg-gray-50 text-primary-500 dark:bg-white/5 dark:text-primary-400'
+            : 'text-gray-400 hover:text-gray-500 focus-visible:text-gray-500 dark:text-gray-500 dark:hover:text-gray-400 dark:focus-visible:text-gray-400'
+    "
+>
+    <!--[if BLOCK]><![endif]-->    <svg class="h-5 w-5" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true" data-slot="icon">
+  <path fill-rule="evenodd" d="M7.455 2.004a.75.75 0 0 1 .26.77 7 7 0 0 0 9.958 7.967.75.75 0 0 1 1.067.853A8.5 8.5 0 1 1 6.647 1.921a.75.75 0 0 1 .808.083Z" clip-rule="evenodd"/>
+</svg><!--[if ENDBLOCK]><![endif]-->
+</button>
+
+    <button
+    aria-label="Tryb systemowy"
+    type="button"
+    x-on:click="(theme = 'system') && close()"
+    x-tooltip="{
+        content: 'Tryb systemowy',
+        theme: $store.theme,
+    }"
+    class="fi-theme-switcher-btn flex justify-center rounded-md p-2 outline-none transition duration-75 hover:bg-gray-50 focus-visible:bg-gray-50 dark:hover:bg-white/5 dark:focus-visible:bg-white/5"
+    x-bind:class="
+        theme === 'system'            ? 'fi-active bg-gray-50 text-primary-500 dark:bg-white/5 dark:text-primary-400'
+            : 'text-gray-400 hover:text-gray-500 focus-visible:text-gray-500 dark:text-gray-500 dark:hover:text-gray-400 dark:focus-visible:text-gray-400'
+    "
+>
+    <!--[if BLOCK]><![endif]-->    <svg class="h-5 w-5" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true" data-slot="icon">
+  <path fill-rule="evenodd" d="M2 4.25A2.25 2.25 0 0 1 4.25 2h11.5A2.25 2.25 0 0 1 18 4.25v8.5A2.25 2.25 0 0 1 15.75 15h-3.105a3.501 3.501 0 0 0 1.1 1.677A.75.75 0 0 1 13.26 18H6.74a.75.75 0 0 1-.484-1.323A3.501 3.501 0 0 0 7.355 15H4.25A2.25 2.25 0 0 1 2 12.75v-8.5Zm1.5 0a.75.75 0 0 1 .75-.75h11.5a.75.75 0 0 1 .75.75v7.5a.75.75 0 0 1-.75.75H4.25a.75.75 0 0 1-.75-.75v-7.5Z" clip-rule="evenodd"/>
+</svg><!--[if ENDBLOCK]><![endif]-->
+</button>
+</div>
+</div>
+    
+    <div class="fi-dropdown-list p-1">
+    <form
+        action="http://localhost/admin/logout" method="post"
+    >
+        <input type="hidden" name="_token" value="q79a9ePNzPalFTcT6FdGkdzp9ftNHAxHkvwXKiZ3" autocomplete="off">
+        <button
+                                                type="submit"
+            style=";" class="fi-dropdown-list-item flex w-full items-center gap-2 whitespace-nowrap rounded-md p-2 text-sm transition-colors duration-75 outline-none disabled:pointer-events-none disabled:opacity-70 hover:bg-gray-50 focus-visible:bg-gray-50 dark:hover:bg-white/5 dark:focus-visible:bg-white/5 fi-dropdown-list-item-color-gray fi-color-gray"
+        >
+                            <!--[if BLOCK]><![endif]-->    <svg class="fi-dropdown-list-item-icon h-5 w-5 text-gray-400 dark:text-gray-500" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true" data-slot="icon">
+  <path fill-rule="evenodd" d="M3 4.25A2.25 2.25 0 0 1 5.25 2h5.5A2.25 2.25 0 0 1 13 4.25v2a.75.75 0 0 1-1.5 0v-2a.75.75 0 0 0-.75-.75h-5.5a.75.75 0 0 0-.75.75v11.5c0 .414.336.75.75.75h5.5a.75.75 0 0 0 .75-.75v-2a.75.75 0 0 1 1.5 0v2A2.25 2.25 0 0 1 10.75 18h-5.5A2.25 2.25 0 0 1 3 15.75V4.25Z" clip-rule="evenodd"/>
+  <path fill-rule="evenodd" d="M19 10a.75.75 0 0 0-.75-.75H8.704l1.048-.943a.75.75 0 1 0-1.004-1.114l-2.5 2.25a.75.75 0 0 0 0 1.114l2.5 2.25a.75.75 0 1 0 1.004-1.114l-1.048-.943h9.546A.75.75 0 0 0 19 10Z" clip-rule="evenodd"/>
+</svg><!--[if ENDBLOCK]><![endif]-->
+            
+            <span class="fi-dropdown-list-item-label flex-1 truncate text-start text-gray-700 dark:text-gray-200" style="">
+                Wyloguj się
+            </span>
+
+                    </button>
+    </form>
+</div>
+        </div>
+    </div>
+
+
+                    </div>
+
+        <div class="flex items-center space-x-3 mr-4" x-data="{ 
+    newTasksCount: 12,
+    unreadMessagesCount: 0,
+    refreshNotifications() {
+        // Odśwież dane
+        fetch('http://localhost/admin/notifications/counts')
+            .then(response => response.json())
+            .then(data => {
+                this.newTasksCount = data.tasks;
+                this.unreadMessagesCount = data.messages;
+                
+                // Wyświetl notyfikację jeśli są nowe
+                if (data.tasks > this.newTasksCount || data.messages > this.unreadMessagesCount) {
+                    // Można dodać toast notification tutaj
+                }
+            })
+            .catch(error => console.error('Błąd odświeżania powiadomień:', error));
+    }
+}" x-init="
+    // Odświeżaj co 30 sekund
+    setInterval(() => refreshNotifications(), 30000);
+    
+    // Odświeżaj przy focus na oknie
+    window.addEventListener('focus', () => refreshNotifications());
+    
+    // Nasłuchuj na event odświeżenia z Livewire
+    window.addEventListener('refresh-notifications', () => {
+        setTimeout(() => refreshNotifications(), 100);
+    });
+"
+@refresh-notifications.window="refreshNotifications()"
+>
+    <!-- Zadania -->
+    <a href="http://localhost/admin/tasks" 
+       class="relative flex items-center space-x-2 p-2 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors group">
+        <div class="relative">
+            <div class="flex h-8 w-8 items-center justify-center rounded-full bg-orange-100 dark:bg-orange-500/20 group-hover:bg-orange-200 dark:group-hover:bg-orange-500/30 transition-colors">
+                <svg class="h-4 w-4 text-orange-600 dark:text-orange-400" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor">
+                    <path stroke-linecap="round" stroke-linejoin="round" d="M9 12h3.75M9 15h3.75M9 18h3.75m3-7.5H21m-9.75-3.75h9.75m-9.75 3.75h9.75M3.375 7.5h.75c.621 0 1.125.504 1.125 1.125v9.75c0 .621-.504 1.125-1.125 1.125h-.75a1.125 1.125 0 01-1.125-1.125V8.625c0-.621.504-1.125 1.125-1.125z" />
+                </svg>
+            </div>
+                            <span x-show="newTasksCount > 0" class="absolute -top-1 -right-1 inline-flex items-center justify-center px-1.5 py-0.5 text-xs font-bold leading-none text-white bg-red-600 rounded-full min-w-[1.25rem] h-5 ring-1 ring-white dark:ring-gray-900"
+                      x-text="newTasksCount > 99 ? '99+' : newTasksCount">
+                </span>
+                    </div>
+        <div class="hidden sm:block">
+            <div class="text-xs font-medium text-gray-900 dark:text-white">
+                Zadania
+            </div>
+            <div class="text-xs text-gray-500 dark:text-gray-400">
+                <span x-show="newTasksCount > 0" x-text="newTasksCount + ' nowych'"></span>
+                <span x-show="newTasksCount === 0">Brak nowych</span>
+            </div>
+        </div>
+    </a>
+
+    <!-- Separator -->
+    <div class="h-8 w-px bg-gray-200 dark:bg-gray-700"></div>
+
+    <!-- Wiadomości -->
+    <a href="http://localhost/admin/chat"
+       class="relative flex items-center space-x-2 p-2 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors group">
+        <div class="relative">
+            <div class="flex h-8 w-8 items-center justify-center rounded-full bg-blue-100 dark:bg-blue-500/20 group-hover:bg-blue-200 dark:group-hover:bg-blue-500/30 transition-colors">
+                <svg class="h-4 w-4 text-blue-600 dark:text-blue-400" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor">
+                    <path stroke-linecap="round" stroke-linejoin="round" d="M8.625 9.75a.375.375 0 11-.75 0 .375.375 0 01.75 0zm0 0H8.25m4.125 0a.375.375 0 11-.75 0 .375.375 0 01.75 0zm0 0H12m4.125 0a.375.375 0 11-.75 0 .375.375 0 01.75 0zm0 0h-.375m-13.5 3.01c0 1.6 1.123 2.994 2.707 3.227 1.087.16 2.185.283 3.293.369V21l4.184-4.183a1.14 1.14 0 01.778-.332 48.294 48.294 0 005.83-.498c1.585-.233 2.708-1.626 2.708-3.228V6.741c0-1.602-1.123-2.995-2.707-3.228A48.394 48.394 0 0012 3c-2.392 0-4.744.175-7.043.513C3.373 3.746 2.25 5.14 2.25 6.741v6.018z" />
+                </svg>
+            </div>
+                    </div>
+        <div class="hidden sm:block">
+            <div class="text-xs font-medium text-gray-900 dark:text-white">
+                Czat
+            </div>
+            <div class="text-xs text-gray-500 dark:text-gray-400">
+                <span x-show="unreadMessagesCount > 0" x-text="unreadMessagesCount + ' nowych'"></span>
+                <span x-show="unreadMessagesCount === 0">Brak nowych</span>
+            </div>
+        </div>
+    </a>
+</div>
+
+    </nav>
+</div>
+
+                
+            
+            <main
+                class="fi-main mx-auto h-full w-full px-4 md:px-6 lg:px-8 max-w-7xl"
+            >
+                
+
+                <div wire:snapshot="{&quot;data&quot;:{&quot;isTableReordering&quot;:false,&quot;tableFilters&quot;:null,&quot;tableGrouping&quot;:null,&quot;tableGroupingDirection&quot;:null,&quot;tableSearch&quot;:&quot;&quot;,&quot;tableSortColumn&quot;:null,&quot;tableSortDirection&quot;:null,&quot;activeTab&quot;:null,&quot;mountedActions&quot;:[[],{&quot;s&quot;:&quot;arr&quot;}],&quot;mountedActionsArguments&quot;:[[],{&quot;s&quot;:&quot;arr&quot;}],&quot;mountedActionsData&quot;:[[],{&quot;s&quot;:&quot;arr&quot;}],&quot;defaultAction&quot;:null,&quot;defaultActionArguments&quot;:null,&quot;componentFileAttachments&quot;:[[],{&quot;s&quot;:&quot;arr&quot;}],&quot;mountedFormComponentActions&quot;:[[],{&quot;s&quot;:&quot;arr&quot;}],&quot;mountedFormComponentActionsArguments&quot;:[[],{&quot;s&quot;:&quot;arr&quot;}],&quot;mountedFormComponentActionsData&quot;:[[],{&quot;s&quot;:&quot;arr&quot;}],&quot;mountedFormComponentActionsComponents&quot;:[[],{&quot;s&quot;:&quot;arr&quot;}],&quot;mountedInfolistActions&quot;:[[],{&quot;s&quot;:&quot;arr&quot;}],&quot;mountedInfolistActionsData&quot;:[[],{&quot;s&quot;:&quot;arr&quot;}],&quot;mountedInfolistActionsComponent&quot;:null,&quot;mountedInfolistActionsInfolist&quot;:null,&quot;isTableLoaded&quot;:false,&quot;tableRecordsPerPage&quot;:10,&quot;tableColumnSearches&quot;:[[],{&quot;s&quot;:&quot;arr&quot;}],&quot;toggledTableColumns&quot;:[[],{&quot;s&quot;:&quot;arr&quot;}],&quot;mountedTableActions&quot;:[[],{&quot;s&quot;:&quot;arr&quot;}],&quot;mountedTableActionsData&quot;:[[],{&quot;s&quot;:&quot;arr&quot;}],&quot;mountedTableActionsArguments&quot;:[[],{&quot;s&quot;:&quot;arr&quot;}],&quot;mountedTableActionRecord&quot;:null,&quot;defaultTableAction&quot;:null,&quot;defaultTableActionArguments&quot;:null,&quot;defaultTableActionRecord&quot;:null,&quot;selectedTableRecords&quot;:[[],{&quot;s&quot;:&quot;arr&quot;}],&quot;mountedTableBulkAction&quot;:null,&quot;mountedTableBulkActionData&quot;:[[],{&quot;s&quot;:&quot;arr&quot;}],&quot;tableDeferredFilters&quot;:null,&quot;paginators&quot;:[{&quot;page&quot;:1},{&quot;s&quot;:&quot;arr&quot;}]},&quot;memo&quot;:{&quot;id&quot;:&quot;iJCDF7XC8TMoi7nbPh2y&quot;,&quot;name&quot;:&quot;app.filament.resources.blog-post-resource.pages.list-blog-posts&quot;,&quot;path&quot;:&quot;admin\/blog-posts&quot;,&quot;method&quot;:&quot;GET&quot;,&quot;children&quot;:[],&quot;scripts&quot;:[],&quot;assets&quot;:[],&quot;errors&quot;:[],&quot;locale&quot;:&quot;pl&quot;},&quot;checksum&quot;:&quot;70319744e64b1537002293d9ae11e8373538ebe0ab77116c123751d61c6570f3&quot;}" wire:effects="{&quot;url&quot;:{&quot;isTableReordering&quot;:{&quot;as&quot;:null,&quot;use&quot;:&quot;replace&quot;,&quot;alwaysShow&quot;:false,&quot;except&quot;:null},&quot;tableFilters&quot;:{&quot;as&quot;:null,&quot;use&quot;:&quot;replace&quot;,&quot;alwaysShow&quot;:false,&quot;except&quot;:null},&quot;tableGrouping&quot;:{&quot;as&quot;:null,&quot;use&quot;:&quot;replace&quot;,&quot;alwaysShow&quot;:false,&quot;except&quot;:null},&quot;tableGroupingDirection&quot;:{&quot;as&quot;:null,&quot;use&quot;:&quot;replace&quot;,&quot;alwaysShow&quot;:false,&quot;except&quot;:null},&quot;tableSearch&quot;:{&quot;as&quot;:null,&quot;use&quot;:&quot;replace&quot;,&quot;alwaysShow&quot;:false,&quot;except&quot;:null},&quot;tableSortColumn&quot;:{&quot;as&quot;:null,&quot;use&quot;:&quot;replace&quot;,&quot;alwaysShow&quot;:false,&quot;except&quot;:null},&quot;tableSortDirection&quot;:{&quot;as&quot;:null,&quot;use&quot;:&quot;replace&quot;,&quot;alwaysShow&quot;:false,&quot;except&quot;:null},&quot;activeTab&quot;:{&quot;as&quot;:null,&quot;use&quot;:&quot;replace&quot;,&quot;alwaysShow&quot;:false,&quot;except&quot;:null},&quot;defaultAction&quot;:{&quot;as&quot;:&quot;action&quot;,&quot;use&quot;:&quot;replace&quot;,&quot;alwaysShow&quot;:false,&quot;except&quot;:null},&quot;defaultActionArguments&quot;:{&quot;as&quot;:&quot;actionArguments&quot;,&quot;use&quot;:&quot;replace&quot;,&quot;alwaysShow&quot;:false,&quot;except&quot;:null},&quot;defaultTableAction&quot;:{&quot;as&quot;:&quot;tableAction&quot;,&quot;use&quot;:&quot;replace&quot;,&quot;alwaysShow&quot;:false,&quot;except&quot;:null},&quot;defaultTableActionArguments&quot;:{&quot;as&quot;:&quot;tableActionArguments&quot;,&quot;use&quot;:&quot;replace&quot;,&quot;alwaysShow&quot;:false,&quot;except&quot;:null},&quot;defaultTableActionRecord&quot;:{&quot;as&quot;:&quot;tableActionRecord&quot;,&quot;use&quot;:&quot;replace&quot;,&quot;alwaysShow&quot;:false,&quot;except&quot;:null},&quot;paginators.page&quot;:{&quot;as&quot;:&quot;page&quot;,&quot;use&quot;:&quot;push&quot;,&quot;alwaysShow&quot;:false,&quot;except&quot;:null}}}" wire:id="iJCDF7XC8TMoi7nbPh2y"
+    class="fi-page fi-resource-list-records-page fi-resource-blog-posts"
+>
+    
+
+    <section
+        class="flex flex-col gap-y-8 py-8"
+    >
+        <!--[if BLOCK]><![endif]-->            
+            <header
+    class="fi-header flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between"
+>
+    <div>
+        <!--[if BLOCK]><![endif]-->            <nav class="fi-breadcrumbs mb-2 hidden sm:block">
+    <ol class="fi-breadcrumbs-list flex flex-wrap items-center gap-x-2">
+        <!--[if BLOCK]><![endif]-->            <li class="fi-breadcrumbs-item flex items-center gap-x-2">
+                <!--[if BLOCK]><![endif]--><!--[if ENDBLOCK]><![endif]-->
+
+                <!--[if BLOCK]><![endif]-->                    <a
+                        href="http://localhost/admin/blog-posts"
+                        class="fi-breadcrumbs-item-label text-sm font-medium text-gray-500 dark:text-gray-400 transition duration-75 hover:text-gray-700 dark:hover:text-gray-200"
+                    >
+                        Blog Posts
+                    </a>
+                <!--[if ENDBLOCK]><![endif]-->
+            </li>
+                    <li class="fi-breadcrumbs-item flex items-center gap-x-2">
+                <!--[if BLOCK]><![endif]-->                    <!--[if BLOCK]><![endif]-->    <svg class="fi-breadcrumbs-item-separator flex h-5 w-5 text-gray-400 dark:text-gray-500 rtl:hidden" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true" data-slot="icon">
+  <path fill-rule="evenodd" d="M8.22 5.22a.75.75 0 0 1 1.06 0l4.25 4.25a.75.75 0 0 1 0 1.06l-4.25 4.25a.75.75 0 0 1-1.06-1.06L11.94 10 8.22 6.28a.75.75 0 0 1 0-1.06Z" clip-rule="evenodd"/>
+</svg><!--[if ENDBLOCK]><![endif]-->
+
+                    <!--[if BLOCK]><![endif]-->    <svg class="fi-breadcrumbs-item-separator flex h-5 w-5 text-gray-400 dark:text-gray-500 ltr:hidden" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true" data-slot="icon">
+  <path fill-rule="evenodd" d="M11.78 5.22a.75.75 0 0 1 0 1.06L8.06 10l3.72 3.72a.75.75 0 1 1-1.06 1.06l-4.25-4.25a.75.75 0 0 1 0-1.06l4.25-4.25a.75.75 0 0 1 1.06 0Z" clip-rule="evenodd"/>
+</svg><!--[if ENDBLOCK]><![endif]-->
+                <!--[if ENDBLOCK]><![endif]-->
+
+                <!--[if BLOCK]><![endif]-->                    <span class="fi-breadcrumbs-item-label text-sm font-medium text-gray-500 dark:text-gray-400">
+                        Lista
+                    </span>
+                <!--[if ENDBLOCK]><![endif]-->
+            </li>
+        <!--[if ENDBLOCK]><![endif]-->
+    </ol>
+</nav>
+        <!--[if ENDBLOCK]><![endif]-->
+
+        <h1
+            class="fi-header-heading text-2xl font-bold tracking-tight text-gray-950 dark:text-white sm:text-3xl"
+        >
+            Blog Posts
+        </h1>
+
+        <!--[if BLOCK]><![endif]--><!--[if ENDBLOCK]><![endif]-->
+    </div>
+
+    <div
+        class="flex shrink-0 items-center gap-3 sm:mt-7"
+    >
+        
+
+        <!--[if BLOCK]><![endif]-->            <!--[if BLOCK]><![endif]-->    <div
+        class="fi-ac gap-3 flex flex-wrap items-center justify-start"
+    >
+        <!--[if BLOCK]><![endif]-->            <!--[if BLOCK]><![endif]-->                <!--[if BLOCK]><![endif]--><!--[if ENDBLOCK]><![endif]-->
+
+<a
+            href="http://localhost/admin/blog-posts/create"
+                        style="--c-400:var(--primary-400);--c-500:var(--primary-500);--c-600:var(--primary-600);" class="fi-btn relative grid-flow-col items-center justify-center font-semibold outline-none transition duration-75 focus-visible:ring-2 rounded-lg fi-color-custom fi-btn-color-primary fi-color-primary fi-size-md fi-btn-size-md gap-1.5 px-3 py-2 text-sm inline-grid shadow-sm bg-custom-600 text-white hover:bg-custom-500 focus-visible:ring-custom-500/50 dark:bg-custom-500 dark:hover:bg-custom-400 dark:focus-visible:ring-custom-400/50 fi-ac-action fi-ac-btn-action"
+>
+    <!--[if BLOCK]><![endif]-->        <!--[if BLOCK]><![endif]--><!--[if ENDBLOCK]><![endif]-->
+
+        <!--[if BLOCK]><![endif]--><!--[if ENDBLOCK]><![endif]-->
+
+        <!--[if BLOCK]><![endif]--><!--[if ENDBLOCK]><![endif]-->
+    <!--[if ENDBLOCK]><![endif]-->
+
+    <span
+                class="fi-btn-label"
+    >
+        Utwórz
+    </span>
+
+    <!--[if BLOCK]><![endif]--><!--[if ENDBLOCK]><![endif]-->
+
+    <!--[if BLOCK]><![endif]--><!--[if ENDBLOCK]><![endif]-->
+
+    <!--[if BLOCK]><![endif]--><!--[if ENDBLOCK]><![endif]-->
+</a>
+
+            <!--[if ENDBLOCK]><![endif]-->
+        <!--[if ENDBLOCK]><![endif]-->
+    </div>
+<!--[if ENDBLOCK]><![endif]-->
+        <!--[if ENDBLOCK]><![endif]-->
+
+        
+    </div>
+</header>
+        <!--[if ENDBLOCK]><![endif]-->
+
+        <div
+            class=""
+        >
+            <!--[if BLOCK]><![endif]--><!--[if ENDBLOCK]><![endif]-->
+
+            <div
+                class="grid flex-1 auto-cols-fr gap-y-8"
+            >
+                
+
+                <!--[if BLOCK]><![endif]--><!--[if ENDBLOCK]><![endif]-->
+
+                
+
+                <div class="flex flex-col gap-y-6">
+        <!--[if BLOCK]><![endif]--><!--[if ENDBLOCK]><![endif]-->
+
+        
+
+        <div
+                x-load
+        x-load-src="http://localhost/js/filament/tables/components/table.js?v=3.3.20.0"
+    x-data="table"
+    class="fi-ta"
+>
+    <div
+    class="fi-ta-ctn divide-y divide-gray-200 overflow-hidden rounded-xl bg-white shadow-sm ring-1 ring-gray-950/5 dark:divide-white/10 dark:bg-gray-900 dark:ring-white/10"
+>
+    <div
+                        x-bind:hidden="! (true || (selectedRecords.length && 0))"
+            x-show="true || (selectedRecords.length && 0)"
+            class="fi-ta-header-ctn divide-y divide-gray-200 dark:divide-white/10"
+        >
+            
+
+            <!--[if BLOCK]><![endif]--><!--[if ENDBLOCK]><![endif]-->
+
+            
+
+            <!--[if BLOCK]><![endif]--><!--[if ENDBLOCK]><![endif]-->
+
+            
+
+            <div
+                                x-show="true || (selectedRecords.length && 0)"
+                class="fi-ta-header-toolbar flex items-center justify-between gap-x-4 px-4 py-3 sm:px-6"
+            >
+                
+
+                <div class="flex shrink-0 items-center gap-x-4">
+                    
+
+                    <!--[if BLOCK]><![endif]--><!--[if ENDBLOCK]><![endif]-->
+
+                    
+
+                    <!--[if BLOCK]><![endif]--><!--[if ENDBLOCK]><![endif]-->
+
+                    
+
+                    <!--[if BLOCK]><![endif]--><!--[if ENDBLOCK]><![endif]-->
+
+                    
+                </div>
+
+                <!--[if BLOCK]><![endif]-->                    <div class="ms-auto flex items-center gap-x-4">
+                        
+
+                        <!--[if BLOCK]><![endif]-->                            <div
+    x-id="['input']"
+    class="fi-ta-search-field"
+>
+    <label x-bind:for="$id('input')" class="sr-only">
+        Szukaj
+    </label>
+
+    <div
+        class="fi-input-wrp flex rounded-lg shadow-sm ring-1 transition duration-75 bg-white dark:bg-white/5 [&amp;:not(:has(.fi-ac-action:focus))]:focus-within:ring-2 ring-gray-950/10 dark:ring-white/20 [&amp;:not(:has(.fi-ac-action:focus))]:focus-within:ring-primary-600 dark:[&amp;:not(:has(.fi-ac-action:focus))]:focus-within:ring-primary-500"
+>
+    <!--[if BLOCK]><![endif]-->        <div
+                        class="fi-input-wrp-prefix items-center gap-x-3 ps-3 flex pe-2"
+        >
+            <!--[if BLOCK]><![endif]--><!--[if ENDBLOCK]><![endif]-->
+
+            <!--[if BLOCK]><![endif]-->                <!--[if BLOCK]><![endif]-->    <svg style=";" wire:loading.remove.delay.default="1" wire:target="tableSearch" class="fi-input-wrp-icon h-5 w-5 text-gray-400 dark:text-gray-500" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true" data-slot="icon">
+  <path fill-rule="evenodd" d="M9 3.5a5.5 5.5 0 1 0 0 11 5.5 5.5 0 0 0 0-11ZM2 9a7 7 0 1 1 12.452 4.391l3.328 3.329a.75.75 0 1 1-1.06 1.06l-3.329-3.328A7 7 0 0 1 2 9Z" clip-rule="evenodd"/>
+</svg><!--[if ENDBLOCK]><![endif]-->
+            <!--[if ENDBLOCK]><![endif]-->
+
+            <!--[if BLOCK]><![endif]-->                <svg
+    fill="none"
+    viewBox="0 0 24 24"
+    xmlns="http://www.w3.org/2000/svg"
+    class="animate-spin fi-input-wrp-icon h-5 w-5 text-gray-400 dark:text-gray-500" wire:loading.delay.default="" wire:target="tableSearch"
+>
+    <path
+        clip-rule="evenodd"
+        d="M12 19C15.866 19 19 15.866 19 12C19 8.13401 15.866 5 12 5C8.13401 5 5 8.13401 5 12C5 15.866 8.13401 19 12 19ZM12 22C17.5228 22 22 17.5228 22 12C22 6.47715 17.5228 2 12 2C6.47715 2 2 6.47715 2 12C2 17.5228 6.47715 22 12 22Z"
+        fill-rule="evenodd"
+        fill="currentColor"
+        opacity="0.2"
+    ></path>
+    <path
+        d="M2 12C2 6.47715 6.47715 2 12 2V5C8.13401 5 5 8.13401 5 12H2Z"
+        fill="currentColor"
+    ></path>
+</svg>
+            <!--[if ENDBLOCK]><![endif]-->
+
+            <!--[if BLOCK]><![endif]--><!--[if ENDBLOCK]><![endif]-->
+        </div>
+    <!--[if ENDBLOCK]><![endif]-->
+
+    <div
+                class="fi-input-wrp-input min-w-0 flex-1"
+    >
+        <input
+    class="fi-input block w-full border-none py-1.5 text-base text-gray-950 transition duration-75 placeholder:text-gray-400 focus:ring-0 disabled:text-gray-500 disabled:[-webkit-text-fill-color:theme(colors.gray.500)] disabled:placeholder:[-webkit-text-fill-color:theme(colors.gray.400)] dark:text-white dark:placeholder:text-gray-500 dark:disabled:text-gray-400 dark:disabled:[-webkit-text-fill-color:theme(colors.gray.400)] dark:disabled:placeholder:[-webkit-text-fill-color:theme(colors.gray.500)] sm:text-sm sm:leading-6 bg-white/0 ps-0 pe-3" autocomplete="off" maxlength="1000" placeholder="Szukaj" type="search" wire:key="iJCDF7XC8TMoi7nbPh2y.table.tableSearch.field.input" wire:model.live.debounce.500ms="tableSearch" x-bind:id="$id(&#039;input&#039;)" x-on:keyup="if ($event.key === &#039;Enter&#039;) { $wire.$refresh() }"
+/>
+    </div>
+
+    <!--[if BLOCK]><![endif]--><!--[if ENDBLOCK]><![endif]-->
+</div>
+</div>
+                        <!--[if ENDBLOCK]><![endif]-->
+
+                        
+
+                        <!--[if BLOCK]><![endif]--><!--[if ENDBLOCK]><![endif]-->
+                    </div>
+                <!--[if ENDBLOCK]><![endif]-->
+
+                
+            </div>
+
+            
+        </div>
+
+        <!--[if BLOCK]><![endif]--><!--[if ENDBLOCK]><![endif]-->
+
+        <!--[if BLOCK]><![endif]--><!--[if ENDBLOCK]><![endif]-->
+
+        <div
+                        class="fi-ta-content relative divide-y divide-gray-200 overflow-x-auto dark:divide-white/10 dark:border-t-white/10"
+        >
+            <!--[if BLOCK]><![endif]-->                <tr>
+                    <td colspan="3">
+                        <div
+    class="fi-ta-empty-state px-6 py-12"
+>
+    <div
+        class="fi-ta-empty-state-content mx-auto grid max-w-lg justify-items-center text-center"
+    >
+        <div
+            class="fi-ta-empty-state-icon-ctn mb-4 rounded-full bg-gray-100 p-3 dark:bg-gray-500/20"
+        >
+            <!--[if BLOCK]><![endif]-->    <svg class="fi-ta-empty-state-icon h-6 w-6 text-gray-500 dark:text-gray-400" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" aria-hidden="true" data-slot="icon">
+  <path stroke-linecap="round" stroke-linejoin="round" d="M6 18 18 6M6 6l12 12"/>
+</svg><!--[if ENDBLOCK]><![endif]-->
+        </div>
+
+        <h4
+    class="fi-ta-empty-state-heading text-base font-semibold leading-6 text-gray-950 dark:text-white"
+>
+    Nie znaleziono rekordów
+</h4>
+
+        <!--[if BLOCK]><![endif]--><!--[if ENDBLOCK]><![endif]-->
+
+        <!--[if BLOCK]><![endif]--><!--[if ENDBLOCK]><![endif]-->
+    </div>
+</div>
+                    </td>
+                </tr>
+            <!--[if ENDBLOCK]><![endif]-->
+        </div>
+
+        <!--[if BLOCK]><![endif]--><!--[if ENDBLOCK]><![endif]-->
+
+        <!--[if BLOCK]><![endif]--><!--[if ENDBLOCK]><![endif]-->
+</div>
+
+    <!--[if BLOCK]><![endif]-->    <form wire:submit.prevent="callMountedAction">
+        
+        <div
+        aria-modal="true"
+    role="dialog"
+    x-data="{
+        isOpen: false,
+
+        livewire: null,
+
+        close: function () {
+            this.isOpen = false
+
+            this.$refs.modalContainer.dispatchEvent(
+                new CustomEvent('modal-closed', { detail: { id: 'iJCDF7XC8TMoi7nbPh2y-action' } }),
+            )
+        },
+
+        open: function () {
+            this.$nextTick(() => {
+                this.isOpen = true
+
+                
+                this.$refs.modalContainer.dispatchEvent(
+                    new CustomEvent('modal-opened', { detail: { id: 'iJCDF7XC8TMoi7nbPh2y-action' } }),
+                )
+            })
+        },
+    }"
+            x-on:close-modal.window="if ($event.detail.id === 'iJCDF7XC8TMoi7nbPh2y-action') close()"
+        x-on:open-modal.window="if ($event.detail.id === 'iJCDF7XC8TMoi7nbPh2y-action') open()"
+        data-fi-modal-id="iJCDF7XC8TMoi7nbPh2y-action"
+        x-trap.noscroll="isOpen"
+    x-bind:class="{
+        'fi-modal-open': isOpen,
+    }"
+    class="fi-modal block"
+>
+    <!--[if BLOCK]><![endif]--><!--[if ENDBLOCK]><![endif]-->
+
+    <div x-cloak x-show="isOpen">
+        <div
+            aria-hidden="true"
+            x-show="isOpen"
+            x-transition.duration.300ms.opacity
+            class="fi-modal-close-overlay fixed inset-0 z-40 bg-gray-950/50 dark:bg-gray-950/75"
+        ></div>
+
+        <div
+            class="fixed inset-0 z-40 overflow-y-auto cursor-pointer"
+        >
+            <div
+                x-ref="modalContainer"
+                                    
+                    x-on:click.self="
+                        document.activeElement.selectionStart === undefined &&
+                            document.activeElement.selectionEnd === undefined &&
+                            $dispatch(&#039;close-modal&#039;, { id: &#039;iJCDF7XC8TMoi7nbPh2y-action&#039; })
+                    "
+                                class="relative grid min-h-full grid-rows-[1fr_auto_1fr] justify-items-center sm:grid-rows-[1fr_auto_3fr] p-4" x-on:closed-form-component-action-modal.window="if (($event.detail.id === 'iJCDF7XC8TMoi7nbPh2y') && $wire.mountedActions.length) open()" x-on:modal-closed.stop="if (!$event.detail?.id?.startsWith('iJCDF7XC8TMoi7nbPh2y-')) {
+                    return
+                }
+
+                const mountedActionShouldOpenModal = false
+
+
+                if (! mountedActionShouldOpenModal) {
+                    return
+                }
+
+                if ($wire.mountedFormComponentActions.length) {
+                    return
+                }
+
+                $wire.unmountAction(false, false)" x-on:opened-form-component-action-modal.window="if ($event.detail.id === 'iJCDF7XC8TMoi7nbPh2y') close()"
+            >
+                <div
+                    x-data="{ isShown: false }"
+                    x-init="
+                        $nextTick(() => {
+                            isShown = isOpen
+                            $watch('isOpen', () => (isShown = isOpen))
+                        })
+                    "
+                                            x-on:keydown.window.escape="$dispatch(&#039;close-modal&#039;, { id: &#039;iJCDF7XC8TMoi7nbPh2y-action&#039; })"
+                                        x-show="isShown"
+                    x-transition:enter="duration-300"
+                    x-transition:leave="duration-300"
+                                            x-transition:enter-start="scale-95 opacity-0"
+                        x-transition:enter-end="scale-100 opacity-100"
+                        x-transition:leave-start="scale-100 opacity-100"
+                        x-transition:leave-end="scale-95 opacity-0"
+                                        class="fi-modal-window pointer-events-auto relative row-start-2 flex w-full cursor-default flex-col bg-white shadow-xl ring-1 ring-gray-950/5 dark:bg-gray-900 dark:ring-white/10 mx-auto rounded-xl hidden max-w-sm"
+                >
+                    <!--[if BLOCK]><![endif]--><!--[if ENDBLOCK]><![endif]-->
+
+                    <!--[if BLOCK]><![endif]--><!--[if ENDBLOCK]><![endif]-->
+
+                    <!--[if BLOCK]><![endif]--><!--[if ENDBLOCK]><![endif]-->
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+    </form>
+
+    <!--[if ENDBLOCK]><![endif]-->
+
+<!--[if BLOCK]><![endif]-->    <form wire:submit.prevent="callMountedTableAction">
+        
+        <div
+        aria-modal="true"
+    role="dialog"
+    x-data="{
+        isOpen: false,
+
+        livewire: null,
+
+        close: function () {
+            this.isOpen = false
+
+            this.$refs.modalContainer.dispatchEvent(
+                new CustomEvent('modal-closed', { detail: { id: 'iJCDF7XC8TMoi7nbPh2y-table-action' } }),
+            )
+        },
+
+        open: function () {
+            this.$nextTick(() => {
+                this.isOpen = true
+
+                
+                this.$refs.modalContainer.dispatchEvent(
+                    new CustomEvent('modal-opened', { detail: { id: 'iJCDF7XC8TMoi7nbPh2y-table-action' } }),
+                )
+            })
+        },
+    }"
+            x-on:close-modal.window="if ($event.detail.id === 'iJCDF7XC8TMoi7nbPh2y-table-action') close()"
+        x-on:open-modal.window="if ($event.detail.id === 'iJCDF7XC8TMoi7nbPh2y-table-action') open()"
+        data-fi-modal-id="iJCDF7XC8TMoi7nbPh2y-table-action"
+        x-trap.noscroll="isOpen"
+    x-bind:class="{
+        'fi-modal-open': isOpen,
+    }"
+    class="fi-modal block"
+>
+    <!--[if BLOCK]><![endif]--><!--[if ENDBLOCK]><![endif]-->
+
+    <div x-cloak x-show="isOpen">
+        <div
+            aria-hidden="true"
+            x-show="isOpen"
+            x-transition.duration.300ms.opacity
+            class="fi-modal-close-overlay fixed inset-0 z-40 bg-gray-950/50 dark:bg-gray-950/75"
+        ></div>
+
+        <div
+            class="fixed inset-0 z-40 overflow-y-auto cursor-pointer"
+        >
+            <div
+                x-ref="modalContainer"
+                                    
+                    x-on:click.self="
+                        document.activeElement.selectionStart === undefined &&
+                            document.activeElement.selectionEnd === undefined &&
+                            $dispatch(&#039;close-modal&#039;, { id: &#039;iJCDF7XC8TMoi7nbPh2y-table-action&#039; })
+                    "
+                                class="relative grid min-h-full grid-rows-[1fr_auto_1fr] justify-items-center sm:grid-rows-[1fr_auto_3fr] p-4" x-on:closed-form-component-action-modal.window="if (($event.detail.id === 'iJCDF7XC8TMoi7nbPh2y') && $wire.mountedTableActions.length) open()" x-on:modal-closed.stop="if (!$event.detail?.id?.startsWith('iJCDF7XC8TMoi7nbPh2y-')) {
+                    return
+                }
+
+                const mountedTableActionShouldOpenModal = false
+
+
+                if (! mountedTableActionShouldOpenModal) {
+                    return
+                }
+
+                if ($wire.mountedFormComponentActions.length) {
+                    return
+                }
+
+                $wire.unmountTableAction(false, false)" x-on:opened-form-component-action-modal.window="if ($event.detail.id === 'iJCDF7XC8TMoi7nbPh2y') close()"
+            >
+                <div
+                    x-data="{ isShown: false }"
+                    x-init="
+                        $nextTick(() => {
+                            isShown = isOpen
+                            $watch('isOpen', () => (isShown = isOpen))
+                        })
+                    "
+                                            x-on:keydown.window.escape="$dispatch(&#039;close-modal&#039;, { id: &#039;iJCDF7XC8TMoi7nbPh2y-table-action&#039; })"
+                                        x-show="isShown"
+                    x-transition:enter="duration-300"
+                    x-transition:leave="duration-300"
+                                            x-transition:enter-start="scale-95 opacity-0"
+                        x-transition:enter-end="scale-100 opacity-100"
+                        x-transition:leave-start="scale-100 opacity-100"
+                        x-transition:leave-end="scale-95 opacity-0"
+                                        class="fi-modal-window pointer-events-auto relative row-start-2 flex w-full cursor-default flex-col bg-white shadow-xl ring-1 ring-gray-950/5 dark:bg-gray-900 dark:ring-white/10 mx-auto rounded-xl hidden max-w-sm"
+                >
+                    <!--[if BLOCK]><![endif]--><!--[if ENDBLOCK]><![endif]-->
+
+                    <!--[if BLOCK]><![endif]--><!--[if ENDBLOCK]><![endif]-->
+
+                    <!--[if BLOCK]><![endif]--><!--[if ENDBLOCK]><![endif]-->
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+    </form>
+
+    <form wire:submit.prevent="callMountedTableBulkAction">
+        
+        <div
+        aria-modal="true"
+    role="dialog"
+    x-data="{
+        isOpen: false,
+
+        livewire: null,
+
+        close: function () {
+            this.isOpen = false
+
+            this.$refs.modalContainer.dispatchEvent(
+                new CustomEvent('modal-closed', { detail: { id: 'iJCDF7XC8TMoi7nbPh2y-table-bulk-action' } }),
+            )
+        },
+
+        open: function () {
+            this.$nextTick(() => {
+                this.isOpen = true
+
+                
+                this.$refs.modalContainer.dispatchEvent(
+                    new CustomEvent('modal-opened', { detail: { id: 'iJCDF7XC8TMoi7nbPh2y-table-bulk-action' } }),
+                )
+            })
+        },
+    }"
+            x-on:close-modal.window="if ($event.detail.id === 'iJCDF7XC8TMoi7nbPh2y-table-bulk-action') close()"
+        x-on:open-modal.window="if ($event.detail.id === 'iJCDF7XC8TMoi7nbPh2y-table-bulk-action') open()"
+        data-fi-modal-id="iJCDF7XC8TMoi7nbPh2y-table-bulk-action"
+        x-trap.noscroll="isOpen"
+    x-bind:class="{
+        'fi-modal-open': isOpen,
+    }"
+    class="fi-modal block"
+>
+    <!--[if BLOCK]><![endif]--><!--[if ENDBLOCK]><![endif]-->
+
+    <div x-cloak x-show="isOpen">
+        <div
+            aria-hidden="true"
+            x-show="isOpen"
+            x-transition.duration.300ms.opacity
+            class="fi-modal-close-overlay fixed inset-0 z-40 bg-gray-950/50 dark:bg-gray-950/75"
+        ></div>
+
+        <div
+            class="fixed inset-0 z-40 overflow-y-auto cursor-pointer"
+        >
+            <div
+                x-ref="modalContainer"
+                                    
+                    x-on:click.self="
+                        document.activeElement.selectionStart === undefined &&
+                            document.activeElement.selectionEnd === undefined &&
+                            $dispatch(&#039;close-modal&#039;, { id: &#039;iJCDF7XC8TMoi7nbPh2y-table-bulk-action&#039; })
+                    "
+                                class="relative grid min-h-full grid-rows-[1fr_auto_1fr] justify-items-center sm:grid-rows-[1fr_auto_3fr] p-4" x-on:closed-form-component-action-modal.window="if (($event.detail.id === 'iJCDF7XC8TMoi7nbPh2y') && $wire.mountedTableBulkAction) open()" x-on:modal-closed.stop="if (!$event.detail?.id?.startsWith('iJCDF7XC8TMoi7nbPh2y-')) {
+                    return
+                }
+
+                const mountedTableBulkActionShouldOpenModal = false
+
+
+                if (! mountedTableBulkActionShouldOpenModal) {
+                    return
+                }
+
+                if ($wire.mountedFormComponentActions.length) {
+                    return
+                }
+
+                $wire.unmountTableBulkAction(false)" x-on:opened-form-component-action-modal.window="if ($event.detail.id === 'iJCDF7XC8TMoi7nbPh2y') close()"
+            >
+                <div
+                    x-data="{ isShown: false }"
+                    x-init="
+                        $nextTick(() => {
+                            isShown = isOpen
+                            $watch('isOpen', () => (isShown = isOpen))
+                        })
+                    "
+                                            x-on:keydown.window.escape="$dispatch(&#039;close-modal&#039;, { id: &#039;iJCDF7XC8TMoi7nbPh2y-table-bulk-action&#039; })"
+                                        x-show="isShown"
+                    x-transition:enter="duration-300"
+                    x-transition:leave="duration-300"
+                                            x-transition:enter-start="scale-95 opacity-0"
+                        x-transition:enter-end="scale-100 opacity-100"
+                        x-transition:leave-start="scale-100 opacity-100"
+                        x-transition:leave-end="scale-95 opacity-0"
+                                        class="fi-modal-window pointer-events-auto relative row-start-2 flex w-full cursor-default flex-col bg-white shadow-xl ring-1 ring-gray-950/5 dark:bg-gray-900 dark:ring-white/10 mx-auto rounded-xl hidden max-w-sm"
+                >
+                    <!--[if BLOCK]><![endif]--><!--[if ENDBLOCK]><![endif]-->
+
+                    <!--[if BLOCK]><![endif]--><!--[if ENDBLOCK]><![endif]-->
+
+                    <!--[if BLOCK]><![endif]--><!--[if ENDBLOCK]><![endif]-->
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+    </form>
+
+    <!--[if ENDBLOCK]><![endif]-->
+
+<!--[if BLOCK]><![endif]-->    <form wire:submit.prevent="callMountedInfolistAction">
+        
+        <div
+        aria-modal="true"
+    role="dialog"
+    x-data="{
+        isOpen: false,
+
+        livewire: null,
+
+        close: function () {
+            this.isOpen = false
+
+            this.$refs.modalContainer.dispatchEvent(
+                new CustomEvent('modal-closed', { detail: { id: 'iJCDF7XC8TMoi7nbPh2y-infolist-action' } }),
+            )
+        },
+
+        open: function () {
+            this.$nextTick(() => {
+                this.isOpen = true
+
+                
+                this.$refs.modalContainer.dispatchEvent(
+                    new CustomEvent('modal-opened', { detail: { id: 'iJCDF7XC8TMoi7nbPh2y-infolist-action' } }),
+                )
+            })
+        },
+    }"
+            x-on:close-modal.window="if ($event.detail.id === 'iJCDF7XC8TMoi7nbPh2y-infolist-action') close()"
+        x-on:open-modal.window="if ($event.detail.id === 'iJCDF7XC8TMoi7nbPh2y-infolist-action') open()"
+        data-fi-modal-id="iJCDF7XC8TMoi7nbPh2y-infolist-action"
+        x-trap.noscroll="isOpen"
+    x-bind:class="{
+        'fi-modal-open': isOpen,
+    }"
+    class="fi-modal block"
+>
+    <!--[if BLOCK]><![endif]--><!--[if ENDBLOCK]><![endif]-->
+
+    <div x-cloak x-show="isOpen">
+        <div
+            aria-hidden="true"
+            x-show="isOpen"
+            x-transition.duration.300ms.opacity
+            class="fi-modal-close-overlay fixed inset-0 z-40 bg-gray-950/50 dark:bg-gray-950/75"
+        ></div>
+
+        <div
+            class="fixed inset-0 z-40 overflow-y-auto cursor-pointer"
+        >
+            <div
+                x-ref="modalContainer"
+                                    
+                    x-on:click.self="
+                        document.activeElement.selectionStart === undefined &&
+                            document.activeElement.selectionEnd === undefined &&
+                            $dispatch(&#039;close-modal&#039;, { id: &#039;iJCDF7XC8TMoi7nbPh2y-infolist-action&#039; })
+                    "
+                                class="relative grid min-h-full grid-rows-[1fr_auto_1fr] justify-items-center sm:grid-rows-[1fr_auto_3fr] p-4" x-on:closed-form-component-action-modal.window="if (($event.detail.id === 'iJCDF7XC8TMoi7nbPh2y') && $wire.mountedInfolistActions.length) open()" x-on:modal-closed.stop="if (!$event.detail?.id?.startsWith('iJCDF7XC8TMoi7nbPh2y-')) {
+                    return
+                }
+
+                const mountedInfolistActionShouldOpenModal = false
+
+
+                if (! mountedInfolistActionShouldOpenModal) {
+                    return
+                }
+
+                if ($wire.mountedFormComponentActions.length) {
+                    return
+                }
+
+                $wire.unmountInfolistAction(false, false)" x-on:opened-form-component-action-modal.window="if ($event.detail.id === 'iJCDF7XC8TMoi7nbPh2y') close()"
+            >
+                <div
+                    x-data="{ isShown: false }"
+                    x-init="
+                        $nextTick(() => {
+                            isShown = isOpen
+                            $watch('isOpen', () => (isShown = isOpen))
+                        })
+                    "
+                                            x-on:keydown.window.escape="$dispatch(&#039;close-modal&#039;, { id: &#039;iJCDF7XC8TMoi7nbPh2y-infolist-action&#039; })"
+                                        x-show="isShown"
+                    x-transition:enter="duration-300"
+                    x-transition:leave="duration-300"
+                                            x-transition:enter-start="scale-95 opacity-0"
+                        x-transition:enter-end="scale-100 opacity-100"
+                        x-transition:leave-start="scale-100 opacity-100"
+                        x-transition:leave-end="scale-95 opacity-0"
+                                        class="fi-modal-window pointer-events-auto relative row-start-2 flex w-full cursor-default flex-col bg-white shadow-xl ring-1 ring-gray-950/5 dark:bg-gray-900 dark:ring-white/10 mx-auto rounded-xl hidden max-w-sm"
+                >
+                    <!--[if BLOCK]><![endif]--><!--[if ENDBLOCK]><![endif]-->
+
+                    <!--[if BLOCK]><![endif]--><!--[if ENDBLOCK]><![endif]-->
+
+                    <!--[if BLOCK]><![endif]--><!--[if ENDBLOCK]><![endif]-->
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+    </form>
+
+    <!--[if ENDBLOCK]><![endif]-->
+
+<!--[if BLOCK]><![endif]-->    
+    <form wire:submit.prevent="callMountedFormComponentAction">
+        <div
+        aria-modal="true"
+    role="dialog"
+    x-data="{
+        isOpen: false,
+
+        livewire: null,
+
+        close: function () {
+            this.isOpen = false
+
+            this.$refs.modalContainer.dispatchEvent(
+                new CustomEvent('modal-closed', { detail: { id: 'iJCDF7XC8TMoi7nbPh2y-form-component-action' } }),
+            )
+        },
+
+        open: function () {
+            this.$nextTick(() => {
+                this.isOpen = true
+
+                
+                this.$refs.modalContainer.dispatchEvent(
+                    new CustomEvent('modal-opened', { detail: { id: 'iJCDF7XC8TMoi7nbPh2y-form-component-action' } }),
+                )
+            })
+        },
+    }"
+            x-on:close-modal.window="if ($event.detail.id === 'iJCDF7XC8TMoi7nbPh2y-form-component-action') close()"
+        x-on:open-modal.window="if ($event.detail.id === 'iJCDF7XC8TMoi7nbPh2y-form-component-action') open()"
+        data-fi-modal-id="iJCDF7XC8TMoi7nbPh2y-form-component-action"
+        x-trap.noscroll="isOpen"
+    x-bind:class="{
+        'fi-modal-open': isOpen,
+    }"
+    class="fi-modal block"
+>
+    <!--[if BLOCK]><![endif]--><!--[if ENDBLOCK]><![endif]-->
+
+    <div x-cloak x-show="isOpen">
+        <div
+            aria-hidden="true"
+            x-show="isOpen"
+            x-transition.duration.300ms.opacity
+            class="fi-modal-close-overlay fixed inset-0 z-40 bg-gray-950/50 dark:bg-gray-950/75"
+        ></div>
+
+        <div
+            class="fixed inset-0 z-40 overflow-y-auto cursor-pointer"
+        >
+            <div
+                x-ref="modalContainer"
+                                    
+                    x-on:click.self="
+                        document.activeElement.selectionStart === undefined &&
+                            document.activeElement.selectionEnd === undefined &&
+                            $dispatch(&#039;close-modal&#039;, { id: &#039;iJCDF7XC8TMoi7nbPh2y-form-component-action&#039; })
+                    "
+                                class="relative grid min-h-full grid-rows-[1fr_auto_1fr] justify-items-center sm:grid-rows-[1fr_auto_3fr] p-4" x-on:modal-closed.stop="if (!$event.detail?.id?.startsWith('iJCDF7XC8TMoi7nbPh2y-')) {
+                    return
+                }
+
+                const mountedFormComponentActionShouldOpenModal = false
+
+
+                if (mountedFormComponentActionShouldOpenModal) {
+                    $wire.unmountFormComponentAction(false, false)
+                }"
+            >
+                <div
+                    x-data="{ isShown: false }"
+                    x-init="
+                        $nextTick(() => {
+                            isShown = isOpen
+                            $watch('isOpen', () => (isShown = isOpen))
+                        })
+                    "
+                                            x-on:keydown.window.escape="$dispatch(&#039;close-modal&#039;, { id: &#039;iJCDF7XC8TMoi7nbPh2y-form-component-action&#039; })"
+                                        x-show="isShown"
+                    x-transition:enter="duration-300"
+                    x-transition:leave="duration-300"
+                                            x-transition:enter-start="scale-95 opacity-0"
+                        x-transition:enter-end="scale-100 opacity-100"
+                        x-transition:leave-start="scale-100 opacity-100"
+                        x-transition:leave-end="scale-95 opacity-0"
+                                        class="fi-modal-window pointer-events-auto relative row-start-2 flex w-full cursor-default flex-col bg-white shadow-xl ring-1 ring-gray-950/5 dark:bg-gray-900 dark:ring-white/10 mx-auto rounded-xl hidden max-w-sm"
+                >
+                    <!--[if BLOCK]><![endif]--><!--[if ENDBLOCK]><![endif]-->
+
+                    <!--[if BLOCK]><![endif]--><!--[if ENDBLOCK]><![endif]-->
+
+                    <!--[if BLOCK]><![endif]--><!--[if ENDBLOCK]><![endif]-->
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+    </form>
+
+    <!--[if ENDBLOCK]><![endif]-->
+</div>
+
+
+        
+    </div>
+
+                
+
+                <!--[if BLOCK]><![endif]--><!--[if ENDBLOCK]><![endif]-->
+
+                
+            </div>
+
+            <!--[if BLOCK]><![endif]--><!--[if ENDBLOCK]><![endif]-->
+        </div>
+
+        <!--[if BLOCK]><![endif]--><!--[if ENDBLOCK]><![endif]-->
+    </section>
+
+    <!--[if BLOCK]><![endif]--><!--[if ENDBLOCK]><![endif]-->
+
+    <!--[if BLOCK]><![endif]--><!--[if ENDBLOCK]><![endif]-->
+
+    
+
+    <!--[if BLOCK]><![endif]--><!--[if ENDBLOCK]><![endif]-->
+</div>
+
+                
+            </main>
+
+            
+        </div>
+
+                    <div
+                x-cloak
+                x-data="{}"
+                x-on:click="$store.sidebar.close()"
+                x-show="$store.sidebar.isOpen"
+                x-transition.opacity.300ms
+                class="fi-sidebar-close-overlay fixed inset-0 z-30 bg-gray-950/50 transition duration-500 dark:bg-gray-950/75 lg:hidden"
+            ></div>
+
+            <aside
+    x-data="{}"
+                        x-cloak="-lg"
+            x-bind:class="
+                $store.sidebar.isOpen
+                    ? 'fi-sidebar-open w-[--sidebar-width] translate-x-0 shadow-xl ring-1 ring-gray-950\/5 dark:ring-white\/10 rtl:-translate-x-0 lg:sticky'                    : 'w-[--sidebar-width] -translate-x-full rtl:translate-x-full lg:sticky'
+            "
+                class="fi-sidebar fixed inset-y-0 start-0 z-30 flex flex-col h-screen content-start bg-white transition-all dark:bg-gray-900 lg:z-0 lg:bg-transparent lg:shadow-none lg:ring-0 lg:transition-none dark:lg:bg-transparent lg:translate-x-0 rtl:lg:-translate-x-0 fi-main-sidebar"
+>
+    <div class="overflow-x-clip">
+        <header
+            class="fi-sidebar-header flex h-16 items-center bg-white px-6 ring-1 ring-gray-950/5 dark:bg-gray-900 dark:ring-white/10 lg:shadow-sm"
+        >
+            <div
+                            >
+                                    <a href="http://localhost/admin">
+                        <div
+            class="fi-logo flex text-xl font-bold leading-5 tracking-tight text-gray-950 dark:text-white"
+        >
+            Laravel
+        </div>
+    
+            
+
+                    </a>
+                            </div>
+
+            
+                    </header>
+    </div>
+
+    <nav
+        class="fi-sidebar-nav flex-grow flex flex-col gap-y-7 overflow-y-auto overflow-x-hidden px-6 py-8"
+        style="scrollbar-gutter: stable"
+    >
+        
+
+        
+        <ul class="fi-sidebar-nav-groups -mx-2 flex flex-col gap-y-7">
+                            <li
+    x-data="{ label: null }"
+    data-group-label=""
+    class="fi-sidebar-group flex flex-col gap-y-1 fi-active"
+>
+    
+    
+    <ul
+                        class="fi-sidebar-group-items flex flex-col gap-y-1"
+    >
+                    
+            <li
+    class="fi-sidebar-item"
+>
+    <a
+        href="http://localhost/admin"
+        x-on:click="window.matchMedia(`(max-width: 1024px)`).matches && $store.sidebar.close()"
+                class="fi-sidebar-item-button relative flex items-center justify-center gap-x-3 rounded-lg px-2 py-2 outline-none transition duration-75 hover:bg-gray-100 focus-visible:bg-gray-100 dark:hover:bg-white/5 dark:focus-visible:bg-white/5"
+    >
+                    <!--[if BLOCK]><![endif]-->    <svg class="fi-sidebar-item-icon h-6 w-6 text-gray-400 dark:text-gray-500" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" aria-hidden="true" data-slot="icon">
+  <path stroke-linecap="round" stroke-linejoin="round" d="m2.25 12 8.954-8.955c.44-.439 1.152-.439 1.591 0L21.75 12M4.5 9.75v10.125c0 .621.504 1.125 1.125 1.125H9.75v-4.875c0-.621.504-1.125 1.125-1.125h2.25c.621 0 1.125.504 1.125 1.125V21h4.125c.621 0 1.125-.504 1.125-1.125V9.75M8.25 21h8.25"/>
+</svg><!--[if ENDBLOCK]><![endif]-->
+        
+        
+        <span
+                        class="fi-sidebar-item-label flex-1 truncate text-sm font-medium text-gray-700 dark:text-gray-200"
+        >
+            Panel
+        </span>
+
+            </a>
+
+    </li>
+                    
+            <li
+    class="fi-sidebar-item fi-active fi-sidebar-item-active flex flex-col gap-y-1"
+>
+    <a
+        href="http://localhost/admin/blog-posts"
+        x-on:click="window.matchMedia(`(max-width: 1024px)`).matches && $store.sidebar.close()"
+                class="fi-sidebar-item-button relative flex items-center justify-center gap-x-3 rounded-lg px-2 py-2 outline-none transition duration-75 hover:bg-gray-100 focus-visible:bg-gray-100 dark:hover:bg-white/5 dark:focus-visible:bg-white/5 bg-gray-100 dark:bg-white/5"
+    >
+                    <!--[if BLOCK]><![endif]-->    <svg class="fi-sidebar-item-icon h-6 w-6 text-primary-600 dark:text-primary-400" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" aria-hidden="true" data-slot="icon">
+  <path stroke-linecap="round" stroke-linejoin="round" d="M19.5 14.25v-2.625a3.375 3.375 0 0 0-3.375-3.375h-1.5A1.125 1.125 0 0 1 13.5 7.125v-1.5a3.375 3.375 0 0 0-3.375-3.375H8.25m0 12.75h7.5m-7.5 3H12M10.5 2.25H5.625c-.621 0-1.125.504-1.125 1.125v17.25c0 .621.504 1.125 1.125 1.125h12.75c.621 0 1.125-.504 1.125-1.125V11.25a9 9 0 0 0-9-9Z"/>
+</svg><!--[if ENDBLOCK]><![endif]-->
+        
+        
+        <span
+                        class="fi-sidebar-item-label flex-1 truncate text-sm font-medium text-primary-600 dark:text-primary-400"
+        >
+            Blog
+        </span>
+
+            </a>
+
+    </li>
+            </ul>
+</li>
+                            <li
+    x-data="{ label: 'Narz\u0119dzia' }"
+    data-group-label="Narzędzia"
+    class="fi-sidebar-group flex flex-col gap-y-1"
+>
+            <div
+                            x-on:click="$store.sidebar.toggleCollapsedGroup(label)"
+                                    class="fi-sidebar-group-button flex items-center gap-x-3 px-2 py-2 cursor-pointer"
+        >
+            
+            <span
+                class="fi-sidebar-group-label flex-1 text-sm font-medium leading-6 text-gray-500 dark:text-gray-400"
+            >
+                Narzędzia
+            </span>
+
+                            <button
+                                style="--c-300:var(--gray-300);--c-400:var(--gray-400);--c-500:var(--gray-500);--c-600:var(--gray-600);" class="fi-icon-btn relative flex items-center justify-center rounded-lg outline-none transition duration-75 focus-visible:ring-2 -m-2 h-9 w-9 text-gray-400 hover:text-gray-500 focus-visible:ring-primary-600 dark:text-gray-500 dark:hover:text-gray-400 dark:focus-visible:ring-primary-500 fi-color-gray fi-sidebar-group-collapse-button" title="Narzędzia" type="button" wire:loading.attr="disabled" x-bind:aria-expanded="! $store.sidebar.groupIsCollapsed(label)" x-on:click.stop="$store.sidebar.toggleCollapsedGroup(label)" x-bind:class="{ '-rotate-180': $store.sidebar.groupIsCollapsed(label) }"
+    >
+                    <span class="sr-only">
+                Narzędzia
+            </span>
+        
+        <!--[if BLOCK]><![endif]-->    <svg class="fi-icon-btn-icon h-5 w-5" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true" data-slot="icon">
+  <path fill-rule="evenodd" d="M9.47 6.47a.75.75 0 0 1 1.06 0l4.25 4.25a.75.75 0 1 1-1.06 1.06L10 8.06l-3.72 3.72a.75.75 0 0 1-1.06-1.06l4.25-4.25Z" clip-rule="evenodd"/>
+</svg><!--[if ENDBLOCK]><![endif]-->
+
+        
+            </button>
+                    </div>
+    
+    
+    <ul
+                                    x-show="! $store.sidebar.groupIsCollapsed(label)"
+                        x-collapse.duration.200ms
+                        class="fi-sidebar-group-items flex flex-col gap-y-1"
+    >
+                    
+            <li
+    class="fi-sidebar-item"
+>
+    <a
+        href="http://localhost/admin/import-export-panel"
+        x-on:click="window.matchMedia(`(max-width: 1024px)`).matches && $store.sidebar.close()"
+                class="fi-sidebar-item-button relative flex items-center justify-center gap-x-3 rounded-lg px-2 py-2 outline-none transition duration-75 hover:bg-gray-100 focus-visible:bg-gray-100 dark:hover:bg-white/5 dark:focus-visible:bg-white/5"
+    >
+                    <!--[if BLOCK]><![endif]-->    <svg class="fi-sidebar-item-icon h-6 w-6 text-gray-400 dark:text-gray-500" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" aria-hidden="true" data-slot="icon">
+  <path stroke-linecap="round" stroke-linejoin="round" d="M3 16.5v2.25A2.25 2.25 0 0 0 5.25 21h13.5A2.25 2.25 0 0 0 21 18.75V16.5M16.5 12 12 16.5m0 0L7.5 12m4.5 4.5V3"/>
+</svg><!--[if ENDBLOCK]><![endif]-->
+        
+        
+        <span
+                        class="fi-sidebar-item-label flex-1 truncate text-sm font-medium text-gray-700 dark:text-gray-200"
+        >
+            Import / Export danych
+        </span>
+
+            </a>
+
+    </li>
+            </ul>
+</li>
+                            <li
+    x-data="{ label: 'Admin' }"
+    data-group-label="Admin"
+    class="fi-sidebar-group flex flex-col gap-y-1"
+>
+            <div
+                            x-on:click="$store.sidebar.toggleCollapsedGroup(label)"
+                                    class="fi-sidebar-group-button flex items-center gap-x-3 px-2 py-2 cursor-pointer"
+        >
+            
+            <span
+                class="fi-sidebar-group-label flex-1 text-sm font-medium leading-6 text-gray-500 dark:text-gray-400"
+            >
+                Admin
+            </span>
+
+                            <button
+                                style="--c-300:var(--gray-300);--c-400:var(--gray-400);--c-500:var(--gray-500);--c-600:var(--gray-600);" class="fi-icon-btn relative flex items-center justify-center rounded-lg outline-none transition duration-75 focus-visible:ring-2 -m-2 h-9 w-9 text-gray-400 hover:text-gray-500 focus-visible:ring-primary-600 dark:text-gray-500 dark:hover:text-gray-400 dark:focus-visible:ring-primary-500 fi-color-gray fi-sidebar-group-collapse-button" title="Admin" type="button" wire:loading.attr="disabled" x-bind:aria-expanded="! $store.sidebar.groupIsCollapsed(label)" x-on:click.stop="$store.sidebar.toggleCollapsedGroup(label)" x-bind:class="{ '-rotate-180': $store.sidebar.groupIsCollapsed(label) }"
+    >
+                    <span class="sr-only">
+                Admin
+            </span>
+        
+        <!--[if BLOCK]><![endif]-->    <svg class="fi-icon-btn-icon h-5 w-5" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true" data-slot="icon">
+  <path fill-rule="evenodd" d="M9.47 6.47a.75.75 0 0 1 1.06 0l4.25 4.25a.75.75 0 1 1-1.06 1.06L10 8.06l-3.72 3.72a.75.75 0 0 1-1.06-1.06l4.25-4.25Z" clip-rule="evenodd"/>
+</svg><!--[if ENDBLOCK]><![endif]-->
+
+        
+            </button>
+                    </div>
+    
+    
+    <ul
+                                    x-show="! $store.sidebar.groupIsCollapsed(label)"
+                        x-collapse.duration.200ms
+                        class="fi-sidebar-group-items flex flex-col gap-y-1"
+    >
+                    
+            <li
+    class="fi-sidebar-item"
+>
+    <a
+        href="http://localhost/admin/roles"
+        x-on:click="window.matchMedia(`(max-width: 1024px)`).matches && $store.sidebar.close()"
+                class="fi-sidebar-item-button relative flex items-center justify-center gap-x-3 rounded-lg px-2 py-2 outline-none transition duration-75 hover:bg-gray-100 focus-visible:bg-gray-100 dark:hover:bg-white/5 dark:focus-visible:bg-white/5"
+    >
+                    <!--[if BLOCK]><![endif]-->    <svg class="fi-sidebar-item-icon h-6 w-6 text-gray-400 dark:text-gray-500" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" aria-hidden="true" data-slot="icon">
+  <path stroke-linecap="round" stroke-linejoin="round" d="M9 12.75 11.25 15 15 9.75m-3-7.036A11.959 11.959 0 0 1 3.598 6 11.99 11.99 0 0 0 3 9.749c0 5.592 3.824 10.29 9 11.623 5.176-1.332 9-6.03 9-11.622 0-1.31-.21-2.571-.598-3.751h-.152c-3.196 0-6.1-1.248-8.25-3.285Z"/>
+</svg><!--[if ENDBLOCK]><![endif]-->
+        
+        
+        <span
+                        class="fi-sidebar-item-label flex-1 truncate text-sm font-medium text-gray-700 dark:text-gray-200"
+        >
+            Role i uprawnienia
+        </span>
+
+            </a>
+
+    </li>
+                    
+            <li
+    class="fi-sidebar-item"
+>
+    <a
+        href="http://localhost/admin/users"
+        x-on:click="window.matchMedia(`(max-width: 1024px)`).matches && $store.sidebar.close()"
+                class="fi-sidebar-item-button relative flex items-center justify-center gap-x-3 rounded-lg px-2 py-2 outline-none transition duration-75 hover:bg-gray-100 focus-visible:bg-gray-100 dark:hover:bg-white/5 dark:focus-visible:bg-white/5"
+    >
+                    <!--[if BLOCK]><![endif]-->    <svg class="fi-sidebar-item-icon h-6 w-6 text-gray-400 dark:text-gray-500" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" aria-hidden="true" data-slot="icon">
+  <path stroke-linecap="round" stroke-linejoin="round" d="M15 19.128a9.38 9.38 0 0 0 2.625.372 9.337 9.337 0 0 0 4.121-.952 4.125 4.125 0 0 0-7.533-2.493M15 19.128v-.003c0-1.113-.285-2.16-.786-3.07M15 19.128v.106A12.318 12.318 0 0 1 8.624 21c-2.331 0-4.512-.645-6.374-1.766l-.001-.109a6.375 6.375 0 0 1 11.964-3.07M12 6.375a3.375 3.375 0 1 1-6.75 0 3.375 3.375 0 0 1 6.75 0Zm8.25 2.25a2.625 2.625 0 1 1-5.25 0 2.625 2.625 0 0 1 5.25 0Z"/>
+</svg><!--[if ENDBLOCK]><![endif]-->
+        
+        
+        <span
+                        class="fi-sidebar-item-label flex-1 truncate text-sm font-medium text-gray-700 dark:text-gray-200"
+        >
+            Użytkownicy
+        </span>
+
+            </a>
+
+    </li>
+            </ul>
+</li>
+                            <li
+    x-data="{ label: 'Konfiguracja' }"
+    data-group-label="Konfiguracja"
+    class="fi-sidebar-group flex flex-col gap-y-1"
+>
+            <div
+                            x-on:click="$store.sidebar.toggleCollapsedGroup(label)"
+                                    class="fi-sidebar-group-button flex items-center gap-x-3 px-2 py-2 cursor-pointer"
+        >
+            
+            <span
+                class="fi-sidebar-group-label flex-1 text-sm font-medium leading-6 text-gray-500 dark:text-gray-400"
+            >
+                Konfiguracja
+            </span>
+
+                            <button
+                                style="--c-300:var(--gray-300);--c-400:var(--gray-400);--c-500:var(--gray-500);--c-600:var(--gray-600);" class="fi-icon-btn relative flex items-center justify-center rounded-lg outline-none transition duration-75 focus-visible:ring-2 -m-2 h-9 w-9 text-gray-400 hover:text-gray-500 focus-visible:ring-primary-600 dark:text-gray-500 dark:hover:text-gray-400 dark:focus-visible:ring-primary-500 fi-color-gray fi-sidebar-group-collapse-button" title="Konfiguracja" type="button" wire:loading.attr="disabled" x-bind:aria-expanded="! $store.sidebar.groupIsCollapsed(label)" x-on:click.stop="$store.sidebar.toggleCollapsedGroup(label)" x-bind:class="{ '-rotate-180': $store.sidebar.groupIsCollapsed(label) }"
+    >
+                    <span class="sr-only">
+                Konfiguracja
+            </span>
+        
+        <!--[if BLOCK]><![endif]-->    <svg class="fi-icon-btn-icon h-5 w-5" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true" data-slot="icon">
+  <path fill-rule="evenodd" d="M9.47 6.47a.75.75 0 0 1 1.06 0l4.25 4.25a.75.75 0 1 1-1.06 1.06L10 8.06l-3.72 3.72a.75.75 0 0 1-1.06-1.06l4.25-4.25Z" clip-rule="evenodd"/>
+</svg><!--[if ENDBLOCK]><![endif]-->
+
+        
+            </button>
+                    </div>
+    
+    
+    <ul
+                                    x-show="! $store.sidebar.groupIsCollapsed(label)"
+                        x-collapse.duration.200ms
+                        class="fi-sidebar-group-items flex flex-col gap-y-1"
+    >
+                    
+            <li
+    class="fi-sidebar-item"
+>
+    <a
+        href="http://localhost/admin/taxes"
+        x-on:click="window.matchMedia(`(max-width: 1024px)`).matches && $store.sidebar.close()"
+                class="fi-sidebar-item-button relative flex items-center justify-center gap-x-3 rounded-lg px-2 py-2 outline-none transition duration-75 hover:bg-gray-100 focus-visible:bg-gray-100 dark:hover:bg-white/5 dark:focus-visible:bg-white/5"
+    >
+                    <!--[if BLOCK]><![endif]-->    <svg class="fi-sidebar-item-icon h-6 w-6 text-gray-400 dark:text-gray-500" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" aria-hidden="true" data-slot="icon">
+  <path stroke-linecap="round" stroke-linejoin="round" d="M15.75 15.75V18m-7.5-6.75h.008v.008H8.25v-.008Zm0 2.25h.008v.008H8.25V13.5Zm0 2.25h.008v.008H8.25v-.008Zm0 2.25h.008v.008H8.25V18Zm2.498-6.75h.007v.008h-.007v-.008Zm0 2.25h.007v.008h-.007V13.5Zm0 2.25h.007v.008h-.007v-.008Zm0 2.25h.007v.008h-.007V18Zm2.504-6.75h.008v.008h-.008v-.008Zm0 2.25h.008v.008h-.008V13.5Zm0 2.25h.008v.008h-.008v-.008Zm0 2.25h.008v.008h-.008V18Zm2.498-6.75h.008v.008h-.008v-.008Zm0 2.25h.008v.008h-.008V13.5ZM8.25 6h7.5v2.25h-7.5V6ZM12 2.25c-1.892 0-3.758.11-5.593.322C5.307 2.7 4.5 3.65 4.5 4.757V19.5a2.25 2.25 0 0 0 2.25 2.25h10.5a2.25 2.25 0 0 0 2.25-2.25V4.757c0-1.108-.806-2.057-1.907-2.185A48.507 48.507 0 0 0 12 2.25Z"/>
+</svg><!--[if ENDBLOCK]><![endif]-->
+        
+        
+        <span
+                        class="fi-sidebar-item-label flex-1 truncate text-sm font-medium text-gray-700 dark:text-gray-200"
+        >
+            Podatki
+        </span>
+
+            </a>
+
+    </li>
+            </ul>
+</li>
+                            <li
+    x-data="{ label: 'Transport' }"
+    data-group-label="Transport"
+    class="fi-sidebar-group flex flex-col gap-y-1"
+>
+            <div
+                            x-on:click="$store.sidebar.toggleCollapsedGroup(label)"
+                                    class="fi-sidebar-group-button flex items-center gap-x-3 px-2 py-2 cursor-pointer"
+        >
+            
+            <span
+                class="fi-sidebar-group-label flex-1 text-sm font-medium leading-6 text-gray-500 dark:text-gray-400"
+            >
+                Transport
+            </span>
+
+                            <button
+                                style="--c-300:var(--gray-300);--c-400:var(--gray-400);--c-500:var(--gray-500);--c-600:var(--gray-600);" class="fi-icon-btn relative flex items-center justify-center rounded-lg outline-none transition duration-75 focus-visible:ring-2 -m-2 h-9 w-9 text-gray-400 hover:text-gray-500 focus-visible:ring-primary-600 dark:text-gray-500 dark:hover:text-gray-400 dark:focus-visible:ring-primary-500 fi-color-gray fi-sidebar-group-collapse-button" title="Transport" type="button" wire:loading.attr="disabled" x-bind:aria-expanded="! $store.sidebar.groupIsCollapsed(label)" x-on:click.stop="$store.sidebar.toggleCollapsedGroup(label)" x-bind:class="{ '-rotate-180': $store.sidebar.groupIsCollapsed(label) }"
+    >
+                    <span class="sr-only">
+                Transport
+            </span>
+        
+        <!--[if BLOCK]><![endif]-->    <svg class="fi-icon-btn-icon h-5 w-5" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true" data-slot="icon">
+  <path fill-rule="evenodd" d="M9.47 6.47a.75.75 0 0 1 1.06 0l4.25 4.25a.75.75 0 1 1-1.06 1.06L10 8.06l-3.72 3.72a.75.75 0 0 1-1.06-1.06l4.25-4.25Z" clip-rule="evenodd"/>
+</svg><!--[if ENDBLOCK]><![endif]-->
+
+        
+            </button>
+                    </div>
+    
+    
+    <ul
+                                    x-show="! $store.sidebar.groupIsCollapsed(label)"
+                        x-collapse.duration.200ms
+                        class="fi-sidebar-group-items flex flex-col gap-y-1"
+    >
+                    
+            <li
+    class="fi-sidebar-item"
+>
+    <a
+        href="http://localhost/admin/buses"
+        x-on:click="window.matchMedia(`(max-width: 1024px)`).matches && $store.sidebar.close()"
+                class="fi-sidebar-item-button relative flex items-center justify-center gap-x-3 rounded-lg px-2 py-2 outline-none transition duration-75 hover:bg-gray-100 focus-visible:bg-gray-100 dark:hover:bg-white/5 dark:focus-visible:bg-white/5"
+    >
+                    <!--[if BLOCK]><![endif]-->    <svg class="fi-sidebar-item-icon h-6 w-6 text-gray-400 dark:text-gray-500" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" aria-hidden="true" data-slot="icon">
+  <path stroke-linecap="round" stroke-linejoin="round" d="M8.25 18.75a1.5 1.5 0 0 1-3 0m3 0a1.5 1.5 0 0 0-3 0m3 0h6m-9 0H3.375a1.125 1.125 0 0 1-1.125-1.125V14.25m17.25 4.5a1.5 1.5 0 0 1-3 0m3 0a1.5 1.5 0 0 0-3 0m3 0h1.125c.621 0 1.129-.504 1.09-1.124a17.902 17.902 0 0 0-3.213-9.193 2.056 2.056 0 0 0-1.58-.86H14.25M16.5 18.75h-2.25m0-11.177v-.958c0-.568-.422-1.048-.987-1.106a48.554 48.554 0 0 0-10.026 0 1.106 1.106 0 0 0-.987 1.106v7.635m12-6.677v6.677m0 4.5v-4.5m0 0h-12"/>
+</svg><!--[if ENDBLOCK]><![endif]-->
+        
+        
+        <span
+                        class="fi-sidebar-item-label flex-1 truncate text-sm font-medium text-gray-700 dark:text-gray-200"
+        >
+            Autokary
+        </span>
+
+            </a>
+
+    </li>
+            </ul>
+</li>
+                            <li
+    x-data="{ label: 'Szablony' }"
+    data-group-label="Szablony"
+    class="fi-sidebar-group flex flex-col gap-y-1"
+>
+            <div
+                            x-on:click="$store.sidebar.toggleCollapsedGroup(label)"
+                                    class="fi-sidebar-group-button flex items-center gap-x-3 px-2 py-2 cursor-pointer"
+        >
+            
+            <span
+                class="fi-sidebar-group-label flex-1 text-sm font-medium leading-6 text-gray-500 dark:text-gray-400"
+            >
+                Szablony
+            </span>
+
+                            <button
+                                style="--c-300:var(--gray-300);--c-400:var(--gray-400);--c-500:var(--gray-500);--c-600:var(--gray-600);" class="fi-icon-btn relative flex items-center justify-center rounded-lg outline-none transition duration-75 focus-visible:ring-2 -m-2 h-9 w-9 text-gray-400 hover:text-gray-500 focus-visible:ring-primary-600 dark:text-gray-500 dark:hover:text-gray-400 dark:focus-visible:ring-primary-500 fi-color-gray fi-sidebar-group-collapse-button" title="Szablony" type="button" wire:loading.attr="disabled" x-bind:aria-expanded="! $store.sidebar.groupIsCollapsed(label)" x-on:click.stop="$store.sidebar.toggleCollapsedGroup(label)" x-bind:class="{ '-rotate-180': $store.sidebar.groupIsCollapsed(label) }"
+    >
+                    <span class="sr-only">
+                Szablony
+            </span>
+        
+        <!--[if BLOCK]><![endif]-->    <svg class="fi-icon-btn-icon h-5 w-5" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true" data-slot="icon">
+  <path fill-rule="evenodd" d="M9.47 6.47a.75.75 0 0 1 1.06 0l4.25 4.25a.75.75 0 1 1-1.06 1.06L10 8.06l-3.72 3.72a.75.75 0 0 1-1.06-1.06l4.25-4.25Z" clip-rule="evenodd"/>
+</svg><!--[if ENDBLOCK]><![endif]-->
+
+        
+            </button>
+                    </div>
+    
+    
+    <ul
+                                    x-show="! $store.sidebar.groupIsCollapsed(label)"
+                        x-collapse.duration.200ms
+                        class="fi-sidebar-group-items flex flex-col gap-y-1"
+    >
+                    
+            <li
+    class="fi-sidebar-item"
+>
+    <a
+        href="http://localhost/admin/event-templates"
+        x-on:click="window.matchMedia(`(max-width: 1024px)`).matches && $store.sidebar.close()"
+                class="fi-sidebar-item-button relative flex items-center justify-center gap-x-3 rounded-lg px-2 py-2 outline-none transition duration-75 hover:bg-gray-100 focus-visible:bg-gray-100 dark:hover:bg-white/5 dark:focus-visible:bg-white/5"
+    >
+                    <!--[if BLOCK]><![endif]-->    <svg class="fi-sidebar-item-icon h-6 w-6 text-gray-400 dark:text-gray-500" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" aria-hidden="true" data-slot="icon">
+  <path stroke-linecap="round" stroke-linejoin="round" d="M6 6.878V6a2.25 2.25 0 0 1 2.25-2.25h7.5A2.25 2.25 0 0 1 18 6v.878m-12 0c.235-.083.487-.128.75-.128h10.5c.263 0 .515.045.75.128m-12 0A2.25 2.25 0 0 0 4.5 9v.878m13.5-3A2.25 2.25 0 0 1 19.5 9v.878m0 0a2.246 2.246 0 0 0-.75-.128H5.25c-.263 0-.515.045-.75.128m15 0A2.25 2.25 0 0 1 21 12v6a2.25 2.25 0 0 1-2.25 2.25H5.25A2.25 2.25 0 0 1 3 18v-6c0-.98.626-1.813 1.5-2.122"/>
+</svg><!--[if ENDBLOCK]><![endif]-->
+        
+        
+        <span
+                        class="fi-sidebar-item-label flex-1 truncate text-sm font-medium text-gray-700 dark:text-gray-200"
+        >
+            Szablony imprez
+        </span>
+
+            </a>
+
+    </li>
+                    
+            <li
+    class="fi-sidebar-item"
+>
+    <a
+        href="http://localhost/admin/event-template-program-points"
+        x-on:click="window.matchMedia(`(max-width: 1024px)`).matches && $store.sidebar.close()"
+                class="fi-sidebar-item-button relative flex items-center justify-center gap-x-3 rounded-lg px-2 py-2 outline-none transition duration-75 hover:bg-gray-100 focus-visible:bg-gray-100 dark:hover:bg-white/5 dark:focus-visible:bg-white/5"
+    >
+                    <!--[if BLOCK]><![endif]-->    <svg class="fi-sidebar-item-icon h-6 w-6 text-gray-400 dark:text-gray-500" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" aria-hidden="true" data-slot="icon">
+  <path stroke-linecap="round" stroke-linejoin="round" d="M15 10.5a3 3 0 1 1-6 0 3 3 0 0 1 6 0Z"/>
+  <path stroke-linecap="round" stroke-linejoin="round" d="M19.5 10.5c0 7.142-7.5 11.25-7.5 11.25S4.5 17.642 4.5 10.5a7.5 7.5 0 1 1 15 0Z"/>
+</svg><!--[if ENDBLOCK]><![endif]-->
+        
+        
+        <span
+                        class="fi-sidebar-item-label flex-1 truncate text-sm font-medium text-gray-700 dark:text-gray-200"
+        >
+            Punkty programu
+        </span>
+
+            </a>
+
+    </li>
+                    
+            <li
+    class="fi-sidebar-item"
+>
+    <a
+        href="http://localhost/admin/event-template-qties"
+        x-on:click="window.matchMedia(`(max-width: 1024px)`).matches && $store.sidebar.close()"
+                class="fi-sidebar-item-button relative flex items-center justify-center gap-x-3 rounded-lg px-2 py-2 outline-none transition duration-75 hover:bg-gray-100 focus-visible:bg-gray-100 dark:hover:bg-white/5 dark:focus-visible:bg-white/5"
+    >
+                    <!--[if BLOCK]><![endif]-->    <svg class="fi-sidebar-item-icon h-6 w-6 text-gray-400 dark:text-gray-500" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" aria-hidden="true" data-slot="icon">
+  <path stroke-linecap="round" stroke-linejoin="round" d="M18 18.72a9.094 9.094 0 0 0 3.741-.479 3 3 0 0 0-4.682-2.72m.94 3.198.001.031c0 .225-.012.447-.037.666A11.944 11.944 0 0 1 12 21c-2.17 0-4.207-.576-5.963-1.584A6.062 6.062 0 0 1 6 18.719m12 0a5.971 5.971 0 0 0-.941-3.197m0 0A5.995 5.995 0 0 0 12 12.75a5.995 5.995 0 0 0-5.058 2.772m0 0a3 3 0 0 0-4.681 2.72 8.986 8.986 0 0 0 3.74.477m.94-3.197a5.971 5.971 0 0 0-.94 3.197M15 6.75a3 3 0 1 1-6 0 3 3 0 0 1 6 0Zm6 3a2.25 2.25 0 1 1-4.5 0 2.25 2.25 0 0 1 4.5 0Zm-13.5 0a2.25 2.25 0 1 1-4.5 0 2.25 2.25 0 0 1 4.5 0Z"/>
+</svg><!--[if ENDBLOCK]><![endif]-->
+        
+        
+        <span
+                        class="fi-sidebar-item-label flex-1 truncate text-sm font-medium text-gray-700 dark:text-gray-200"
+        >
+            Warianty ilości
+        </span>
+
+            </a>
+
+    </li>
+                    
+            <li
+    class="fi-sidebar-item"
+>
+    <a
+        href="http://localhost/admin/event-types"
+        x-on:click="window.matchMedia(`(max-width: 1024px)`).matches && $store.sidebar.close()"
+                class="fi-sidebar-item-button relative flex items-center justify-center gap-x-3 rounded-lg px-2 py-2 outline-none transition duration-75 hover:bg-gray-100 focus-visible:bg-gray-100 dark:hover:bg-white/5 dark:focus-visible:bg-white/5"
+    >
+                    <!--[if BLOCK]><![endif]-->    <svg class="fi-sidebar-item-icon h-6 w-6 text-gray-400 dark:text-gray-500" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" aria-hidden="true" data-slot="icon">
+  <path stroke-linecap="round" stroke-linejoin="round" d="M6 6.878V6a2.25 2.25 0 0 1 2.25-2.25h7.5A2.25 2.25 0 0 1 18 6v.878m-12 0c.235-.083.487-.128.75-.128h10.5c.263 0 .515.045.75.128m-12 0A2.25 2.25 0 0 0 4.5 9v.878m13.5-3A2.25 2.25 0 0 1 19.5 9v.878m0 0a2.246 2.246 0 0 0-.75-.128H5.25c-.263 0-.515.045-.75.128m15 0A2.25 2.25 0 0 1 21 12v6a2.25 2.25 0 0 1-2.25 2.25H5.25A2.25 2.25 0 0 1 3 18v-6c0-.98.626-1.813 1.5-2.122"/>
+</svg><!--[if ENDBLOCK]><![endif]-->
+        
+        
+        <span
+                        class="fi-sidebar-item-label flex-1 truncate text-sm font-medium text-gray-700 dark:text-gray-200"
+        >
+            Typy imprez
+        </span>
+
+            </a>
+
+    </li>
+            </ul>
+</li>
+                            <li
+    x-data="{ label: 'Biblioteka medi\u00f3w' }"
+    data-group-label="Biblioteka mediów"
+    class="fi-sidebar-group flex flex-col gap-y-1"
+>
+            <div
+                            x-on:click="$store.sidebar.toggleCollapsedGroup(label)"
+                                    class="fi-sidebar-group-button flex items-center gap-x-3 px-2 py-2 cursor-pointer"
+        >
+            
+            <span
+                class="fi-sidebar-group-label flex-1 text-sm font-medium leading-6 text-gray-500 dark:text-gray-400"
+            >
+                Biblioteka mediów
+            </span>
+
+                            <button
+                                style="--c-300:var(--gray-300);--c-400:var(--gray-400);--c-500:var(--gray-500);--c-600:var(--gray-600);" class="fi-icon-btn relative flex items-center justify-center rounded-lg outline-none transition duration-75 focus-visible:ring-2 -m-2 h-9 w-9 text-gray-400 hover:text-gray-500 focus-visible:ring-primary-600 dark:text-gray-500 dark:hover:text-gray-400 dark:focus-visible:ring-primary-500 fi-color-gray fi-sidebar-group-collapse-button" title="Biblioteka mediów" type="button" wire:loading.attr="disabled" x-bind:aria-expanded="! $store.sidebar.groupIsCollapsed(label)" x-on:click.stop="$store.sidebar.toggleCollapsedGroup(label)" x-bind:class="{ '-rotate-180': $store.sidebar.groupIsCollapsed(label) }"
+    >
+                    <span class="sr-only">
+                Biblioteka mediów
+            </span>
+        
+        <!--[if BLOCK]><![endif]-->    <svg class="fi-icon-btn-icon h-5 w-5" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true" data-slot="icon">
+  <path fill-rule="evenodd" d="M9.47 6.47a.75.75 0 0 1 1.06 0l4.25 4.25a.75.75 0 1 1-1.06 1.06L10 8.06l-3.72 3.72a.75.75 0 0 1-1.06-1.06l4.25-4.25Z" clip-rule="evenodd"/>
+</svg><!--[if ENDBLOCK]><![endif]-->
+
+        
+            </button>
+                    </div>
+    
+    
+    <ul
+                                    x-show="! $store.sidebar.groupIsCollapsed(label)"
+                        x-collapse.duration.200ms
+                        class="fi-sidebar-group-items flex flex-col gap-y-1"
+    >
+                    
+            <li
+    class="fi-sidebar-item"
+>
+    <a
+        href="http://localhost/admin/media"
+        x-on:click="window.matchMedia(`(max-width: 1024px)`).matches && $store.sidebar.close()"
+                class="fi-sidebar-item-button relative flex items-center justify-center gap-x-3 rounded-lg px-2 py-2 outline-none transition duration-75 hover:bg-gray-100 focus-visible:bg-gray-100 dark:hover:bg-white/5 dark:focus-visible:bg-white/5"
+    >
+                    <!--[if BLOCK]><![endif]-->    <svg class="fi-sidebar-item-icon h-6 w-6 text-gray-400 dark:text-gray-500" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" aria-hidden="true" data-slot="icon">
+  <path stroke-linecap="round" stroke-linejoin="round" d="m2.25 15.75 5.159-5.159a2.25 2.25 0 0 1 3.182 0l5.159 5.159m-1.5-1.5 1.409-1.409a2.25 2.25 0 0 1 3.182 0l2.909 2.909m-18 3.75h16.5a1.5 1.5 0 0 0 1.5-1.5V6a1.5 1.5 0 0 0-1.5-1.5H3.75A1.5 1.5 0 0 0 2.25 6v12a1.5 1.5 0 0 0 1.5 1.5Zm10.5-11.25h.008v.008h-.008V8.25Zm.375 0a.375.375 0 1 1-.75 0 .375.375 0 0 1 .75 0Z"/>
+</svg><!--[if ENDBLOCK]><![endif]-->
+        
+        
+        <span
+                        class="fi-sidebar-item-label flex-1 truncate text-sm font-medium text-gray-700 dark:text-gray-200"
+        >
+            Media
+        </span>
+
+            </a>
+
+    </li>
+            </ul>
+</li>
+                            <li
+    x-data="{ label: 'Imprezy' }"
+    data-group-label="Imprezy"
+    class="fi-sidebar-group flex flex-col gap-y-1"
+>
+            <div
+                                    class="fi-sidebar-group-button flex items-center gap-x-3 px-2 py-2"
+        >
+            
+            <span
+                class="fi-sidebar-group-label flex-1 text-sm font-medium leading-6 text-gray-500 dark:text-gray-400"
+            >
+                Imprezy
+            </span>
+
+                    </div>
+    
+    
+    <ul
+                                    x-show="! $store.sidebar.groupIsCollapsed(label)"
+                        x-collapse.duration.200ms
+                        class="fi-sidebar-group-items flex flex-col gap-y-1"
+    >
+                    
+            <li
+    class="fi-sidebar-item"
+>
+    <a
+        href="http://localhost/admin/events"
+        x-on:click="window.matchMedia(`(max-width: 1024px)`).matches && $store.sidebar.close()"
+                class="fi-sidebar-item-button relative flex items-center justify-center gap-x-3 rounded-lg px-2 py-2 outline-none transition duration-75 hover:bg-gray-100 focus-visible:bg-gray-100 dark:hover:bg-white/5 dark:focus-visible:bg-white/5"
+    >
+                    <!--[if BLOCK]><![endif]-->    <svg class="fi-sidebar-item-icon h-6 w-6 text-gray-400 dark:text-gray-500" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" aria-hidden="true" data-slot="icon">
+  <path stroke-linecap="round" stroke-linejoin="round" d="M6.75 3v2.25M17.25 3v2.25M3 18.75V7.5a2.25 2.25 0 0 1 2.25-2.25h13.5A2.25 2.25 0 0 1 21 7.5v11.25m-18 0A2.25 2.25 0 0 0 5.25 21h13.5A2.25 2.25 0 0 0 21 18.75m-18 0v-7.5A2.25 2.25 0 0 1 5.25 9h13.5A2.25 2.25 0 0 1 21 11.25v7.5m-9-6h.008v.008H12v-.008ZM12 15h.008v.008H12V15Zm0 2.25h.008v.008H12v-.008ZM9.75 15h.008v.008H9.75V15Zm0 2.25h.008v.008H9.75v-.008ZM7.5 15h.008v.008H7.5V15Zm0 2.25h.008v.008H7.5v-.008Zm6.75-4.5h.008v.008h-.008v-.008Zm0 2.25h.008v.008h-.008V15Zm0 2.25h.008v.008h-.008v-.008Zm2.25-4.5h.008v.008H16.5v-.008Zm0 2.25h.008v.008H16.5V15Z"/>
+</svg><!--[if ENDBLOCK]><![endif]-->
+        
+        
+        <span
+                        class="fi-sidebar-item-label flex-1 truncate text-sm font-medium text-gray-700 dark:text-gray-200"
+        >
+            Imprezy
+        </span>
+
+                    <span
+                            >
+                <span
+                    style="--c-50:var(--primary-50);--c-400:var(--primary-400);--c-600:var(--primary-600);" class="fi-badge flex items-center justify-center gap-x-1 rounded-md text-xs font-medium ring-1 ring-inset px-2 min-w-[theme(spacing.6)] py-1 fi-color-custom bg-custom-50 text-custom-600 ring-custom-600/10 dark:bg-custom-400/10 dark:text-custom-400 dark:ring-custom-400/30 fi-color-primary"
+>
+            
+            
+    <span class="grid">
+        <span class="truncate">
+            0
+        </span>
+    </span>
+
+    </span>
+            </span>
+            </a>
+
+    </li>
+            </ul>
+</li>
+                            <li
+    x-data="{ label: 'Ustawienia' }"
+    data-group-label="Ustawienia"
+    class="fi-sidebar-group flex flex-col gap-y-1"
+>
+            <div
+                            x-on:click="$store.sidebar.toggleCollapsedGroup(label)"
+                                    class="fi-sidebar-group-button flex items-center gap-x-3 px-2 py-2 cursor-pointer"
+        >
+            
+            <span
+                class="fi-sidebar-group-label flex-1 text-sm font-medium leading-6 text-gray-500 dark:text-gray-400"
+            >
+                Ustawienia
+            </span>
+
+                            <button
+                                style="--c-300:var(--gray-300);--c-400:var(--gray-400);--c-500:var(--gray-500);--c-600:var(--gray-600);" class="fi-icon-btn relative flex items-center justify-center rounded-lg outline-none transition duration-75 focus-visible:ring-2 -m-2 h-9 w-9 text-gray-400 hover:text-gray-500 focus-visible:ring-primary-600 dark:text-gray-500 dark:hover:text-gray-400 dark:focus-visible:ring-primary-500 fi-color-gray fi-sidebar-group-collapse-button" title="Ustawienia" type="button" wire:loading.attr="disabled" x-bind:aria-expanded="! $store.sidebar.groupIsCollapsed(label)" x-on:click.stop="$store.sidebar.toggleCollapsedGroup(label)" x-bind:class="{ '-rotate-180': $store.sidebar.groupIsCollapsed(label) }"
+    >
+                    <span class="sr-only">
+                Ustawienia
+            </span>
+        
+        <!--[if BLOCK]><![endif]-->    <svg class="fi-icon-btn-icon h-5 w-5" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true" data-slot="icon">
+  <path fill-rule="evenodd" d="M9.47 6.47a.75.75 0 0 1 1.06 0l4.25 4.25a.75.75 0 1 1-1.06 1.06L10 8.06l-3.72 3.72a.75.75 0 0 1-1.06-1.06l4.25-4.25Z" clip-rule="evenodd"/>
+</svg><!--[if ENDBLOCK]><![endif]-->
+
+        
+            </button>
+                    </div>
+    
+    
+    <ul
+                                    x-show="! $store.sidebar.groupIsCollapsed(label)"
+                        x-collapse.duration.200ms
+                        class="fi-sidebar-group-items flex flex-col gap-y-1"
+    >
+                    
+            <li
+    class="fi-sidebar-item"
+>
+    <a
+        href="http://localhost/admin/event-price-descriptions"
+        x-on:click="window.matchMedia(`(max-width: 1024px)`).matches && $store.sidebar.close()"
+                class="fi-sidebar-item-button relative flex items-center justify-center gap-x-3 rounded-lg px-2 py-2 outline-none transition duration-75 hover:bg-gray-100 focus-visible:bg-gray-100 dark:hover:bg-white/5 dark:focus-visible:bg-white/5"
+    >
+                    <!--[if BLOCK]><![endif]-->    <svg class="fi-sidebar-item-icon h-6 w-6 text-gray-400 dark:text-gray-500" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" aria-hidden="true" data-slot="icon">
+  <path stroke-linecap="round" stroke-linejoin="round" d="M14.25 7.756a4.5 4.5 0 1 0 0 8.488M7.5 10.5h5.25m-5.25 3h5.25M21 12a9 9 0 1 1-18 0 9 9 0 0 1 18 0Z"/>
+</svg><!--[if ENDBLOCK]><![endif]-->
+        
+        
+        <span
+                        class="fi-sidebar-item-label flex-1 truncate text-sm font-medium text-gray-700 dark:text-gray-200"
+        >
+            Opisy Cen Imprez
+        </span>
+
+            </a>
+
+    </li>
+            </ul>
+</li>
+                            <li
+    x-data="{ label: 'Ustawienia kalkulacji' }"
+    data-group-label="Ustawienia kalkulacji"
+    class="fi-sidebar-group flex flex-col gap-y-1"
+>
+            <div
+                            x-on:click="$store.sidebar.toggleCollapsedGroup(label)"
+                                    class="fi-sidebar-group-button flex items-center gap-x-3 px-2 py-2 cursor-pointer"
+        >
+            
+            <span
+                class="fi-sidebar-group-label flex-1 text-sm font-medium leading-6 text-gray-500 dark:text-gray-400"
+            >
+                Ustawienia kalkulacji
+            </span>
+
+                            <button
+                                style="--c-300:var(--gray-300);--c-400:var(--gray-400);--c-500:var(--gray-500);--c-600:var(--gray-600);" class="fi-icon-btn relative flex items-center justify-center rounded-lg outline-none transition duration-75 focus-visible:ring-2 -m-2 h-9 w-9 text-gray-400 hover:text-gray-500 focus-visible:ring-primary-600 dark:text-gray-500 dark:hover:text-gray-400 dark:focus-visible:ring-primary-500 fi-color-gray fi-sidebar-group-collapse-button" title="Ustawienia kalkulacji" type="button" wire:loading.attr="disabled" x-bind:aria-expanded="! $store.sidebar.groupIsCollapsed(label)" x-on:click.stop="$store.sidebar.toggleCollapsedGroup(label)" x-bind:class="{ '-rotate-180': $store.sidebar.groupIsCollapsed(label) }"
+    >
+                    <span class="sr-only">
+                Ustawienia kalkulacji
+            </span>
+        
+        <!--[if BLOCK]><![endif]-->    <svg class="fi-icon-btn-icon h-5 w-5" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true" data-slot="icon">
+  <path fill-rule="evenodd" d="M9.47 6.47a.75.75 0 0 1 1.06 0l4.25 4.25a.75.75 0 1 1-1.06 1.06L10 8.06l-3.72 3.72a.75.75 0 0 1-1.06-1.06l4.25-4.25Z" clip-rule="evenodd"/>
+</svg><!--[if ENDBLOCK]><![endif]-->
+
+        
+            </button>
+                    </div>
+    
+    
+    <ul
+                                    x-show="! $store.sidebar.groupIsCollapsed(label)"
+                        x-collapse.duration.200ms
+                        class="fi-sidebar-group-items flex flex-col gap-y-1"
+    >
+                    
+            <li
+    class="fi-sidebar-item"
+>
+    <a
+        href="http://localhost/admin/currencies"
+        x-on:click="window.matchMedia(`(max-width: 1024px)`).matches && $store.sidebar.close()"
+                class="fi-sidebar-item-button relative flex items-center justify-center gap-x-3 rounded-lg px-2 py-2 outline-none transition duration-75 hover:bg-gray-100 focus-visible:bg-gray-100 dark:hover:bg-white/5 dark:focus-visible:bg-white/5"
+    >
+                    <!--[if BLOCK]><![endif]-->    <svg class="fi-sidebar-item-icon h-6 w-6 text-gray-400 dark:text-gray-500" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" aria-hidden="true" data-slot="icon">
+  <path stroke-linecap="round" stroke-linejoin="round" d="M12 6v12m-3-2.818.879.659c1.171.879 3.07.879 4.242 0 1.172-.879 1.172-2.303 0-3.182C13.536 12.219 12.768 12 12 12c-.725 0-1.45-.22-2.003-.659-1.106-.879-1.106-2.303 0-3.182s2.9-.879 4.006 0l.415.33M21 12a9 9 0 1 1-18 0 9 9 0 0 1 18 0Z"/>
+</svg><!--[if ENDBLOCK]><![endif]-->
+        
+        
+        <span
+                        class="fi-sidebar-item-label flex-1 truncate text-sm font-medium text-gray-700 dark:text-gray-200"
+        >
+            Waluty
+        </span>
+
+            </a>
+
+    </li>
+                    
+            <li
+    class="fi-sidebar-item"
+>
+    <a
+        href="http://localhost/admin/markups"
+        x-on:click="window.matchMedia(`(max-width: 1024px)`).matches && $store.sidebar.close()"
+                class="fi-sidebar-item-button relative flex items-center justify-center gap-x-3 rounded-lg px-2 py-2 outline-none transition duration-75 hover:bg-gray-100 focus-visible:bg-gray-100 dark:hover:bg-white/5 dark:focus-visible:bg-white/5"
+    >
+                    <!--[if BLOCK]><![endif]-->    <svg class="fi-sidebar-item-icon h-6 w-6 text-gray-400 dark:text-gray-500" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" aria-hidden="true" data-slot="icon">
+  <path stroke-linecap="round" stroke-linejoin="round" d="M12 9v6m3-3H9m12 0a9 9 0 1 1-18 0 9 9 0 0 1 18 0Z"/>
+</svg><!--[if ENDBLOCK]><![endif]-->
+        
+        
+        <span
+                        class="fi-sidebar-item-label flex-1 truncate text-sm font-medium text-gray-700 dark:text-gray-200"
+        >
+            Narzuty
+        </span>
+
+            </a>
+
+    </li>
+                    
+            <li
+    class="fi-sidebar-item"
+>
+    <a
+        href="http://localhost/admin/payers"
+        x-on:click="window.matchMedia(`(max-width: 1024px)`).matches && $store.sidebar.close()"
+                class="fi-sidebar-item-button relative flex items-center justify-center gap-x-3 rounded-lg px-2 py-2 outline-none transition duration-75 hover:bg-gray-100 focus-visible:bg-gray-100 dark:hover:bg-white/5 dark:focus-visible:bg-white/5"
+    >
+                    <!--[if BLOCK]><![endif]-->    <svg class="fi-sidebar-item-icon h-6 w-6 text-gray-400 dark:text-gray-500" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" aria-hidden="true" data-slot="icon">
+  <path stroke-linecap="round" stroke-linejoin="round" d="M2.25 8.25h19.5M2.25 9h19.5m-16.5 5.25h6m-6 2.25h3m-3.75 3h15a2.25 2.25 0 0 0 2.25-2.25V6.75A2.25 2.25 0 0 0 19.5 4.5h-15a2.25 2.25 0 0 0-2.25 2.25v10.5A2.25 2.25 0 0 0 4.5 19.5Z"/>
+</svg><!--[if ENDBLOCK]><![endif]-->
+        
+        
+        <span
+                        class="fi-sidebar-item-label flex-1 truncate text-sm font-medium text-gray-700 dark:text-gray-200"
+        >
+            Płatnicy
+        </span>
+
+            </a>
+
+    </li>
+                    
+            <li
+    class="fi-sidebar-item"
+>
+    <a
+        href="http://localhost/admin/payment-statuses"
+        x-on:click="window.matchMedia(`(max-width: 1024px)`).matches && $store.sidebar.close()"
+                class="fi-sidebar-item-button relative flex items-center justify-center gap-x-3 rounded-lg px-2 py-2 outline-none transition duration-75 hover:bg-gray-100 focus-visible:bg-gray-100 dark:hover:bg-white/5 dark:focus-visible:bg-white/5"
+    >
+                    <!--[if BLOCK]><![endif]-->    <svg class="fi-sidebar-item-icon h-6 w-6 text-gray-400 dark:text-gray-500" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" aria-hidden="true" data-slot="icon">
+  <path stroke-linecap="round" stroke-linejoin="round" d="M9 12.75 11.25 15 15 9.75M21 12c0 1.268-.63 2.39-1.593 3.068a3.745 3.745 0 0 1-1.043 3.296 3.745 3.745 0 0 1-3.296 1.043A3.745 3.745 0 0 1 12 21c-1.268 0-2.39-.63-3.068-1.593a3.746 3.746 0 0 1-3.296-1.043 3.745 3.745 0 0 1-1.043-3.296A3.745 3.745 0 0 1 3 12c0-1.268.63-2.39 1.593-3.068a3.745 3.745 0 0 1 1.043-3.296 3.746 3.746 0 0 1 3.296-1.043A3.746 3.746 0 0 1 12 3c1.268 0 2.39.63 3.068 1.593a3.746 3.746 0 0 1 3.296 1.043 3.746 3.746 0 0 1 1.043 3.296A3.745 3.745 0 0 1 21 12Z"/>
+</svg><!--[if ENDBLOCK]><![endif]-->
+        
+        
+        <span
+                        class="fi-sidebar-item-label flex-1 truncate text-sm font-medium text-gray-700 dark:text-gray-200"
+        >
+            Statusy płatności
+        </span>
+
+            </a>
+
+    </li>
+                    
+            <li
+    class="fi-sidebar-item"
+>
+    <a
+        href="http://localhost/admin/payment-types"
+        x-on:click="window.matchMedia(`(max-width: 1024px)`).matches && $store.sidebar.close()"
+                class="fi-sidebar-item-button relative flex items-center justify-center gap-x-3 rounded-lg px-2 py-2 outline-none transition duration-75 hover:bg-gray-100 focus-visible:bg-gray-100 dark:hover:bg-white/5 dark:focus-visible:bg-white/5"
+    >
+                    <!--[if BLOCK]><![endif]-->    <svg class="fi-sidebar-item-icon h-6 w-6 text-gray-400 dark:text-gray-500" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" aria-hidden="true" data-slot="icon">
+  <path stroke-linecap="round" stroke-linejoin="round" d="M2.25 18.75a60.07 60.07 0 0 1 15.797 2.101c.727.198 1.453-.342 1.453-1.096V18.75M3.75 4.5v.75A.75.75 0 0 1 3 6h-.75m0 0v-.375c0-.621.504-1.125 1.125-1.125H20.25M2.25 6v9m18-10.5v.75c0 .414.336.75.75.75h.75m-1.5-1.5h.375c.621 0 1.125.504 1.125 1.125v9.75c0 .621-.504 1.125-1.125 1.125h-.375m1.5-1.5H21a.75.75 0 0 0-.75.75v.75m0 0H3.75m0 0h-.375a1.125 1.125 0 0 1-1.125-1.125V15m1.5 1.5v-.75A.75.75 0 0 0 3 15h-.75M15 10.5a3 3 0 1 1-6 0 3 3 0 0 1 6 0Zm3 0h.008v.008H18V10.5Zm-12 0h.008v.008H6V10.5Z"/>
+</svg><!--[if ENDBLOCK]><![endif]-->
+        
+        
+        <span
+                        class="fi-sidebar-item-label flex-1 truncate text-sm font-medium text-gray-700 dark:text-gray-200"
+        >
+            Typy płatności
+        </span>
+
+            </a>
+
+    </li>
+            </ul>
+</li>
+                            <li
+    x-data="{ label: 'Ustawienia og\u00f3lne' }"
+    data-group-label="Ustawienia ogólne"
+    class="fi-sidebar-group flex flex-col gap-y-1"
+>
+            <div
+                            x-on:click="$store.sidebar.toggleCollapsedGroup(label)"
+                                    class="fi-sidebar-group-button flex items-center gap-x-3 px-2 py-2 cursor-pointer"
+        >
+            
+            <span
+                class="fi-sidebar-group-label flex-1 text-sm font-medium leading-6 text-gray-500 dark:text-gray-400"
+            >
+                Ustawienia ogólne
+            </span>
+
+                            <button
+                                style="--c-300:var(--gray-300);--c-400:var(--gray-400);--c-500:var(--gray-500);--c-600:var(--gray-600);" class="fi-icon-btn relative flex items-center justify-center rounded-lg outline-none transition duration-75 focus-visible:ring-2 -m-2 h-9 w-9 text-gray-400 hover:text-gray-500 focus-visible:ring-primary-600 dark:text-gray-500 dark:hover:text-gray-400 dark:focus-visible:ring-primary-500 fi-color-gray fi-sidebar-group-collapse-button" title="Ustawienia ogólne" type="button" wire:loading.attr="disabled" x-bind:aria-expanded="! $store.sidebar.groupIsCollapsed(label)" x-on:click.stop="$store.sidebar.toggleCollapsedGroup(label)" x-bind:class="{ '-rotate-180': $store.sidebar.groupIsCollapsed(label) }"
+    >
+                    <span class="sr-only">
+                Ustawienia ogólne
+            </span>
+        
+        <!--[if BLOCK]><![endif]-->    <svg class="fi-icon-btn-icon h-5 w-5" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true" data-slot="icon">
+  <path fill-rule="evenodd" d="M9.47 6.47a.75.75 0 0 1 1.06 0l4.25 4.25a.75.75 0 1 1-1.06 1.06L10 8.06l-3.72 3.72a.75.75 0 0 1-1.06-1.06l4.25-4.25Z" clip-rule="evenodd"/>
+</svg><!--[if ENDBLOCK]><![endif]-->
+
+        
+            </button>
+                    </div>
+    
+    
+    <ul
+                                    x-show="! $store.sidebar.groupIsCollapsed(label)"
+                        x-collapse.duration.200ms
+                        class="fi-sidebar-group-items flex flex-col gap-y-1"
+    >
+                    
+            <li
+    class="fi-sidebar-item"
+>
+    <a
+        href="http://localhost/admin/contract-templates"
+        x-on:click="window.matchMedia(`(max-width: 1024px)`).matches && $store.sidebar.close()"
+                class="fi-sidebar-item-button relative flex items-center justify-center gap-x-3 rounded-lg px-2 py-2 outline-none transition duration-75 hover:bg-gray-100 focus-visible:bg-gray-100 dark:hover:bg-white/5 dark:focus-visible:bg-white/5"
+    >
+                    <!--[if BLOCK]><![endif]-->    <svg class="fi-sidebar-item-icon h-6 w-6 text-gray-400 dark:text-gray-500" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" aria-hidden="true" data-slot="icon">
+  <path stroke-linecap="round" stroke-linejoin="round" d="M19.5 14.25v-2.625a3.375 3.375 0 0 0-3.375-3.375h-1.5A1.125 1.125 0 0 1 13.5 7.125v-1.5a3.375 3.375 0 0 0-3.375-3.375H8.25m0 12.75h7.5m-7.5 3H12M10.5 2.25H5.625c-.621 0-1.125.504-1.125 1.125v17.25c0 .621.504 1.125 1.125 1.125h12.75c.621 0 1.125-.504 1.125-1.125V11.25a9 9 0 0 0-9-9Z"/>
+</svg><!--[if ENDBLOCK]><![endif]-->
+        
+        
+        <span
+                        class="fi-sidebar-item-label flex-1 truncate text-sm font-medium text-gray-700 dark:text-gray-200"
+        >
+            Szablony umów
+        </span>
+
+            </a>
+
+    </li>
+                    
+            <li
+    class="fi-sidebar-item"
+>
+    <a
+        href="http://localhost/admin/insurances"
+        x-on:click="window.matchMedia(`(max-width: 1024px)`).matches && $store.sidebar.close()"
+                class="fi-sidebar-item-button relative flex items-center justify-center gap-x-3 rounded-lg px-2 py-2 outline-none transition duration-75 hover:bg-gray-100 focus-visible:bg-gray-100 dark:hover:bg-white/5 dark:focus-visible:bg-white/5"
+    >
+                    <!--[if BLOCK]><![endif]-->    <svg class="fi-sidebar-item-icon h-6 w-6 text-gray-400 dark:text-gray-500" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" aria-hidden="true" data-slot="icon">
+  <path stroke-linecap="round" stroke-linejoin="round" d="M9 12.75 11.25 15 15 9.75m-3-7.036A11.959 11.959 0 0 1 3.598 6 11.99 11.99 0 0 0 3 9.749c0 5.592 3.824 10.29 9 11.623 5.176-1.332 9-6.03 9-11.622 0-1.31-.21-2.571-.598-3.751h-.152c-3.196 0-6.1-1.248-8.25-3.285Z"/>
+</svg><!--[if ENDBLOCK]><![endif]-->
+        
+        
+        <span
+                        class="fi-sidebar-item-label flex-1 truncate text-sm font-medium text-gray-700 dark:text-gray-200"
+        >
+            Ubezpieczenia
+        </span>
+
+            </a>
+
+    </li>
+                    
+            <li
+    class="fi-sidebar-item"
+>
+    <a
+        href="http://localhost/admin/place-distances"
+        x-on:click="window.matchMedia(`(max-width: 1024px)`).matches && $store.sidebar.close()"
+                class="fi-sidebar-item-button relative flex items-center justify-center gap-x-3 rounded-lg px-2 py-2 outline-none transition duration-75 hover:bg-gray-100 focus-visible:bg-gray-100 dark:hover:bg-white/5 dark:focus-visible:bg-white/5"
+    >
+                    <!--[if BLOCK]><![endif]-->    <svg class="fi-sidebar-item-icon h-6 w-6 text-gray-400 dark:text-gray-500" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" aria-hidden="true" data-slot="icon">
+  <path stroke-linecap="round" stroke-linejoin="round" d="M15.75 9V5.25A2.25 2.25 0 0 0 13.5 3h-6a2.25 2.25 0 0 0-2.25 2.25v13.5A2.25 2.25 0 0 0 7.5 21h6a2.25 2.25 0 0 0 2.25-2.25V15m3 0 3-3m0 0-3-3m3 3H9"/>
+</svg><!--[if ENDBLOCK]><![endif]-->
+        
+        
+        <span
+                        class="fi-sidebar-item-label flex-1 truncate text-sm font-medium text-gray-700 dark:text-gray-200"
+        >
+            Odległości między miejscami
+        </span>
+
+            </a>
+
+    </li>
+                    
+            <li
+    class="fi-sidebar-item"
+>
+    <a
+        href="http://localhost/admin/places"
+        x-on:click="window.matchMedia(`(max-width: 1024px)`).matches && $store.sidebar.close()"
+                class="fi-sidebar-item-button relative flex items-center justify-center gap-x-3 rounded-lg px-2 py-2 outline-none transition duration-75 hover:bg-gray-100 focus-visible:bg-gray-100 dark:hover:bg-white/5 dark:focus-visible:bg-white/5"
+    >
+                    <!--[if BLOCK]><![endif]-->    <svg class="fi-sidebar-item-icon h-6 w-6 text-gray-400 dark:text-gray-500" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" aria-hidden="true" data-slot="icon">
+  <path stroke-linecap="round" stroke-linejoin="round" d="M9 6.75V15m6-6v8.25m.503 3.498 4.875-2.437c.381-.19.622-.58.622-1.006V4.82c0-.836-.88-1.38-1.628-1.006l-3.869 1.934c-.317.159-.69.159-1.006 0L9.503 3.252a1.125 1.125 0 0 0-1.006 0L3.622 5.689C3.24 5.88 3 6.27 3 6.695V19.18c0 .836.88 1.38 1.628 1.006l3.869-1.934c.317-.159.69-.159 1.006 0l4.994 2.497c.317.158.69.158 1.006 0Z"/>
+</svg><!--[if ENDBLOCK]><![endif]-->
+        
+        
+        <span
+                        class="fi-sidebar-item-label flex-1 truncate text-sm font-medium text-gray-700 dark:text-gray-200"
+        >
+            Miejsca
+        </span>
+
+            </a>
+
+    </li>
+                    
+            <li
+    class="fi-sidebar-item"
+>
+    <a
+        href="http://localhost/admin/tags"
+        x-on:click="window.matchMedia(`(max-width: 1024px)`).matches && $store.sidebar.close()"
+                class="fi-sidebar-item-button relative flex items-center justify-center gap-x-3 rounded-lg px-2 py-2 outline-none transition duration-75 hover:bg-gray-100 focus-visible:bg-gray-100 dark:hover:bg-white/5 dark:focus-visible:bg-white/5"
+    >
+                    <!--[if BLOCK]><![endif]-->    <svg class="fi-sidebar-item-icon h-6 w-6 text-gray-400 dark:text-gray-500" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" aria-hidden="true" data-slot="icon">
+  <path stroke-linecap="round" stroke-linejoin="round" d="M9.568 3H5.25A2.25 2.25 0 0 0 3 5.25v4.318c0 .597.237 1.17.659 1.591l9.581 9.581c.699.699 1.78.872 2.607.33a18.095 18.095 0 0 0 5.223-5.223c.542-.827.369-1.908-.33-2.607L11.16 3.66A2.25 2.25 0 0 0 9.568 3Z"/>
+  <path stroke-linecap="round" stroke-linejoin="round" d="M6 6h.008v.008H6V6Z"/>
+</svg><!--[if ENDBLOCK]><![endif]-->
+        
+        
+        <span
+                        class="fi-sidebar-item-label flex-1 truncate text-sm font-medium text-gray-700 dark:text-gray-200"
+        >
+            Tagi
+        </span>
+
+            </a>
+
+    </li>
+                    
+            <li
+    class="fi-sidebar-item"
+>
+    <a
+        href="http://localhost/admin/todo-statuses"
+        x-on:click="window.matchMedia(`(max-width: 1024px)`).matches && $store.sidebar.close()"
+                class="fi-sidebar-item-button relative flex items-center justify-center gap-x-3 rounded-lg px-2 py-2 outline-none transition duration-75 hover:bg-gray-100 focus-visible:bg-gray-100 dark:hover:bg-white/5 dark:focus-visible:bg-white/5"
+    >
+                    <!--[if BLOCK]><![endif]-->    <svg class="fi-sidebar-item-icon h-6 w-6 text-gray-400 dark:text-gray-500" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" aria-hidden="true" data-slot="icon">
+  <path stroke-linecap="round" stroke-linejoin="round" d="M9 12.75 11.25 15 15 9.75M21 12a9 9 0 1 1-18 0 9 9 0 0 1 18 0Z"/>
+</svg><!--[if ENDBLOCK]><![endif]-->
+        
+        
+        <span
+                        class="fi-sidebar-item-label flex-1 truncate text-sm font-medium text-gray-700 dark:text-gray-200"
+        >
+            Statusy zadań
+        </span>
+
+            </a>
+
+    </li>
+            </ul>
+</li>
+                            <li
+    x-data="{ label: 'Ustawienia nocleg\u00f3w' }"
+    data-group-label="Ustawienia noclegów"
+    class="fi-sidebar-group flex flex-col gap-y-1"
+>
+            <div
+                            x-on:click="$store.sidebar.toggleCollapsedGroup(label)"
+                                    class="fi-sidebar-group-button flex items-center gap-x-3 px-2 py-2 cursor-pointer"
+        >
+            
+            <span
+                class="fi-sidebar-group-label flex-1 text-sm font-medium leading-6 text-gray-500 dark:text-gray-400"
+            >
+                Ustawienia noclegów
+            </span>
+
+                            <button
+                                style="--c-300:var(--gray-300);--c-400:var(--gray-400);--c-500:var(--gray-500);--c-600:var(--gray-600);" class="fi-icon-btn relative flex items-center justify-center rounded-lg outline-none transition duration-75 focus-visible:ring-2 -m-2 h-9 w-9 text-gray-400 hover:text-gray-500 focus-visible:ring-primary-600 dark:text-gray-500 dark:hover:text-gray-400 dark:focus-visible:ring-primary-500 fi-color-gray fi-sidebar-group-collapse-button" title="Ustawienia noclegów" type="button" wire:loading.attr="disabled" x-bind:aria-expanded="! $store.sidebar.groupIsCollapsed(label)" x-on:click.stop="$store.sidebar.toggleCollapsedGroup(label)" x-bind:class="{ '-rotate-180': $store.sidebar.groupIsCollapsed(label) }"
+    >
+                    <span class="sr-only">
+                Ustawienia noclegów
+            </span>
+        
+        <!--[if BLOCK]><![endif]-->    <svg class="fi-icon-btn-icon h-5 w-5" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true" data-slot="icon">
+  <path fill-rule="evenodd" d="M9.47 6.47a.75.75 0 0 1 1.06 0l4.25 4.25a.75.75 0 1 1-1.06 1.06L10 8.06l-3.72 3.72a.75.75 0 0 1-1.06-1.06l4.25-4.25Z" clip-rule="evenodd"/>
+</svg><!--[if ENDBLOCK]><![endif]-->
+
+        
+            </button>
+                    </div>
+    
+    
+    <ul
+                                    x-show="! $store.sidebar.groupIsCollapsed(label)"
+                        x-collapse.duration.200ms
+                        class="fi-sidebar-group-items flex flex-col gap-y-1"
+    >
+                    
+            <li
+    class="fi-sidebar-item"
+>
+    <a
+        href="http://localhost/admin/hotel-rooms"
+        x-on:click="window.matchMedia(`(max-width: 1024px)`).matches && $store.sidebar.close()"
+                class="fi-sidebar-item-button relative flex items-center justify-center gap-x-3 rounded-lg px-2 py-2 outline-none transition duration-75 hover:bg-gray-100 focus-visible:bg-gray-100 dark:hover:bg-white/5 dark:focus-visible:bg-white/5"
+    >
+                    <!--[if BLOCK]><![endif]-->    <svg class="fi-sidebar-item-icon h-6 w-6 text-gray-400 dark:text-gray-500" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" aria-hidden="true" data-slot="icon">
+  <path stroke-linecap="round" stroke-linejoin="round" d="m2.25 12 8.954-8.955c.44-.439 1.152-.439 1.591 0L21.75 12M4.5 9.75v10.125c0 .621.504 1.125 1.125 1.125H9.75v-4.875c0-.621.504-1.125 1.125-1.125h2.25c.621 0 1.125.504 1.125 1.125V21h4.125c.621 0 1.125-.504 1.125-1.125V9.75M8.25 21h8.25"/>
+</svg><!--[if ENDBLOCK]><![endif]-->
+        
+        
+        <span
+                        class="fi-sidebar-item-label flex-1 truncate text-sm font-medium text-gray-700 dark:text-gray-200"
+        >
+            Pokoje hotelowe
+        </span>
+
+            </a>
+
+    </li>
+            </ul>
+</li>
+                            <li
+    x-data="{ label: 'Kontakty' }"
+    data-group-label="Kontakty"
+    class="fi-sidebar-group flex flex-col gap-y-1"
+>
+            <div
+                            x-on:click="$store.sidebar.toggleCollapsedGroup(label)"
+                                    class="fi-sidebar-group-button flex items-center gap-x-3 px-2 py-2 cursor-pointer"
+        >
+            
+            <span
+                class="fi-sidebar-group-label flex-1 text-sm font-medium leading-6 text-gray-500 dark:text-gray-400"
+            >
+                Kontakty
+            </span>
+
+                            <button
+                                style="--c-300:var(--gray-300);--c-400:var(--gray-400);--c-500:var(--gray-500);--c-600:var(--gray-600);" class="fi-icon-btn relative flex items-center justify-center rounded-lg outline-none transition duration-75 focus-visible:ring-2 -m-2 h-9 w-9 text-gray-400 hover:text-gray-500 focus-visible:ring-primary-600 dark:text-gray-500 dark:hover:text-gray-400 dark:focus-visible:ring-primary-500 fi-color-gray fi-sidebar-group-collapse-button" title="Kontakty" type="button" wire:loading.attr="disabled" x-bind:aria-expanded="! $store.sidebar.groupIsCollapsed(label)" x-on:click.stop="$store.sidebar.toggleCollapsedGroup(label)" x-bind:class="{ '-rotate-180': $store.sidebar.groupIsCollapsed(label) }"
+    >
+                    <span class="sr-only">
+                Kontakty
+            </span>
+        
+        <!--[if BLOCK]><![endif]-->    <svg class="fi-icon-btn-icon h-5 w-5" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true" data-slot="icon">
+  <path fill-rule="evenodd" d="M9.47 6.47a.75.75 0 0 1 1.06 0l4.25 4.25a.75.75 0 1 1-1.06 1.06L10 8.06l-3.72 3.72a.75.75 0 0 1-1.06-1.06l4.25-4.25Z" clip-rule="evenodd"/>
+</svg><!--[if ENDBLOCK]><![endif]-->
+
+        
+            </button>
+                    </div>
+    
+    
+    <ul
+                                    x-show="! $store.sidebar.groupIsCollapsed(label)"
+                        x-collapse.duration.200ms
+                        class="fi-sidebar-group-items flex flex-col gap-y-1"
+    >
+                    
+            <li
+    class="fi-sidebar-item"
+>
+    <a
+        href="http://localhost/admin/contacts"
+        x-on:click="window.matchMedia(`(max-width: 1024px)`).matches && $store.sidebar.close()"
+                class="fi-sidebar-item-button relative flex items-center justify-center gap-x-3 rounded-lg px-2 py-2 outline-none transition duration-75 hover:bg-gray-100 focus-visible:bg-gray-100 dark:hover:bg-white/5 dark:focus-visible:bg-white/5"
+    >
+                    <!--[if BLOCK]><![endif]-->    <svg class="fi-sidebar-item-icon h-6 w-6 text-gray-400 dark:text-gray-500" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" aria-hidden="true" data-slot="icon">
+  <path stroke-linecap="round" stroke-linejoin="round" d="M15.75 6a3.75 3.75 0 1 1-7.5 0 3.75 3.75 0 0 1 7.5 0ZM4.501 20.118a7.5 7.5 0 0 1 14.998 0A17.933 17.933 0 0 1 12 21.75c-2.676 0-5.216-.584-7.499-1.632Z"/>
+</svg><!--[if ENDBLOCK]><![endif]-->
+        
+        
+        <span
+                        class="fi-sidebar-item-label flex-1 truncate text-sm font-medium text-gray-700 dark:text-gray-200"
+        >
+            Kontakty
+        </span>
+
+            </a>
+
+    </li>
+                    
+            <li
+    class="fi-sidebar-item"
+>
+    <a
+        href="http://localhost/admin/contractors"
+        x-on:click="window.matchMedia(`(max-width: 1024px)`).matches && $store.sidebar.close()"
+                class="fi-sidebar-item-button relative flex items-center justify-center gap-x-3 rounded-lg px-2 py-2 outline-none transition duration-75 hover:bg-gray-100 focus-visible:bg-gray-100 dark:hover:bg-white/5 dark:focus-visible:bg-white/5"
+    >
+                    <!--[if BLOCK]><![endif]-->    <svg class="fi-sidebar-item-icon h-6 w-6 text-gray-400 dark:text-gray-500" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" aria-hidden="true" data-slot="icon">
+  <path stroke-linecap="round" stroke-linejoin="round" d="M3.75 21h16.5M4.5 3h15M5.25 3v18m13.5-18v18M9 6.75h1.5m-1.5 3h1.5m-1.5 3h1.5m3-6H15m-1.5 3H15m-1.5 3H15M9 21v-3.375c0-.621.504-1.125 1.125-1.125h3.75c.621 0 1.125.504 1.125 1.125V21"/>
+</svg><!--[if ENDBLOCK]><![endif]-->
+        
+        
+        <span
+                        class="fi-sidebar-item-label flex-1 truncate text-sm font-medium text-gray-700 dark:text-gray-200"
+        >
+            Kontrahenci
+        </span>
+
+            </a>
+
+    </li>
+            </ul>
+</li>
+                            <li
+    x-data="{ label: 'Szablony imprez' }"
+    data-group-label="Szablony imprez"
+    class="fi-sidebar-group flex flex-col gap-y-1"
+>
+            <div
+                            x-on:click="$store.sidebar.toggleCollapsedGroup(label)"
+                                    class="fi-sidebar-group-button flex items-center gap-x-3 px-2 py-2 cursor-pointer"
+        >
+            
+            <span
+                class="fi-sidebar-group-label flex-1 text-sm font-medium leading-6 text-gray-500 dark:text-gray-400"
+            >
+                Szablony imprez
+            </span>
+
+                            <button
+                                style="--c-300:var(--gray-300);--c-400:var(--gray-400);--c-500:var(--gray-500);--c-600:var(--gray-600);" class="fi-icon-btn relative flex items-center justify-center rounded-lg outline-none transition duration-75 focus-visible:ring-2 -m-2 h-9 w-9 text-gray-400 hover:text-gray-500 focus-visible:ring-primary-600 dark:text-gray-500 dark:hover:text-gray-400 dark:focus-visible:ring-primary-500 fi-color-gray fi-sidebar-group-collapse-button" title="Szablony imprez" type="button" wire:loading.attr="disabled" x-bind:aria-expanded="! $store.sidebar.groupIsCollapsed(label)" x-on:click.stop="$store.sidebar.toggleCollapsedGroup(label)" x-bind:class="{ '-rotate-180': $store.sidebar.groupIsCollapsed(label) }"
+    >
+                    <span class="sr-only">
+                Szablony imprez
+            </span>
+        
+        <!--[if BLOCK]><![endif]-->    <svg class="fi-icon-btn-icon h-5 w-5" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true" data-slot="icon">
+  <path fill-rule="evenodd" d="M9.47 6.47a.75.75 0 0 1 1.06 0l4.25 4.25a.75.75 0 1 1-1.06 1.06L10 8.06l-3.72 3.72a.75.75 0 0 1-1.06-1.06l4.25-4.25Z" clip-rule="evenodd"/>
+</svg><!--[if ENDBLOCK]><![endif]-->
+
+        
+            </button>
+                    </div>
+    
+    
+    <ul
+                                    x-show="! $store.sidebar.groupIsCollapsed(label)"
+                        x-collapse.duration.200ms
+                        class="fi-sidebar-group-items flex flex-col gap-y-1"
+    >
+                    
+            <li
+    class="fi-sidebar-item"
+>
+    <a
+        href="http://localhost/admin/kategoria-szablonus"
+        x-on:click="window.matchMedia(`(max-width: 1024px)`).matches && $store.sidebar.close()"
+                class="fi-sidebar-item-button relative flex items-center justify-center gap-x-3 rounded-lg px-2 py-2 outline-none transition duration-75 hover:bg-gray-100 focus-visible:bg-gray-100 dark:hover:bg-white/5 dark:focus-visible:bg-white/5"
+    >
+                    <!--[if BLOCK]><![endif]-->    <svg class="fi-sidebar-item-icon h-6 w-6 text-gray-400 dark:text-gray-500" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" aria-hidden="true" data-slot="icon">
+  <path stroke-linecap="round" stroke-linejoin="round" d="M2.25 12.75V12A2.25 2.25 0 0 1 4.5 9.75h15A2.25 2.25 0 0 1 21.75 12v.75m-8.69-6.44-2.12-2.12a1.5 1.5 0 0 0-1.061-.44H4.5A2.25 2.25 0 0 0 2.25 6v12a2.25 2.25 0 0 0 2.25 2.25h15A2.25 2.25 0 0 0 21.75 18V9a2.25 2.25 0 0 0-2.25-2.25h-5.379a1.5 1.5 0 0 1-1.06-.44Z"/>
+</svg><!--[if ENDBLOCK]><![endif]-->
+        
+        
+        <span
+                        class="fi-sidebar-item-label flex-1 truncate text-sm font-medium text-gray-700 dark:text-gray-200"
+        >
+            Kategorie szablonów
+        </span>
+
+            </a>
+
+    </li>
+                    
+            <li
+    class="fi-sidebar-item"
+>
+    <a
+        href="http://localhost/admin/transport-types"
+        x-on:click="window.matchMedia(`(max-width: 1024px)`).matches && $store.sidebar.close()"
+                class="fi-sidebar-item-button relative flex items-center justify-center gap-x-3 rounded-lg px-2 py-2 outline-none transition duration-75 hover:bg-gray-100 focus-visible:bg-gray-100 dark:hover:bg-white/5 dark:focus-visible:bg-white/5"
+    >
+                    <!--[if BLOCK]><![endif]-->    <svg class="fi-sidebar-item-icon h-6 w-6 text-gray-400 dark:text-gray-500" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" aria-hidden="true" data-slot="icon">
+  <path stroke-linecap="round" stroke-linejoin="round" d="M8.25 18.75a1.5 1.5 0 0 1-3 0m3 0a1.5 1.5 0 0 0-3 0m3 0h6m-9 0H3.375a1.125 1.125 0 0 1-1.125-1.125V14.25m17.25 4.5a1.5 1.5 0 0 1-3 0m3 0a1.5 1.5 0 0 0-3 0m3 0h1.125c.621 0 1.129-.504 1.09-1.124a17.902 17.902 0 0 0-3.213-9.193 2.056 2.056 0 0 0-1.58-.86H14.25M16.5 18.75h-2.25m0-11.177v-.958c0-.568-.422-1.048-.987-1.106a48.554 48.554 0 0 0-10.026 0 1.106 1.106 0 0 0-.987 1.106v7.635m12-6.677v6.677m0 4.5v-4.5m0 0h-12"/>
+</svg><!--[if ENDBLOCK]><![endif]-->
+        
+        
+        <span
+                        class="fi-sidebar-item-label flex-1 truncate text-sm font-medium text-gray-700 dark:text-gray-200"
+        >
+            Rodzaj transportu
+        </span>
+
+            </a>
+
+    </li>
+            </ul>
+</li>
+                            <li
+    x-data="{ label: 'Zadania' }"
+    data-group-label="Zadania"
+    class="fi-sidebar-group flex flex-col gap-y-1"
+>
+            <div
+                            x-on:click="$store.sidebar.toggleCollapsedGroup(label)"
+                                    class="fi-sidebar-group-button flex items-center gap-x-3 px-2 py-2 cursor-pointer"
+        >
+            
+            <span
+                class="fi-sidebar-group-label flex-1 text-sm font-medium leading-6 text-gray-500 dark:text-gray-400"
+            >
+                Zadania
+            </span>
+
+                            <button
+                                style="--c-300:var(--gray-300);--c-400:var(--gray-400);--c-500:var(--gray-500);--c-600:var(--gray-600);" class="fi-icon-btn relative flex items-center justify-center rounded-lg outline-none transition duration-75 focus-visible:ring-2 -m-2 h-9 w-9 text-gray-400 hover:text-gray-500 focus-visible:ring-primary-600 dark:text-gray-500 dark:hover:text-gray-400 dark:focus-visible:ring-primary-500 fi-color-gray fi-sidebar-group-collapse-button" title="Zadania" type="button" wire:loading.attr="disabled" x-bind:aria-expanded="! $store.sidebar.groupIsCollapsed(label)" x-on:click.stop="$store.sidebar.toggleCollapsedGroup(label)" x-bind:class="{ '-rotate-180': $store.sidebar.groupIsCollapsed(label) }"
+    >
+                    <span class="sr-only">
+                Zadania
+            </span>
+        
+        <!--[if BLOCK]><![endif]-->    <svg class="fi-icon-btn-icon h-5 w-5" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true" data-slot="icon">
+  <path fill-rule="evenodd" d="M9.47 6.47a.75.75 0 0 1 1.06 0l4.25 4.25a.75.75 0 1 1-1.06 1.06L10 8.06l-3.72 3.72a.75.75 0 0 1-1.06-1.06l4.25-4.25Z" clip-rule="evenodd"/>
+</svg><!--[if ENDBLOCK]><![endif]-->
+
+        
+            </button>
+                    </div>
+    
+    
+    <ul
+                                    x-show="! $store.sidebar.groupIsCollapsed(label)"
+                        x-collapse.duration.200ms
+                        class="fi-sidebar-group-items flex flex-col gap-y-1"
+    >
+                    
+            <li
+    class="fi-sidebar-item"
+>
+    <a
+        href="http://localhost/admin/tasks"
+        x-on:click="window.matchMedia(`(max-width: 1024px)`).matches && $store.sidebar.close()"
+                class="fi-sidebar-item-button relative flex items-center justify-center gap-x-3 rounded-lg px-2 py-2 outline-none transition duration-75 hover:bg-gray-100 focus-visible:bg-gray-100 dark:hover:bg-white/5 dark:focus-visible:bg-white/5"
+    >
+                    <!--[if BLOCK]><![endif]-->    <svg class="fi-sidebar-item-icon h-6 w-6 text-gray-400 dark:text-gray-500" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" aria-hidden="true" data-slot="icon">
+  <path stroke-linecap="round" stroke-linejoin="round" d="M9 4.5v15m6-15v15m-10.875 0h15.75c.621 0 1.125-.504 1.125-1.125V5.625c0-.621-.504-1.125-1.125-1.125H4.125C3.504 4.5 3 5.004 3 5.625v12.75c0 .621.504 1.125 1.125 1.125Z"/>
+</svg><!--[if ENDBLOCK]><![endif]-->
+        
+        
+        <span
+                        class="fi-sidebar-item-label flex-1 truncate text-sm font-medium text-gray-700 dark:text-gray-200"
+        >
+            Zadania
+        </span>
+
+                    <span
+                            >
+                <span
+                    style="--c-50:var(--primary-50);--c-400:var(--primary-400);--c-600:var(--primary-600);" class="fi-badge flex items-center justify-center gap-x-1 rounded-md text-xs font-medium ring-1 ring-inset px-2 min-w-[theme(spacing.6)] py-1 fi-color-custom bg-custom-50 text-custom-600 ring-custom-600/10 dark:bg-custom-400/10 dark:text-custom-400 dark:ring-custom-400/30 fi-color-primary"
+>
+            
+            
+    <span class="grid">
+        <span class="truncate">
+            14
+        </span>
+    </span>
+
+    </span>
+            </span>
+            </a>
+
+    </li>
+            </ul>
+</li>
+                            <li
+    x-data="{ label: 'Komunikacja' }"
+    data-group-label="Komunikacja"
+    class="fi-sidebar-group flex flex-col gap-y-1"
+>
+            <div
+                            x-on:click="$store.sidebar.toggleCollapsedGroup(label)"
+                                    class="fi-sidebar-group-button flex items-center gap-x-3 px-2 py-2 cursor-pointer"
+        >
+            
+            <span
+                class="fi-sidebar-group-label flex-1 text-sm font-medium leading-6 text-gray-500 dark:text-gray-400"
+            >
+                Komunikacja
+            </span>
+
+                            <button
+                                style="--c-300:var(--gray-300);--c-400:var(--gray-400);--c-500:var(--gray-500);--c-600:var(--gray-600);" class="fi-icon-btn relative flex items-center justify-center rounded-lg outline-none transition duration-75 focus-visible:ring-2 -m-2 h-9 w-9 text-gray-400 hover:text-gray-500 focus-visible:ring-primary-600 dark:text-gray-500 dark:hover:text-gray-400 dark:focus-visible:ring-primary-500 fi-color-gray fi-sidebar-group-collapse-button" title="Komunikacja" type="button" wire:loading.attr="disabled" x-bind:aria-expanded="! $store.sidebar.groupIsCollapsed(label)" x-on:click.stop="$store.sidebar.toggleCollapsedGroup(label)" x-bind:class="{ '-rotate-180': $store.sidebar.groupIsCollapsed(label) }"
+    >
+                    <span class="sr-only">
+                Komunikacja
+            </span>
+        
+        <!--[if BLOCK]><![endif]-->    <svg class="fi-icon-btn-icon h-5 w-5" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true" data-slot="icon">
+  <path fill-rule="evenodd" d="M9.47 6.47a.75.75 0 0 1 1.06 0l4.25 4.25a.75.75 0 1 1-1.06 1.06L10 8.06l-3.72 3.72a.75.75 0 0 1-1.06-1.06l4.25-4.25Z" clip-rule="evenodd"/>
+</svg><!--[if ENDBLOCK]><![endif]-->
+
+        
+            </button>
+                    </div>
+    
+    
+    <ul
+                                    x-show="! $store.sidebar.groupIsCollapsed(label)"
+                        x-collapse.duration.200ms
+                        class="fi-sidebar-group-items flex flex-col gap-y-1"
+    >
+                    
+            <li
+    class="fi-sidebar-item"
+>
+    <a
+        href="http://localhost/admin/chat"
+        x-on:click="window.matchMedia(`(max-width: 1024px)`).matches && $store.sidebar.close()"
+                class="fi-sidebar-item-button relative flex items-center justify-center gap-x-3 rounded-lg px-2 py-2 outline-none transition duration-75 hover:bg-gray-100 focus-visible:bg-gray-100 dark:hover:bg-white/5 dark:focus-visible:bg-white/5"
+    >
+                    <!--[if BLOCK]><![endif]-->    <svg class="fi-sidebar-item-icon h-6 w-6 text-gray-400 dark:text-gray-500" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" aria-hidden="true" data-slot="icon">
+  <path stroke-linecap="round" stroke-linejoin="round" d="M20.25 8.511c.884.284 1.5 1.128 1.5 2.097v4.286c0 1.136-.847 2.1-1.98 2.193-.34.027-.68.052-1.02.072v3.091l-3-3c-1.354 0-2.694-.055-4.02-.163a2.115 2.115 0 0 1-.825-.242m9.345-8.334a2.126 2.126 0 0 0-.476-.095 48.64 48.64 0 0 0-8.048 0c-1.131.094-1.976 1.057-1.976 2.192v4.286c0 .837.46 1.58 1.155 1.951m9.345-8.334V6.637c0-1.621-1.152-3.026-2.76-3.235A48.455 48.455 0 0 0 11.25 3c-2.115 0-4.198.137-6.24.402-1.608.209-2.76 1.614-2.76 3.235v6.226c0 1.621 1.152 3.026 2.76 3.235.577.075 1.157.14 1.74.194V21l4.155-4.155"/>
+</svg><!--[if ENDBLOCK]><![endif]-->
+        
+        
+        <span
+                        class="fi-sidebar-item-label flex-1 truncate text-sm font-medium text-gray-700 dark:text-gray-200"
+        >
+            Czat
+        </span>
+
+            </a>
+
+    </li>
+            </ul>
+</li>
+                    </ul>
+
+        <script>
+            var collapsedGroups = JSON.parse(
+                localStorage.getItem('collapsedGroups'),
+            )
+
+            if (collapsedGroups === null || collapsedGroups === 'null') {
+                localStorage.setItem(
+                    'collapsedGroups',
+                    JSON.stringify(JSON.parse('[\u0022Admin\u0022,\u0022Ustawienia\u0022,\u0022Ustawienia kalkulacji\u0022,\u0022Ustawienia og\\u00f3lne\u0022,\u0022Ustawienia nocleg\\u00f3w\u0022,\u0022Kontakty\u0022,\u0022Szablony imprez\u0022,\u0022Zadania\u0022,\u0022Komunikacja\u0022]')),
+                )
+            }
+
+            collapsedGroups = JSON.parse(
+                localStorage.getItem('collapsedGroups'),
+            )
+
+            document
+                .querySelectorAll('.fi-sidebar-group')
+                .forEach((group) => {
+                    if (
+                        !collapsedGroups.includes(group.dataset.groupLabel)
+                    ) {
+                        return
+                    }
+
+                    // Alpine.js loads too slow, so attempt to hide a
+                    // collapsed sidebar group earlier.
+                    group.querySelector(
+                        '.fi-sidebar-group-items',
+                    ).style.display = 'none'
+                    group
+                        .querySelector('.fi-sidebar-group-collapse-button')
+                        .classList.add('rotate-180')
+                })
+        </script>
+
+        
+    </nav>
+
+    
+</aside>
+
+
+            <script>
+                document.addEventListener('DOMContentLoaded', () => {
+                    setTimeout(() => {
+                        let activeSidebarItem = document.querySelector(
+                            '.fi-main-sidebar .fi-sidebar-item.fi-active',
+                        )
+
+                        if (
+                            !activeSidebarItem ||
+                            activeSidebarItem.offsetParent === null
+                        ) {
+                            activeSidebarItem = document.querySelector(
+                                '.fi-main-sidebar .fi-sidebar-group.fi-active',
+                            )
+                        }
+
+                        if (
+                            !activeSidebarItem ||
+                            activeSidebarItem.offsetParent === null
+                        ) {
+                            return
+                        }
+
+                        const sidebarWrapper = document.querySelector(
+                            '.fi-main-sidebar .fi-sidebar-nav',
+                        )
+
+                        if (!sidebarWrapper) {
+                            return
+                        }
+
+                        sidebarWrapper.scrollTo(
+                            0,
+                            activeSidebarItem.offsetTop -
+                                window.innerHeight / 2,
+                        )
+                    }, 10)
+                })
+            </script>
+            </div>
+
+        <div wire:snapshot="{&quot;data&quot;:{&quot;isFilamentNotificationsComponent&quot;:true,&quot;notifications&quot;:[[],{&quot;class&quot;:&quot;Filament\\Notifications\\Collection&quot;,&quot;s&quot;:&quot;wrbl&quot;}]},&quot;memo&quot;:{&quot;id&quot;:&quot;mm7dnR0JSbCL3xOpUc5d&quot;,&quot;name&quot;:&quot;filament.livewire.notifications&quot;,&quot;path&quot;:&quot;admin\/blog-posts&quot;,&quot;method&quot;:&quot;GET&quot;,&quot;children&quot;:[],&quot;scripts&quot;:[],&quot;assets&quot;:[],&quot;errors&quot;:[],&quot;locale&quot;:&quot;pl&quot;},&quot;checksum&quot;:&quot;11d384880e44bf19507cb27df01025af1d116b7b7ca7145ee0f88a125c986de2&quot;}" wire:effects="{&quot;listeners&quot;:[&quot;notificationsSent&quot;,&quot;notificationSent&quot;,&quot;notificationClosed&quot;]}" wire:id="mm7dnR0JSbCL3xOpUc5d">
+    <div
+        class="fi-no pointer-events-none fixed inset-4 z-50 mx-auto flex gap-3 items-end flex-col-reverse justify-end"
+        role="status"
+    >
+        <!--[if BLOCK]><![endif]--><!--[if ENDBLOCK]><![endif]-->
+    </div>
+
+    <!--[if BLOCK]><![endif]-->        <div
+    x-data="{}"
+    x-init="
+        window.addEventListener('EchoLoaded', () => {
+            window.Echo.private('App.Models.User.1').notification((notification) => {
+                setTimeout(() => $wire.handleBroadcastNotification(notification), 500)
+            })
+        })
+
+        if (window.Echo) {
+            window.dispatchEvent(new CustomEvent('EchoLoaded'))
+        }
+    "
+    
+></div>
+    <!--[if ENDBLOCK]><![endif]-->
+</div>
+
+        
+
+        <script>
+        window.filamentData = []    </script>
+
+            
+            <script
+                src="http://localhost/js/filament/notifications/notifications.js?v=3.3.20.0"
+                
+                
+                
+                
+                
+                
+            ></script>
+        
+                
+            <script
+                src="http://localhost/js/filament/support/support.js?v=3.3.20.0"
+                
+                
+                
+                
+                
+                
+            ></script>
+        
+                
+            <script
+                src="https://sor3v1b.test/build/assets/js/app._-BIFQAM.js"
+                
+                
+                type="module"
+                
+                
+                
+            ></script>
+        
+                
+            <script
+                src="http://localhost/js/filament/filament/echo.js?v=3.3.20.0"
+                
+                
+                
+                
+                
+                
+            ></script>
+        
+                
+            <script
+                src="http://localhost/js/filament/filament/app.js?v=3.3.20.0"
+                
+                
+                
+                
+                
+                
+            ></script>
+        
+    
+<style>
+    :root {
+            }
+</style>
+
+        
+                    <script>
+                loadDarkMode()
+            </script>
+        
+        
+        
+
+        
+    <!-- Livewire Scripts -->
+<script src="/livewire/livewire.js?id=df3a17f2"   data-csrf="q79a9ePNzPalFTcT6FdGkdzp9ftNHAxHkvwXKiZ3" data-update-uri="/livewire/update" data-navigate-once="true"></script>
+</body>
+</html>

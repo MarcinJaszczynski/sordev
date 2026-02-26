@@ -1,0 +1,397 @@
+Merge report
+Timestamp: 20250831_105728
+Target: /Users/marcin/Herd/sor3events/database/database.sqlite
+Backup: /Users/marcin/Herd/sor3events/database/database.sqlite.bak-20250831_105728
+Source: /Users/marcin/Herd/sor3events/database/database_serv.sqlite
+
+Starting merge...
+Found 67 tables in source
+
+Processing tables:
+- Table: blog_posts
+  -> Skipped: column count mismatch (source=      10 target=      15)
+  Source columns:
+0|id|INTEGER|1||1
+1|title|varchar|1||0
+2|slug|varchar|1||0
+3|content|TEXT|1||0
+4|status|varchar|1||0
+5|published_at|datetime|0||0
+6|is_featured|tinyint(1)|1|'0'|0
+7|deleted_at|datetime|0||0
+8|created_at|datetime|0||0
+9|updated_at|datetime|0||0
+  Target columns:
+0|id|INTEGER|1||1
+1|title|varchar|1||0
+2|slug|varchar|1||0
+3|content|TEXT|1||0
+4|status|varchar|1||0
+5|published_at|datetime|0||0
+6|is_featured|tinyint(1)|1|'0'|0
+7|deleted_at|datetime|0||0
+8|created_at|datetime|0||0
+9|updated_at|datetime|0||0
+10|excerpt|TEXT|0||0
+11|seo_meta|TEXT|0||0
+12|featured_image|varchar|0||0
+13|is_published|tinyint(1)|1|'0'|0
+14|gallery|TEXT|0||0
+
+- Table: buses
+  -> Inserted: 0 rows (before=5 after=5)
+
+- Table: cache
+  -> Inserted: 10 rows (before=80 after=90)
+
+- Table: cache_locks
+  -> Inserted: 0 rows (before=0 after=0)
+
+- Table: contact_contractor
+  -> Inserted: 0 rows (before=2 after=2)
+
+- Table: contacts
+  -> Inserted: 0 rows (before=291 after=291)
+
+- Table: contract_templates
+  -> Inserted: 0 rows (before=0 after=0)
+
+- Table: contractors
+  -> Skipped: column count mismatch (source=      11 target=      20)
+  Source columns:
+0|id|INTEGER|0||1
+1|name|TEXT|0||0
+2|street|TEXT|0||0
+3|house_number|TEXT|0||0
+4|city|TEXT|0||0
+5|postal_code|TEXT|0||0
+6|status|TEXT|0||0
+7|office_notes|TEXT|0||0
+8|created_at|TEXT|0||0
+9|updated_at|TEXT|0||0
+10|deleted_at|TEXT|0||0
+  Target columns:
+0|id|INTEGER|0||1
+1|name|TEXT|0||0
+2|street|TEXT|0||0
+3|house_number|TEXT|0||0
+4|city|TEXT|0||0
+5|postal_code|TEXT|0||0
+6|status|TEXT|0||0
+7|office_notes|TEXT|0||0
+8|created_at|TEXT|0||0
+9|updated_at|TEXT|0||0
+10|deleted_at|TEXT|0||0
+11|region|varchar|0||0
+12|country|varchar|0||0
+13|nip|varchar|0||0
+14|www|varchar|0||0
+15|description|TEXT|0||0
+16|firstname|varchar|0||0
+17|surname|varchar|0||0
+18|email|varchar|0||0
+19|phone|varchar|0||0
+
+- Table: conversation_participants
+  -> Inserted: 0 rows (before=40 after=40)
+
+- Table: conversations
+  -> Inserted: 0 rows (before=19 after=19)
+
+- Table: currencies
+  -> Inserted: 0 rows (before=21 after=21)
+
+- Table: event_histories
+  -> Inserted: 0 rows (before=200 after=200)
+
+- Table: event_price_descriptions
+  -> Inserted: 0 rows (before=5 after=5)
+
+- Table: event_program_points
+  -> Skipped: column count mismatch (source=      14 target=      28)
+  Source columns:
+0|id|INTEGER|0||1
+1|event_id|INTEGER|0||0
+2|event_template_program_point_id|INTEGER|0||0
+3|day|INTEGER|0||0
+4|order|REAL|0||0
+5|unit_price|INTEGER|0||0
+6|quantity|INTEGER|0||0
+7|total_price|INTEGER|0||0
+8|notes|TEXT|0||0
+9|include_in_program|INTEGER|0||0
+10|include_in_calculation|INTEGER|0||0
+11|active|INTEGER|0||0
+12|created_at|TEXT|0||0
+13|updated_at|TEXT|0||0
+  Target columns:
+0|id|INTEGER|0||1
+1|event_id|INTEGER|0||0
+2|event_template_program_point_id|INTEGER|0||0
+3|day|INTEGER|0||0
+4|order|REAL|0||0
+5|unit_price|INTEGER|0||0
+6|quantity|INTEGER|0||0
+7|total_price|INTEGER|0||0
+8|notes|TEXT|0||0
+9|include_in_program|INTEGER|0||0
+10|include_in_calculation|INTEGER|0||0
+11|active|INTEGER|0||0
+12|created_at|TEXT|0||0
+13|updated_at|TEXT|0||0
+14|name|varchar|0||0
+15|description|TEXT|0||0
+16|office_notes|TEXT|0||0
+17|pilot_notes|TEXT|0||0
+18|duration_hours|INTEGER|0||0
+19|duration_minutes|INTEGER|0||0
+20|featured_image|varchar|0||0
+21|gallery_images|TEXT|0||0
+22|group_size|INTEGER|0||0
+23|currency_id|INTEGER|0||0
+24|convert_to_pln|tinyint(1)|1|'0'|0
+25|show_title_style|tinyint(1)|1|'1'|0
+26|show_description|tinyint(1)|1|'1'|0
+27|parent_id|INTEGER|0||0
+
+- Table: event_snapshots
+  -> Skipped: column count mismatch (source=      14 target=      15)
+  Source columns:
+0|id|INTEGER|0||1
+1|event_id|INTEGER|0||0
+2|type|TEXT|0||0
+3|name|TEXT|0||0
+4|description|TEXT|0||0
+5|event_data|TEXT|0||0
+6|program_points|TEXT|0||0
+7|calculations|TEXT|0||0
+8|currency_rates|TEXT|0||0
+9|total_cost_snapshot|INTEGER|0||0
+10|created_by|INTEGER|0||0
+11|snapshot_date|TEXT|0||0
+12|created_at|TEXT|0||0
+13|updated_at|TEXT|0||0
+  Target columns:
+0|id|INTEGER|0||1
+1|event_id|INTEGER|0||0
+2|type|TEXT|0||0
+3|name|TEXT|0||0
+4|description|TEXT|0||0
+5|event_data|TEXT|0||0
+6|program_points|TEXT|0||0
+7|calculations|TEXT|0||0
+8|currency_rates|TEXT|0||0
+9|total_cost_snapshot|INTEGER|0||0
+10|created_by|INTEGER|0||0
+11|snapshot_date|TEXT|0||0
+12|created_at|TEXT|0||0
+13|updated_at|TEXT|0||0
+14|template_prices_snapshot|TEXT|0||0
+
+- Table: event_template_day_insurance
+  -> Inserted: 1022 rows (before=796 after=1818)
+
+- Table: event_template_event_price_description
+  -> Inserted: 179 rows (before=259 after=438)
+
+- Table: event_template_event_template_program_point
+  -> Inserted: 7059 rows (before=5211 after=12270)
+
+- Table: event_template_event_type
+  -> Inserted: 180 rows (before=262 after=442)
+
+- Table: event_template_hotel_days
+  -> Inserted: 485 rows (before=213 after=698)
+
+- Table: event_template_price_per_person
+  -> Inserted: 19447 rows (before=31131 after=50578)
+
+- Table: event_template_program_point_child
+  -> Inserted: 0 rows (before=0 after=0)
+
+- Table: event_template_program_point_child_pivot
+  -> Inserted: 2049 rows (before=1524 after=3573)
+
+- Table: event_template_program_point_parent
+  -> Inserted: 23 rows (before=557 after=580)
+
+- Table: event_template_program_point_tag
+  -> Inserted: 54 rows (before=2666 after=2720)
+
+- Table: event_template_program_points
+  -> Inserted: 18 rows (before=1241 after=1259)
+
+- Table: event_template_qties
+  -> Inserted: 0 rows (before=10 after=10)
+
+- Table: event_template_starting_place_availability
+  -> Inserted: 8178 rows (before=7079 after=15257)
+
+- Table: event_template_tag
+  -> Inserted: 918 rows (before=1281 after=2199)
+
+- Table: event_template_tax
+  -> Inserted: 358 rows (before=536 after=894)
+
+- Table: event_template_transport_type
+  -> Inserted: 179 rows (before=262 after=441)
+
+- Table: event_templates
+  -> Inserted: 179 rows (before=280 after=459)
+
+- Table: event_types
+  -> Inserted: 0 rows (before=3 after=3)
+
+- Table: events
+  -> Skipped: column count mismatch (source=      21 target=      22)
+  Source columns:
+0|id|INTEGER|0||1
+1|event_template_id|INTEGER|0||0
+2|name|TEXT|0||0
+3|client_name|TEXT|0||0
+4|client_email|TEXT|0||0
+5|client_phone|TEXT|0||0
+6|start_date|TEXT|0||0
+7|end_date|TEXT|0||0
+8|participant_count|INTEGER|0||0
+9|total_cost|INTEGER|0||0
+10|status|TEXT|0||0
+11|notes|TEXT|0||0
+12|created_by|INTEGER|0||0
+13|assigned_to|REAL|0||0
+14|created_at|TEXT|0||0
+15|updated_at|TEXT|0||0
+16|duration_days|INTEGER|0||0
+17|transfer_km|INTEGER|0||0
+18|program_km|INTEGER|0||0
+19|bus_id|REAL|0||0
+20|markup_id|REAL|0||0
+  Target columns:
+0|id|INTEGER|0||1
+1|event_template_id|INTEGER|0||0
+2|name|TEXT|0||0
+3|client_name|TEXT|0||0
+4|client_email|TEXT|0||0
+5|client_phone|TEXT|0||0
+6|start_date|TEXT|0||0
+7|end_date|TEXT|0||0
+8|participant_count|INTEGER|0||0
+9|total_cost|INTEGER|0||0
+10|status|TEXT|0||0
+11|notes|TEXT|0||0
+12|created_by|INTEGER|0||0
+13|assigned_to|REAL|0||0
+14|created_at|TEXT|0||0
+15|updated_at|TEXT|0||0
+16|duration_days|INTEGER|0||0
+17|transfer_km|INTEGER|0||0
+18|program_km|INTEGER|0||0
+19|bus_id|REAL|0||0
+20|markup_id|REAL|0||0
+21|start_place_id|INTEGER|0||0
+
+- Table: failed_jobs
+  -> Inserted: 1 rows (before=2 after=3)
+
+- Table: hotel_room_tag
+  -> Inserted: 0 rows (before=5 after=5)
+
+- Table: hotel_rooms
+  -> Inserted: 12 rows (before=83 after=95)
+
+- Table: insurances
+  -> Inserted: 0 rows (before=6 after=6)
+
+- Table: job_batches
+  -> Inserted: 0 rows (before=0 after=0)
+
+- Table: jobs
+  -> Inserted: 7945 rows (before=2268 after=10213)
+
+- Table: kategoria_szablonus
+  -> Inserted: 0 rows (before=21 after=21)
+
+- Table: markups
+  -> Inserted: 0 rows (before=6 after=6)
+
+- Table: media
+  -> Inserted: 0 rows (before=0 after=0)
+
+- Table: messages
+  -> Inserted: 0 rows (before=42 after=42)
+
+- Table: migrations
+  -> Inserted: 190 rows (before=400 after=590)
+
+- Table: model_has_permissions
+  -> Inserted: 0 rows (before=0 after=0)
+
+- Table: model_has_roles
+  -> Inserted: 14 rows (before=29 after=43)
+
+- Table: notifications
+  -> Inserted: 0 rows (before=2 after=2)
+
+- Table: password_reset_tokens
+  -> Inserted: 0 rows (before=0 after=0)
+
+- Table: payers
+  -> Inserted: 0 rows (before=7 after=7)
+
+- Table: payment_statuses
+  -> Inserted: 0 rows (before=4 after=4)
+
+- Table: payment_types
+  -> Inserted: 0 rows (before=2 after=2)
+
+- Table: permissions
+  -> Inserted: 0 rows (before=57 after=57)
+
+- Table: place_distances
+  -> Inserted: 0 rows (before=100806 after=100806)
+
+- Table: places
+  -> Inserted: 2 rows (before=320 after=322)
+
+- Table: role_has_permissions
+  -> Inserted: 188 rows (before=283 after=471)
+
+- Table: roles
+  -> Inserted: 0 rows (before=5 after=5)
+
+- Table: sessions
+  -> Inserted: 6 rows (before=2 after=8)
+
+- Table: tags
+  -> Inserted: 96 rows (before=1277 after=1373)
+
+- Table: task_attachments
+  -> Inserted: 0 rows (before=2 after=2)
+
+- Table: task_comments
+  -> Inserted: 0 rows (before=2 after=2)
+
+- Table: task_statuses
+  -> Inserted: 0 rows (before=5 after=5)
+
+- Table: tasks
+  -> Inserted: 0 rows (before=14 after=14)
+
+- Table: taxes
+  -> Inserted: 0 rows (before=3 after=3)
+
+- Table: todo_statuses
+  -> Inserted: 0 rows (before=1 after=1)
+
+- Table: transport_types
+  -> Inserted: 0 rows (before=4 after=4)
+
+- Table: users
+  -> Inserted: 0 rows (before=12 after=12)
+
+Merge finished.
+
+Summary:
+Total target tables: 78
+Backup created at: /Users/marcin/Herd/sor3events/database/database.sqlite.bak-20250831_105728
+Report: /Users/marcin/Herd/sor3events/database/merge_reports/merge_report_20250831_105728.txt

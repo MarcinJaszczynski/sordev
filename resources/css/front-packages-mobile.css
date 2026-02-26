@@ -1,0 +1,32 @@
+/* Minimal mobile overrides for packages page
+   - Stack day buttons/duration selectors vertically
+   - Make sidebar select/input full width on small screens
+   - Keep rules small and low-risk
+*/
+
+@media (max-width: 780px) {
+  /* Stack common button groups and selectors */
+  .day-buttons, .duration-buttons, .day-lengths, .days, .duration-list,
+  .btn-group, .btn-toolbar, .input-group {
+    display: flex !important;
+    flex-direction: column !important;
+    gap: 8px !important;
+  }
+
+  .day-buttons .btn, .duration-buttons .btn, .day-lengths .btn, .days .btn, .duration-list .btn,
+  .btn-group .btn, .input-group .form-control, .form-select, .form-control {
+    width: 100% !important;
+    display: block !important;
+  }
+
+  /* Sidebar filter inputs full width */
+  .package-sidebar .widget .box select.form-select,
+  .package-sidebar .widget .box input.form-control,
+  .package-sidebar .widget .box .row {
+    width: 100% !important;
+    display: block !important;
+  }
+
+  /* Ensure the filter toggle shows/hides cleanly */
+  #filters { box-sizing: border-box; }
+}

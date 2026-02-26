@@ -1,0 +1,82 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Test Drag & Drop</title>
+    <script src="https://cdn.jsdelivr.net/npm/sortablejs@1.15.6/Sortable.min.js"></script>
+    <style>
+        .kanban-dropzone {
+            min-height: 200px;
+            background: #f3f4f6;
+            border: 2px dashed #d1d5db;
+            padding: 16px;
+            margin: 16px;
+            width: 300px;
+            float: left;
+        }
+        .kanban-item {
+            background: white;
+            padding: 12px;
+            margin: 8px 0;
+            border-radius: 4px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+            cursor: move;
+        }
+        .sortable-ghost {
+            opacity: 0.5;
+            background: #e5edff;
+        }
+    </style>
+</head>
+<body>
+    <h1>Test Drag & Drop SortableJS</h1>
+    
+    <div class="kanban-dropzone" data-day="1">
+        <h3>Dzień 1</h3>
+        <div class="kanban-item" data-pivot-id="1">Element 1</div>
+        <div class="kanban-item" data-pivot-id="2">Element 2</div>
+        <div class="kanban-item" data-pivot-id="3">Element 3</div>
+    </div>
+    
+    <div class="kanban-dropzone" data-day="2">
+        <h3>Dzień 2</h3>
+        <div class="kanban-item" data-pivot-id="4">Element 4</div>
+        <div class="kanban-item" data-pivot-id="5">Element 5</div>
+    </div>
+    
+    <script>
+        document.addEventListener('DOMContentLoaded', function () {
+            const sortableInstances = [];
+            
+            document.querySelectorAll('.kanban-dropzone').forEach(zone => {
+                const instance = new Sortable(zone, {
+                    group: 'program-points',
+                    animation: 150,
+                    ghostClass: 'sortable-ghost',
+                    handle: '.kanban-item',
+                    onEnd: function(evt) {
+                        const pivotId = evt.item.getAttribute('data-pivot-id');
+                        const newDay = evt.to.getAttribute('data-day');
+                        
+                        const fullOrder = Array.from(evt.to.children)
+                            .filter(el => el.classList.contains('kanban-item'))
+                            .map(el => el.getAttribute('data-pivot-id'))
+                            .filter(Boolean);
+                        
+                        console.log('Drag ended:', {
+                            pivotId: pivotId,
+                            newDay: newDay,
+                            fullOrder: fullOrder
+                        });
+                        
+                        alert(`Przeniesiono element ${pivotId} do dnia ${newDay}\nNowa kolejność: ${fullOrder.join(', ')}`);
+                    }
+                });
+                
+                sortableInstances.push(instance);
+            });
+        });
+    </script>
+</body>
+</html>

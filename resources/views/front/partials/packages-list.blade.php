@@ -1,0 +1,324 @@
+@php
+    // Use centralized helper to get region slug for links
+    $regionSlugForLinks = \App\Support\Region::slugForLinks(isset($start_place_id) ? (int)$start_place_id : null);
+@endphp
+<style>
+@media (max-width: 966px) {
+    .package-box-name-mobile .title-section { padding:8px 12px; }
+    .package-box-name-mobile .title-section .title a { display:block; font-size:1.04rem; font-weight:700; color:#222 !important; text-decoration:none; line-height:1.2; }
+    .package-box-name-mobile .title-section .title a:hover { text-decoration:underline; }
+    .package-box-name-mobile .title-section .length { display:block; font-size:.85rem; color:#555; font-weight:400; margin:2px 0 6px; line-height:1.25; }
+    .package-box-name-mobile .title-section .type { display:flex; flex-wrap:wrap; gap:6px; }
+    .package-box-name-mobile .title-section .badge-tag { background:#f1f1f1; padding:4px 8px; border-radius:12px; font-size:.72rem; color:#333; text-decoration:none; font-weight:500; }
+    .package-box-name-mobile .title-section .badge-tag:hover { background:#e0e0e0; }
+}
+.transport-type-block { margin:10px 0 6px; }
+.transport-type-label { font-size:.85rem; font-weight:600; color:#4a4a4a; margin-bottom:4px; }
+.transport-type-icons { display:flex; gap:8px; flex-wrap:wrap; align-items:center; }
+.transport-type-icon { width:38px; height:38px; border-radius:10px; background:#f6f6f6; border:1px solid #ececec; padding:4px; display:flex; align-items:center; justify-content:center; box-shadow:0 1px 2px rgba(0,0,0,0.05); }
+.transport-type-icon img { max-width:100%; max-height:100%; object-fit:contain; }
+.transport-type-fallback { font-size:.75rem; font-weight:600; color:#666; text-transform:uppercase; letter-spacing:.02em; }
+.transport-type-icons--mobile { margin-top:6px; }
+</style>
+<!-- preserved original styles (no additional responsive overrides) -->
+@php $hasAny = (isset($eventTemplate) && count($eventTemplate) > 0); @endphp
+@if(!$hasAny)
+    <div style="padding:40px 10px; text-align:center; color:#444; font-size:1rem; font-weight:500;">
+        Brak ofert spełniających kryteria wyszukiwania.
+    </div>
+@endif
+
+@foreach($eventTemplate as $item)
+    @php
+        if ($item->relationLoaded('transportTypes')) {
+            $transportTypeCollection = $item->transportTypes;
+        } elseif (method_exists($item, 'transportTypes')) {
+            try {
+                $transportTypeCollection = $item->transportTypes()->get();
+            } catch (Throwable $e) {
+                $transportTypeCollection = collect();
+            }
+        } else {
+            $transportTypeCollection = collect();
+        }
+    @endphp
+    <div class="item pb_25 package-item" data-id="{{ $item->id }}">
+        <div class="package-box">
+            <div class="package-box-layout">
+                <div
+                    class="package-box-photo"
+                    style="background-image: url({{ asset('storage/' . ($item->featured_image ?? '')) }}); cursor: pointer;"
+                    @php
+                        $__baseUrl = route('package.pretty', [
+                            'regionSlug' => $regionSlugForLinks,
+                            'dayLength' => $item->duration_days . '-dniowe',
+                            'id' => $item->id,
+                            'slug' => $item->slug,
+                        ]);
+                        // Jeśli mamy wybrane start_place_id -> dołączamy go do linku jako query param
+                        if (isset($start_place_id) && $start_place_id) {
+                            $__baseUrl = $__baseUrl . '?start_place_id=' . (int)$start_place_id;
+                        }
+                    @endphp
+                    onclick="window.location.href='{{ $__baseUrl }}';">
+                </div>
+                <div class="package-box-name-mobile">
+                    <div class="title-section">
+                        <div class="title"><a href="{{ $__baseUrl }}">{{ $item->name }}</a></div>
+                        <div class="length">{{ $item->duration_days == 1 ? 'jednodniowa wycieczka szkolna' : $item->duration_days . '-dniowa wycieczka szkolna' }}</div>
+                        @php
+                            $mobileTags = [];
+                            if ($item->relationLoaded('tags') && $item->tags) {
+                                $mobileTags = $item->tags->take(3);
+                            } else {
+                                try { $mobileTags = $item->tags()->limit(3)->get(); } catch (Throwable $e) { $mobileTags = collect(); }
+                            }
+                        @endphp
+                        @if($mobileTags && $mobileTags->count())
+                            <div class="type">
+                                @foreach($mobileTags as $tag)
+                                    @php
+                                        $tUrl = route('packages', ['regionSlug' => $regionSlugForLinks]) . '?tag=' . \Illuminate\Support\Str::slug($tag->name);
+                                        if (isset($start_place_id) && $start_place_id) { $tUrl .= '&start_place_id=' . (int)$start_place_id; }
+                                    @endphp
+                                    <a href="{{ $tUrl }}" class="badge-tag">{{ $tag->name }}</a>
+                                @endforeach
+                            </div>
+                        @endif
+                        @if(isset($transportTypeCollection) && $transportTypeCollection->count())
+                            <div class="transport-type-icons transport-type-icons--mobile" aria-label="Środki transportu">
+                                @foreach($transportTypeCollection as $transportType)
+                                    @php
+                                        $iconPath = $transportType->icon_path ? asset('storage/' . ltrim($transportType->icon_path, '/')) : null;
+                                        $fallbackLabel = (string) \Illuminate\Support\Str::of($transportType->name ?? '')->trim()->substr(0, 2)->upper();
+                                    @endphp
+                                    <span class="transport-type-icon" title="{{ $transportType->name }}">
+                                        @if($iconPath)
+                                            <img src="{{ $iconPath }}" alt="{{ $transportType->name }}">
+                                        @else
+                                            <span class="transport-type-fallback">{{ $fallbackLabel }}</span>
+                                        @endif
+                                    </span>
+                                @endforeach
+                            </div>
+                        @endif
+                    </div>
+                </div>
+                <div class="package-box-info">
+                    <div class="left">
+                        <div class="package-box-name">
+                            <a href="{{ route('package.pretty', [
+                                    'regionSlug' => $regionSlugForLinks,
+                                    'dayLength' => $item->duration_days . '-dniowe',
+                                    'id' => $item->id,
+                                    'slug' => $item->slug,
+                                ]) }}">{{ $item->name }}</a>
+                            @if($item->subtitle)
+                                <div class="package-box-subtitle">{{ $item->subtitle }}</div>
+                            @endif
+                        </div>
+                        <div class="package-box-small-info">
+                            <div class="package-box-time">
+                                <i class="fas fa-clock"></i> {{ $item->duration_days }} dni
+                            </div>
+                        </div>
+                        @if(isset($transportTypeCollection) && $transportTypeCollection->count())
+                            <div class="transport-type-block">
+                                <div class="transport-type-label">Transport:</div>
+                                <div class="transport-type-icons" aria-label="Środki transportu">
+                                    @foreach($transportTypeCollection as $transportType)
+                                        @php
+                                            $iconPath = $transportType->icon_path ? asset('storage/' . ltrim($transportType->icon_path, '/')) : null;
+                                            $fallbackLabel = (string) \Illuminate\Support\Str::of($transportType->name ?? '')->trim()->substr(0, 2)->upper();
+                                        @endphp
+                                        <span class="transport-type-icon" title="{{ $transportType->name }}">
+                                            @if($iconPath)
+                                                <img src="{{ $iconPath }}" alt="{{ $transportType->name }}">
+                                            @else
+                                                <span class="transport-type-fallback">{{ $fallbackLabel }}</span>
+                                            @endif
+                                        </span>
+                                    @endforeach
+                                </div>
+                            </div>
+                        @endif
+                        <div class="package-box-positioning-graphic-info"></div>
+                        <div class="package-box-graphic-info">
+                            <div class="amenity-title">Tagi:</div>
+
+                            <div class="package-box-tags">
+                                @php
+                                    // Fallback: jeśli relacja 'tags' nie została załadowana, dociągnij ją (minimalnie) – chroni przed N+1 jeśli zwykle eager loaded.
+                                    if (!method_exists($item, 'tags')) {
+                                        $loadedTags = collect();
+                                    } else {
+                                        if (!$item->relationLoaded('tags') || $item->tags === null) {
+                                            // Ostrożnie: pojedyncze zapytanie – akceptowalne jako fallback.
+                                            $item->setRelation('tags', $item->tags()->get());
+                                        }
+                                        $loadedTags = $item->tags;
+                                    }
+                                @endphp
+                                @if ($loadedTags && $loadedTags->isNotEmpty())
+                                    @php $tagsBase = route('packages', ['regionSlug' => $regionSlugForLinks]); @endphp
+                                    @foreach ($loadedTags as $tag)
+                                            @php
+                                                $tSlug = \Illuminate\Support\Str::slug($tag->name);
+                                                $tUrl = $tagsBase . '?tag=' . $tSlug;
+                                                if (isset($start_place_id) && $start_place_id) { $tUrl .= '&start_place_id=' . (int)$start_place_id; }
+                                            @endphp
+                                            <a href="{{ $tUrl }}" class="badge-tag">{{ $tag->name }}</a>
+                                    @endforeach
+                                @else
+                                    {{-- Brak tagów --}}
+                                @endif
+                            </div>
+                        </div>
+                        </div>
+                    <div class="right">
+                        <div class="price-2-boxes">
+                        <div class="package-box-actual-price">
+                            @php
+                                $displayPrice = null;
+                                $otherCurrencyParts = [];
+
+                                if ($item->pricesPerPerson && $item->pricesPerPerson->count()) {
+                                    $validPrices = $item->pricesPerPerson->where('price_per_person', '>', 0);
+                                    if ($validPrices->count() > 0) {
+                                        // helper: wykryj PLN po symbol/nazwie (bez code, bo nie istnieje w tabeli)
+                                        $isPln = function($cur){
+                                            if (!$cur) return false;
+                                            $symbol = strtoupper(trim($cur->symbol ?? ''));
+                                            $name = strtoupper(trim($cur->name ?? ''));
+                                            return $symbol === 'PLN' || str_contains($name, 'ZŁOT');
+                                        };
+
+                                        // Najpierw PLN: minimalna cena (już zaokrąglona przy zapisie) – bez ponownego ceil.
+                                        $plnPrices = $validPrices->filter(function($p) use ($isPln){ return isset($p->currency) && $isPln($p->currency); });
+                                            if ($plnPrices->count() > 0) {
+                                                // Prefer controller computed_price if present
+                                                if (isset($item->computed_price) && is_numeric($item->computed_price)) {
+                                                    $displayPrice = (float) $item->computed_price;
+                                                } else {
+                                                    $displayPrice = (float)$plnPrices->min('price_per_person');
+                                                }
+                                            }
+
+                                        // Inne waluty: grupuj po etykiecie i bierz min (pełne jednostki)
+                                        $grouped = $validPrices->groupBy(function($p){
+                                            $c = $p->currency ?? null;
+                                            $label = $c?->symbol ?: 'OTHER'; // użyj symbol zamiast code
+                                            return $label ?: 'OTHER';
+                                        });
+                                        // Prefer EUR first, then the rest (PLN skipped below)
+                                        $orderedKeys = [];
+                                        foreach ($grouped->keys() as $k) { if (strtoupper((string)$k) === 'EUR') { $orderedKeys[] = $k; } }
+                                        foreach ($grouped->keys() as $k) { if (strtoupper((string)$k) !== 'EUR') { $orderedKeys[] = $k; } }
+                                        foreach($orderedKeys as $code) {
+                                            $group = $grouped->get($code);
+                                            $sample = $group->first()->currency ?? null;
+                                            if ($sample && $isPln($sample)) continue; // pomiń PLN w liniach dodatkowych
+                                            $min = $group->min('price_per_person');
+                                            if ($min && $min > 0) {
+                                                $amt = ceil($min);
+                                                $label = $sample?->code ?: ($sample?->symbol ?: $code);
+                                                $otherCurrencyParts[] = $amt . ' ' . $label;
+                                            }
+                                        }
+                                    }
+                                }
+                            @endphp
+                            <div class="price-multiline">
+                                @php
+                                    // Jeśli kontroler wyliczył computed_price (lokalna preferencja), to zawsze użyj go jako źródła ceny na liście.
+                                    if(isset($item->computed_price) && is_numeric($item->computed_price)) {
+                                        $displayPrice = $item->computed_price;
+                                    }
+                                @endphp
+                                @if(isset($displayPrice))
+                                    @php
+                                        // Zaokrąglij do pełnych 5 zł tak jak na stronie szczegółu (ceil do najbliższych 5)
+                                        $displayPriceRounded = ceil($displayPrice / 5) * 5;
+                                    @endphp
+                                    <div>od <b>{{ number_format($displayPriceRounded, 0, ',', ' ') }} zł</b></div>
+                                @else
+                                    <div><b>Cena w przygotowaniu</b></div>
+                                @endif
+                                @if(!empty($otherCurrencyParts))
+                                    @foreach($otherCurrencyParts as $part)
+                                        <div>+ {{ $part }}</div>
+                                    @endforeach
+                                @endif
+                                <div class="price-note">za osobę</div>
+                            </div>
+                        </div>
+                        @php
+                            // Dodatkowo: pokaż cenę dla zadanej liczby osób (requestedQty), jeśli policzona/computed_price bazuje na najbliższym progu
+                            $qtyNote = null;
+                            if (isset($requestedQty) && $requestedQty) {
+                                // spróbuj znaleźć najbliższy próg i cenę dla niego
+                                $qtyToPrice = [];
+                                if ($item->pricesPerPerson && $item->pricesPerPerson->count()) {
+                                    // grupy per qty (najnowsza po id)
+                                    $grouped = $item->pricesPerPerson
+                                        ->where('price_per_person', '>', 0)
+                                        ->groupBy('event_template_qty_id')
+                                        ->map(function($group){ return $group->sortByDesc('id')->first(); })
+                                        ->values();
+                                    foreach ($grouped as $price) {
+                                        $q = optional($price->eventTemplateQty)->qty;
+                                        if ($q) $qtyToPrice[(int)$q] = (float) $price->price_per_person;
+                                    }
+                                    ksort($qtyToPrice);
+                                    if (!empty($qtyToPrice)) {
+                                        if (isset($qtyToPrice[$requestedQty])) {
+                                            $closestQty = $requestedQty;
+                                        } else {
+                                            $lower = null; $upper = null;
+                                            foreach (array_keys($qtyToPrice) as $q) {
+                                                if ($q < $requestedQty) $lower = $q;
+                                                if ($q > $requestedQty) { $upper = $q; break; }
+                                            }
+                                            // Preferuj mniejszy próg (lower). Gdy brak mniejszego – bierz najmniejszy większy (upper)
+                                            if ($lower !== null) $closestQty = $lower;
+                                            else $closestQty = $upper; // może pozostać null, gdy brak danych
+                                        }
+                                        if (isset($closestQty) && isset($qtyToPrice[$closestQty])) {
+                                            $qtyPrice = $qtyToPrice[$closestQty]; // już zaokrąglone w bazie
+                                            $qtyNote = '(' . $qtyPrice . ' zł/os. dla grupy ' . $closestQty . ' osób)';
+                                        }
+                                    }
+                                }
+                            }
+                        @endphp
+                                @if($qtyNote)
+                                    <div style="margin-top:4px; font-size: 12px; color:#666;">{{ $qtyNote }}</div>
+                                @endif
+
+                                <div class="package-box-price">
+                                    <a href="{{ route('package.pretty', [
+                                            'regionSlug' => $regionSlugForLinks,
+                                            'dayLength' => $item->duration_days . '-dniowe',
+                                            'id' => $item->id,
+                                            'slug' => $item->slug,
+                                        ]) }}">Pokaż ofertę</a>
+                                </div>
+                            </div> <!-- .price-2-boxes -->
+                        </div> <!-- .right -->
+                    </div> <!-- .package-box-info -->
+                </div> <!-- .package-box-layout -->
+            </div> <!-- .package-box -->
+        </div> <!-- .item -->
+@endforeach
+
+{{-- Pagination --}}
+@if(isset($eventTemplate) && $eventTemplate instanceof \Illuminate\Contracts\Pagination\LengthAwarePaginator && $eventTemplate->hasPages())
+    <noscript>
+        <div class="pagination-container" style="text-align: center; margin-top: 40px; margin-bottom: 6px;">
+            {{ $eventTemplate->appends(request()->query())->links('pagination::bootstrap-4') }}
+        </div>
+        <div class="pagination-info" style="text-align: center; color:#666; font-size: 0.9em; margin-bottom: 20px;">
+            Wyświetlanie {{ $eventTemplate->firstItem() }}–{{ $eventTemplate->lastItem() }} z {{ $eventTemplate->total() }} wyników
+        </div>
+    </noscript>
+@endif

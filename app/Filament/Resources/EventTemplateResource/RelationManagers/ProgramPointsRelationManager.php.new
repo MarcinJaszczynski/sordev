@@ -1,0 +1,184 @@
+<?php
+
+namespace App\Filament\Resources\EventTemplateResource\RelationManagers;
+
+use App\Models\EventTemplateProgramPoint;
+use Filament\Forms;
+use Filament\Tables;
+use Filament\Resources\RelationManagers\RelationManager;
+use Filament\Tables\Actions\Action;
+use Filament\Tables\Grouping\Group;
+use Filament\Tables\Columns\TextColumn;
+use Filament\Tables\Columns\BooleanColumn;
+use Illuminate\Database\Eloquent\Builder;
+use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Log;
+
+class ProgramPointsRelationManager extends RelationManager
+{
+    protected static string $relationship = 'programPoints';
+    protected static ?string $title = 'Program imprezy';
+    protected static ?string $recordTitleAttribute = 'name';
+
+    public function table(Tables\Table $table): Tables\Table
+    {
+        return $table
+            ->reorderable('order')
+            ->defaultSort('pivot.order', 'asc')
+            ->columns([
+                Tables\Columns\TextColumn::make('pivot.day')
+                    ->label('Dzień')
+                    ->formatStateUsing(function ($state, $record, $rowLoop, $livewire) {
+                        // Separator: wyświetl numer dnia tylko nad pierwszym punktem danego dnia
+                        static $lastDay = null;
+                        $output = '';
+                        if ($lastDay !== $state) {
+                            $output = '<b style="display:block;margin-top:8px;">Dzień ' . $state . '</b>';
+                            $lastDay = $state;
+                        }
+                        return $output;
+                    })
+                    ->html(),
+                Tables\Columns\TextColumn::make('name')->label('Punkt programu')->searchable(),
+                Tables\Columns\TextColumn::make('pivot.order')->label('Kolejność')->sortable(),
+                Tables\Columns\TextColumn::make('pivot.notes')->label('Uwagi')->limit(30),
+                Tables\Columns\BooleanColumn::make('pivot.include_in_program')->label('W programie'),
+                Tables\Columns\BooleanColumn::make('pivot.include_in_calculation')->label('W kalkulacji'),
+                Tables\Columns\BooleanColumn::make('pivot.active')->label('Aktywny'),
+            ])
+            ->actions([
+                Tables\Actions\Action::make('edit')
+                    ->label('Edytuj')
+                    ->icon('heroicon-o-pencil')
+                    ->modalHeading('Edytuj punkt programu')
+                    ->modalSubmitActionLabel('Zapisz')
+                    ->form([
+                        Forms\Components\Select::make('event_template_program_point_id')
+                            ->label('Punkt programu')
+                            ->options(EventTemplateProgramPoint::all()->pluck('name', 'id'))
+                            ->required(),
+                        Forms\Components\TextInput::make('day')->label('Dzień')->numeric()->required(),
+                        Forms\Components\TextInput::make('order')->label('Kolejność')->numeric()->required(),
+                        Forms\Components\Textarea::make('notes')->label('Uwagi'),
+                        Forms\Components\Toggle::make('include_in_program')->label('Uwzględniaj w programie'),
+                        Forms\Components\Toggle::make('include_in_calculation')->label('Uwzględniaj w kalkulacji'),
+                        Forms\Components\Toggle::make('active')->label('Aktywny'),
+                    ])
+                    ->mountUsing(function ($form, $record) {
+                        $form->fill($record->pivot->toArray());
+                    })
+                    ->action(function ($data, $record) {
+                        $record->pivot->update($data);
+                    }),
+                Tables\Actions\DeleteAction::make(),
+            ])
+            ->headerActions([
+                Tables\Actions\Action::make('attach')
+                    ->label('Dodaj punkt do programu')
+                    ->icon('heroicon-o-plus')
+                    ->modalHeading('Dodaj punkt programu do imprezy')
+                    ->modalSubmitActionLabel('Dodaj')
+                    ->form([
+                        Forms\Components\Select::make('event_template_program_point_id')
+                            ->label('Punkt programu')
+                            ->options(EventTemplateProgramPoint::all()->pluck('name', 'id'))
+                            ->required(),
+                        Forms\Components\TextInput::make('day')->label('Dzień')->numeric()->required(),
+                        Forms\Components\TextInput::make('order')->label('Kolejność')->numeric()->required(),
+                        Forms\Components\Textarea::make('notes')->label('Uwagi'),
+                        Forms\Components\Toggle::make('include_in_program')->label('Uwzględniaj w programie')->default(true),
+                        Forms\Components\Toggle::make('include_in_calculation')->label('Uwzględniaj w kalkulacji')->default(true),
+                        Forms\Components\Toggle::make('active')->label('Aktywny')->default(true),
+                    ])
+                    ->action(function ($data) {
+                        $this->getOwnerRecord()->programPoints()->attach($data['event_template_program_point_id'], [
+                            'day' => $data['day'],
+                            'order' => $data['order'],
+                            'notes' => $data['notes'] ?? null,
+                            'include_in_program' => $data['include_in_program'] ?? false,
+                            'include_in_calculation' => $data['include_in_calculation'] ?? false,
+                            'active' => $data['active'] ?? false,
+                        ]);
+                    }),
+            ]);
+    }
+
+    public function getTableQuery(): Builder
+    {
+        return $this->getOwnerRecord()
+            ->programPoints()
+            ->withPivot([
+                'id', // Koniecznie dodajemy id do pivot
+                'day',
+                'order',
+                'notes',
+                'include_in_program',
+                'include_in_calculation',
+                'active',
+            ])
+            ->orderBy('event_template_event_template_program_point.day')
+            ->orderBy('event_template_event_template_program_point.order')
+            ->getQuery();
+    }
+    
+    /**
+     * Nadpisanie całkowitej metody reorderTable z Filament, aby uniknąć błędów z getRelationValue
+     * W Filament 3 z Laravel 12 istnieje problem z relacjami pivot przy reorderTable
+     */
+    public function reorderTable(array $order): void
+    {
+        try {
+            // Zapisujemy szczegółowe informacje debugowania
+            Log::info('Początek reorderTable', ['order' => $order]);
+            
+            // Konwertujemy tablicę na kolekcję dla łatwiejszej manipulacji
+            $orderCollection = collect($order);
+            
+            Log::info('Format tablicy order', [
+                'isArray' => is_array($order),
+                'isNumericArray' => array_is_list($order),
+                'firstItem' => $orderCollection->first(),
+                'orderCollection' => $orderCollection->toArray()
+            ]);
+            
+            DB::transaction(function () use ($order) {
+                $ownerRecord = $this->getOwnerRecord();
+                $relationship = $this->getRelationship();
+                $pivotTable = $relationship->getTable();
+                $foreignPivotKey = $relationship->getForeignPivotKeyName();
+                $relatedPivotKey = $relationship->getRelatedPivotKeyName();
+                
+                Log::info('Informacje o relacji', [
+                    'pivotTable' => $pivotTable,
+                    'foreignPivotKey' => $foreignPivotKey,
+                    'relatedPivotKey' => $relatedPivotKey,
+                    'ownerRecordKey' => $ownerRecord->getKey()
+                ]);
+                
+                // Przetwarzamy każdy rekord w tabeli
+                foreach ($order as $index => $recordId) {
+                    Log::info('Aktualizacja rekordu', [
+                        'index' => $index,
+                        'recordId' => $recordId,
+                        'newOrder' => $index + 1
+                    ]);
+                    
+                    // Znajdujemy odpowiedni rekord pivot i aktualizujemy bezpośrednio
+                    $result = DB::table($pivotTable)
+                        ->where($foreignPivotKey, $ownerRecord->getKey())
+                        ->where($relatedPivotKey, $recordId)
+                        ->update(['order' => $index + 1]);
+                        
+                    Log::info('Wynik aktualizacji', ['result' => $result]);
+                }
+            });
+            
+            Log::info('Koniec reorderTable - sukces');
+        } catch (\Exception $e) {
+            // Logowanie błędów
+            Log::error('Błąd podczas przestawiania: ' . $e->getMessage(), [
+                'trace' => $e->getTraceAsString()
+            ]);
+        }
+    }
+}

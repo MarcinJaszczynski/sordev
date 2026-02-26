@@ -1,0 +1,36 @@
+<?php
+
+use Illuminate\Database\Migrations\Migration;
+use Illuminate\Database\Schema\Blueprint;
+use Illuminate\Support\Facades\Schema;
+
+return new class extends Migration
+{
+    /**
+     * Run the migrations.
+     */
+    public function up(): void
+    {
+        Schema::create('event_template_tax', function (Blueprint $table) {
+            $table->id();
+            $table->unsignedBigInteger('event_template_id');
+            $table->unsignedBigInteger('tax_id');
+            $table->timestamps();
+            
+            // Prevent duplicate assignments
+            $table->unique(['event_template_id', 'tax_id']);
+            
+            // Add foreign keys without constraint checking due to SQLite issues
+            $table->index('event_template_id');
+            $table->index('tax_id');
+        });
+    }
+
+    /**
+     * Reverse the migrations.
+     */
+    public function down(): void
+    {
+        Schema::dropIfExists('event_template_tax');
+    }
+};

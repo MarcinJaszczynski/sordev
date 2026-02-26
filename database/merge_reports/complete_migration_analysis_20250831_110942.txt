@@ -1,0 +1,71 @@
+Complete Migration Analysis
+Timestamp: 2025-08-31_11:09:42
+Target: /Users/marcin/Herd/sor3events/database/database.sqlite
+Source: /Users/marcin/Herd/sor3events/database/database_serv.sqlite
+
+=== NEW TABLES IN TARGET (no data to migrate) ===
+- blog_post_tag
+- contractor_contact
+- contractor_contractortype
+- contractor_types
+- document_attachments
+- document_sections
+- documents
+- event_day_insurance
+- event_price_per_person
+- event_qties
+- event_starting_place_availability
+
+=== EXISTING TABLES WITH NEW COLUMNS ===
+Table: blog_posts
+New columns: excerpt,featured_image,gallery,is_published,seo_meta
+Existing records in target: 3
+
+Table: contractors
+New columns: country,description,email,firstname,nip,phone,region,surname,www
+Existing records in target: 292
+
+Table: event_program_points
+New columns: convert_to_pln,currency_id,description,duration_hours,duration_minutes,featured_image,gallery_images,group_size,name,office_notes,parent_id,pilot_notes,show_description,show_title_style
+Existing records in target: 85
+
+Table: event_snapshots
+New columns: template_prices_snapshot
+Existing records in target: 13
+
+Table: events
+New columns: start_place_id
+Existing records in target: 14
+
+=== POTENTIAL MAPPINGS ===
+blog_posts:excerpt=lit:NULL (or from content summary)
+blog_posts:seo_meta=lit:NULL
+blog_posts:featured_image=lit:NULL (or from media table if filename matches)
+blog_posts:gallery=lit:NULL
+blog_posts:is_published=lit:1
+contractors:country=lit:Poland
+contractors:region=lit:NULL
+contractors:www=lit:NULL
+contractors:description=lit:NULL
+contractors:email=lit:NULL
+contractors:phone=lit:NULL
+contractors:firstname=lit:NULL
+contractors:surname=lit:NULL
+contractors:nip=lit:NULL
+events:start_place_id=lit:NULL
+event_program_points:name=lit:NULL
+event_program_points:description=lit:NULL
+event_program_points:office_notes=lit:NULL
+event_program_points:pilot_notes=lit:NULL
+event_program_points:duration_hours=lit:0
+event_program_points:duration_minutes=lit:0
+event_program_points:featured_image=lit:NULL
+event_program_points:gallery_images=lit:NULL
+event_program_points:group_size=lit:NULL
+event_program_points:currency_id=lit:1
+event_program_points:convert_to_pln=lit:0
+event_program_points:show_title_style=lit:1
+event_program_points:show_description=lit:1
+event_program_points:parent_id=lit:NULL
+event_snapshots:template_prices_snapshot=lit:NULL
+

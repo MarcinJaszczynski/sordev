@@ -1,0 +1,91 @@
+# Apache .htaccess configuration for serving compressed assets
+# Add this to your public/.htaccess file
+
+<IfModule mod_deflate.c>
+    # Enable compression for text-based files
+    AddOutputFilterByType DEFLATE text/plain
+    AddOutputFilterByType DEFLATE text/html
+    AddOutputFilterByType DEFLATE text/xml
+    AddOutputFilterByType DEFLATE text/css
+    AddOutputFilterByType DEFLATE application/xml
+    AddOutputFilterByType DEFLATE application/xhtml+xml
+    AddOutputFilterByType DEFLATE application/rss+xml
+    AddOutputFilterByType DEFLATE application/javascript
+    AddOutputFilterByType DEFLATE application/x-javascript
+    AddOutputFilterByType DEFLATE image/svg+xml
+</IfModule>
+
+<IfModule mod_expires.c>
+    # Enable expires headers
+    ExpiresActive On
+    
+    # CSS and JS files
+    ExpiresByType text/css "access plus 1 year"
+    ExpiresByType application/javascript "access plus 1 year"
+    ExpiresByType application/x-javascript "access plus 1 year"
+    
+    # Images
+    ExpiresByType image/png "access plus 1 year"
+    ExpiresByType image/jpg "access plus 1 year"
+    ExpiresByType image/jpeg "access plus 1 year"
+    ExpiresByType image/gif "access plus 1 year"
+    ExpiresByType image/svg+xml "access plus 1 year"
+    ExpiresByType image/webp "access plus 1 year"
+    
+    # Fonts
+    ExpiresByType font/woff2 "access plus 1 year"
+    ExpiresByType font/woff "access plus 1 year"
+    ExpiresByType font/ttf "access plus 1 year"
+    ExpiresByType font/eot "access plus 1 year"
+</IfModule>
+
+<IfModule mod_headers.c>
+    # Add Vary header for better caching
+    Header append Vary Accept-Encoding
+    
+    # Security headers
+    Header always set X-Content-Type-Options nosniff
+    Header always set X-Frame-Options DENY
+    Header always set X-XSS-Protection "1; mode=block"
+    
+    # Cache headers for static assets
+    <FilesMatch "\.(css|js|png|jpg|jpeg|gif|svg|woff2?|ttf|eot)$">
+        Header set Cache-Control "public, max-age=31536000, immutable"
+    </FilesMatch>
+</IfModule>
+
+# Serve pre-compressed files if available
+<IfModule mod_rewrite.c>
+    RewriteEngine On
+    
+    # Check for Brotli compressed files
+    RewriteCond %{HTTP:Accept-Encoding} br
+    RewriteCond %{REQUEST_FILENAME}\.br -f
+    RewriteRule ^(.*)$ $1.br [L]
+    
+    # Check for Gzip compressed files
+    RewriteCond %{HTTP:Accept-Encoding} gzip
+    RewriteCond %{REQUEST_FILENAME}\.gz -f
+    RewriteRule ^(.*)$ $1.gz [L]
+    
+    # Set proper content encoding for compressed files
+    <FilesMatch "\.js\.br$">
+        AddType "text/javascript" .br
+        AddEncoding br .br
+    </FilesMatch>
+    
+    <FilesMatch "\.css\.br$">
+        AddType "text/css" .br
+        AddEncoding br .br
+    </FilesMatch>
+    
+    <FilesMatch "\.js\.gz$">
+        AddType "text/javascript" .gz
+        AddEncoding gzip .gz
+    </FilesMatch>
+    
+    <FilesMatch "\.css\.gz$">
+        AddType "text/css" .gz
+        AddEncoding gzip .gz
+    </FilesMatch>
+</IfModule>

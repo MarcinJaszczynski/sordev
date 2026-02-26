@@ -1,0 +1,15 @@
+Apply mappings report
+Timestamp: 20250831_110258
+Target: /Users/marcin/Herd/sor3events/database/database.sqlite
+Source: /Users/marcin/Herd/sor3events/database/database_serv.sqlite
+Config: /Users/marcin/Herd/sor3events/scripts/column_mappings.conf
+
+Starting apply mappings...
+Processing mapping: table=blog_posts key=id target_col=excerpt source_expr=excerpt
+ -> Skipped: source column 'excerpt' does not exist in /Users/marcin/Herd/sor3events/database/database_serv.sqlite.blog_posts
+Processing mapping: table=blog_posts key=id target_col=seo_meta source_expr=seo_meta
+ -> Skipped: source column 'seo_meta' does not exist in /Users/marcin/Herd/sor3events/database/database_serv.sqlite.blog_posts
+Processing mapping: table=blog_posts key=id target_col=featured_image source_expr=featured_image
+ -> Skipped: source column 'featured_image' does not exist in /Users/marcin/Herd/sor3events/database/database_serv.sqlite.blog_posts
+Apply mappings finished.
+Report: /Users/marcin/Herd/sor3events/database/merge_reports/apply_mappings_report_20250831_110258.txt

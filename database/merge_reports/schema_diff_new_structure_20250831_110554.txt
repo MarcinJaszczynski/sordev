@@ -1,0 +1,762 @@
+Schema diff report
+Target: /Users/marcin/Herd/sor3events/database/database.sqlite
+Source: /Users/marcin/Herd/sor3events/database/database_serv.sqlite
+
+Tables present only in TARGET (new tables):
+blog_post_tag
+contractor_contact
+contractor_contractortype
+contractor_types
+document_attachments
+document_sections
+documents
+event_day_insurance
+event_price_per_person
+event_qties
+event_starting_place_availability
+
+Columns added in TARGET for existing tables:
+blog_posts: excerpt,featured_image,gallery,is_published,seo_meta
+contractors: country,description,email,firstname,nip,phone,region,surname,www
+event_program_points: convert_to_pln,currency_id,description,duration_hours,duration_minutes,featured_image,gallery_images,group_size,name,office_notes,parent_id,pilot_notes,show_description,show_title_style
+event_snapshots: template_prices_snapshot
+events: start_place_id
+
+Full target tables and columns (for reference):
+--- blog_post_tag
+0|blog_post_id|INTEGER|1||1
+1|tag_id|INTEGER|1||2
+--- blog_posts
+0|id|INTEGER|1||1
+1|title|varchar|1||0
+2|slug|varchar|1||0
+3|content|TEXT|1||0
+4|status|varchar|1||0
+5|published_at|datetime|0||0
+6|is_featured|tinyint(1)|1|'0'|0
+7|deleted_at|datetime|0||0
+8|created_at|datetime|0||0
+9|updated_at|datetime|0||0
+10|excerpt|TEXT|0||0
+11|seo_meta|TEXT|0||0
+12|featured_image|varchar|0||0
+13|is_published|tinyint(1)|1|'0'|0
+14|gallery|TEXT|0||0
+--- buses
+0|id|INTEGER|0||1
+1|name|TEXT|0||0
+2|description|TEXT|0||0
+3|capacity|INTEGER|0||0
+4|package_price_per_day|INTEGER|0||0
+5|package_km_per_day|INTEGER|0||0
+6|extra_km_price|REAL|0||0
+7|created_at|TEXT|0||0
+8|updated_at|TEXT|0||0
+9|currency|TEXT|0||0
+10|convert_to_pln|INTEGER|0||0
+--- cache
+0|key|TEXT|0||0
+1|value|TEXT|0||0
+2|expiration|INTEGER|0||0
+--- cache_locks
+0|key|TEXT|0||0
+1|owner|TEXT|0||0
+2|expiration|TEXT|0||0
+--- contact_contractor
+0|id|INTEGER|0||1
+1|contractor_id|INTEGER|0||0
+2|contact_id|INTEGER|0||0
+3|created_at|TEXT|0||0
+4|updated_at|TEXT|0||0
+--- contacts
+0|id|INTEGER|0||1
+1|first_name|TEXT|0||0
+2|last_name|TEXT|0||0
+3|phone|TEXT|0||0
+4|email|TEXT|0||0
+5|notes|TEXT|0||0
+6|created_at|TEXT|0||0
+7|updated_at|TEXT|0||0
+8|deleted_at|TEXT|0||0
+--- contract_templates
+0|id|TEXT|0||0
+1|name|TEXT|0||0
+2|content|TEXT|0||0
+3|created_at|TEXT|0||0
+4|updated_at|TEXT|0||0
+--- contractor_contact
+0|id|INTEGER|0||1
+1|contractor_id|INTEGER|1||0
+2|contact_id|INTEGER|1||0
+3|created_at|datetime|0||0
+4|updated_at|datetime|0||0
+--- contractor_contractortype
+0|id|INTEGER|1||1
+1|contractor_id|INTEGER|1||0
+2|contractor_type_id|INTEGER|1||0
+3|created_at|datetime|0||0
+4|updated_at|datetime|0||0
+--- contractor_types
+0|id|INTEGER|1||1
+1|name|varchar|1||0
+2|created_at|datetime|0||0
+3|updated_at|datetime|0||0
+--- contractors
+0|id|INTEGER|0||1
+1|name|TEXT|0||0
+2|street|TEXT|0||0
+3|house_number|TEXT|0||0
+4|city|TEXT|0||0
+5|postal_code|TEXT|0||0
+6|status|TEXT|0||0
+7|office_notes|TEXT|0||0
+8|created_at|TEXT|0||0
+9|updated_at|TEXT|0||0
+10|deleted_at|TEXT|0||0
+11|region|varchar|0||0
+12|country|varchar|0||0
+13|nip|varchar|0||0
+14|www|varchar|0||0
+15|description|TEXT|0||0
+16|firstname|varchar|0||0
+17|surname|varchar|0||0
+18|email|varchar|0||0
+19|phone|varchar|0||0
+--- conversation_participants
+0|id|INTEGER|0||1
+1|conversation_id|INTEGER|0||0
+2|user_id|INTEGER|0||0
+3|joined_at|TEXT|0||0
+4|last_read_at|TEXT|0||0
+5|created_at|TEXT|0||0
+6|updated_at|TEXT|0||0
+--- conversations
+0|id|INTEGER|0||1
+1|title|TEXT|0||0
+2|type|TEXT|0||0
+3|created_by|INTEGER|0||0
+4|last_message_at|TEXT|0||0
+5|created_at|TEXT|0||0
+6|updated_at|TEXT|0||0
+--- currencies
+0|id|INTEGER|0||1
+1|name|TEXT|0||0
+2|symbol|TEXT|0||0
+3|exchange_rate|REAL|0||0
+4|last_updated_at|TEXT|0||0
+5|created_at|TEXT|0||0
+6|updated_at|TEXT|0||0
+--- document_attachments
+0|id|INTEGER|1||1
+1|document_id|INTEGER|1||0
+2|path|varchar|1||0
+3|original_name|varchar|0||0
+4|mime_type|varchar|0||0
+5|order_number|INTEGER|1|'0'|0
+6|created_at|datetime|0||0
+7|updated_at|datetime|0||0
+--- document_sections
+0|id|INTEGER|1||1
+1|title|varchar|1||0
+2|slug|varchar|1||0
+3|order_number|INTEGER|1|'0'|0
+4|created_at|datetime|0||0
+5|updated_at|datetime|0||0
+--- documents
+0|id|INTEGER|1||1
+1|document_section_id|INTEGER|1||0
+2|title|varchar|1||0
+3|slug|varchar|1||0
+4|excerpt|TEXT|0||0
+5|content|TEXT|0||0
+6|order_number|INTEGER|1|'0'|0
+7|is_published|tinyint(1)|1|'0'|0
+8|created_at|datetime|0||0
+9|updated_at|datetime|0||0
+--- event_day_insurance
+0|id|INTEGER|1||1
+1|event_id|INTEGER|1||0
+2|day|INTEGER|1||0
+3|insurance_id|INTEGER|0||0
+4|created_at|datetime|0||0
+5|updated_at|datetime|0||0
+--- event_histories
+0|id|INTEGER|0||1
+1|event_id|INTEGER|0||0
+2|user_id|INTEGER|0||0
+3|action|TEXT|0||0
+4|field|TEXT|0||0
+5|old_value|TEXT|0||0
+6|new_value|TEXT|0||0
+7|description|TEXT|0||0
+8|ip_address|TEXT|0||0
+9|created_at|TEXT|0||0
+10|updated_at|TEXT|0||0
+--- event_price_descriptions
+0|id|INTEGER|1||1
+1|description|TEXT|1||0
+2|created_at|datetime|0||0
+3|updated_at|datetime|0||0
+4|name|varchar|1||0
+--- event_price_per_person
+0|id|INTEGER|1||1
+1|event_id|INTEGER|1||0
+2|event_template_qty_id|INTEGER|0||0
+3|currency_id|INTEGER|0||0
+4|start_place_id|INTEGER|0||0
+5|price_per_person|numeric|1|'0'|0
+6|transport_cost|numeric|0||0
+7|price_base|numeric|0||0
+8|markup_amount|numeric|0||0
+9|tax_amount|numeric|0||0
+10|price_with_tax|numeric|0||0
+11|tax_breakdown|TEXT|0||0
+12|created_at|datetime|0||0
+13|updated_at|datetime|0||0
+--- event_program_points
+0|id|INTEGER|0||1
+1|event_id|INTEGER|0||0
+2|event_template_program_point_id|INTEGER|0||0
+3|day|INTEGER|0||0
+4|order|REAL|0||0
+5|unit_price|INTEGER|0||0
+6|quantity|INTEGER|0||0
+7|total_price|INTEGER|0||0
+8|notes|TEXT|0||0
+9|include_in_program|INTEGER|0||0
+10|include_in_calculation|INTEGER|0||0
+11|active|INTEGER|0||0
+12|created_at|TEXT|0||0
+13|updated_at|TEXT|0||0
+14|name|varchar|0||0
+15|description|TEXT|0||0
+16|office_notes|TEXT|0||0
+17|pilot_notes|TEXT|0||0
+18|duration_hours|INTEGER|0||0
+19|duration_minutes|INTEGER|0||0
+20|featured_image|varchar|0||0
+21|gallery_images|TEXT|0||0
+22|group_size|INTEGER|0||0
+23|currency_id|INTEGER|0||0
+24|convert_to_pln|tinyint(1)|1|'0'|0
+25|show_title_style|tinyint(1)|1|'1'|0
+26|show_description|tinyint(1)|1|'1'|0
+27|parent_id|INTEGER|0||0
+--- event_qties
+0|id|INTEGER|1||1
+1|event_id|INTEGER|1||0
+2|qty|INTEGER|1||0
+3|gratis|INTEGER|0||0
+4|staff|INTEGER|0||0
+5|driver|INTEGER|0||0
+6|created_at|datetime|0||0
+7|updated_at|datetime|0||0
+--- event_snapshots
+0|id|INTEGER|0||1
+1|event_id|INTEGER|0||0
+2|type|TEXT|0||0
+3|name|TEXT|0||0
+4|description|TEXT|0||0
+5|event_data|TEXT|0||0
+6|program_points|TEXT|0||0
+7|calculations|TEXT|0||0
+8|currency_rates|TEXT|0||0
+9|total_cost_snapshot|INTEGER|0||0
+10|created_by|INTEGER|0||0
+11|snapshot_date|TEXT|0||0
+12|created_at|TEXT|0||0
+13|updated_at|TEXT|0||0
+14|template_prices_snapshot|TEXT|0||0
+--- event_starting_place_availability
+0|id|INTEGER|1||1
+1|event_id|INTEGER|1||0
+2|start_place_id|INTEGER|0||0
+3|end_place_id|INTEGER|0||0
+4|available|tinyint(1)|1|'1'|0
+5|note|varchar|0||0
+6|created_at|datetime|0||0
+7|updated_at|datetime|0||0
+--- event_template_day_insurance
+0|id|INTEGER|0||1
+1|event_template_id|INTEGER|0||0
+2|day|INTEGER|0||0
+3|insurance_id|INTEGER|0||0
+4|created_at|TEXT|0||0
+5|updated_at|TEXT|0||0
+--- event_template_event_price_description
+0|id|INTEGER|1||1
+1|event_template_id|INTEGER|1||0
+2|event_price_description_id|INTEGER|0||0
+3|created_at|datetime|0||0
+4|updated_at|datetime|0||0
+--- event_template_event_template_program_point
+0|id|INTEGER|1||1
+1|event_template_id|INTEGER|1||0
+2|event_template_program_point_id|INTEGER|1||0
+3|day|INTEGER|1||0
+4|order|INTEGER|1||0
+5|notes|TEXT|0||0
+6|include_in_program|tinyint(1)|1|'1'|0
+7|include_in_calculation|tinyint(1)|1|'1'|0
+8|active|tinyint(1)|1|'1'|0
+9|created_at|datetime|0||0
+10|updated_at|datetime|0||0
+11|show_title_style|tinyint(1)|0|'1'|0
+12|show_description|tinyint(1)|0|'1'|0
+--- event_template_event_type
+0|id|INTEGER|1||1
+1|event_template_id|INTEGER|1||0
+2|event_type_id|INTEGER|1||0
+3|created_at|datetime|0||0
+4|updated_at|datetime|0||0
+--- event_template_hotel_days
+0|id|INTEGER|0||1
+1|event_template_id|INTEGER|0||0
+2|day|INTEGER|0||0
+3|hotel_room_ids_qty|TEXT|0||0
+4|hotel_room_ids_gratis|TEXT|0||0
+5|hotel_room_ids_staff|TEXT|0||0
+6|hotel_room_ids_driver|TEXT|0||0
+7|notes|TEXT|0||0
+8|created_at|TEXT|0||0
+9|updated_at|TEXT|0||0
+--- event_template_price_per_person
+0|id|INTEGER|0||1
+1|event_template_id|INTEGER|0||0
+2|event_template_qty_id|INTEGER|0||0
+3|currency_id|INTEGER|0||0
+4|price_per_person|INTEGER|0||0
+5|created_at|TEXT|0||0
+6|updated_at|TEXT|0||0
+7|start_place_id|INTEGER|0||0
+8|transport_cost|numeric|0||0
+9|price_base|numeric|0||0
+10|markup_amount|numeric|0||0
+11|tax_amount|numeric|0||0
+12|price_with_tax|numeric|0||0
+13|tax_breakdown|TEXT|0||0
+--- event_template_program_point_child
+0|id|INTEGER|1||1
+1|event_template_id|INTEGER|1||0
+2|program_point_id|INTEGER|1||0
+3|include_in_program|tinyint(1)|1|'1'|0
+4|include_in_calculation|tinyint(1)|1|'1'|0
+5|active|tinyint(1)|1|'1'|0
+6|created_at|datetime|0||0
+7|updated_at|datetime|0||0
+--- event_template_program_point_child_pivot
+0|id|INTEGER|1||1
+1|event_template_id|INTEGER|1||0
+2|program_point_child_id|INTEGER|1||0
+3|include_in_program|tinyint(1)|1|'1'|0
+4|include_in_calculation|tinyint(1)|1|'1'|0
+5|active|tinyint(1)|1|'1'|0
+6|created_at|datetime|0||0
+7|updated_at|datetime|0||0
+8|show_title_style|tinyint(1)|0|'1'|0
+9|show_description|tinyint(1)|0|'1'|0
+--- event_template_program_point_parent
+0|id|INTEGER|0||1
+1|parent_id|INTEGER|0||0
+2|child_id|INTEGER|0||0
+3|order|INTEGER|0||0
+4|created_at|TEXT|0||0
+5|updated_at|TEXT|0||0
+--- event_template_program_point_tag
+0|id|INTEGER|0||1
+1|event_template_program_point_id|INTEGER|0||0
+2|tag_id|INTEGER|0||0
+3|created_at|TEXT|0||0
+4|updated_at|TEXT|0||0
+--- event_template_program_points
+0|id|INTEGER|0||1
+1|name|TEXT|0||0
+2|description|TEXT|0||0
+3|office_notes|TEXT|0||0
+4|pilot_notes|TEXT|0||0
+5|duration_hours|INTEGER|0||0
+6|duration_minutes|INTEGER|0||0
+7|featured_image|TEXT|0||0
+8|gallery_images|TEXT|0||0
+9|unit_price|REAL|0||0
+10|group_size|INTEGER|0||0
+11|currency_id|INTEGER|0||0
+12|parent_id|TEXT|0||0
+13|created_at|TEXT|0||0
+14|updated_at|TEXT|0||0
+15|convert_to_pln|INTEGER|0||0
+16|order|INTEGER|0||0
+17|featured_image_original_name|TEXT|0||0
+--- event_template_qties
+0|id|INTEGER|0||1
+1|qty|INTEGER|0||0
+2|created_at|TEXT|0||0
+3|updated_at|TEXT|0||0
+4|gratis|INTEGER|0||0
+5|staff|INTEGER|0||0
+6|driver|INTEGER|0||0
+--- event_template_starting_place_availability
+0|id|INTEGER|1||1
+1|event_template_id|INTEGER|1||0
+2|start_place_id|INTEGER|1||0
+3|end_place_id|INTEGER|1||0
+4|available|tinyint(1)|1|'0'|0
+5|note|TEXT|0||0
+6|created_at|datetime|0||0
+7|updated_at|datetime|0||0
+--- event_template_tag
+0|id|INTEGER|0||1
+1|event_template_id|INTEGER|0||0
+2|tag_id|INTEGER|0||0
+3|created_at|TEXT|0||0
+4|updated_at|TEXT|0||0
+--- event_template_tax
+0|id|INTEGER|1||1
+1|event_template_id|INTEGER|1||0
+2|tax_id|INTEGER|1||0
+3|created_at|datetime|0||0
+4|updated_at|datetime|0||0
+--- event_template_transport_type
+0|id|INTEGER|1||1
+1|event_template_id|INTEGER|1||0
+2|transport_type_id|INTEGER|1||0
+3|created_at|datetime|0||0
+4|updated_at|datetime|0||0
+--- event_templates
+0|id|INTEGER|1||1
+1|name|varchar|1||0
+2|slug|varchar|1||0
+3|duration_days|INTEGER|0||0
+4|featured_image|TEXT|0||0
+5|event_description|TEXT|0||0
+6|gallery|TEXT|0||0
+7|office_description|TEXT|0||0
+8|notes|TEXT|0||0
+9|created_at|datetime|0||0
+10|updated_at|datetime|0||0
+11|deleted_at|datetime|0||0
+12|transfer_km|numeric|0||0
+13|program_km|numeric|0||0
+14|transfer_km2|TEXT|0||0
+15|program_km2|TEXT|0||0
+16|bus_id|numeric|0||0
+17|markup_id|numeric|0||0
+18|is_active|tinyint(1)|1|'1'|0
+19|seo_title|TEXT|0||0
+20|seo_description|TEXT|0||0
+21|seo_keywords|TEXT|0||0
+22|seo_canonical|TEXT|0||0
+23|seo_og_title|TEXT|0||0
+24|seo_og_description|TEXT|0||0
+25|seo_og_image|TEXT|0||0
+26|seo_twitter_title|TEXT|0||0
+27|seo_twitter_description|TEXT|0||0
+28|seo_twitter_image|TEXT|0||0
+29|seo_schema|TEXT|0||0
+30|subtitle|varchar|0||0
+31|transport_notes|TEXT|0||0
+32|start_place_id|INTEGER|0||0
+33|end_place_id|INTEGER|0||0
+34|show_title_style|tinyint(1)|0|'1'|0
+35|show_description|tinyint(1)|0|'1'|0
+--- event_types
+0|id|INTEGER|1||1
+1|name|varchar|1||0
+2|desc|TEXT|0||0
+3|created_at|datetime|0||0
+4|updated_at|datetime|0||0
+--- events
+0|id|INTEGER|0||1
+1|event_template_id|INTEGER|0||0
+2|name|TEXT|0||0
+3|client_name|TEXT|0||0
+4|client_email|TEXT|0||0
+5|client_phone|TEXT|0||0
+6|start_date|TEXT|0||0
+7|end_date|TEXT|0||0
+8|participant_count|INTEGER|0||0
+9|total_cost|INTEGER|0||0
+10|status|TEXT|0||0
+11|notes|TEXT|0||0
+12|created_by|INTEGER|0||0
+13|assigned_to|REAL|0||0
+14|created_at|TEXT|0||0
+15|updated_at|TEXT|0||0
+16|duration_days|INTEGER|0||0
+17|transfer_km|INTEGER|0||0
+18|program_km|INTEGER|0||0
+19|bus_id|REAL|0||0
+20|markup_id|REAL|0||0
+21|start_place_id|INTEGER|0||0
+--- failed_jobs
+0|id|TEXT|0||0
+1|uuid|TEXT|0||0
+2|connection|TEXT|0||0
+3|queue|TEXT|0||0
+4|payload|TEXT|0||0
+5|exception|TEXT|0||0
+6|failed_at|TEXT|0||0
+--- hotel_room_tag
+0|id|INTEGER|0||1
+1|hotel_room_id|TEXT|0||0
+2|tag_id|TEXT|0||0
+3|created_at|TEXT|0||0
+4|updated_at|TEXT|0||0
+--- hotel_rooms
+0|id|INTEGER|0||1
+1|name|TEXT|0||0
+2|description|TEXT|0||0
+3|notes|TEXT|0||0
+4|people_count|INTEGER|0||0
+5|price|INTEGER|0||0
+6|currency|TEXT|0||0
+7|convert_to_pln|INTEGER|0||0
+8|created_at|TEXT|0||0
+9|updated_at|TEXT|0||0
+10|capacity|TEXT|0||0
+11|standard|TEXT|0||0
+--- insurances
+0|id|INTEGER|0||1
+1|name|TEXT|0||0
+2|description|TEXT|0||0
+3|price_per_person|REAL|0||0
+4|active|INTEGER|0||0
+5|created_at|TEXT|0||0
+6|updated_at|TEXT|0||0
+7|deleted_at|TEXT|0||0
+8|insurance_per_day|REAL|0||0
+9|insurance_per_person|REAL|0||0
+10|insurance_enabled|REAL|0||0
+--- job_batches
+0|id|TEXT|0||0
+1|name|TEXT|0||0
+2|total_jobs|TEXT|0||0
+3|pending_jobs|TEXT|0||0
+4|failed_jobs|TEXT|0||0
+5|failed_job_ids|TEXT|0||0
+6|options|TEXT|0||0
+7|cancelled_at|TEXT|0||0
+8|created_at|TEXT|0||0
+9|finished_at|TEXT|0||0
+--- jobs
+0|id|TEXT|0||0
+1|queue|TEXT|0||0
+2|payload|TEXT|0||0
+3|attempts|TEXT|0||0
+4|reserved_at|TEXT|0||0
+5|available_at|TEXT|0||0
+6|created_at|TEXT|0||0
+--- kategoria_szablonus
+0|id|INTEGER|0||1
+1|nazwa|TEXT|0||0
+2|opis|TEXT|0||0
+3|uwagi|TEXT|0||0
+4|parent_id|TEXT|0||0
+5|created_at|TEXT|0||0
+6|updated_at|TEXT|0||0
+--- markups
+0|id|INTEGER|0||1
+1|name|TEXT|0||0
+2|description|TEXT|0||0
+3|percent|INTEGER|0||0
+4|discount_percent|INTEGER|0||0
+5|discount_start|TEXT|0||0
+6|discount_end|TEXT|0||0
+7|is_default|INTEGER|0||0
+8|min_daily_amount_pln|INTEGER|0||0
+9|created_at|TEXT|0||0
+10|updated_at|TEXT|0||0
+--- media
+0|id|INTEGER|1||1
+1|disk|varchar|1|'public'|0
+2|path|varchar|1||0
+3|filename|varchar|1||0
+4|extension|varchar|0||0
+5|mime|varchar|0||0
+6|size|INTEGER|0||0
+7|width|INTEGER|0||0
+8|height|INTEGER|0||0
+9|title|varchar|0||0
+10|alt|varchar|0||0
+11|caption|TEXT|0||0
+12|description|TEXT|0||0
+13|created_at|datetime|0||0
+14|updated_at|datetime|0||0
+--- messages
+0|id|INTEGER|0||1
+1|conversation_id|INTEGER|0||0
+2|user_id|INTEGER|0||0
+3|content|TEXT|0||0
+4|type|TEXT|0||0
+5|attachment_path|TEXT|0||0
+6|attachment_name|TEXT|0||0
+7|is_edited|INTEGER|0||0
+8|edited_at|TEXT|0||0
+9|created_at|TEXT|0||0
+10|updated_at|TEXT|0||0
+--- migrations
+0|id|INTEGER|0||0
+1|migration|TEXT|0||0
+2|batch|INTEGER|0||0
+--- model_has_permissions
+0|permission_id|TEXT|0||0
+1|model_type|TEXT|0||0
+2|model_id|TEXT|0||0
+--- model_has_roles
+0|role_id|INTEGER|0||0
+1|model_type|TEXT|0||0
+2|model_id|INTEGER|0||0
+--- notifications
+0|id|varchar|1||1
+1|type|varchar|1||0
+2|notifiable_type|varchar|1||0
+3|notifiable_id|INTEGER|1||0
+4|data|TEXT|1||0
+5|read_at|datetime|0||0
+6|created_at|datetime|0||0
+7|updated_at|datetime|0||0
+--- password_reset_tokens
+0|email|TEXT|0||0
+1|token|TEXT|0||0
+2|created_at|TEXT|0||0
+--- payers
+0|id|INTEGER|0||1
+1|name|TEXT|0||0
+2|description|TEXT|0||0
+3|created_at|TEXT|0||0
+4|updated_at|TEXT|0||0
+--- payment_statuses
+0|id|INTEGER|0||1
+1|name|TEXT|0||0
+2|created_at|TEXT|0||0
+3|updated_at|TEXT|0||0
+--- payment_types
+0|id|INTEGER|0||1
+1|name|TEXT|0||0
+2|description|TEXT|0||0
+3|created_at|TEXT|0||0
+4|updated_at|TEXT|0||0
+--- permissions
+0|id|INTEGER|0||1
+1|name|TEXT|0||0
+2|guard_name|TEXT|0||0
+3|created_at|TEXT|0||0
+4|updated_at|TEXT|0||0
+--- place_distances
+0|id|INTEGER|1||1
+1|from_place_id|INTEGER|1||0
+2|to_place_id|INTEGER|1||0
+3|distance_km|float|0||0
+4|api_source|varchar|0||0
+5|created_at|datetime|0||0
+6|updated_at|datetime|0||0
+--- places
+0|id|INTEGER|1||1
+1|name|varchar|1||0
+2|description|TEXT|0||0
+3|tags|TEXT|0||0
+4|starting_place|tinyint(1)|1|'1'|0
+5|created_at|datetime|0||0
+6|updated_at|datetime|0||0
+7|latitude|numeric|0||0
+8|longitude|numeric|0||0
+--- role_has_permissions
+0|permission_id|INTEGER|0||0
+1|role_id|INTEGER|0||0
+--- roles
+0|id|INTEGER|0||1
+1|name|TEXT|0||0
+2|guard_name|TEXT|0||0
+3|created_at|TEXT|0||0
+4|updated_at|TEXT|0||0
+--- sessions
+0|id|TEXT|0||0
+1|user_id|REAL|0||0
+2|ip_address|TEXT|0||0
+3|user_agent|TEXT|0||0
+4|payload|TEXT|0||0
+5|last_activity|INTEGER|0||0
+--- tags
+0|id|INTEGER|0||1
+1|name|TEXT|0||0
+2|description|TEXT|0||0
+3|visibility|TEXT|0||0
+4|status|TEXT|0||0
+5|created_at|TEXT|0||0
+6|updated_at|TEXT|0||0
+7|deleted_at|TEXT|0||0
+--- task_attachments
+0|id|INTEGER|0||1
+1|name|TEXT|0||0
+2|file_path|TEXT|0||0
+3|mime_type|TEXT|0||0
+4|size|TEXT|0||0
+5|task_id|INTEGER|0||0
+6|user_id|INTEGER|0||0
+7|created_at|TEXT|0||0
+8|updated_at|TEXT|0||0
+--- task_comments
+0|id|INTEGER|0||1
+1|content|TEXT|0||0
+2|task_id|INTEGER|0||0
+3|user_id|INTEGER|0||0
+4|created_at|TEXT|0||0
+5|updated_at|TEXT|0||0
+--- task_statuses
+0|id|INTEGER|0||1
+1|name|TEXT|0||0
+2|color|TEXT|0||0
+3|icon|TEXT|0||0
+4|order|INTEGER|0||0
+5|is_default|INTEGER|0||0
+6|created_at|TEXT|0||0
+7|updated_at|TEXT|0||0
+--- tasks
+0|id|INTEGER|0||1
+1|title|TEXT|0||0
+2|description|TEXT|0||0
+3|due_date|TEXT|0||0
+4|status_id|INTEGER|0||0
+5|priority|TEXT|0||0
+6|author_id|INTEGER|0||0
+7|assignee_id|INTEGER|0||0
+8|parent_id|REAL|0||0
+9|order|INTEGER|0||0
+10|created_at|TEXT|0||0
+11|updated_at|TEXT|0||0
+12|deleted_at|TEXT|0||0
+--- taxes
+0|id|INTEGER|1||1
+1|name|varchar|1||0
+2|percentage|numeric|1||0
+3|apply_to_base|tinyint(1)|1|'0'|0
+4|apply_to_markup|tinyint(1)|1|'0'|0
+5|is_active|tinyint(1)|1|'1'|0
+6|description|TEXT|0||0
+7|created_at|datetime|0||0
+8|updated_at|datetime|0||0
+--- todo_statuses
+0|id|INTEGER|0||1
+1|name|TEXT|0||0
+2|color|TEXT|0||0
+3|bgcolor|TEXT|0||0
+4|created_at|TEXT|0||0
+5|updated_at|TEXT|0||0
+6|deleted_at|TEXT|0||0
+--- transport_types
+0|id|INTEGER|1||1
+1|name|varchar|1||0
+2|desc|TEXT|0||0
+3|created_at|datetime|0||0
+4|updated_at|datetime|0||0
+--- users
+0|id|INTEGER|0||1
+1|name|TEXT|0||0
+2|email|TEXT|0||0
+3|email_verified_at|TEXT|0||0
+4|password|TEXT|0||0
+5|remember_token|TEXT|0||0
+6|created_at|TEXT|0||0
+7|updated_at|TEXT|0||0
+8|type|TEXT|0||0
+9|status|TEXT|0||0

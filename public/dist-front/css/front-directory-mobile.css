@@ -1,0 +1,241 @@
+/* Public copy - minimal mobile tweaks for directory-packages pages */
+@media (max-width: 780px) {
+    /* Force directory buttons/listing into column for mobile to match desired look */
+    .directory-buttons .layout {
+        display: block !important;
+        flex-direction: column !important;
+    }
+
+    .directory-buttons .layout .package-preview {
+        width: 100% !important;
+        min-height: auto !important;
+        margin-bottom: 8px !important;
+        border-radius: 8px !important;
+    }
+    /* Higher-specificity overrides for directory-buttons to neutralize global styles */
+    .directory-buttons .layout .package-preview {
+        min-height: auto !important;
+        padding-left: 0 !important;
+        padding-right: 0 !important;
+        margin-bottom: 6px !important;
+    }
+
+    .directory-buttons .layout .package-preview .text-window {
+        padding: 6px 8px 6px 10px !important;
+        min-height: auto !important;
+    }
+    /* Ensure the container stacks buttons vertically on small screens so
+       the entire row is visible (avoids horizontal clipping from parent flex). */
+    .directory-buttons .length-buttons,
+    .length-buttons {
+        display: flex !important;
+        flex-direction: column !important;
+        align-items: stretch !important;
+        padding-left: 1rem !important;
+        padding-right: 1rem !important;
+    }
+
+    /* Keep directory buttons compact and rounded (original look) on small screens.
+       Use inline-block with auto width so they sit one-per-line but keep compact sizing.
+       These rules are intentionally specific and use !important to override global styles
+       but avoid forcing full-width. */
+    /* Make buttons full-width to ensure the entire row is visible on small screens */
+    .directory-length-buttons a,
+    .directory-length-buttons a > button,
+    .directory-length-buttons button {
+        display: block !important;
+        width: 100% !important;
+        box-sizing: border-box !important;
+        margin-bottom: 10px !important;
+        padding: 10px 16px !important;
+        min-height: 44px !important;
+        line-height: 1 !important;
+        font-size: 15px !important;
+        border-radius: 999px !important; /* pill / fully rounded */
+        text-align: center !important;
+        box-shadow: none !important;
+    }
+    .destination_search_button { display: block !important; width: 100% !important; }
+    a[href*="/oferty"] > button, .directory-length-buttons a > button { display:inline-block !important; width:auto !important; }
+}
+
+@media (max-width: 780px) {
+    /* Target the actual class used in directory-packages.blade.php */
+    /* Make length-buttons full-width so they don't get clipped on mobile */
+    .length-buttons a,
+    .length-buttons a > button,
+    .length-buttons button {
+        display: block !important;
+        width: 100% !important;
+        box-sizing: border-box !important;
+        margin-bottom: 10px !important;
+        padding: 10px 16px !important;
+        min-height: 44px !important;
+        line-height: 1 !important;
+        font-size: 15px !important;
+        border-radius: 999px !important; /* pill / fully rounded */
+        text-align: center !important;
+        box-shadow: none !important;
+    }
+    /* Ensure anchors are block-level so the whole clickable area spans width */
+    .length-buttons a { display: block !important; }
+}
+
+/* Stack search form fields vertically on mobile for better usability */
+@media (max-width: 780px) {
+    .destination_search .layout {
+        display: flex !important;
+        flex-direction: column !important;
+        gap: 10px !important;
+        align-items: stretch !important;
+    }
+
+    .destination_search .layout > div {
+        width: 100% !important;
+        display: block !important;
+    }
+
+    .destination_search select.destination_from_select_form,
+    .destination_search select.destination_length_select_form,
+    .destination_search input.destination_where_ask,
+    .destination_search .destination_search_button {
+        width: 100% !important;
+        box-sizing: border-box !important;
+        display: block !important;
+        margin: 0 !important;
+    }
+
+    .destination_search .destination_search_button {
+        margin-top: 6px !important;
+    }
+}
+
+/* Remodel package previews for mobile: image left, info right, one per row */
+@media (max-width: 780px) {
+    .layout {
+        display: block !important;
+    }
+
+    /* Ensure the card has no left padding and clips children so the image can be flush to the left edge */
+    .layout .package-preview {
+        padding-left: 0 !important;
+        overflow: hidden !important;
+        box-sizing: border-box !important;
+    }
+
+    .layout .package-preview {
+        display: grid !important;
+        grid-template-columns: 110px 1fr !important; /* slightly narrower image */
+        column-gap: 6px !important; /* slightly tighter */
+        align-items: center !important;
+        padding: 4px 6px 4px 0 !important; /* remove left padding so image is flush to card */
+        margin-bottom: 6px !important;
+        background: #fff !important;
+        border-radius: 8px !important;
+        box-shadow: 0 1px 2px rgba(0,0,0,0.04) !important;
+        width: 100% !important;
+        box-sizing: border-box !important;
+        overflow: hidden !important;
+    }
+
+    .layout .package-preview .photo {
+        width: 110px !important;
+        height: 86px !important;
+        background-size: cover !important;
+        background-position: center !important;
+        border-radius: 8px 0 0 8px !important; /* flush to left card edge */
+        background-color: #f5f5f5 !important; /* fallback */
+        flex-shrink: 0 !important;
+        display: block !important;
+        background-repeat: no-repeat !important;
+        border: 0 !important;
+        box-shadow: none !important;
+        margin: 0 !important; /* ensure no gap from image to card edge */
+    }
+
+    /* Make entire package-preview area easily tappable */
+    .layout .package-preview > .text-window, .layout .package-preview > .photo {
+        -webkit-tap-highlight-color: rgba(0,0,0,0) !important;
+    }
+
+    .layout .package-preview .text-window {
+        flex: 1 1 auto !important;
+        min-width: 0 !important; /* allow text truncation */
+        display: flex !important;
+        flex-direction: column !important;
+        justify-content: space-between !important;
+        padding: 6px 8px 6px 10px !important; /* spacing around text: top/right/bottom/left */
+    }
+
+    .layout .package-preview .title {
+        font-size: 16px !important;
+        font-weight: 600 !important;
+    margin-bottom: 2px !important;
+        overflow: hidden !important;
+        text-overflow: ellipsis !important;
+        white-space: normal !important;
+        display: -webkit-box !important;
+    line-clamp: 2 !important;
+    -webkit-line-clamp: 2 !important;
+        -webkit-box-orient: vertical !important;
+    }
+
+    .layout .package-preview .title a {
+        display: block !important;
+        color: inherit !important;
+        text-decoration: none !important;
+    }
+
+    .layout .package-preview .price {
+        font-size: 15px !important;
+        color: #b30000 !important;
+        font-weight: 700 !important;
+    }
+
+    /* Show only first 3 items per .layout on mobile (use direct-child nth-of-type for robustness).
+       When parent .layout has .show-all, items are visible. */
+    .layout:not(.show-all) > .package-preview:nth-of-type(n+4) {
+        display: none !important;
+    }
+
+    /* Hide the small tag badges that are duplicated under the title on mobile.
+       Keep the main .package-box-tags section (detailed tags) visible. */
+    .package-box-name-mobile .title-section .type,
+    .package-box-name-mobile .title-section .type .badge-tag,
+    .package-box-name-mobile .title-section .badge-tag {
+        display: none !important;
+    }
+
+    /* Mobile 'show more' button */
+    .show-more-packages {
+        display: block !important;
+        width: 100% !important;
+        margin: 8px 0 !important;
+        padding: 10px 12px !important;
+        text-align: center !important;
+        background: #f1f1f1 !important;
+        border-radius: 8px !important;
+        border: 0 !important;
+        font-weight: 600 !important;
+    }
+    /* hide on larger screens */
+    @media (min-width: 781px) {
+        .show-more-packages { display: none !important; }
+    }
+
+    /* Make the 'check-all' link centered and full-width on mobile */
+    .layout > .check-all,
+    .layout .check-all {
+        display: block !important;
+        text-align: center !important;
+        margin: 10px 0 !important;
+        padding: 10px 14px !important;
+        background: #c40000 !important; /* brand red */
+        color: #fff !important;
+        border-radius: 8px !important;
+        text-decoration: none !important;
+        font-weight: 600 !important;
+        border: 0 !important;
+    }
+    .layout > .check-all:hover, .layout .check-all:hover { background: #a00000 !important; color: #fff !important; }
+}

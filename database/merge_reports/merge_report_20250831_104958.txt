@@ -1,0 +1,7 @@
+Merge report
+Timestamp: 20250831_104958
+Target: /Users/marcin/Herd/sor3events/database/database.sqlite
+Backup: /Users/marcin/Herd/sor3events/database/database.sqlite.bak-20250831_104958
+Source: /Users/marcin/Herd/sor3events/database/database_serv.sqlite
+
+Starting merge...

@@ -1,0 +1,8 @@
+Apply mappings report
+Timestamp: 20250831_110956
+Target: /Users/marcin/Herd/sor3events/database/database.sqlite
+Source: /Users/marcin/Herd/sor3events/database/database_serv.sqlite
+Config: /Users/marcin/Herd/sor3events/scripts/column_mappings.conf
+
+Starting apply mappings...
+Processing mapping: table=blog_posts key=id target_col=excerpt source_expr=lit:NULL

@@ -1,0 +1,43 @@
+{
+    "summary": {
+        "pairs": 20,
+        "saved": 0
+    },
+    "problematic": [
+        {
+            "template_id": 14,
+            "start_place_id": 1,
+            "reason": "template_not_found"
+        },
+        {
+            "template_id": 14,
+            "start_place_id": 4,
+            "reason": "template_not_found"
+        },
+        {
+            "template_id": 14,
+            "start_place_id": 5,
+            "reason": "template_not_found"
+        },
+        {
+            "template_id": 14,
+            "start_place_id": 2,
+            "reason": "template_not_found"
+        },
+        {
+            "template_id": 15,
+            "start_place_id": 1,
+            "reason": "template_not_found"
+        },
+        {
+            "template_id": 15,
+            "start_place_id": 4,
+            "reason": "template_not_found"
+        },
+        {
+            "template_id": 15,
+            "start_place_id": 5,
+            "reason": "template_not_found"
+        }
+    ]
+}

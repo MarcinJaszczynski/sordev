@@ -1,0 +1,154 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Livewire Communication Test</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+</head>
+<body class="bg-gray-100 p-8">
+    <div class="max-w-4xl mx-auto">
+        <h1 class="text-2xl font-bold mb-4">Test komunikacji z aplikacją Laravel</h1>
+        
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+            <div class="bg-white p-6 rounded-lg shadow">
+                <h2 class="text-lg font-semibold mb-4">Test AJAX Request</h2>
+                <button id="testAjax" class="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700">
+                    Test AJAX do /check-data
+                </button>
+                <div id="ajaxResult" class="mt-4 p-3 bg-gray-50 rounded text-sm"></div>
+            </div>
+            
+            <div class="bg-white p-6 rounded-lg shadow">
+                <h2 class="text-lg font-semibold mb-4">Test JavaScript Drag & Drop</h2>
+                <div class="flex gap-4">
+                    <div class="w-32 h-32 bg-blue-200 border-2 border-dashed border-blue-400 flex items-center justify-center text-sm" 
+                         ondrop="drop(event)" ondragover="allowDrop(event)">
+                        Drop Zone 1
+                    </div>
+                    <div class="w-32 h-32 bg-green-200 border-2 border-dashed border-green-400 flex items-center justify-center text-sm" 
+                         ondrop="drop(event)" ondragover="allowDrop(event)">
+                        Drop Zone 2
+                    </div>
+                </div>
+                <div class="mt-4">
+                    <div id="draggable" class="w-20 h-20 bg-red-400 text-white flex items-center justify-center text-sm cursor-move rounded" 
+                         draggable="true" ondragstart="drag(event)">
+                        Drag me
+                    </div>
+                </div>
+                <div id="dragResult" class="mt-4 p-3 bg-gray-50 rounded text-sm"></div>
+            </div>
+        </div>
+        
+        <div class="mt-6 bg-white p-6 rounded-lg shadow">
+            <h2 class="text-lg font-semibold mb-4">Console Logs</h2>
+            <div id="console" class="bg-black text-green-400 p-4 rounded font-mono text-sm h-40 overflow-y-auto"></div>
+        </div>
+        
+        <div class="mt-6 bg-yellow-50 p-4 rounded-lg border border-yellow-200">
+            <h3 class="font-semibold text-yellow-800 mb-2">Instrukcje testowe:</h3>
+            <ol class="list-decimal list-inside text-yellow-700 space-y-1">
+                <li>Kliknij "Test AJAX" aby sprawdzić komunikację z backendem</li>
+                <li>Przeciągnij czerwony kwadrat między strefami drop aby przetestować drag & drop</li>
+                <li>Sprawdź logi w konsoli przeglądarki (F12)</li>
+                <li>Sprawdź logi w sekcji "Console Logs" na tej stronie</li>
+            </ol>
+        </div>
+    </div>
+
+    <script>
+        // Redirect console.log to our custom console
+        const originalLog = console.log;
+        const originalError = console.error;
+        const consoleDiv = document.getElementById('console');
+        
+        function addToConsole(message, type = 'log') {
+            const timestamp = new Date().toLocaleTimeString();
+            const color = type === 'error' ? 'text-red-400' : 'text-green-400';
+            consoleDiv.innerHTML += `<div class="${color}">[${timestamp}] ${message}</div>`;
+            consoleDiv.scrollTop = consoleDiv.scrollHeight;
+        }
+        
+        console.log = function(...args) {
+            originalLog.apply(console, args);
+            addToConsole(args.join(' '));
+        };
+        
+        console.error = function(...args) {
+            originalError.apply(console, args);
+            addToConsole(args.join(' '), 'error');
+        };
+        
+        // AJAX Test
+        document.getElementById('testAjax').addEventListener('click', function() {
+            console.log('Testing AJAX request to /check-data');
+            const resultDiv = document.getElementById('ajaxResult');
+            resultDiv.innerHTML = 'Loading...';
+            
+            fetch('/check-data')
+                .then(response => {
+                    console.log('AJAX Response status:', response.status);
+                    return response.json();
+                })
+                .then(data => {
+                    console.log('AJAX Response data:', JSON.stringify(data, null, 2));
+                    resultDiv.innerHTML = `<pre>${JSON.stringify(data, null, 2)}</pre>`;
+                })
+                .catch(error => {
+                    console.error('AJAX Error:', error);
+                    resultDiv.innerHTML = `<div class="text-red-600">Error: ${error.message}</div>`;
+                });
+        });
+        
+        // Drag & Drop functionality
+        function allowDrop(ev) {
+            ev.preventDefault();
+            console.log('allowDrop called');
+        }
+        
+        function drag(ev) {
+            ev.dataTransfer.setData("text", ev.target.id);
+            console.log('drag started with element:', ev.target.id);
+        }
+        
+        function drop(ev) {
+            ev.preventDefault();
+            const data = ev.dataTransfer.getData("text");
+            const draggedElement = document.getElementById(data);
+            
+            console.log('drop event:', {
+                target: ev.target,
+                draggedElement: data,
+                dropZone: ev.target.textContent.trim()
+            });
+            
+            // Add the dragged element to the drop zone
+            ev.target.appendChild(draggedElement);
+            
+            // Update result
+            const resultDiv = document.getElementById('dragResult');
+            resultDiv.innerHTML = `Successfully dropped "${data}" into "${ev.target.textContent.trim()}"`;
+            
+            console.log('Drop completed successfully');
+        }
+        
+        // Test SortableJS if available
+        if (typeof Sortable !== 'undefined') {
+            console.log('SortableJS is available');
+        } else {
+            console.log('SortableJS is NOT available - loading from CDN');
+            const script = document.createElement('script');
+            script.src = 'https://cdn.jsdelivr.net/npm/sortablejs@1.15.6/Sortable.min.js';
+            script.onload = function() {
+                console.log('SortableJS loaded successfully');
+            };
+            document.head.appendChild(script);
+        }
+        
+        console.log('Test page loaded successfully');
+        console.log('User agent:', navigator.userAgent);
+        console.log('Available globals:', Object.keys(window).filter(key => typeof window[key] === 'function').slice(0, 10));
+    </script>
+</body>
+</html>

@@ -1,0 +1,754 @@
+Sample new columns report
+Timestamp: 2025-08-31_11:07:53
+Target: /Users/marcin/Herd/sor3events/database/database.sqlite
+Source: /Users/marcin/Herd/sor3events/database/database_serv.sqlite
+
+Table: blog_post_tag
+New columns in TARGET (missing in SOURCE): blog_post_id,tag_id
+  Column: blog_post_id
+    Source: column not present in source table
+    Target samples (from /Users/marcin/Herd/sor3events/database/database.sqlite.blog_post_tag):
+3
+
+  Column: tag_id
+    Source: column not present in source table
+    Target samples (from /Users/marcin/Herd/sor3events/database/database.sqlite.blog_post_tag):
+1053
+
+
+Table: blog_posts
+New columns in TARGET (missing in SOURCE): excerpt,featured_image,gallery,is_published,seo_meta
+  Column: excerpt
+    Source: column not present in source table
+    Target samples (from /Users/marcin/Herd/sor3events/database/database.sqlite.blog_posts):
+Quick test excerpt
+Illum omnis eos velit omnis
+
+  Column: featured_image
+    Source: column not present in source table
+    Target samples (from /Users/marcin/Herd/sor3events/database/database.sqlite.blog_posts):
+01K3E5HADD0KNM2FWPAE15BPWV.jpg
+
+  Column: gallery
+    Source: column not present in source table
+    Target samples (from /Users/marcin/Herd/sor3events/database/database.sqlite.blog_posts):
+["blog\/gallery\/524612426_122216926532089960_4532796497036701749_n.jpg","blog\/gallery\/524897042_1203367171833907_8141568519400462631_n.jpg"]
+[]
+
+  Column: is_published
+    Source: column not present in source table
+    Target samples (from /Users/marcin/Herd/sor3events/database/database.sqlite.blog_posts):
+1
+
+  Column: seo_meta
+    Source: column not present in source table
+    Target samples (from /Users/marcin/Herd/sor3events/database/database.sqlite.blog_posts):
+
+
+Table: contractor_contact
+New columns in TARGET (missing in SOURCE): contact_id,contractor_id,created_at,id,updated_at
+  Column: contact_id
+    Source: column not present in source table
+    Target samples (from /Users/marcin/Herd/sor3events/database/database.sqlite.contractor_contact):
+6
+7
+8
+9
+10
+11
+12
+13
+14
+15
+
+  Column: contractor_id
+    Source: column not present in source table
+    Target samples (from /Users/marcin/Herd/sor3events/database/database.sqlite.contractor_contact):
+1
+2
+3
+11
+12
+13
+14
+15
+16
+381
+
+  Column: created_at
+    Source: column not present in source table
+    Target samples (from /Users/marcin/Herd/sor3events/database/database.sqlite.contractor_contact):
+2025-08-22 07:50:44
+2025-08-22 07:50:45
+2025-08-22 07:50:46
+2025-08-22 07:50:47
+
+  Column: id
+    Source: column not present in source table
+    Target samples (from /Users/marcin/Herd/sor3events/database/database.sqlite.contractor_contact):
+1
+2
+3
+4
+5
+6
+7
+8
+9
+10
+
+  Column: updated_at
+    Source: column not present in source table
+    Target samples (from /Users/marcin/Herd/sor3events/database/database.sqlite.contractor_contact):
+2025-08-22 07:50:44
+2025-08-22 07:50:45
+2025-08-22 07:50:46
+2025-08-22 07:50:47
+
+
+Table: contractor_contractortype
+New columns in TARGET (missing in SOURCE): contractor_id,contractor_type_id,created_at,id,updated_at
+  Column: contractor_id
+    Source: column not present in source table
+    Target samples (from /Users/marcin/Herd/sor3events/database/database.sqlite.contractor_contractortype):
+1
+2
+3
+11
+12
+13
+14
+15
+16
+381
+
+  Column: contractor_type_id
+    Source: column not present in source table
+    Target samples (from /Users/marcin/Herd/sor3events/database/database.sqlite.contractor_contractortype):
+6
+1
+2
+3
+4
+5
+7
+9
+8
+10
+
+  Column: created_at
+    Source: column not present in source table
+    Target samples (from /Users/marcin/Herd/sor3events/database/database.sqlite.contractor_contractortype):
+
+  Column: id
+    Source: column not present in source table
+    Target samples (from /Users/marcin/Herd/sor3events/database/database.sqlite.contractor_contractortype):
+1
+2
+3
+4
+5
+6
+7
+8
+9
+15
+
+  Column: updated_at
+    Source: column not present in source table
+    Target samples (from /Users/marcin/Herd/sor3events/database/database.sqlite.contractor_contractortype):
+
+
+Table: contractor_types
+New columns in TARGET (missing in SOURCE): created_at,id,name,updated_at
+  Column: created_at
+    Source: column not present in source table
+    Target samples (from /Users/marcin/Herd/sor3events/database/database.sqlite.contractor_types):
+
+  Column: id
+    Source: column not present in source table
+    Target samples (from /Users/marcin/Herd/sor3events/database/database.sqlite.contractor_types):
+1
+2
+3
+4
+5
+6
+7
+8
+9
+10
+
+  Column: name
+    Source: column not present in source table
+    Target samples (from /Users/marcin/Herd/sor3events/database/database.sqlite.contractor_types):
+hotel
+przewodnik
+muzeum
+klient
+pilot
+kierowca
+przewoźnik
+restauracja
+Biuro przewodnickie
+Warsztaty
+
+  Column: updated_at
+    Source: column not present in source table
+    Target samples (from /Users/marcin/Herd/sor3events/database/database.sqlite.contractor_types):
+
+
+Table: contractors
+New columns in TARGET (missing in SOURCE): country,description,email,firstname,nip,phone,region,surname,www
+  Column: country
+    Source: column not present in source table
+    Target samples (from /Users/marcin/Herd/sor3events/database/database.sqlite.contractors):
+
+  Column: description
+    Source: column not present in source table
+    Target samples (from /Users/marcin/Herd/sor3events/database/database.sqlite.contractors):
+<p>Pokoje 1os.x14, 2os.x10, apartament dla niepełnosprawnych + willa dla 6os.</p>
+<p>Pokoje 1os.x11, 2os.x10, apartament dla niepełnosprawnych</p>
+Żywiec, Góra Żar
+
+  Column: email
+    Source: column not present in source table
+    Target samples (from /Users/marcin/Herd/sor3events/database/database.sqlite.contractors):
+M.jaszczynski@gmail.com
+woloszynoktawia@gmail.com
+m.wolanskaaa@gmail.com
+mariusz.kiecana@zamoyski.edu.pl
+agnieszkakowalczyk17@gmail.com
+biuro@kazimierz-tour.pl
+a.kalisz@bprafa.pl
+aneta.porowska666@gmail.com
+Marta.Przynoga@cms-cmno.com
+dominika.konwerska@nikatrans.pl
+
+  Column: firstname
+    Source: column not present in source table
+    Target samples (from /Users/marcin/Herd/sor3events/database/database.sqlite.contractors):
+Marcin
+Oktawia
+Marta
+Mariusz
+Agnieszka
+Aleksandra
+Kamila
+Władysław
+Zbigniew
+Arek
+
+  Column: nip
+    Source: column not present in source table
+    Target samples (from /Users/marcin/Herd/sor3events/database/database.sqlite.contractors):
+526-25-44-258
+922-258-65-48
+922-106-49-19
+631 266 64 79
+6572905857
+7162658035
+742-141-01-99
+5871665509
+8451147353
+9591672746
+
+  Column: phone
+    Source: column not present in source table
+    Target samples (from /Users/marcin/Herd/sor3events/database/database.sqlite.contractors):
++48690674114
+797520606
+510 784 995
+882 094 612
+604 116 147
+606 896 795
+694 489 954
+889 984 990
+798195569
+665 241 666
+
+  Column: region
+    Source: column not present in source table
+    Target samples (from /Users/marcin/Herd/sor3events/database/database.sqlite.contractors):
+
+  Column: surname
+    Source: column not present in source table
+    Target samples (from /Users/marcin/Herd/sor3events/database/database.sqlite.contractors):
+Jaszczyński
+Wołoszyn
+Wolańska
+Kiecana
+Kowalczyk
+Elżbieta Skoczylas
+Kalisz
+Momot
+Wojtowicz
+Marczak
+
+  Column: www
+    Source: column not present in source table
+    Target samples (from /Users/marcin/Herd/sor3events/database/database.sqlite.contractors):
+www.kazimierz-tour.pl
+https://krainawilka.pl/
+https://www.lenas-donau.at/
+https://www.sielskoanielsko.pl/?lang=pl
+https://sabatkrajno.pl/
+https://kolejka.bieszczady.pl/
+https://muzeumpilsudski.pl/
+https://muzeumpilsudski.pl/restauracja-adelcia/
+http://www.olympik.cz/cz/tristar
+foodiestorun.pl
+
+
+Table: document_attachments
+New columns in TARGET (missing in SOURCE): created_at,document_id,id,mime_type,order_number,original_name,path,updated_at
+  Column: created_at
+    Source: column not present in source table
+    Target samples (from /Users/marcin/Herd/sor3events/database/database.sqlite.document_attachments):
+2025-08-24 15:14:35
+
+  Column: document_id
+    Source: column not present in source table
+    Target samples (from /Users/marcin/Herd/sor3events/database/database.sqlite.document_attachments):
+1
+2
+
+  Column: id
+    Source: column not present in source table
+    Target samples (from /Users/marcin/Herd/sor3events/database/database.sqlite.document_attachments):
+1
+2
+
+  Column: mime_type
+    Source: column not present in source table
+    Target samples (from /Users/marcin/Herd/sor3events/database/database.sqlite.document_attachments):
+application/pdf
+
+  Column: order_number
+    Source: column not present in source table
+    Target samples (from /Users/marcin/Herd/sor3events/database/database.sqlite.document_attachments):
+1
+
+  Column: original_name
+    Source: column not present in source table
+    Target samples (from /Users/marcin/Herd/sor3events/database/database.sqlite.document_attachments):
+warunki_uczestnictwa.pdf
+regulamin_przewozu.pdf
+
+  Column: path
+    Source: column not present in source table
+    Target samples (from /Users/marcin/Herd/sor3events/database/database.sqlite.document_attachments):
+uploads/documents/warunki_uczestnictwa.pdf
+uploads/documents/regulamin_przewozu.pdf
+
+  Column: updated_at
+    Source: column not present in source table
+    Target samples (from /Users/marcin/Herd/sor3events/database/database.sqlite.document_attachments):
+2025-08-24 15:14:35
+
+
+Table: document_sections
+New columns in TARGET (missing in SOURCE): created_at,id,order_number,slug,title,updated_at
+  Column: created_at
+    Source: column not present in source table
+    Target samples (from /Users/marcin/Herd/sor3events/database/database.sqlite.document_sections):
+2025-08-24 15:14:35
+
+  Column: id
+    Source: column not present in source table
+    Target samples (from /Users/marcin/Herd/sor3events/database/database.sqlite.document_sections):
+2
+1
+
+  Column: order_number
+    Source: column not present in source table
+    Target samples (from /Users/marcin/Herd/sor3events/database/database.sqlite.document_sections):
+1
+2
+
+  Column: slug
+    Source: column not present in source table
+    Target samples (from /Users/marcin/Herd/sor3events/database/database.sqlite.document_sections):
+ceidg
+warunki
+
+  Column: title
+    Source: column not present in source table
+    Target samples (from /Users/marcin/Herd/sor3events/database/database.sqlite.document_sections):
+Warunki uczestnictwa
+CEIDG i rejestr
+
+  Column: updated_at
+    Source: column not present in source table
+    Target samples (from /Users/marcin/Herd/sor3events/database/database.sqlite.document_sections):
+2025-08-24 15:14:35
+
+
+Table: documents
+New columns in TARGET (missing in SOURCE): content,created_at,document_section_id,excerpt,id,is_published,order_number,slug,title,updated_at
+  Column: content
+    Source: column not present in source table
+    Target samples (from /Users/marcin/Herd/sor3events/database/database.sqlite.documents):
+<p>Pełne warunki uczestnictwa...</p>
+<p>Treść regulaminu...</p>
+
+  Column: created_at
+    Source: column not present in source table
+    Target samples (from /Users/marcin/Herd/sor3events/database/database.sqlite.documents):
+2025-08-24 15:14:35
+
+  Column: document_section_id
+    Source: column not present in source table
+    Target samples (from /Users/marcin/Herd/sor3events/database/database.sqlite.documents):
+1
+
+  Column: excerpt
+    Source: column not present in source table
+    Target samples (from /Users/marcin/Herd/sor3events/database/database.sqlite.documents):
+Warunki uczestnictwa - skrót
+Regulamin przewozu - skrót
+
+  Column: id
+    Source: column not present in source table
+    Target samples (from /Users/marcin/Herd/sor3events/database/database.sqlite.documents):
+2
+1
+
+  Column: is_published
+    Source: column not present in source table
+    Target samples (from /Users/marcin/Herd/sor3events/database/database.sqlite.documents):
+1
+
+  Column: order_number
+    Source: column not present in source table
+    Target samples (from /Users/marcin/Herd/sor3events/database/database.sqlite.documents):
+1
+2
+
+  Column: slug
+    Source: column not present in source table
+    Target samples (from /Users/marcin/Herd/sor3events/database/database.sqlite.documents):
+regulamin-przewozu
+warunki-uczestnictwa-2025
+
+  Column: title
+    Source: column not present in source table
+    Target samples (from /Users/marcin/Herd/sor3events/database/database.sqlite.documents):
+Warunki uczestnictwa 2025
+Regulamin przewozu
+
+  Column: updated_at
+    Source: column not present in source table
+    Target samples (from /Users/marcin/Herd/sor3events/database/database.sqlite.documents):
+2025-08-24 15:14:35
+
+
+Table: event_day_insurance
+New columns in TARGET (missing in SOURCE): created_at,day,event_id,id,insurance_id,updated_at
+  Column: created_at
+    Source: column not present in source table
+    Target samples (from /Users/marcin/Herd/sor3events/database/database.sqlite.event_day_insurance):
+
+  Column: day
+    Source: column not present in source table
+    Target samples (from /Users/marcin/Herd/sor3events/database/database.sqlite.event_day_insurance):
+
+  Column: event_id
+    Source: column not present in source table
+    Target samples (from /Users/marcin/Herd/sor3events/database/database.sqlite.event_day_insurance):
+
+  Column: id
+    Source: column not present in source table
+    Target samples (from /Users/marcin/Herd/sor3events/database/database.sqlite.event_day_insurance):
+
+  Column: insurance_id
+    Source: column not present in source table
+    Target samples (from /Users/marcin/Herd/sor3events/database/database.sqlite.event_day_insurance):
+
+  Column: updated_at
+    Source: column not present in source table
+    Target samples (from /Users/marcin/Herd/sor3events/database/database.sqlite.event_day_insurance):
+
+
+Table: event_price_per_person
+New columns in TARGET (missing in SOURCE): created_at,currency_id,event_id,event_template_qty_id,id,markup_amount,price_base,price_per_person,price_with_tax,start_place_id,tax_amount,tax_breakdown,transport_cost,updated_at
+  Column: created_at
+    Source: column not present in source table
+    Target samples (from /Users/marcin/Herd/sor3events/database/database.sqlite.event_price_per_person):
+2025-08-20 08:11:34
+2025-08-20 08:25:13
+2025-08-20 08:26:17
+2025-08-20 14:56:49
+2025-08-20 15:01:10
+
+  Column: currency_id
+    Source: column not present in source table
+    Target samples (from /Users/marcin/Herd/sor3events/database/database.sqlite.event_price_per_person):
+
+  Column: event_id
+    Source: column not present in source table
+    Target samples (from /Users/marcin/Herd/sor3events/database/database.sqlite.event_price_per_person):
+8
+10
+11
+13
+14
+
+  Column: event_template_qty_id
+    Source: column not present in source table
+    Target samples (from /Users/marcin/Herd/sor3events/database/database.sqlite.event_price_per_person):
+23
+24
+34
+40
+41
+
+  Column: id
+    Source: column not present in source table
+    Target samples (from /Users/marcin/Herd/sor3events/database/database.sqlite.event_price_per_person):
+1
+3
+9
+10
+11
+12
+13
+14
+15
+16
+
+  Column: markup_amount
+    Source: column not present in source table
+    Target samples (from /Users/marcin/Herd/sor3events/database/database.sqlite.event_price_per_person):
+0
+880
+1080
+1280
+1520
+1720
+
+  Column: price_base
+    Source: column not present in source table
+    Target samples (from /Users/marcin/Herd/sor3events/database/database.sqlite.event_price_per_person):
+400
+4400
+5400
+6400
+7600
+8600
+
+  Column: price_per_person
+    Source: column not present in source table
+    Target samples (from /Users/marcin/Herd/sor3events/database/database.sqlite.event_price_per_person):
+40
+264
+259.2
+256
+260.57
+258
+
+  Column: price_with_tax
+    Source: column not present in source table
+    Target samples (from /Users/marcin/Herd/sor3events/database/database.sqlite.event_price_per_person):
+400
+5280
+6480
+7680
+9120
+10320
+
+  Column: start_place_id
+    Source: column not present in source table
+    Target samples (from /Users/marcin/Herd/sor3events/database/database.sqlite.event_price_per_person):
+
+  Column: tax_amount
+    Source: column not present in source table
+    Target samples (from /Users/marcin/Herd/sor3events/database/database.sqlite.event_price_per_person):
+0
+
+  Column: tax_breakdown
+    Source: column not present in source table
+    Target samples (from /Users/marcin/Herd/sor3events/database/database.sqlite.event_price_per_person):
+
+  Column: transport_cost
+    Source: column not present in source table
+    Target samples (from /Users/marcin/Herd/sor3events/database/database.sqlite.event_price_per_person):
+0
+
+  Column: updated_at
+    Source: column not present in source table
+    Target samples (from /Users/marcin/Herd/sor3events/database/database.sqlite.event_price_per_person):
+2025-08-20 08:11:34
+2025-08-20 08:25:13
+2025-08-20 08:26:17
+2025-08-20 14:56:49
+2025-08-20 15:01:10
+
+
+Table: event_program_points
+New columns in TARGET (missing in SOURCE): convert_to_pln,currency_id,description,duration_hours,duration_minutes,featured_image,gallery_images,group_size,name,office_notes,parent_id,pilot_notes,show_description,show_title_style
+  Column: convert_to_pln
+    Source: column not present in source table
+    Target samples (from /Users/marcin/Herd/sor3events/database/database.sqlite.event_program_points):
+0
+1
+
+  Column: currency_id
+    Source: column not present in source table
+    Target samples (from /Users/marcin/Herd/sor3events/database/database.sqlite.event_program_points):
+1
+
+  Column: description
+    Source: column not present in source table
+    Target samples (from /Users/marcin/Herd/sor3events/database/database.sqlite.event_program_points):
+Warsztaty służące integracji zespołu
+Kolacja w eleganckiej restauracji
+
+  Column: duration_hours
+    Source: column not present in source table
+    Target samples (from /Users/marcin/Herd/sor3events/database/database.sqlite.event_program_points):
+2
+1
+
+  Column: duration_minutes
+    Source: column not present in source table
+    Target samples (from /Users/marcin/Herd/sor3events/database/database.sqlite.event_program_points):
+0
+30
+
+  Column: featured_image
+    Source: column not present in source table
+    Target samples (from /Users/marcin/Herd/sor3events/database/database.sqlite.event_program_points):
+program-points/01JYM238B39EQ1VEF4TD1FXF72.png
+
+  Column: gallery_images
+    Source: column not present in source table
+    Target samples (from /Users/marcin/Herd/sor3events/database/database.sqlite.event_program_points):
+"[]"
+"[\"program-points\/gallery\/01JYM2N81461HVA40ARK2P0QKV.png\",\"program-points\/gallery\/01JYM2S6N5RDYZK0R8B0PTFE7K.png\"]"
+
+  Column: group_size
+    Source: column not present in source table
+    Target samples (from /Users/marcin/Herd/sor3events/database/database.sqlite.event_program_points):
+15
+1
+
+  Column: name
+    Source: column not present in source table
+    Target samples (from /Users/marcin/Herd/sor3events/database/database.sqlite.event_program_points):
+Warsztaty integracyjne
+Kolacja w restauracji
+
+  Column: office_notes
+    Source: column not present in source table
+    Target samples (from /Users/marcin/Herd/sor3events/database/database.sqlite.event_program_points):
+
+  Column: parent_id
+    Source: column not present in source table
+    Target samples (from /Users/marcin/Herd/sor3events/database/database.sqlite.event_program_points):
+85
+88
+91
+94
+
+  Column: pilot_notes
+    Source: column not present in source table
+    Target samples (from /Users/marcin/Herd/sor3events/database/database.sqlite.event_program_points):
+
+  Column: show_description
+    Source: column not present in source table
+    Target samples (from /Users/marcin/Herd/sor3events/database/database.sqlite.event_program_points):
+1
+
+  Column: show_title_style
+    Source: column not present in source table
+    Target samples (from /Users/marcin/Herd/sor3events/database/database.sqlite.event_program_points):
+1
+
+
+Table: event_qties
+New columns in TARGET (missing in SOURCE): created_at,driver,event_id,gratis,id,qty,staff,updated_at
+  Column: created_at
+    Source: column not present in source table
+    Target samples (from /Users/marcin/Herd/sor3events/database/database.sqlite.event_qties):
+
+  Column: driver
+    Source: column not present in source table
+    Target samples (from /Users/marcin/Herd/sor3events/database/database.sqlite.event_qties):
+
+  Column: event_id
+    Source: column not present in source table
+    Target samples (from /Users/marcin/Herd/sor3events/database/database.sqlite.event_qties):
+
+  Column: gratis
+    Source: column not present in source table
+    Target samples (from /Users/marcin/Herd/sor3events/database/database.sqlite.event_qties):
+
+  Column: id
+    Source: column not present in source table
+    Target samples (from /Users/marcin/Herd/sor3events/database/database.sqlite.event_qties):
+
+  Column: qty
+    Source: column not present in source table
+    Target samples (from /Users/marcin/Herd/sor3events/database/database.sqlite.event_qties):
+
+  Column: staff
+    Source: column not present in source table
+    Target samples (from /Users/marcin/Herd/sor3events/database/database.sqlite.event_qties):
+
+  Column: updated_at
+    Source: column not present in source table
+    Target samples (from /Users/marcin/Herd/sor3events/database/database.sqlite.event_qties):
+
+
+Table: event_snapshots
+New columns in TARGET (missing in SOURCE): template_prices_snapshot
+  Column: template_prices_snapshot
+    Source: column not present in source table
+    Target samples (from /Users/marcin/Herd/sor3events/database/database.sqlite.event_snapshots):
+[]
+
+
+Table: event_starting_place_availability
+New columns in TARGET (missing in SOURCE): available,created_at,end_place_id,event_id,id,note,start_place_id,updated_at
+  Column: available
+    Source: column not present in source table
+    Target samples (from /Users/marcin/Herd/sor3events/database/database.sqlite.event_starting_place_availability):
+
+  Column: created_at
+    Source: column not present in source table
+    Target samples (from /Users/marcin/Herd/sor3events/database/database.sqlite.event_starting_place_availability):
+
+  Column: end_place_id
+    Source: column not present in source table
+    Target samples (from /Users/marcin/Herd/sor3events/database/database.sqlite.event_starting_place_availability):
+
+  Column: event_id
+    Source: column not present in source table
+    Target samples (from /Users/marcin/Herd/sor3events/database/database.sqlite.event_starting_place_availability):
+
+  Column: id
+    Source: column not present in source table
+    Target samples (from /Users/marcin/Herd/sor3events/database/database.sqlite.event_starting_place_availability):
+
+  Column: note
+    Source: column not present in source table
+    Target samples (from /Users/marcin/Herd/sor3events/database/database.sqlite.event_starting_place_availability):
+
+  Column: start_place_id
+    Source: column not present in source table
+    Target samples (from /Users/marcin/Herd/sor3events/database/database.sqlite.event_starting_place_availability):
+
+  Column: updated_at
+    Source: column not present in source table
+    Target samples (from /Users/marcin/Herd/sor3events/database/database.sqlite.event_starting_place_availability):
+
+
+Table: events
+New columns in TARGET (missing in SOURCE): start_place_id
+  Column: start_place_id
+    Source: column not present in source table
+    Target samples (from /Users/marcin/Herd/sor3events/database/database.sqlite.events):
+1
+
+

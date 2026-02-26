@@ -1,0 +1,288 @@
+{
+    "summary": {
+        "pairs": 8,
+        "saved": 0
+    },
+    "problematic": [
+        {
+            "template_id": 5,
+            "start_place_id": 1,
+            "qty": 20,
+            "reason": "qty_not_found",
+            "lookup": "not_found"
+        },
+        {
+            "template_id": 5,
+            "start_place_id": 1,
+            "qty": 25,
+            "reason": "qty_not_found",
+            "lookup": "not_found"
+        },
+        {
+            "template_id": 5,
+            "start_place_id": 1,
+            "qty": 30,
+            "reason": "qty_not_found",
+            "lookup": "not_found"
+        },
+        {
+            "template_id": 5,
+            "start_place_id": 1,
+            "qty": 35,
+            "reason": "qty_not_found",
+            "lookup": "not_found"
+        },
+        {
+            "template_id": 5,
+            "start_place_id": 1,
+            "qty": 40,
+            "reason": "qty_not_found",
+            "lookup": "not_found"
+        },
+        {
+            "template_id": 5,
+            "start_place_id": 6,
+            "qty": 20,
+            "reason": "qty_not_found",
+            "lookup": "not_found"
+        },
+        {
+            "template_id": 5,
+            "start_place_id": 6,
+            "qty": 25,
+            "reason": "qty_not_found",
+            "lookup": "not_found"
+        },
+        {
+            "template_id": 5,
+            "start_place_id": 6,
+            "qty": 30,
+            "reason": "qty_not_found",
+            "lookup": "not_found"
+        },
+        {
+            "template_id": 5,
+            "start_place_id": 6,
+            "qty": 35,
+            "reason": "qty_not_found",
+            "lookup": "not_found"
+        },
+        {
+            "template_id": 5,
+            "start_place_id": 6,
+            "qty": 40,
+            "reason": "qty_not_found",
+            "lookup": "not_found"
+        },
+        {
+            "template_id": 5,
+            "start_place_id": 8,
+            "qty": 20,
+            "reason": "qty_not_found",
+            "lookup": "not_found"
+        },
+        {
+            "template_id": 5,
+            "start_place_id": 8,
+            "qty": 25,
+            "reason": "qty_not_found",
+            "lookup": "not_found"
+        },
+        {
+            "template_id": 5,
+            "start_place_id": 8,
+            "qty": 30,
+            "reason": "qty_not_found",
+            "lookup": "not_found"
+        },
+        {
+            "template_id": 5,
+            "start_place_id": 8,
+            "qty": 35,
+            "reason": "qty_not_found",
+            "lookup": "not_found"
+        },
+        {
+            "template_id": 5,
+            "start_place_id": 8,
+            "qty": 40,
+            "reason": "qty_not_found",
+            "lookup": "not_found"
+        },
+        {
+            "template_id": 5,
+            "start_place_id": 4,
+            "qty": 20,
+            "reason": "qty_not_found",
+            "lookup": "not_found"
+        },
+        {
+            "template_id": 5,
+            "start_place_id": 4,
+            "qty": 25,
+            "reason": "qty_not_found",
+            "lookup": "not_found"
+        },
+        {
+            "template_id": 5,
+            "start_place_id": 4,
+            "qty": 30,
+            "reason": "qty_not_found",
+            "lookup": "not_found"
+        },
+        {
+            "template_id": 5,
+            "start_place_id": 4,
+            "qty": 35,
+            "reason": "qty_not_found",
+            "lookup": "not_found"
+        },
+        {
+            "template_id": 5,
+            "start_place_id": 4,
+            "qty": 40,
+            "reason": "qty_not_found",
+            "lookup": "not_found"
+        },
+        {
+            "template_id": 5,
+            "start_place_id": 3,
+            "qty": 20,
+            "reason": "qty_not_found",
+            "lookup": "not_found"
+        },
+        {
+            "template_id": 5,
+            "start_place_id": 3,
+            "qty": 25,
+            "reason": "qty_not_found",
+            "lookup": "not_found"
+        },
+        {
+            "template_id": 5,
+            "start_place_id": 3,
+            "qty": 30,
+            "reason": "qty_not_found",
+            "lookup": "not_found"
+        },
+        {
+            "template_id": 5,
+            "start_place_id": 3,
+            "qty": 35,
+            "reason": "qty_not_found",
+            "lookup": "not_found"
+        },
+        {
+            "template_id": 5,
+            "start_place_id": 3,
+            "qty": 40,
+            "reason": "qty_not_found",
+            "lookup": "not_found"
+        },
+        {
+            "template_id": 10,
+            "start_place_id": 1,
+            "qty": 20,
+            "reason": "qty_not_found",
+            "lookup": "not_found"
+        },
+        {
+            "template_id": 10,
+            "start_place_id": 1,
+            "qty": 25,
+            "reason": "qty_not_found",
+            "lookup": "not_found"
+        },
+        {
+            "template_id": 10,
+            "start_place_id": 1,
+            "qty": 30,
+            "reason": "qty_not_found",
+            "lookup": "not_found"
+        },
+        {
+            "template_id": 10,
+            "start_place_id": 1,
+            "qty": 35,
+            "reason": "qty_not_found",
+            "lookup": "not_found"
+        },
+        {
+            "template_id": 10,
+            "start_place_id": 1,
+            "qty": 40,
+            "reason": "qty_not_found",
+            "lookup": "not_found"
+        },
+        {
+            "template_id": 10,
+            "start_place_id": 4,
+            "qty": 20,
+            "reason": "qty_not_found",
+            "lookup": "not_found"
+        },
+        {
+            "template_id": 10,
+            "start_place_id": 4,
+            "qty": 25,
+            "reason": "qty_not_found",
+            "lookup": "not_found"
+        },
+        {
+            "template_id": 10,
+            "start_place_id": 4,
+            "qty": 30,
+            "reason": "qty_not_found",
+            "lookup": "not_found"
+        },
+        {
+            "template_id": 10,
+            "start_place_id": 4,
+            "qty": 35,
+            "reason": "qty_not_found",
+            "lookup": "not_found"
+        },
+        {
+            "template_id": 10,
+            "start_place_id": 4,
+            "qty": 40,
+            "reason": "qty_not_found",
+            "lookup": "not_found"
+        },
+        {
+            "template_id": 10,
+            "start_place_id": 5,
+            "qty": 20,
+            "reason": "qty_not_found",
+            "lookup": "not_found"
+        },
+        {
+            "template_id": 10,
+            "start_place_id": 5,
+            "qty": 25,
+            "reason": "qty_not_found",
+            "lookup": "not_found"
+        },
+        {
+            "template_id": 10,
+            "start_place_id": 5,
+            "qty": 30,
+            "reason": "qty_not_found",
+            "lookup": "not_found"
+        },
+        {
+            "template_id": 10,
+            "start_place_id": 5,
+            "qty": 35,
+            "reason": "qty_not_found",
+            "lookup": "not_found"
+        },
+        {
+            "template_id": 10,
+            "start_place_id": 5,
+            "qty": 40,
+            "reason": "qty_not_found",
+            "lookup": "not_found"
+        }
+    ]
+}

@@ -1,0 +1,15 @@
+{
+    "started_at": "2025-08-19T18:59:02+00:00",
+    "src_path": "C:\\Users\\user\\Documents\\Herd\\sor3v1b\\scripts\/..\/database\/database.sqlite",
+    "dst_path": "C:\\Users\\user\\Documents\\Herd\\sor3v1b\\scripts\/..\/database\/database_serv.sqlite",
+    "backup": "C:\\Users\\user\\Documents\\Herd\\sor3v1b\\scripts\/..\/database\/database_serv.sqlite.bak.20250819_185902",
+    "places_src_count": 318,
+    "places_dst_count": 318,
+    "unmapped_places_count": 0,
+    "unmapped_sample": [],
+    "considered_pairs": 100788,
+    "inserted": 89084,
+    "skipped_existing": 11704,
+    "skipped_unmapped": 0,
+    "finished_at": "2025-08-19T18:59:04+00:00"
+}

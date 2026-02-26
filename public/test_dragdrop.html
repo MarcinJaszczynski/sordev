@@ -1,0 +1,106 @@
+<!DOCTYPE html>
+<html lang="pl">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Test Drag & Drop</title>
+    <script src="https://cdn.jsdelivr.net/npm/sortablejs@1.15.6/Sortable.min.js"></script>
+    <style>
+        .kanban-dropzone {
+            min-height: 200px;
+            background-color: #f0f0f0;
+            margin: 10px;
+            padding: 20px;
+            border: 2px dashed #ccc;
+            border-radius: 8px;
+            display: inline-block;
+            width: 300px;
+            vertical-align: top;
+        }
+        .kanban-item {
+            background-color: white;
+            padding: 10px;
+            margin: 5px 0;
+            border-radius: 4px;
+            cursor: move;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+        .sortable-ghost {
+            opacity: 0.5;
+            background-color: #e5edff;
+        }
+    </style>
+</head>
+<body>
+    <h1>Test funkcjonalności Drag & Drop</h1>
+    
+    <div class="kanban-dropzone" data-day="1">
+        <h3>Dzień 1</h3>
+        <div class="kanban-item" data-pivot-id="1">Element 1</div>
+        <div class="kanban-item" data-pivot-id="2">Element 2</div>
+        <div class="kanban-item" data-pivot-id="3">Element 3</div>
+    </div>
+    
+    <div class="kanban-dropzone" data-day="2">
+        <h3>Dzień 2</h3>
+        <div class="kanban-item" data-pivot-id="4">Element 4</div>
+        <div class="kanban-item" data-pivot-id="5">Element 5</div>
+    </div>
+    
+    <div class="kanban-dropzone" data-day="3">
+        <h3>Dzień 3</h3>
+        <div class="kanban-item" data-pivot-id="6">Element 6</div>
+    </div>
+
+    <script>
+        document.addEventListener('DOMContentLoaded', function () {
+            const sortableInstances = [];
+            
+            function initSortable() {
+                // Utwórz nowe instancje dla każdej kolumny
+                document.querySelectorAll('.kanban-dropzone').forEach(zone => {
+                    const instance = new Sortable(zone, {
+                        group: 'program-points',
+                        animation: 150,
+                        ghostClass: 'sortable-ghost',
+                        handle: '.kanban-item',
+                        onStart: function(evt) {
+                            console.log('Drag started:', {
+                                item: evt.item,
+                                pivotId: evt.item.getAttribute('data-pivot-id'),
+                                from: evt.from.getAttribute('data-day')
+                            });
+                        },
+                        onEnd: function(evt) {
+                            // Pobierz informacje o przeciąganym elemencie
+                            const pivotId = evt.item.getAttribute('data-pivot-id');
+                            const newDay = evt.to.getAttribute('data-day');
+                            
+                            console.log('Drag ended - element info:', {
+                                pivotId: pivotId,
+                                newDay: newDay,
+                                item: evt.item,
+                                to: evt.to
+                            });
+                            
+                            // Pobierz wszystkie ID elementów w nowej kolejności
+                            const fullOrder = Array.from(evt.to.children)
+                                .filter(el => el.classList.contains('kanban-item'))
+                                .map(el => el.getAttribute('data-pivot-id'))
+                                .filter(Boolean);
+                            
+                            console.log('Full order calculated:', fullOrder);
+                            console.log('Would call movePoint with:', { pivotId, newDay, fullOrder });
+                        }
+                    });
+                    
+                    sortableInstances.push(instance);
+                });
+            }
+            
+            // Inicjalizacja
+            initSortable();
+        });
+    </script>
+</body>
+</html>

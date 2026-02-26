@@ -1,0 +1,99 @@
+<!DOCTYPE html>
+<html lang="pl">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Test Livewire Communication</title>
+    <script src="https://cdn.jsdelivr.net/npm/sortablejs@1.15.6/Sortable.min.js"></script>
+    <style>
+        .test-area {
+            border: 2px solid #ccc;
+            padding: 20px;
+            margin: 10px;
+            min-height: 100px;
+        }
+        .draggable-item {
+            background: #f0f0f0;
+            padding: 10px;
+            margin: 5px 0;
+            cursor: move;
+            border-radius: 4px;
+        }
+        .log-area {
+            background: #000;
+            color: #0f0;
+            padding: 10px;
+            font-family: monospace;
+            height: 200px;
+            overflow-y: scroll;
+            margin-top: 20px;
+        }
+    </style>
+</head>
+<body>
+    <h1>Test komunikacji JavaScript</h1>
+    
+    <div class="test-area" data-day="1">
+        <h3>Dzień 1</h3>
+        <div class="draggable-item" data-pivot-id="1">Element 1</div>
+        <div class="draggable-item" data-pivot-id="2">Element 2</div>
+    </div>
+    
+    <div class="test-area" data-day="2">
+        <h3>Dzień 2</h3>
+        <div class="draggable-item" data-pivot-id="3">Element 3</div>
+    </div>
+    
+    <button onclick="testFunction()">Test JavaScript</button>
+    <button onclick="testAjax()">Test AJAX</button>
+    
+    <div class="log-area" id="log"></div>
+
+    <script>
+        function log(message) {
+            const logArea = document.getElementById('log');
+            logArea.innerHTML += new Date().toLocaleTimeString() + ': ' + message + '\n';
+            logArea.scrollTop = logArea.scrollHeight;
+        }
+        
+        function testFunction() {
+            log('JavaScript function works!');
+        }
+        
+        function testAjax() {
+            log('Testing AJAX...');
+            fetch('/test-log')
+                .then(response => response.text())
+                .then(data => log('AJAX response: ' + data))
+                .catch(error => log('AJAX error: ' + error));
+        }
+        
+        document.addEventListener('DOMContentLoaded', function() {
+            log('DOM loaded, initializing Sortable...');
+            
+            document.querySelectorAll('.test-area').forEach(area => {
+                new Sortable(area, {
+                    group: 'test-group',
+                    animation: 150,
+                    onStart: function(evt) {
+                        log('Drag started: ' + evt.item.textContent);
+                    },
+                    onEnd: function(evt) {
+                        const pivotId = evt.item.getAttribute('data-pivot-id');
+                        const newDay = evt.to.getAttribute('data-day');
+                        log('Drag ended: item ' + pivotId + ' moved to day ' + newDay);
+                        
+                        // Symulacja wywołania Livewire (AJAX)
+                        fetch('/test-log')
+                            .then(response => response.text())
+                            .then(data => log('Simulated movePoint call successful'))
+                            .catch(error => log('Simulated movePoint error: ' + error));
+                    }
+                });
+            });
+            
+            log('Sortable initialized');
+        });
+    </script>
+</body>
+</html>

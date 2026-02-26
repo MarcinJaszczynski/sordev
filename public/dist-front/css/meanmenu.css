@@ -1,0 +1,481 @@
+a.meanmenu-reveal {
+	display: none;
+}
+/* when under viewport size, .mean-container is added to body */
+.mean-container .mean-bar {
+	float: left;
+	width: 100%;
+	position: absolute;
+	background: transparent;
+	padding: 20px 0 0;
+	z-index: 999;
+	border-bottom: 1px solid rgba(0, 0, 0, 0.03);
+	height: 55px;
+}
+.mean-container a.meanmenu-reveal {
+	width: 35px;
+	height: 30px;
+	padding: 12px 15px 0 0;
+	position: absolute;
+	right: 0;
+	cursor: pointer;
+	color: #ffffff;
+	text-decoration: none;
+	font-size: 16px;
+	text-indent: -9999em;
+	line-height: 22px;
+	font-size: 1px;
+	display: block;
+	font-weight: 700;
+}
+.mean-container a.meanmenu-reveal span {
+    display: block;
+    background: #ffffff;
+    height: 5px; /* slightly thicker for visibility */
+    margin-top: 4px;
+    border-radius: 4px;
+    width: 28px; /* ensure consistent width */
+}
+.mean-container .mean-nav {
+	float: left;
+	width: 100%;
+	background: #ffffff;
+	margin-top: 55px;
+}
+.mean-container .mean-nav ul {
+	padding: 0;
+	margin: 0;
+	width: 100%;
+	border: none;
+	list-style-type: none;
+}
+.mean-container .mean-nav ul li {
+	position: relative;
+	float: left;
+	width: 100%;
+}
+.mean-container .mean-nav ul li a {
+	display: block;
+	float: left;
+	width: 90%;
+	padding: 1em 5%;
+	margin: 0;
+	text-align: left;
+	color: #677294;
+	border-top: 1px solid #DBEEFD;
+	text-decoration: none;
+}
+.mean-container .mean-nav ul li a.active {
+	color: #000000;
+}
+.mean-container .mean-nav ul li li a {
+	width: 80%;
+	padding: 1em 10%;
+	color: #677294;
+	border-top: 1px solid #DBEEFD;
+	opacity: 1;
+	filter: alpha(opacity=75);
+	text-shadow: none !important;
+	visibility: visible;
+	text-transform: none;
+	font-size: 14px;
+}
+.mean-container .mean-nav ul li.mean-last a {
+	border-bottom: none;
+	margin-bottom: 0;
+}
+.mean-container .mean-nav ul li li li a {
+	width: 70%;
+	padding: 1em 15%;
+}
+.mean-container .mean-nav ul li li li li a {
+	width: 60%;
+	padding: 1em 20%;
+}
+.mean-container .mean-nav ul li li li li li a {
+	width: 50%;
+	padding: 1em 25%;
+}
+.mean-container .mean-nav ul li a:hover {
+	background: #252525;
+	background: rgba(255,255,255,0.1);
+}
+.mean-container .mean-nav ul li a.mean-expand {
+	margin-top: 3px;
+	width: 100%;
+	height: 24px;
+	padding: 12px !important;
+	text-align: right ;
+	position: absolute;
+	right: 0;
+	top: 0;
+	z-index: 2;
+	font-weight: 700;
+	background: transparent;
+	border: none !important;
+}
+.mean-container .mean-push {
+	float: left;
+	width: 100%;
+	padding: 0;
+	margin: 0;
+	clear: both;
+}
+.mean-nav .wrapper {
+	width: 100%;
+	padding: 0;
+	margin: 0;
+}
+/* Fix for box sizing on Foundation Framework etc. */
+.mean-container .mean-bar, .mean-container .mean-bar * {
+	-webkit-box-sizing: content-box;
+	-moz-box-sizing: content-box;
+	box-sizing: content-box;
+}
+.mean-remove {
+	display: none !important;
+}
+.mobile-nav {
+    display: none;
+}
+.mobile-nav.mean-container .mean-nav ul li a.active {
+    color: #FF2D55;
+}
+.main-nav {
+    background: #000;
+    position: fixed !important;
+    width: 100%;
+    z-index: 999;
+    height: auto;
+}
+.mean-nav .dropdown-toggle::after {
+	display: none;
+}
+.navbar-light .navbar-brand, .navbar-light .navbar-brand:hover {
+    color: #fff;
+    font-weight: bold;
+    text-transform: uppercase;
+}
+.main-nav nav ul {
+    padding: 0;
+    margin: 0;
+    list-style-type: none;
+}
+.main-nav nav .navbar-nav .nav-item {
+    position: relative;
+}
+
+.main-nav nav .navbar-nav {
+    width: 100%;
+    justify-content: space-evenly;
+}
+
+.main-nav nav .navbar-nav .nav-item a {
+    font-weight: 500;
+    font-size: 16px;
+    text-transform: uppercase;
+    color: #ffffff;
+    padding-left: 20px;
+    padding-right: 20px;
+    padding-top: 0;
+    padding-bottom: 0;
+}
+
+.main-nav nav .navbar-nav .nav-item a:hover,
+.main-nav nav .navbar-nav .nav-item a:focus,
+.main-nav nav .navbar-nav .nav-item a.active {
+    color: #FF2D55;
+}
+.main-nav nav .navbar-nav .nav-item:hover a {
+    color: #FF2D55;
+}
+.main-nav nav .navbar-nav .nav-item .dropdown-menu {
+    -webkit-box-shadow: 0 0 30px 0 rgba(0, 0, 0, 0.05);
+            box-shadow: 0 0 30px 0 rgba(0, 0, 0, 0.05);
+    background: #0d1028;
+    position: absolute;
+    top: 80px;
+    left: 0;
+    width: 250px;
+    z-index: 99;
+    display: block;
+    padding-top: 20px;
+    padding-left: 5px;
+    padding-right: 5px;
+    padding-bottom: 20px;
+    opacity: 0;
+    visibility: hidden;
+    -webkit-transition: all 0.3s ease-in-out;
+    transition: all 0.3s ease-in-out;
+}
+.main-nav nav .navbar-nav .nav-item .dropdown-menu li {
+    position: relative;
+    padding: 0;
+}
+.main-nav nav .navbar-nav .nav-item .dropdown-menu li a {
+    font-size: 15px;
+    font-weight: 500;
+    text-transform: capitalize;
+    padding: 9px 15px;
+    margin: 0;
+    display: block;
+    color: #ffffff;
+}
+.main-nav nav .navbar-nav .nav-item .dropdown-menu li a:hover,
+.main-nav nav .navbar-nav .nav-item .dropdown-menu li a:focus,
+.main-nav nav .navbar-nav .nav-item .dropdown-menu li a.active {
+    color: #000000;
+}
+.main-nav nav .navbar-nav .nav-item .dropdown-menu li .dropdown-menu {
+    position: absolute;
+    left: -100%;
+    top: 0;
+    opacity: 0 !important;
+    visibility: hidden !important;
+}
+.main-nav nav .navbar-nav .nav-item .dropdown-menu li:hover .dropdown-menu {
+    opacity: 1 !important;
+    visibility: visible !important;
+    top: -20px !important;
+}
+.main-nav nav .navbar-nav .nav-item .dropdown-menu li .dropdown-menu li .dropdown-menu {
+    position: absolute;
+    left: -100%;
+    top: 0;
+    opacity: 0 !important;
+    visibility: hidden !important;
+}
+.main-nav nav .navbar-nav .nav-item .dropdown-menu li:hover .dropdown-menu li:hover .dropdown-menu {
+    opacity: 1 !important;
+    visibility: visible !important;
+    top: -20px !important;
+}
+.main-nav nav .navbar-nav .nav-item .dropdown-menu li .dropdown-menu li a {
+    color: #ffffff;
+    text-transform: capitalize;
+}
+.main-nav nav .navbar-nav .nav-item .dropdown-menu li .dropdown-menu li a:hover,
+.main-nav nav .navbar-nav .nav-item .dropdown-menu li .dropdown-menu li a:focus,
+.main-nav nav .navbar-nav .nav-item .dropdown-menu li .dropdown-menu li a.active {
+    color: #000000;
+}
+.main-nav nav .navbar-nav .nav-item .dropdown-menu li:hover a {
+    color: #000000;
+}
+.main-nav nav .navbar-nav .nav-item:hover ul {
+    opacity: 1;
+    visibility: visible;
+    top: 100%;
+}
+.main-nav nav .navbar-nav .nav-item:last-child .dropdown-menu {
+    left: auto;
+    right: 0;
+}
+
+/* Responsive Style */
+@media (max-width: 1920px) {
+    .main-nav nav .navbar-nav .nav-item a {
+        padding-left: 18px;
+        padding-right: 18px;
+    }
+}
+@media (max-width: 1366px) {
+    .main-nav nav .navbar-nav .nav-item a {
+        padding-left: 10px;
+        padding-right: 10px;
+    }
+}
+
+@media (max-width: 1280px) {
+    .main-nav nav .navbar-nav .nav-item a {
+        padding-left: 5px;
+        padding-right: 5px;
+    }
+
+}
+
+@media (max-width: 1100px) {
+    .main-nav nav .navbar-nav .nav-item a {
+        padding-left: 2px;
+        padding-right: 2px;
+    }
+}
+
+@media (max-width: 1050px) {
+    .main-nav nav .navbar-nav .nav-item a {
+        padding-left: 3px;
+        padding-right: 3px;
+    }
+}
+
+
+@media only screen and (max-width: 991px) {
+    .mobile-nav {
+        display: block;
+        position: relative;
+    }
+    .mobile-nav .logo {
+		text-decoration: none;
+        position: absolute;
+        top: 11px;
+        z-index: 999999;
+        left: 15px;
+        color: #fff;
+        font-weight: bold;
+        text-transform: uppercase;
+        font-size: 20px;
+    }
+    .mean-container .mean-bar {
+        background-color: #000;
+        padding: 0;
+    }
+    .mean-container a.meanmenu-reveal {
+        padding: 15px 15px 0 0;
+    }
+    .mobile-nav nav .navbar-nav .nav-item a i {
+        display: none;
+    }
+    .main-nav {
+        display: none !important;
+    }
+
+    .main-nav nav .navbar-nav {
+        display:flex;
+    }
+}
+
+/* Ensure the mobile meanmenu bar is fixed and menu starts below it */
+body.mean-container > .mean-bar, .mobile-nav.mean-container > .mean-bar {
+    position: fixed !important;
+    top: 0 !important;
+    left: 0 !important;
+    right: 0 !important;
+    height: 56px !important;
+    display: flex !important;
+    align-items: center !important;
+    justify-content: space-between !important;
+    padding: 8px 12px !important;
+    background: #fff !important;
+    z-index: 12000 !important;
+}
+
+/* place hamburger to the right of the bar */
+body.mean-container a.meanmenu-reveal, .mobile-nav.mean-container a.meanmenu-reveal {
+    position: relative !important;
+    margin-left: auto !important;
+    right: 0 !important;
+    display: inline-flex !important;
+    align-items: center !important;
+    justify-content: center !important;
+    z-index: 12001 !important;
+    color: #000 !important;
+}
+
+/* ensure the expanded nav begins below the fixed bar */
+body.mean-container > .mean-nav, .mobile-nav.mean-container > .mean-nav, .mean-container > .mean-nav {
+    position: fixed !important;
+    top: 56px !important;
+    left: 0 !important;
+    right: 0 !important;
+    bottom: 0 !important;
+    overflow: auto !important;
+    -webkit-overflow-scrolling: touch !important;
+    background: #fff !important;
+    z-index: 11999 !important;
+}
+
+/* Prevent mobile nav creeping up on scroll: remove margins/paddings/transforms and disable top transitions */
+body.mean-container > .mean-nav, .mobile-nav.mean-container > .mean-nav, #mobileMenuContainer, .mean-container > .mean-nav {
+    margin-top: 0 !important;
+    padding-top: 0 !important;
+    -webkit-transform: none !important;
+    transform: none !important;
+    transition: none !important;
+    -webkit-transition: none !important;
+}
+
+/* hide any mean-push spacer that could change size while scrolling */
+.mean-push { display: none !important; margin-top: 0 !important; height: 0 !important; padding: 0 !important; }
+
+/* ensure our custom container stays anchored exactly below the bar */
+#mobileMenuContainer { top: 56px !important; }
+
+/* Fix: ensure mobile logo doesn't push hamburger off-screen and hamburger is vertically centered */
+body.mean-container .mobile-nav .logo,
+.mean-container .mobile-nav .logo {
+    max-width: calc(100vw - 90px) !important;
+    overflow: hidden !important;
+    text-overflow: ellipsis !important;
+    white-space: nowrap !important;
+    padding-left: 12px !important;
+}
+
+body.mean-container a.meanmenu-reveal, .mobile-nav.mean-container a.meanmenu-reveal {
+    right: 12px !important;
+    top: 50% !important;
+    transform: translateY(-50%) !important;
+    padding: 8px !important;
+}
+
+/* ensure hamburger bar is visible and has a stable width */
+body.mean-container a.meanmenu-reveal span {
+    width: 28px !important;
+    display: block !important;
+}
+
+/* ensure submenu items expand downwards inside the mean-nav and do not overlap the top bar */
+.mean-container .mean-nav ul li ul, .mean-container .mean-nav ul li .dropdown {
+    position: static !important;
+    display: block !important;
+}
+
+/* give some spacing so first item not hidden under bar */
+.mean-container .mean-nav ul { padding-top: 6px !important; }
+
+
+/* new mobile-bar styles for our custom fixed header */
+.mobile-bar {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 8px 12px;
+    background: #fff;
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    height: 56px;
+    z-index: 12000;
+    box-shadow: 0 1px 0 rgba(0,0,0,0.04);
+    max-width: 100vw;
+    box-sizing: border-box;
+    overflow: hidden;
+}
+.mobile-bar .logo img { height: 40px; max-height:40px; max-width: calc(100vw - 100px); display:block; object-fit: contain; }
+.mobile-bar .logo { flex: 0 1 auto; min-width: 0; }
+.mobile-toggle { background:transparent; border:0; padding:12px; display:inline-flex; align-items:center; justify-content:center; cursor: pointer; }
+.mobile-toggle .hamburger { width:28px; height:3px; background:#000; display:block; position:relative; }
+.mobile-toggle .hamburger::before, .mobile-toggle .hamburger::after{ content:''; position:absolute; left:0; right:0; height:3px; background:#000; }
+.mobile-toggle .hamburger::before{ top:-8px; }
+.mobile-toggle .hamburger::after{ bottom:-8px; }
+
+/* our injected mobile menu container sits below fixed bar */
+#mobileMenuContainer, .mobile-menu-container { display:none; position: fixed; left:0; right:0; top:56px; bottom:0; overflow:auto; background:#fff; z-index:11999; padding:12px; }
+#mobileMenuContainer .navbar-nav { display:block; }
+#mobileMenuContainer .navbar-nav li { display:block; }
+#mobileMenuContainer .navbar-nav li a { display:block; padding:12px 8px; border-bottom:1px solid #f0f0f0; color:#222; }
+
+/* ensure header does not scroll away on mobile only */
+@media only screen and (max-width: 991px) {
+    body { padding-top: 56px !important; }
+}
+
+/* Desktop: ensure main-nav fixed bar sits at top */
+@media only screen and (min-width: 992px) {
+    .main-nav { top: 0; }
+}
+
+/* hide legacy logos injected by meanmenu or mobile-nav - keep only our fixed .mobile-bar logo */
+.mobile-nav .logo, .mean-container .logo { display: none !important; }
+.mobile-nav, .mean-container .mean-bar { overflow: visible !important; }
+

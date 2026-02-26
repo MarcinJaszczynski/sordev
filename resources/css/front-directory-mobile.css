@@ -1,0 +1,30 @@
+/* Minimal mobile tweaks for directory-packages pages
+   - make anchor-wrapped <button> elements block-level and full width on mobile
+   - match styling of .destination_search_button to full width behavior
+*/
+
+@media (max-width: 780px) {
+    /* Ensure buttons wrapped in anchors become full-width block elements */
+    .directory-length-buttons a,
+    .directory-length-buttons a > button,
+    .directory-length-buttons button {
+        display: block !important;
+        width: 100% !important;
+        box-sizing: border-box !important;
+        margin-bottom: 10px !important;
+        padding: 10px 14px !important;
+        border-radius: 6px !important;
+    }
+
+    /* If your 'Szukaj' button uses this class, mimic its full-width appearance */
+    .destination_search_button {
+        display: block !important;
+        width: 100% !important;
+    }
+
+    /* Add higher specificity to override library defaults when needed */
+    a[href*="/oferty"] > button, .directory-length-buttons a > button {
+        display:block !important;
+        width:100% !important;
+    }
+}

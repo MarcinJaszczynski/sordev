@@ -1,0 +1,5 @@
+User-agent: *
+Disallow:
+
+# Sitemap for search engines
+Sitemap: /sitemap.xml

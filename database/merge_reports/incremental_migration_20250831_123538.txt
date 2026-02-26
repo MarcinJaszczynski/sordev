@@ -1,0 +1,21 @@
+=== INCREMENTAL MIGRATION REPORT ===
+Timestamp: 20250831_123538
+Target: /Users/marcin/Herd/sor3events/database/database.sqlite
+Source: /Users/marcin/Herd/sor3events/database/database_serv_2.sqlite
+Backup: /Users/marcin/Herd/sor3events/database/database.sqlite.incremental_backup_20250831_123538
+
+
+=== INCREMENTAL DATA MIGRATION ===
+blog_posts: 0 new rows (no changes)
+buses: 0 new rows (no changes)
+cache: 0 new rows (no changes)
+cache_locks: 0 new rows (no changes)
+contact_contractor: 0 new rows (no changes)
+contacts: 0 new rows (no changes)
+contract_templates: 0 new rows (no changes)
+contractors: 0 new rows (no changes)
+conversation_participants: 0 new rows (no changes)
+conversations: 0 new rows (no changes)
+currencies: 0 new rows (no changes)
+event_histories: 0 new rows (no changes)
+event_price_descriptions: 0 new rows (no changes)
