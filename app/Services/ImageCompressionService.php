@@ -1,4 +1,14 @@
-<?php
+
+    /**
+     * Transliterate filename to ASCII (remove diacritics)
+     */
+    private static function transliterateFilename(string $filename): string
+    {
+        $transliterated = iconv('UTF-8', 'ASCII//TRANSLIT//IGNORE', $filename);
+        // Zamień spacje i niebezpieczne znaki na podkreślenia
+        $transliterated = preg_replace('/[^A-Za-z0-9_.-]/', '_', $transliterated);
+        return $transliterated;
+    }
 
 namespace App\Services;
 
@@ -22,7 +32,8 @@ class ImageCompressionService
     {
         $originalName = pathinfo($file->getClientOriginalName(), PATHINFO_FILENAME);
         $extension = strtolower($file->getClientOriginalExtension());
-        $filename = uniqid($originalName . '_') . '.' . $extension;
+        $safeName = self::transliterateFilename($originalName);
+        $filename = uniqid($safeName . '_') . '.' . $extension;
         
         // Załaduj obraz
         $manager = new ImageManager(new Driver());
@@ -52,6 +63,7 @@ class ImageCompressionService
             $constraint->aspectRatio();
             $constraint->upsize();
         });
+        $thumbnail->crop(self::THUMBNAIL_SIZE, self::THUMBNAIL_SIZE, 0, 0);
         $thumbnailData = self::compressImage($thumbnail, $extension);
         Storage::disk($disk)->put($thumbnailPath, $thumbnailData);
         
@@ -77,15 +89,15 @@ class ImageCompressionService
     /**
      * Kompresuje istniejące obrazy w storage
      */
-    public static function compressExistingImages(string $disk = 'public', string $directory = 'images'): array
+    public static function compressExistingImages(string $disk = 'public', string $directory = 'images', bool $force = false): array
     {
         $files = Storage::disk($disk)->allFiles($directory);
         $results = [];
-        
+
         foreach ($files as $filePath) {
-            if (self::isImageFile($filePath)) {
+            if (self::isProcessableSourceImage($filePath)) {
                 try {
-                    $result = self::compressExistingImage($disk, $filePath);
+                    $result = self::compressExistingImage($disk, $filePath, $force);
                     $results[] = $result;
                 } catch (\Exception $e) {
                     $results[] = [
@@ -95,40 +107,62 @@ class ImageCompressionService
                 }
             }
         }
-        
+
         return $results;
     }
     
     /**
      * Kompresuje pojedynczy istniejący obraz
      */
-    private static function compressExistingImage(string $disk, string $filePath): array
+    public static function compressExistingImage(string $disk, string $filePath, bool $force = false): array
     {
         $storage = Storage::disk($disk);
         $originalSize = $storage->size($filePath);
-        
+
         // Załaduj obraz z storage
         $imageData = $storage->get($filePath);
         $manager = new ImageManager(new Driver());
         $image = $manager->read($imageData);
-        
+
         // Optymalizuj
         $image = self::resizeIfNeeded($image);
-        $extension = pathinfo($filePath, PATHINFO_EXTENSION);
+        $extension = strtolower((string) pathinfo($filePath, PATHINFO_EXTENSION));
         $compressedData = self::compressImage($image, $extension);
-        
+
         // Zapisz skompresowany obraz
         $storage->put($filePath, $compressedData);
-        
+
+        $thumbnailPath = self::thumbnailPathFor($filePath);
+        if ($force || !$storage->exists($thumbnailPath)) {
+            $thumbnail = clone $image;
+            $thumbnail->resize(self::THUMBNAIL_SIZE, self::THUMBNAIL_SIZE, function ($constraint) {
+                $constraint->aspectRatio();
+                $constraint->upsize();
+            });
+            $thumbnail->crop(self::THUMBNAIL_SIZE, self::THUMBNAIL_SIZE, 0, 0);
+
+            $storage->put($thumbnailPath, self::compressImage($thumbnail, $extension));
+        }
+
+        $webpPath = null;
+        if ($extension !== 'webp') {
+            $webpPath = self::webpPathFor($filePath);
+            if ($force || !$storage->exists($webpPath)) {
+                $storage->put($webpPath, $image->toWebp(self::WEBP_QUALITY));
+            }
+        }
+
         $newSize = $storage->size($filePath);
-        $compressionRatio = round((1 - $newSize / $originalSize) * 100, 1);
-        
+        $compressionRatio = round((1 - $newSize / max($originalSize, 1)) * 100, 1);
+
         return [
             'file' => $filePath,
             'size_before' => $originalSize,
             'size_after' => $newSize,
             'compression_ratio' => $compressionRatio,
             'saved_bytes' => $originalSize - $newSize,
+            'thumbnail' => $thumbnailPath,
+            'webp' => $webpPath,
         ];
     }
     
@@ -171,6 +205,41 @@ class ImageCompressionService
     {
         $extension = strtolower(pathinfo($filePath, PATHINFO_EXTENSION));
         return in_array($extension, ['jpg', 'jpeg', 'png', 'gif', 'webp']);
+    }
+
+    private static function isProcessableSourceImage(string $filePath): bool
+    {
+        if (!self::isImageFile($filePath)) {
+            return false;
+        }
+
+        $normalized = str_replace('\\', '/', $filePath);
+
+        return !str_contains($normalized, '/thumbs/');
+    }
+
+    private static function thumbnailPathFor(string $filePath): string
+    {
+        $directory = pathinfo($filePath, PATHINFO_DIRNAME);
+        $filename = pathinfo($filePath, PATHINFO_BASENAME);
+
+        if (!$directory || $directory === '.') {
+            return 'thumbs/' . $filename;
+        }
+
+        return trim($directory, '/') . '/thumbs/' . $filename;
+    }
+
+    private static function webpPathFor(string $filePath): string
+    {
+        $directory = pathinfo($filePath, PATHINFO_DIRNAME);
+        $filename = pathinfo($filePath, PATHINFO_FILENAME) . '.webp';
+
+        if (!$directory || $directory === '.') {
+            return $filename;
+        }
+
+        return trim($directory, '/') . '/' . $filename;
     }
     
     /**
