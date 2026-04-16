@@ -41,4 +41,9 @@ class EventPricePerPerson extends Model
     {
         return $this->belongsTo(Currency::class);
     }
+
+    public function eventTemplateQty()
+    {
+        return $this->belongsTo(EventTemplateQty::class);
+    }
 }

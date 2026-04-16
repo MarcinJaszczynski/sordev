@@ -21,7 +21,8 @@ class TaxResource extends Resource
     protected static ?string $navigationLabel = 'Podatki';
     protected static ?string $modelLabel = 'Podatek';
     protected static ?string $pluralModelLabel = 'Podatki';
-    protected static ?string $navigationGroup = 'Konfiguracja';
+    protected static ?string $navigationGroup = 'Ustawienia kalkulacji';
+    protected static ?int $navigationSort = 70;
 
     public static function form(Form $form): Form
     {
@@ -62,9 +63,7 @@ class TaxResource extends Resource
                 
                 Forms\Components\Section::make('Dodatkowe informacje')
                     ->schema([
-                        Forms\Components\Textarea::make('description')
-                            ->label('Opis')
-                            ->rows(3)
+                        Forms\Components\RichEditor::make('description')
                             ->placeholder('Dodatkowe informacje o podatku...'),
                     ]),
             ]);
@@ -102,6 +101,7 @@ class TaxResource extends Resource
                     ->falseColor('danger'),
                 Tables\Columns\TextColumn::make('description')
                     ->label('Opis')
+                    ->html(false)
                     ->limit(50)
                     ->toggleable(),
                 Tables\Columns\TextColumn::make('created_at')

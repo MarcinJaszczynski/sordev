@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use App\Models\Concerns\HasTasks;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\SoftDeletes;
@@ -9,6 +10,7 @@ use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
 use App\Models\EventType;
 use App\Support\Region;
+use App\Support\StoragePath;
 
 /**
  * Model EventTemplate
@@ -33,7 +35,7 @@ use App\Support\Region;
 
 class EventTemplate extends Model
 {
-    use HasFactory, SoftDeletes;
+    use HasFactory, SoftDeletes, HasTasks;
 
     /**
      * Automatyczne zapewnienie unikalności slugów przy tworzeniu/aktualizacji.
@@ -124,6 +126,43 @@ class EventTemplate extends Model
             }
             return 'event-templates/gallery/' . ltrim((string) $path, '/');
         }, $items);
+    }
+
+    public function getFullImagePathAttribute(): ?string
+    {
+        return StoragePath::normalize($this->featured_image);
+    }
+
+    public function getPreviewImagePathAttribute(): ?string
+    {
+        $fullPath = $this->full_image_path;
+
+        if (!$fullPath) {
+            return null;
+        }
+
+        if (str_contains($fullPath, '/thumbs/')) {
+            return $fullPath;
+        }
+
+        $directory = pathinfo($fullPath, PATHINFO_DIRNAME);
+        $filename = pathinfo($fullPath, PATHINFO_BASENAME);
+
+        if (!$directory || $directory === '.' || $directory === '/') {
+            return 'thumbs/' . $filename;
+        }
+
+        return trim($directory, '/') . '/thumbs/' . $filename;
+    }
+
+    public function getFullImageUrlAttribute(): ?string
+    {
+        return StoragePath::publicUrl($this->full_image_path);
+    }
+
+    public function getPreviewImageUrlAttribute(): ?string
+    {
+        return StoragePath::publicUrl($this->preview_image_path) ?: $this->full_image_url;
     }
 
     /**
@@ -229,6 +268,8 @@ class EventTemplate extends Model
                 'day',
                 'order',
                 'notes',
+                'start_time',
+                'end_time',
                 'include_in_program',
                 'include_in_calculation',
                 'active',
@@ -336,6 +377,20 @@ class EventTemplate extends Model
     public function scopeInactive($query)
     {
         return $query->where('is_active', false);
+    }
+
+    public function scopeWithFrontendRelations($query)
+    {
+        return $query->with([
+            'tags',
+            'programPoints',
+            'startingPlaceAvailabilities.startPlace',
+            'eventTypes',
+            'transportTypes',
+            'pricesPerPerson.eventTemplateQty',
+            'pricesPerPerson.currency',
+            'pricesPerPerson.startPlace',
+        ]);
     }
 
     /**

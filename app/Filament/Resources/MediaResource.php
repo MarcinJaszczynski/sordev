@@ -24,7 +24,7 @@ class MediaResource extends Resource
             Forms\Components\TextInput::make('title')->label('Tytuł'),
             Forms\Components\TextInput::make('alt')->label('Tekst alternatywny'),
             Forms\Components\Textarea::make('caption')->label('Podpis')->rows(2),
-            Forms\Components\Textarea::make('description')->label('Opis')->rows(3),
+            Forms\Components\RichEditor::make('description'),
         ]);
     }
 

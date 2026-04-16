@@ -20,6 +20,7 @@ use Filament\Resources\Resource;
 use Filament\Tables;
 use Filament\Tables\Table;
 use Illuminate\Database\Eloquent\Builder;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Schema;
 
 class EventResource extends Resource
@@ -36,9 +37,104 @@ class EventResource extends Resource
     {
         return $form
             ->schema([
+                Forms\Components\Section::make('Podsumowanie finansowe')
+                    ->icon('heroicon-o-banknotes')
+                    ->collapsible()
+                    ->compact()
+                    ->columns(4)
+                    ->hidden(fn (string $operation) => $operation !== 'edit')
+                    ->schema([
+                        Forms\Components\Placeholder::make('fs_calc_cost')
+                            ->label('Cena z kalkulacji')
+                            ->helperText('Obliczona na podstawie szablonu, km i liczby uczestników')
+                            ->content(function ($record, callable $get): string {
+                                if (!$record) {
+                                    return '—';
+                                }
+
+                                $participantCount = max(1, (int) ($get('participant_count') ?? $record->participant_count ?? 1));
+
+                                try {
+                                    // Identyczna kalkulacja jak w zakładce Cennik (EventPriceTable)
+                                    $widget = app(\App\Filament\Resources\EventResource\Widgets\EventPriceTable::class);
+                                    $widget->record = $record;
+                                    $widget->loadCalculations();
+
+                                    $plnData   = $widget->detailedCalculations[$participantCount]['PLN'] ?? null;
+                                    $totalCost = $plnData ? round((float) ($plnData['total'] ?? 0), 2) : 0.0;
+                                    $perPerson = $participantCount > 0 ? $totalCost / $participantCount : 0;
+
+                                    return 'SUMA KOŃCOWA dla PLN: ' . number_format($totalCost, 2, '.', ',') . ' PLN' . "\n" .
+                                           'Cena za osobę (uczestnik): ' . number_format($perPerson, 2, '.', ',') . ' PLN';
+                                } catch (\Throwable $e) {
+                                    return 'Brak danych kalkulacji';
+                                }
+                            })
+                            ->extraAttributes(['class' => 'whitespace-pre-line']),
+
+                        Forms\Components\Placeholder::make('fs_planned_cost')
+                            ->label('Do zapłaty przez biuro')
+                            ->helperText('Z aktywnego rozliczenia — po rezerwacjach i ustaleniach')
+                            ->content(function ($record): string {
+                                if (!$record) {
+                                    return '—';
+                                }
+                                try {
+                                    $s = $record->settlements()
+                                        ->whereIn('status', ['draft', 'active', 'pilot_settled'])
+                                        ->latest('id')->first();
+                                    if ($s && $s->planned_cost_pln !== null) {
+                                        return number_format((float) $s->planned_cost_pln, 2, ',', ' ') . ' PLN';
+                                    }
+                                } catch (\Throwable) {}
+                                return '— (brak rozliczenia)';
+                            }),
+
+                        Forms\Components\Placeholder::make('fs_actual_cost')
+                            ->label('Już zapłacono przez biuro')
+                            ->helperText('Suma kwot faktycznie przelanych do wykonawców')
+                            ->content(function ($record): string {
+                                if (!$record) {
+                                    return '—';
+                                }
+                                try {
+                                    $s = $record->settlements()
+                                        ->whereIn('status', ['draft', 'active', 'pilot_settled'])
+                                        ->latest('id')->first();
+                                    if ($s && $s->actual_cost_pln !== null) {
+                                        return number_format((float) $s->actual_cost_pln, 2, ',', ' ') . ' PLN';
+                                    }
+                                } catch (\Throwable) {}
+                                return '— (brak rozliczenia)';
+                            }),
+
+                        Forms\Components\Placeholder::make('fs_clients_paid')
+                            ->label('Wpłaty klientów')
+                            ->helperText('Suma wpłat ze wszystkich umów tej imprezy')
+                            ->content(function ($record): string {
+                                if (!$record) {
+                                    return '—';
+                                }
+                                try {
+                                    if ($record->agreements()->doesntExist()) {
+                                        return '— (brak umów)';
+                                    }
+                                    $paid = $record->agreements()->sum('amount_paid');
+                                    return number_format((float) $paid, 2, ',', ' ') . ' PLN';
+                                } catch (\Throwable) {}
+                                return '—';
+                            }),
+                    ]),
+
                 Forms\Components\Section::make('Podstawowe informacje')
                     ->columns(2)
                     ->schema([
+                        Forms\Components\TextInput::make('code')
+                            ->label('Kod imprezy')
+                            ->readOnly()
+                            ->disabled()
+                            ->dehydrated(false)
+                            ->helperText('Unikalny kod identyfikacyjny imprezy.'),
                         Forms\Components\Select::make('event_template_id')
                             ->label('Szablon imprezy')
                             ->options(EventTemplate::where('deleted_at', null)->pluck('name', 'id'))
@@ -58,14 +154,8 @@ class EventResource extends Resource
                         
                         Forms\Components\Select::make('status')
                             ->label('Status')
-                            ->options([
-                                'draft' => 'Szkic',
-                                'confirmed' => 'Potwierdzona',
-                                'in_progress' => 'W trakcie',
-                                'completed' => 'Zakończona',
-                                'cancelled' => 'Anulowana',
-                            ])
-                            ->default('draft')
+                            ->options(Event::getStatusOptions())
+                            ->default(Event::STATUS_INQUIRY)
                             ->required(),
                     ]),
                 
@@ -216,12 +306,13 @@ class EventResource extends Resource
                             ->helperText('Pole pomocnicze do kalkulacji ceny (nie jest zapisywane w events).'),
                         
                         Forms\Components\TextInput::make('total_cost')
-                            ->label('Całkowity koszt (PLN)')
+                            ->label('Cena z kalkulacji (PLN)')
                             ->numeric()
-                            ->prefix('PLN')
+                            ->suffix('PLN')
                             ->default(0)
                             ->readOnly()
-                            ->helperText('Koszt jest obliczany automatycznie jako koszt bazowy (bez narzutu).'),
+                            ->hidden(fn (string $operation) => $operation === 'edit')
+                            ->helperText('Obliczany automatycznie na podstawie szablonu i danych imprezy.'),
                         
                         Forms\Components\Select::make('assigned_to')
                             ->label('Pilot / opiekun')
@@ -236,7 +327,7 @@ class EventResource extends Resource
                     ->schema([
                         Forms\Components\Select::make('contractor_id')
                             ->label('Wykonawca (kontrahent)')
-                            ->relationship('contractor', 'name')
+                            ->options(Contractor::orderBy('name')->pluck('name', 'id'))
                             ->searchable()
                             ->nullable()
                             ->helperText('Podmiot realizujący usługę/wykonanie.'),
@@ -312,9 +403,11 @@ class EventResource extends Resource
                             ->maxLength(32)
                             ->visible(fn (): bool => Schema::hasColumn('events', 'vehicle_registration')),
 
-                        Forms\Components\Textarea::make('pickup_place_details')
+                        Forms\Components\RichEditor::make('pickup_place_details')
                             ->label('Dodatkowe miejsce podstawienia')
-                            ->rows(2)
+                            ->toolbarButtons([
+                                'bold', 'italic', 'underline', 'strike', 'link', 'bulletList', 'orderedList', 'blockquote', 'codeBlock', 'h2', 'h3', 'color', 'highlight', 'undo', 'redo'
+                            ])
                             ->columnSpanFull()
                             ->visible(fn (): bool => Schema::hasColumn('events', 'pickup_place_details'))
                             ->helperText('Np. dokładny adres, brama, punkt orientacyjny.'),
@@ -331,24 +424,32 @@ class EventResource extends Resource
                 Forms\Components\Section::make('Uwagi operacyjne')
                     ->columns(1)
                     ->schema([
-                        Forms\Components\Textarea::make('office_notes')
+                        Forms\Components\RichEditor::make('office_notes')
                             ->label('Uwagi dla biura')
-                            ->rows(3)
+                            ->toolbarButtons([
+                                'bold', 'italic', 'underline', 'strike', 'link', 'bulletList', 'orderedList', 'blockquote', 'codeBlock', 'h2', 'h3', 'color', 'highlight', 'undo', 'redo'
+                            ])
                             ->visible(fn (): bool => Schema::hasColumn('events', 'office_notes')),
 
-                        Forms\Components\Textarea::make('pilot_notes')
+                        Forms\Components\RichEditor::make('pilot_notes')
                             ->label('Uwagi dla pilota')
-                            ->rows(3)
+                            ->toolbarButtons([
+                                'bold', 'italic', 'underline', 'strike', 'link', 'bulletList', 'orderedList', 'blockquote', 'codeBlock', 'h2', 'h3', 'color', 'highlight', 'undo', 'redo'
+                            ])
                             ->visible(fn (): bool => Schema::hasColumn('events', 'pilot_notes')),
 
-                        Forms\Components\Textarea::make('driver_notes')
+                        Forms\Components\RichEditor::make('driver_notes')
                             ->label('Uwagi dla kierowcy')
-                            ->rows(3)
+                            ->toolbarButtons([
+                                'bold', 'italic', 'underline', 'strike', 'link', 'bulletList', 'orderedList', 'blockquote', 'codeBlock', 'h2', 'h3', 'color', 'highlight', 'undo', 'redo'
+                            ])
                             ->visible(fn (): bool => Schema::hasColumn('events', 'driver_notes')),
 
-                        Forms\Components\Textarea::make('notes')
+                        Forms\Components\RichEditor::make('notes')
                             ->label('Uwagi ogólne')
-                            ->rows(5)
+                            ->toolbarButtons([
+                                'bold', 'italic', 'underline', 'strike', 'link', 'bulletList', 'orderedList', 'blockquote', 'codeBlock', 'h2', 'h3', 'color', 'highlight', 'undo', 'redo'
+                            ])
                             ->placeholder('Dodatkowe uwagi widoczne globalnie dla imprezy.')
                             ->helperText('Tu możesz wpisać uwagi operacyjne do całej imprezy.'),
                     ])
@@ -489,127 +590,183 @@ class EventResource extends Resource
     public static function table(Table $table): Table
     {
         return $table
+            ->poll('20s')
             ->columns([
-                // --- Nazwa imprezy + szablon pod spodem ---
+                Tables\Columns\TextColumn::make('code')
+                    ->label('Kod imprezy')
+                    ->searchable()
+                    ->sortable()
+                    ->copyable()
+                    ->copyMessage('Skopiowano kod imprezy!'),
+                // --- Termin + Nazwa + Szablon ---
                 Tables\Columns\TextColumn::make('name')
-                    ->label('Nazwa imprezy')
+                    ->label('Termin / Impreza')
                     ->searchable()
-                    ->sortable()
-                    ->weight('medium')
-                    ->description(fn ($record) => $record->eventTemplate?->name),
-
-                // --- Zamawiający z telefonem i e-mailem ---
-                Tables\Columns\TextColumn::make('client_name')
-                    ->label('Zamawiający')
-                    ->searchable()
-                    ->sortable()
-                    ->html()
-                    ->state(function ($record): string {
-                        $name = e($record->client_name ?? '—');
-                        $sub  = '';
-                        if ($record->client_phone) {
-                            $sub .= '<div style="font-size:0.78rem;color:#6b7280;line-height:1.5">' . e($record->client_phone) . '</div>';
-                        }
-                        if ($record->client_email) {
-                            $sub .= '<div style="font-size:0.78rem;color:#6b7280;line-height:1.5">' . e($record->client_email) . '</div>';
-                        }
-                        return '<span>' . $name . '</span>' . $sub;
-                    }),
-
-                // --- Wykonawcy: pilot, transport, główny kontrahent ---
-                Tables\Columns\TextColumn::make('assignedUser.name')
-                    ->label('Wykonawcy')
-                    ->html()
-                    ->state(function ($record): string {
-                        $lines = [];
-                        if ($pilot = $record->assignedUser?->name) {
-                            $lines[] = '<div><span style="font-size:0.72rem;color:#9ca3af">Pilot:</span> ' . e($pilot) . '</div>';
-                        }
-                        $transport = $record->transport_company_name ?: ($record->contractor?->name);
-                        if ($transport) {
-                            $lines[] = '<div><span style="font-size:0.72rem;color:#9ca3af">Transport:</span> ' . e($transport) . '</div>';
-                        }
-                        return $lines ? implode('', $lines) : '<span style="color:#9ca3af">—</span>';
-                    }),
-
-                // --- Termin: od-do z liczbą dni ---
-                Tables\Columns\TextColumn::make('start_date')
-                    ->label('Termin')
-                    ->sortable()
+                    ->sortable(query: function (Builder $query, string $direction): Builder {
+                        return $query->orderBy('start_date', $direction)->orderBy('name', $direction);
+                    })
                     ->html()
                     ->state(function ($record): string {
                         $start = $record->start_date ? $record->start_date->format('d.m.Y') : '—';
                         $end   = $record->end_date   ? $record->end_date->format('d.m.Y')   : null;
                         $days  = max(1, (int) ($record->duration_days ?? 1));
-                        $daysLabel = $days === 1 ? '(1 dzień)' : "({$days} dni)";
-                        $html  = '<span style="font-weight:500">' . e($start) . '</span>';
+                        $daysLabel = $days === 1 ? '1 dzień' : $days . ' dni';
+
+                        $termin = '<div style="font-size:0.75rem;color:#6b7280;margin-bottom:2px">'
+                            . e($start);
                         if ($end && $end !== $start) {
-                            $html .= '<div style="color:#6b7280;font-size:0.85rem">– ' . e($end) . '</div>';
+                            $termin .= ' – ' . e($end);
                         }
-                        $html .= '<div style="color:#9ca3af;font-size:0.75rem">' . $daysLabel . '</div>';
-                        return $html;
+                        $termin .= ' <span style="color:#9ca3af">(' . e($daysLabel) . ')</span></div>';
+
+                        $nazwa = '<div style="font-weight:700;font-size:0.9rem;color:#111827;line-height:1.3">'
+                            . e($record->name ?? '—') . '</div>';
+
+                        $szablon = '';
+                        if ($record->eventTemplate?->name) {
+                            $szablon = '<div style="font-size:0.72rem;color:#9ca3af;margin-top:2px">'
+                                . e($record->eventTemplate->name) . '</div>';
+                        }
+
+                        return $termin . $nazwa . $szablon;
                     }),
 
-                // --- Uczestnicy ---
+                // --- Start / Klient ---
+                Tables\Columns\TextColumn::make('client_name')
+                    ->label('Start / Klient')
+                    ->searchable()
+                    ->html()
+                    ->state(function ($record): string {
+                        $parts = [];
+                        if ($record->startPlace?->name) {
+                            $parts[] = '<div style="font-size:0.75rem;color:#6b7280;margin-bottom:2px">'
+                                . e($record->startPlace->name) . '</div>';
+                        }
+                        $parts[] = '<div style="font-weight:500">' . e($record->client_name ?? '—') . '</div>';
+                        if ($record->client_phone) {
+                            $parts[] = '<div style="font-size:0.75rem;color:#6b7280">' . e($record->client_phone) . '</div>';
+                        }
+                        if ($record->client_email) {
+                            $parts[] = '<div style="font-size:0.75rem;color:#6b7280">' . e($record->client_email) . '</div>';
+                        }
+                        return implode('', $parts);
+                    }),
+
+                // --- Uczestnicy: X+Y(gratis) ---
                 Tables\Columns\TextColumn::make('participant_count')
                     ->label('Uczestnicy')
-                    ->numeric()
                     ->sortable()
-                    ->alignCenter(),
+                    ->alignCenter()
+                    ->html()
+                    ->state(function ($record): string {
+                        $total  = (int) ($record->participant_count ?? 0);
+                        $gratis = 0;
+                        try {
+                            $gratis = $record->resolveGratisCountForParticipantCount($total);
+                        } catch (\Throwable) {}
 
-                Tables\Columns\TextColumn::make('agreements_paid_count')
-                    ->label('Opłacone')
-                    ->state(fn ($record) => (int) ($record->agreements_paid_count ?? 0))
-                    ->badge()
-                    ->color('success')
-                    ->alignCenter(),
-
-                Tables\Columns\TextColumn::make('agreements_missing_count')
-                    ->label('Brakujące')
-                    ->state(fn ($record) => max(0, ((int) ($record->agreements_count ?? 0)) - ((int) ($record->agreements_paid_count ?? 0))))
-                    ->badge()
-                    ->color(fn ($state) => $state > 0 ? 'warning' : 'success')
-                    ->alignCenter(),
-
-                Tables\Columns\TextColumn::make('total_cost')
-                    ->label('Koszt')
-                    ->money('PLN')
-                    ->sortable()
-                    ->alignEnd(),
-
-                Tables\Columns\BadgeColumn::make('status')
-                    ->label('Status')
-                    ->colors([
-                        'secondary' => 'draft',
-                        'success'   => 'confirmed',
-                        'warning'   => 'in_progress',
-                        'primary'   => 'completed',
-                        'danger'    => 'cancelled',
-                    ])
-                    ->formatStateUsing(fn (string $state): string => match ($state) {
-                        'draft'       => 'Szkic',
-                        'confirmed'   => 'Potwierdzona',
-                        'in_progress' => 'W trakcie',
-                        'completed'   => 'Zakończona',
-                        'cancelled'   => 'Anulowana',
-                        default       => $state,
+                        $base = '<span style="font-weight:700;font-size:0.9rem">' . e($total) . '</span>';
+                        $gr   = $gratis > 0
+                            ? '<span style="color:#6b7280;font-size:0.8rem">+' . e($gratis) . '</span>'
+                            : '';
+                        return $base . $gr;
                     }),
 
-                // --- Uwagi biura (skrócone, tooltip po najechaniu) ---
+                // --- Finanse: Do zapłaty / Zapłacono (X/Y) / Brakuje ---
+                Tables\Columns\TextColumn::make('total_cost')
+                    ->label('Finanse')
+                    ->sortable()
+                    ->html()
+                    ->state(function ($record): string {
+                        $fmt = fn ($v) => number_format((float) ($v ?? 0), 2, ',', ' ') . ' PLN';
+
+                        $participantCount = max(1, (int) ($record->participant_count ?? 1));
+
+                        // Priorytet: dokładnie ta sama kalkulacja co widżet "Kalkulacje cen"
+                        // (SUMA KOŃCOWA dla PLN i Cena za osobę).
+                        $dueAmount = null;
+                        $pricePerPerson = null;
+
+                        try {
+                            static $calcCache = [];
+                            $cacheKey = (int) ($record->id ?? 0);
+
+                            if (!array_key_exists($cacheKey, $calcCache)) {
+                                $widget = app(\App\Filament\Resources\EventResource\Widgets\EventPriceTable::class);
+                                $widget->record = $record;
+                                $widget->loadCalculations();
+
+                                $pln = $widget->detailedCalculations[$participantCount]['PLN'] ?? null;
+                                $calcCache[$cacheKey] = [
+                                    'total' => is_array($pln) ? (float) ($pln['total'] ?? 0) : 0.0,
+                                ];
+                            }
+
+                            $dueAmount = (float) ($calcCache[$cacheKey]['total'] ?? 0);
+                            if ($dueAmount > 0) {
+                                $pricePerPerson = round($dueAmount / $participantCount, 2);
+                            }
+                        } catch (\Throwable) {
+                            // Fallback gdy szczegółowa kalkulacja nie jest dostępna.
+                        }
+
+                        if ($dueAmount === null || $dueAmount <= 0) {
+                            $dueAmount = (float) ($record->total_cost ?? 0);
+                        }
+
+                        if ($pricePerPerson === null || $pricePerPerson <= 0) {
+                            $pricePerPerson = round($dueAmount / $participantCount, 2);
+                        }
+
+                        // Zapłacono: suma wpłat z umów indywidualnych.
+                        $paidAmount = (float) ($record->agreements_amount_paid_total ?? 0);
+
+                        $totalCount = (int) ($record->participant_count ?? 0);
+                        $paidCount  = (int) ($record->paid_participants_count ?? 0);
+                        $brakuje    = max(0.0, $dueAmount - $paidAmount);
+
+                        $row = fn (string $label, string $value, string $vColor = '#111827') =>
+                            '<tr>'
+                            . '<td style="padding:1px 8px 1px 0;color:#9ca3af;font-size:0.72rem;white-space:nowrap">' . $label . '</td>'
+                            . '<td style="color:' . $vColor . ';font-size:0.78rem;font-weight:600;white-space:nowrap">' . $value . '</td>'
+                            . '</tr>';
+
+                        $paidDisplay = e($fmt($paidAmount));
+                        if ($totalCount > 0) {
+                            $paidDisplay .= ' <span style="color:#9ca3af;font-weight:400;font-size:0.7rem">('
+                                . $paidCount . '/' . $totalCount . ')</span>';
+                        }
+
+                        $brakujeColor = $brakuje > 0.001 ? '#dc2626' : '#047857';
+
+                        return '<table style="border-collapse:collapse">'
+                            . $row('Do zapłaty (łącznie):', e($fmt($dueAmount)))
+                            . $row('Cena za os.:', number_format($pricePerPerson, 2, ',', ' ') . ' PLN', '#1f2937')
+                            . '<tr>'
+                            . '<td style="padding:1px 8px 1px 0;color:#9ca3af;font-size:0.72rem;white-space:nowrap">Zapłacono:</td>'
+                            . '<td style="color:#047857;font-size:0.78rem;font-weight:600;white-space:nowrap">' . $paidDisplay . '</td>'
+                            . '</tr>'
+                            . $row('Brakuje:', e($fmt($brakuje)), $brakujeColor)
+                            . '</table>';
+                    }),
+
+                // --- Uwagi biura ---
                 Tables\Columns\TextColumn::make('office_notes')
                     ->label('Uwagi biura')
-                    ->limit(35)
+                    ->limit(40)
                     ->tooltip(fn ($record): ?string => ($record->office_notes ?? null) ?: null)
                     ->placeholder('—')
                     ->visible(fn (): bool => Schema::hasColumn('events', 'office_notes'))
                     ->toggleable(),
 
-                // --- Kolumny transportowe (domyślnie ukryte) ---
-                Tables\Columns\TextColumn::make('startPlace.name')
-                    ->label('Miejsce podstawienia')
-                    ->placeholder('—')
-                    ->toggleable(isToggledHiddenByDefault: true),
+                // --- Status z możliwością zmiany inline ---
+                Tables\Columns\SelectColumn::make('status')
+                    ->label('Status')
+                    ->options(Event::getStatusOptions())
+                    ->sortable()
+                    ->selectablePlaceholder(false),
 
+                // --- Ukryte domyślnie ---
                 Tables\Columns\TextColumn::make('departure_time')
                     ->label('Godzina podstawienia')
                     ->state(fn ($record) => $record->departure_time ?: '—')
@@ -630,12 +787,6 @@ class EventResource extends Resource
                     ->toggleable(isToggledHiddenByDefault: true)
                     ->visible(fn (): bool => Schema::hasColumn('events', 'driver_name')),
 
-                Tables\Columns\TextColumn::make('driver_phone')
-                    ->label('Telefon kierowcy')
-                    ->placeholder('—')
-                    ->toggleable(isToggledHiddenByDefault: true)
-                    ->visible(fn (): bool => Schema::hasColumn('events', 'driver_phone')),
-
                 Tables\Columns\TextColumn::make('created_at')
                     ->label('Utworzona')
                     ->dateTime('d.m.Y H:i')
@@ -645,14 +796,8 @@ class EventResource extends Resource
             ->filters([
                 Tables\Filters\SelectFilter::make('status')
                     ->label('Status')
-                    ->options([
-                        'draft' => 'Szkic',
-                        'confirmed' => 'Potwierdzona',
-                        'in_progress' => 'W trakcie',
-                        'completed' => 'Zakończona',
-                        'cancelled' => 'Anulowana',
-                    ]),
-                
+                    ->options(Event::getStatusOptions()),
+
                 Tables\Filters\SelectFilter::make('event_template_id')
                     ->label('Szablon')
                         ->options(EventTemplate::where('deleted_at', null)->pluck('name', 'id'))
@@ -714,33 +859,23 @@ class EventResource extends Resource
             ->actions([
                 Tables\Actions\EditAction::make(),
                 Tables\Actions\DeleteAction::make()
-                    ->visible(fn (Event $record) => $record->status === 'draft'),
-                
-                Tables\Actions\Action::make('change_status')
-                    ->label('Zmień status')
-                    ->icon('heroicon-o-arrow-path')
-                    ->form([
-                        Forms\Components\Select::make('status')
-                            ->label('Nowy status')
-                            ->options([
-                                'draft' => 'Szkic',
-                                'confirmed' => 'Potwierdzona',
-                                'in_progress' => 'W trakcie',
-                                'completed' => 'Zakończona',
-                                'cancelled' => 'Anulowana',
-                            ])
-                            ->required(),
-                        
-                        Forms\Components\Textarea::make('reason')
-                            ->label('Powód zmiany')
-                            ->rows(3),
-                    ])
-                    ->action(function (Event $record, array $data) {
-                        $record->changeStatus($data['status'], $data['reason'] ?? null);
-                    }),
+                    ->visible(fn (Event $record) => $record->status === Event::STATUS_INQUIRY),
             ])
             ->bulkActions([
                 Tables\Actions\BulkActionGroup::make([
+                    Tables\Actions\BulkAction::make('bulk_status')
+                        ->label('Zmień status')
+                        ->icon('heroicon-o-arrow-path')
+                        ->form([
+                            Forms\Components\Select::make('status')
+                                ->label('Nowy status')
+                                ->options(Event::getStatusOptions())
+                                ->required(),
+                        ])
+                        ->action(function (\Illuminate\Support\Collection $records, array $data): void {
+                            $records->each(fn (Event $record) => $record->changeStatus($data['status']));
+                        })
+                        ->deselectRecordsAfterCompletion(),
                     Tables\Actions\DeleteBulkAction::make(),
                 ]),
             ])
@@ -791,12 +926,17 @@ class EventResource extends Resource
         $query = parent::getEloquentQuery();
 
         if (!Schema::hasTable('event_agreements')) {
-            return $query;
+            return $query->with(['qtyVariants:id,event_id,qty,gratis']);
         }
 
-        return $query->withCount([
+        $query->withCount([
             'agreements',
             'agreements as agreements_paid_count' => fn (Builder $query) => $query->where('payment_status', 'paid'),
-        ]);
+        ])->withSum([
+            'agreements as paid_participants_count' => fn (Builder $query) => $query->where('payment_status', 'paid'),
+        ], 'participant_count')->withSum('agreements as agreements_amount_paid_total', 'amount_paid')
+            ->with(['qtyVariants:id,event_id,qty,gratis']);
+
+        return $query;
     }
 }

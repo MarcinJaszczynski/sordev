@@ -41,6 +41,14 @@ use Illuminate\Support\Facades\Log;
  */
 class UnifiedPriceCalculator
 {
+    private ?EventTemplateCalculationEngine $engine = null;
+    private ?\Illuminate\Support\Collection $qtyLookup = null;
+
+    public function __construct(?EventTemplateCalculationEngine $engine = null)
+    {
+        $this->engine = $engine;
+    }
+
     /**
      * Oblicza szczegółową strukturę (bez zapisu w DB).
      * @param EventTemplate $template
@@ -70,9 +78,9 @@ class UnifiedPriceCalculator
             return [];
         }
 
-        static $qtyLookup = null;
-        if ($qtyLookup === null) {
-            $qtyLookup = EventTemplateQty::all()->keyBy(fn ($variant) => (int) $variant->qty);
+        // Lazy-load qtyLookup once per instance
+        if ($this->qtyLookup === null) {
+            $this->qtyLookup = EventTemplateQty::all()->keyBy(fn ($variant) => (int) $variant->qty);
         }
 
         $allowForeignCurrencies = method_exists($template, 'isForeignTrip') ? $template->isForeignTrip() : true;
@@ -80,46 +88,83 @@ class UnifiedPriceCalculator
 
         foreach ($detailedRows as $qtyKey => $row) {
             $qty = (int) $qtyKey;
-            $qtyModel = $qtyLookup->get($qty);
+            $qtyModel = $this->qtyLookup->get($qty);
             if (! $qtyModel) {
                 continue;
             }
 
             $currenciesBlock = [];
-            foreach ($row as $code => $data) {
-                if (! is_array($data) || ! array_key_exists('price_per_person_raw', $data)) {
-                    continue;
-                }
 
-                $upperCode = strtoupper($code);
-                if ($upperCode !== 'PLN' && ! $allowForeignCurrencies) {
-                    continue;
-                }
+            // Extract currencies data from the structured format returned by engine
+            if (isset($row['currencies']) && is_array($row['currencies'])) {
+                foreach ($row['currencies'] as $code => $currencyData) {
+                    $upperCode = strtoupper($code);
+                    if ($upperCode !== 'PLN' && ! $allowForeignCurrencies) {
+                        continue;
+                    }
 
-                $rawPerPerson = $data['price_per_person_raw'] ?? null;
-                if ($rawPerPerson === null) {
-                    continue;
-                }
+                    // Get price from the raw block or final block
+                    $rawData = $currencyData['raw'] ?? [];
+                    $finalData = $currencyData['final'] ?? [];
 
-                $finalPerPerson = PriceRoundingService::roundPerPerson((float) $rawPerPerson, $upperCode);
-                $currenciesBlock[$upperCode] = [
-                    'raw' => [
-                        'price_base' => $data['total_before_markup'] ?? null,
-                        'markup_amount' => $upperCode === 'PLN'
-                            ? ($row['markup']['amount'] ?? null)
-                            : ($data['markup_amount'] ?? null),
-                        'tax_amount' => $upperCode === 'PLN'
-                            ? ($row['taxes']['total_amount'] ?? 0)
-                            : ($data['tax_amount'] ?? 0),
-                        'price_with_tax' => $data['total'] ?? null,
-                        'price_per_person' => $rawPerPerson,
-                        'transport_cost' => null,
-                        'tax_breakdown' => $upperCode === 'PLN' ? ($row['taxes']['breakdown'] ?? []) : [],
-                    ],
-                    'final' => [
-                        'price_per_person' => $finalPerPerson,
-                    ],
-                ];
+                    $rawPerPerson = $rawData['price_per_person'] ?? $finalData['price_per_person'] ?? null;
+                    if ($rawPerPerson === null) {
+                        continue;
+                    }
+
+                    $finalPerPerson = PriceRoundingService::roundPerPerson((float) $rawPerPerson, $upperCode);
+                    $currenciesBlock[$upperCode] = [
+                        'raw' => [
+                            'price_base' => $rawData['price_base'] ?? null,
+                            'markup_amount' => $rawData['markup_amount'] ?? null,
+                            'tax_amount' => $rawData['tax_amount'] ?? 0,
+                            'price_with_tax' => $rawData['price_with_tax'] ?? null,
+                            'price_per_person' => $rawPerPerson,
+                            'transport_cost' => $rawData['transport_cost'] ?? null,
+                            'tax_breakdown' => $rawData['tax_breakdown'] ?? [],
+                        ],
+                        'final' => [
+                            'price_per_person' => $finalPerPerson,
+                        ],
+                    ];
+                }
+            } else {
+                // Legacy format handling (for backwards compatibility)
+                foreach ($row as $code => $data) {
+                    if (! is_array($data) || ! array_key_exists('price_per_person_raw', $data)) {
+                        continue;
+                    }
+
+                    $upperCode = strtoupper($code);
+                    if ($upperCode !== 'PLN' && ! $allowForeignCurrencies) {
+                        continue;
+                    }
+
+                    $rawPerPerson = $data['price_per_person_raw'] ?? null;
+                    if ($rawPerPerson === null) {
+                        continue;
+                    }
+
+                    $finalPerPerson = PriceRoundingService::roundPerPerson((float) $rawPerPerson, $upperCode);
+                    $currenciesBlock[$upperCode] = [
+                        'raw' => [
+                            'price_base' => $data['total_before_markup'] ?? null,
+                            'markup_amount' => $upperCode === 'PLN'
+                                ? ($row['markup']['amount'] ?? null)
+                                : ($data['markup_amount'] ?? null),
+                            'tax_amount' => $upperCode === 'PLN'
+                                ? ($row['taxes']['total_amount'] ?? 0)
+                                : ($data['tax_amount'] ?? 0),
+                            'price_with_tax' => $data['total'] ?? null,
+                            'price_per_person' => $rawPerPerson,
+                            'transport_cost' => null,
+                            'tax_breakdown' => $upperCode === 'PLN' ? ($row['taxes']['breakdown'] ?? []) : [],
+                        ],
+                        'final' => [
+                            'price_per_person' => $finalPerPerson,
+                        ],
+                    ];
+                }
             }
 
             if (empty($currenciesBlock)) {
@@ -242,6 +287,13 @@ class UnifiedPriceCalculator
     protected function calculateDetailedRows(EventTemplate $template, ?int $startPlaceId = null): array
     {
         try {
+            // Use injected engine if available (for testing); otherwise use widget
+            if ($this->engine !== null) {
+                $rawData = $this->engine->calculateDetailed($template, $startPlaceId, null, false);
+                // Transform engine output to expected format if needed
+                return $rawData ?? [];
+            }
+
             $widget = app(EventTemplatePriceTable::class);
             $widget->record = $template;
             $widget->startPlaceId = $startPlaceId;

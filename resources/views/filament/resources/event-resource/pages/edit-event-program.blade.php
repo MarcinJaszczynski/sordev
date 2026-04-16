@@ -1,5 +1,3 @@
 <x-filament-panels::page>
-    <div>
-        <livewire:event-program-editor :event="$event" />
-    </div>
+    <livewire:event-program-planner :event-id="$record->id" :key="'event-program-planner-page-' . $record->id" />
 </x-filament-panels::page>

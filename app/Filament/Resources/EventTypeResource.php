@@ -18,7 +18,7 @@ class EventTypeResource extends Resource
     protected static ?string $model = EventType::class;
 
     protected static ?string $navigationIcon = 'heroicon-o-rectangle-stack';
-    protected static ?string $navigationGroup = 'Szablony';
+    protected static ?string $navigationGroup = 'Szablony imprez';
     protected static ?string $navigationLabel = 'Typy imprez';
     protected static ?int $navigationSort = 40;
 
@@ -27,12 +27,14 @@ class EventTypeResource extends Resource
         return $form
             ->schema([
                 Forms\Components\TextInput::make('name')
+                    ->label('Nazwa')
                     ->required()
-                    ->maxLength(255),
-                Forms\Components\Textarea::make('desc')
-                    ->label('Opis')
-                    ->rows(3),
-            ]);
+                    ->maxLength(255)
+                    ->columnSpanFull(),
+                Forms\Components\RichEditor::make('desc')
+                    ->columnSpanFull(),
+            ])
+            ->columns(1);
     }
 
     public static function table(Table $table): Table
@@ -40,7 +42,7 @@ class EventTypeResource extends Resource
         return $table
             ->columns([
                 Tables\Columns\TextColumn::make('name')->label('Nazwa')->searchable(),
-                Tables\Columns\TextColumn::make('desc')->label('Opis')->limit(50),
+                Tables\Columns\TextColumn::make('desc')->label('Opis')->html(false)->limit(50),
                 Tables\Columns\TextColumn::make('created_at')->dateTime('d.m.Y H:i')->label('Utworzono'),
             ])
             ->filters([

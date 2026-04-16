@@ -61,9 +61,7 @@ class EventSettlementResource extends Resource
                         ->searchable()
                         ->nullable(),
 
-                    Forms\Components\Textarea::make('notes')
-                        ->label('Uwagi')
-                        ->rows(3)
+                    Forms\Components\RichEditor::make('notes')
                         ->columnSpanFull(),
                 ]),
 

@@ -2,10 +2,10 @@
 
 namespace App\Models;
 
+use App\Support\StoragePath;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
-use Illuminate\Support\Facades\Storage;
 
 class Message extends Model
 {
@@ -52,7 +52,7 @@ class Message extends Model
             return null;
         }
 
-        return Storage::url($this->attachment_path);
+        return StoragePath::publicUrl($this->attachment_path);
     }
 
     /**

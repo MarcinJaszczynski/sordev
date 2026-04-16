@@ -41,7 +41,7 @@
                     <div class="card p-4 mb-4">
                         <h3>Dokumenty</h3>
                         <ul class="list-unstyled mt-3">
-                            <li class="mb-2"><a href="{{ asset('storage/dokumenty/Warunki-Uczestnictwa-2025.pdf') }}" class="doc-link" target="_blank" rel="noopener"><i class="fas fa-file-pdf" style="color:#d23f2d;margin-right:8px"></i>Warunki uczestnictwa w imprezach organizowanych przez Biuro Podróży RAFA – do umów zawartych od 01.01.2025</a></li>
+                            <li class="mb-2"><a href="{{ asset('storage/dokumenty/Warunki-Uczestnictwa-2026.pdf') }}" class="doc-link" target="_blank" rel="noopener"><i class="fas fa-file-pdf" style="color:#d23f2d;margin-right:8px"></i>Warunki uczestnictwa w imprezach organizowanych przez Biuro Podróży RAFA – do umów zawartych od 01.01.2026</a></li>
                             <li class="mb-2"><a href="{{ asset('storage/dokumenty/Ustawa-1.pdf') }}" class="doc-link" target="_blank" rel="noopener"><i class="fas fa-file-pdf" style="color:#d23f2d;margin-right:8px"></i>Ustawa o imprezach turystycznych</a></li>
                             <li class="mb-2"><a href="{{ asset('storage/dokumenty/Standardowy-Formularz.pdf') }}" class="doc-link" target="_blank" rel="noopener"><i class="fas fa-file-pdf" style="color:#d23f2d;margin-right:8px"></i>Standardowy Formularz Informacyjny</a></li>
                             <li class="mb-2"><a href="{{ asset('storage/dokumenty/regulamin_przewozu_osób.pdf') }}" class="doc-link" target="_blank" rel="noopener"><i class="fas fa-file-pdf" style="color:#d23f2d;margin-right:8px"></i>Regulamin przewozu osób autokarem podczas wycieczek organizowanych przez Biuro Podróży RAFA</a></li>

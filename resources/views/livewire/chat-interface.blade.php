@@ -79,7 +79,7 @@
                                         @if($conversation->lastMessage->user_id === auth()->id())
                                             <span class="text-primary-600 font-medium">Ty:</span>
                                         @endif
-                                        {{ Str::limit($conversation->lastMessage->content, 32) }}
+                                        {{ \Illuminate\Support\Str::limit($conversation->lastMessage->content, 32) }}
                                     @else
                                         <span class="italic text-gray-400 dark:text-gray-500">Brak wiadomości</span>
                                     @endif

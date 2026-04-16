@@ -25,9 +25,7 @@ class SnapshotsRelationManager extends RelationManager
                     ->required()
                     ->maxLength(255),
                 
-                Forms\Components\Textarea::make('description')
-                    ->label('Opis')
-                    ->rows(3)
+                Forms\Components\RichEditor::make('description')
                     ->maxLength(500),
             ]);
     }
@@ -59,6 +57,7 @@ class SnapshotsRelationManager extends RelationManager
                 
                 Tables\Columns\TextColumn::make('description')
                     ->label('Opis')
+                    ->html(false)
                     ->limit(50)
                     ->tooltip(function (Tables\Columns\TextColumn $column): ?string {
                         $state = $column->getState();
@@ -129,9 +128,7 @@ class SnapshotsRelationManager extends RelationManager
                             ->maxLength(255)
                             ->default('Snapshot ręczny ' . now()->format('d.m.Y H:i')),
                         
-                        Forms\Components\Textarea::make('description')
-                            ->label('Opis')
-                            ->rows(3)
+                        Forms\Components\RichEditor::make('description')
                             ->maxLength(500)
                             ->helperText('Opisz powód utworzenia tego snapshotu'),
                     ])

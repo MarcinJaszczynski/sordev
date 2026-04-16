@@ -22,7 +22,7 @@ class PaymentTypeResource extends Resource
      * @var class-string<PaymentType>
      */    protected static ?string $model = PaymentType::class;
     protected static ?string $navigationGroup = 'Ustawienia kalkulacji';
-    protected static ?string $navigationIcon = 'heroicon-o-banknotes';
+    protected static ?string $navigationIcon = 'heroicon-o-calculator';
     protected static ?string $navigationLabel = 'Typy płatności';
     protected static ?string $pluralModelLabel = 'Typy płatności';
     protected static ?string $modelLabel = 'Typ płatności';
@@ -36,7 +36,7 @@ class PaymentTypeResource extends Resource
             Forms\Components\TextInput::make('name')
                 ->label('Nazwa')
                 ->required(),
-            Forms\Components\Textarea::make('description')
+            Forms\Components\RichEditor::make('description')
                 ->label('Opis')
                 ->nullable(),
         ]);
@@ -50,7 +50,7 @@ class PaymentTypeResource extends Resource
         return $table
             ->columns([
                 TextColumn::make('name')->label('Nazwa')->searchable()->sortable(),
-                TextColumn::make('description')->label('Opis')->limit(50),
+                TextColumn::make('description')->label('Opis')->html(false)->limit(50),
                 TextColumn::make('created_at')->label('Utworzono')->dateTime('d.m.Y H:i')->sortable(),
             ])
             ->actions([

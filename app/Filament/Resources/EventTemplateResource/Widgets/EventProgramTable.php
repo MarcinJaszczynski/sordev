@@ -22,7 +22,7 @@ class EventProgramTable extends Widget
         
         // Pobierz punkty programu posortowane według dni i kolejności
         $programPoints = $this->record->programPoints()
-            ->withPivot(['day', 'order', 'notes', 'include_in_program', 'include_in_calculation', 'active'])
+            ->withPivot(['day', 'order', 'notes', 'start_time', 'end_time', 'include_in_program', 'include_in_calculation', 'active'])
             ->orderBy('event_template_event_template_program_point.day')
             ->orderBy('event_template_event_template_program_point.order')
             ->get();

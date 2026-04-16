@@ -81,11 +81,12 @@ class PayerResource extends Resource
         return $form->schema([
             Forms\Components\TextInput::make('name')
                 ->label('Nazwa płatnika')
-                ->required(),
-            Forms\Components\Textarea::make('description')
-                ->label('Opis')
-                ->nullable(),
-        ]);
+                ->required()
+                ->columnSpanFull(),
+            Forms\Components\RichEditor::make('description')
+                ->nullable()
+                ->columnSpanFull(),
+        ])->columns(1);
     }
 
     /**

@@ -38,11 +38,11 @@
                         :attributes="
                             \Filament\Support\prepare_inherited_attributes($getExtraInputAttributeBag())
                                 ->merge([
+                                    'autofocus' => $loop->first && $isAutofocused(),
                                     'disabled' => $isDisabled || $isOptionDisabled($value, $label),
                                     'id' => $id . '-' . $value,
                                     'name' => $id,
                                     'value' => $value,
-                                    'wire:loading.attr' => 'disabled',
                                     $applyStateBindingModifiers('wire:model') => $statePath,
                                 ], escape: false)
                                 ->class(['mt-1'])

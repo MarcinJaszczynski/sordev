@@ -194,12 +194,42 @@
                             @foreach($chunk as $item)
                                 <div class="card">
                                     <div class="image-wrapper">
-                                        <img src="{{ asset('storage/' . ($item->featured_image ?? '')) }}" class="card-img-top" alt="...">
+                                        <img src="{{ $item->preview_image_url ?: asset('uploads/default.png') }}" class="card-img-top" alt="{{ $item->name }}" loading="lazy" decoding="async" onerror="this.onerror=null;this.src='{{ $item->full_image_url ?: asset('uploads/default.png') }}';">
                                     </div>
                                     <div class="card-body">
                                         <h5 class="card-title">{{ $item->name }}</h5>
                                         <div class="card-text">
                                             <div class="price"><i class="far fa-clock"></i>&nbsp&nbsp{{ $item->length->name }}</div>
+                                            @php
+                                                $transportTypes = $item->relationLoaded('transportTypes') ? $item->transportTypes : collect();
+                                            @endphp
+                                            @if($transportTypes->count())
+                                                <div class="price" style="display:flex; align-items:center; gap:0;">
+                                                    @foreach($transportTypes as $index => $transportType)
+                                                        @php
+                                                            $name = trim(strtolower($transportType->name ?? ''));
+                                                            $iconHtml = '<i class="fa-solid fa-train" style="margin-right:4px;"></i>';
+                                                            if (str_contains($name, 'autokar') || str_contains($name, 'autobus')) {
+                                                                $iconHtml = '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 640 640" width="1.2em" height="1.2em" style="margin-right:4px; vertical-align: -0.15em; fill: currentColor; display: inline-block;"><path d="M480 64C568.4 64 640 135.6 640 224L640 448C640 483.3 611.3 512 576 512L570.4 512C557.2 549.3 521.8 576 480 576C438.2 576 402.7 549.3 389.6 512L250.5 512C237.3 549.3 201.8 576 160.1 576C118.4 576 82.9 549.3 69.7 512L64 512C28.7 512 0 483.3 0 448L0 160C0 107 43 64 96 64L480 64zM160 432C133.5 432 112 453.5 112 480C112 506.5 133.5 528 160 528C186.5 528 208 506.5 208 480C208 453.5 186.5 432 160 432zM480 432C453.5 432 432 453.5 432 480C432 506.5 453.5 528 480 528C506.5 528 528 506.5 528 480C528 453.5 506.5 432 480 432zM480 128C462.3 128 448 142.3 448 160L448 352C448 369.7 462.3 384 480 384L544 384C561.7 384 576 369.7 576 352L576 224C576 171 533 128 480 128zM248 288L352 288C369.7 288 384 273.7 384 256L384 160C384 142.3 369.7 128 352 128L248 128L248 288zM96 128C78.3 128 64 142.3 64 160L64 256C64 273.7 78.3 288 96 288L200 288L200 128L96 128z"/></svg>';
+                                                            } elseif (str_contains($name, 'pociąg') || str_contains($name, 'pociag')) {
+                                                                $iconHtml = '<i class="fa-solid fa-train" style="margin-right:4px;"></i>';
+                                                            } elseif (str_contains($name, 'samolot')) {
+                                                                $iconHtml = '<i class="fa-solid fa-plane" style="margin-right:4px;"></i>';
+                                                            } elseif (str_contains($name, 'prom')) {
+                                                                $iconHtml = '<i class="fa-solid fa-sailboat" style="margin-right:4px;"></i>';
+                                                            } elseif (str_contains($name, 'minibus')) {
+                                                                $iconHtml = '<i class="fa-solid fa-van-shuttle" style="margin-right:4px;"></i>';
+                                                            }
+                                                        @endphp
+                                                        <span style="margin:0 3px 0 0; white-space:nowrap;">
+                                                            {!! $iconHtml !!}{{ $transportType->name }}
+                                                        </span>
+                                                        @if($index < $transportTypes->count() - 1)
+                                                            <span style="margin:0 3px;">+</span>
+                                                        @endif
+                                                    @endforeach
+                                                </div>
+                                            @endif
                                             <div class="price" id="price-accent">
                                                 @php
                                                     $filterStartPlaceId = null;
@@ -270,6 +300,23 @@
     </div>
 
     <style>
+        .home-banner-bg {
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            width: 100vw;
+            height: 100%;
+            min-height: 100%;
+            background: #e6f0fa;
+            z-index: 1;
+        }
+        .banner-details .details h2,
+        .banner-details .details p {
+            color: #222831 !important;
+            text-shadow: none !important;
+        }
     .blog.pt_70 .item.pb_70 {
         display: flex;
         flex-direction: column;
@@ -304,15 +351,23 @@
     .banner {
         position: relative;
         width: 100vw;
+        min-width: 100vw;
         overflow: hidden;
         margin-top: 60px;
         padding: 50px 0;
+        background: #e6f0fa;
     }
 
     .banner-inner {
         position: relative;
         z-index: 2;
         margin-top: 0;
+        max-width: 1200px;
+        margin-left: auto;
+        margin-right: auto;
+        width: 100%;
+        background: transparent;
+        box-shadow: none;
     }
 
     .banner-content {
@@ -446,8 +501,7 @@
 
 <div class="banner">
     <div class="home-banner-bg"></div>
-    <div class="home-banner-overlay"></div>
-    <div class="container banner-inner">
+    <div class="banner-inner">
         <div class="banner-content">
             <div class="banner-image">
                 <img src="{{ asset('storage/turysci.jpg') }}" alt="Uczniowie podczas wycieczki">
@@ -485,7 +539,7 @@
                             <div class="item pb_70">
                                 <div class="photo">
                                     @if($post->featured_image)
-                                        <img src="{{ asset('storage/' . $post->featured_image) }}" alt="{{ $post->title }}" />
+                                        <img src="{{ asset('storage/' . $post->featured_image) }}" alt="{{ $post->title }}" loading="lazy" decoding="async" />
                                     @else
                                         <img src="{{ asset('uploads/blog-placeholder.jpg') }}" alt="{{ $post->title }}" />
                                     @endif
@@ -499,7 +553,7 @@
                                             @if($post->excerpt)
                                                 {{ $post->excerpt }}
                                             @else
-                                                {{ Str::limit(strip_tags($post->content), 150) }}
+                                                {{ \Illuminate\Support\Str::limit(strip_tags($post->content), 150) }}
                                             @endif
                                         </p>
                                     </div>

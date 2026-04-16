@@ -21,34 +21,51 @@ class HotelRoomResource extends Resource
     public static function form(Form $form): Form
     {
         return $form->schema([
-            Forms\Components\TextInput::make('name')
-                ->label('Nazwa')
-                ->required(),
-            Forms\Components\Textarea::make('description')
-                ->label('Opis'),
-            Forms\Components\Textarea::make('notes')
-                ->label('Uwagi'),
-            Forms\Components\TextInput::make('people_count')
-                ->label('Ilość osób w pokoju')
-                ->numeric()
-                ->required(),
-            Forms\Components\TextInput::make('price')
-                ->label('Cena za pokój')
-                ->numeric()
-                ->required(),
-            Forms\Components\TextInput::make('currency')
-                ->label('Waluta')
-                ->default('PLN')
-                ->required(),
-            Forms\Components\Toggle::make('convert_to_pln')
-                ->label('Przeliczaj na złotówki')
-                ->default(true),
-            Forms\Components\Select::make('tags')
-                ->label('Tagi')
-                ->multiple()
-                ->relationship('tags', 'name')
-                ->searchable()
-                ->preload(),
+            Forms\Components\Section::make('Podstawowe informacje')
+                ->columns(3)
+                ->schema([
+                    Forms\Components\TextInput::make('name')
+                        ->label('Nazwa')
+                        ->required()
+                        ->columnSpan(2),
+                    Forms\Components\TextInput::make('people_count')
+                        ->label('Ilość osób w pokoju')
+                        ->numeric()
+                        ->required()
+                        ->columnSpan(1),
+                    Forms\Components\RichEditor::make('description')
+                        ->columnSpanFull(),
+                    Forms\Components\RichEditor::make('notes')
+                        ->columnSpanFull(),
+                ]),
+
+            Forms\Components\Section::make('Cennik i waluta')
+                ->columns(3)
+                ->schema([
+                    Forms\Components\TextInput::make('price')
+                        ->label('Cena za pokój')
+                        ->numeric()
+                        ->required(),
+                    Forms\Components\TextInput::make('currency')
+                        ->label('Waluta')
+                        ->default('PLN')
+                        ->required(),
+                    Forms\Components\Toggle::make('convert_to_pln')
+                        ->label('Przeliczaj na złotówki')
+                        ->default(true)
+                        ->inline(false),
+                ]),
+
+            Forms\Components\Section::make('Tagi')
+                ->schema([
+                    Forms\Components\Select::make('tags')
+                        ->label('Tagi')
+                        ->multiple()
+                        ->relationship('tags', 'name')
+                        ->searchable()
+                        ->preload()
+                        ->columnSpanFull(),
+                ]),
         ]);
     }
 
@@ -56,8 +73,8 @@ class HotelRoomResource extends Resource
     {
         return $table->columns([
             Tables\Columns\TextColumn::make('name')->label('Nazwa')->sortable(),
-            Tables\Columns\TextColumn::make('description')->label('Opis')->limit(40),
-            Tables\Columns\TextColumn::make('notes')->label('Uwagi')->limit(40),
+            Tables\Columns\TextColumn::make('description')->label('Opis')->html(false)->limit(40),
+            Tables\Columns\TextColumn::make('notes')->label('Uwagi')->html(false)->limit(40),
             Tables\Columns\TextColumn::make('people_count')->label('Ilość osób')->sortable(),
             Tables\Columns\TextColumn::make('price')->label('Cena za pokój')->sortable(),
             Tables\Columns\TextColumn::make('currency')->label('Waluta')->sortable(),

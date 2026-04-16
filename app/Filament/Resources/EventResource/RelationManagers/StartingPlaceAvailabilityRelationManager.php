@@ -21,7 +21,7 @@ class StartingPlaceAvailabilityRelationManager extends RelationManager
             Select::make('start_place_id')->label('Miejsce startu')->relationship('startPlace','name')->preload()->required(),
             Select::make('end_place_id')->label('Miejsce zakończenia')->relationship('endPlace','name')->preload()->required(),
             Toggle::make('available')->label('Dostępne')->default(true),
-            Forms\Components\Textarea::make('note')->label('Notatka')->rows(2),
+            Forms\Components\RichEditor::make('note'),
         ]);
     }
 

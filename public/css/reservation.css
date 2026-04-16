@@ -1,0 +1,921 @@
+/* ============================================
+   Reservation Page Styles
+   ============================================ */
+
+/* Form Container */
+.white_box {
+
+}
+
+.white_box h2 {
+    color: #333;
+    font-size: 28px;
+    font-weight: 600;
+    margin-bottom: 30px;
+    padding-bottom: 15px;
+}
+
+/* Form Styles */
+.reservation-form {
+    width: 100%;
+}
+
+/* Force consistent borders on all reservation inputs */
+.reservation-form .form-control {
+    width: 100%;
+    padding: 12px 15px;
+    border: 1px solid #ddd;
+    border-radius: 4px;
+    font-size: 14px;
+    font-family: inherit;
+    box-sizing: border-box;
+}
+
+.reservation-form .form-control:focus {
+    outline: none;
+    border-color: #007bff;
+    box-shadow: 0 0 0 3px rgba(0, 123, 255, 0.1);
+}
+
+.form-group {
+    margin-bottom: 20px;
+}
+
+.form-group label {
+    display: block;
+    margin-bottom: 8px;
+    font-weight: 600;
+    color: #333;
+    font-size: 14px;
+}
+
+.form-group input[type="text"],
+.form-group input[type="email"],
+.form-group input[type="tel"],
+.form-group textarea,
+.form-group select {
+    width: 100%;
+    padding: 12px 15px;
+    border: 1px solid #ddd;
+    border-radius: 4px;
+    font-size: 14px;
+    font-family: inherit;
+    transition: border-color 0.3s ease, box-shadow 0.3s ease;
+    box-sizing: border-box;
+}
+
+.form-group input[type="text"]:focus,
+.form-group input[type="email"]:focus,
+.form-group input[type="tel"]:focus,
+.form-group textarea:focus,
+.form-group select:focus {
+    outline: none;
+    border-color: #007bff;
+    box-shadow: 0 0 0 3px rgba(0, 123, 255, 0.1);
+}
+
+.form-group textarea {
+    resize: vertical;
+    min-height: 100px;
+}
+
+/* Button Styles */
+.form-group button[type="submit"],
+.btn {
+    display: inline-block;
+    padding: 12px 30px;
+    background-color: #007bff;
+    color: white;
+    border: none;
+    border-radius: 4px;
+    font-size: 16px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: background-color 0.3s ease, transform 0.2s ease;
+}
+
+.form-group button[type="submit"]:hover,
+.btn:hover {
+    background-color: #0056b3;
+    transform: translateY(-2px);
+}
+
+.form-group button[type="submit"]:active,
+.btn:active {
+    transform: translateY(0);
+}
+
+.btn-primary {
+    background-color: #007bff;
+}
+
+.btn-primary:hover {
+    background-color: #0056b3;
+}
+
+/* Simple danger button (red) and block helper if Bootstrap isn't present or overridden */
+.btn-danger {
+    background-color: #dc3545 !important;
+    color: #fff !important;
+    border: 1px solid rgba(0,0,0,0.05) !important;
+}
+
+.btn-danger:hover {
+    background-color: #b02a37 !important;
+    /* Nie przesuwaj czerwonego przycisku na hover */
+    transform: none !important;
+}
+
+/* Zapewnij też, że aktywacja i focus nie będą przesuwać przycisku */
+.btn-danger:active,
+.btn-danger:focus {
+    transform: none !important;
+}
+
+.btn-block {
+    display: block !important;
+    width: 100% !important;
+}
+
+/* Force border on all reservation fields even if global styles override .form-control */
+.reservation-form input.form-control,
+.reservation-form textarea.form-control,
+.reservation-form select.form-control {
+    border: 1px solid #ddd !important;
+    border-radius: 4px !important;
+    background-color: #fff !important;
+}
+
+/* Address row layout: keep City/Province/Postal in one line */
+.reservation-form .form-row {
+    display: flex;
+    gap: 12px;
+    flex-wrap: nowrap;
+    margin-bottom: 20px;
+}
+
+.reservation-form .form-row .form-group {
+    flex: 1 1 0;
+    margin-bottom: 0;
+}
+
+@media (max-width: 768px) {
+    .reservation-form .form-row {
+        flex-wrap: wrap;
+    }
+
+    .reservation-form .form-row .form-group {
+        flex: 1 1 100%;
+        margin-bottom: 15px;
+    }
+}
+
+/* Responsive Design */
+@media (max-width: 768px) {
+    .white_box {
+        padding: 20px;
+    }
+
+    .white_box h2 {
+        font-size: 24px;
+        margin-bottom: 20px;
+    }
+
+    .form-group {
+        margin-bottom: 15px;
+    }
+
+    .form-group button[type="submit"] {
+        width: 100%;
+    }
+}
+
+/* Error and Success Messages */
+.form-group .error {
+    color: #dc3545;
+    font-size: 12px;
+    margin-top: 5px;
+    display: block;
+}
+
+.form-group.has-error input,
+.form-group.has-error textarea {
+    border-color: #dc3545;
+}
+
+.form-success {
+    background-color: #d4edda;
+    color: #155724;
+    padding: 15px;
+    border-radius: 4px;
+    margin-bottom: 20px;
+    border: 1px solid #c3e6cb;
+}
+
+.form-error {
+    background-color: #f8d7da;
+    color: #721c24;
+    padding: 15px;
+    border-radius: 4px;
+    margin-bottom: 20px;
+    border: 1px solid #f5c6cb;
+}
+
+.birthdate-row {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+}
+
+.birthdate-label {
+    white-space: nowrap;
+    color: #888;
+    font-size: 14px;
+    font-weight: 400;
+}
+
+.birthdate-input {
+    flex: 1 1 auto;
+}
+
+/* Stepper Styles (aligned labels under dots) */
+.reservation-stepper {
+    margin-bottom: 24px;
+}
+
+.stepper-title {
+    font-size: 20px;
+    font-weight: 600;
+    color: #3f3a7a;
+    margin-bottom: 12px;
+}
+
+.stepper-items {
+    position: relative;
+    display: grid;
+    /* Zmieniono na 5 kolumn; na węższych ekranach auto-fit zapewnia zawijanie */
+    grid-template-columns: repeat(5, minmax(0, 1fr));
+    align-items: start;
+    justify-items: center;
+    gap: 16px;
+    padding: 0 4px;
+}
+
+/* Jeśli ekran jest wąski, pozwól gridowi dopasować kolumny (zawinięcie) */
+@media (max-width: 600px) {
+    .stepper-items {
+        grid-template-columns: repeat(auto-fit, minmax(64px, 1fr));
+    }
+}
+
+.stepper-items::before {
+    content: "";
+    position: absolute;
+    left: 4px;
+    right: 4px;
+    top: 17px;
+    height: 1px;
+    background: #ddd;
+}
+
+.stepper-item {
+    position: relative;
+    z-index: 1;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    width: 100%;
+    text-align: center;
+}
+
+.stepper-dot {
+    width: 34px;
+    height: 34px;
+    border-radius: 999px;
+    border: 2px solid #0d6efd;
+    background: #fff;
+    color: #0d6efd;
+    font-weight: 600;
+    font-size: 14px;
+    line-height: 1;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+}
+
+.stepper-dot.is-active {
+    background: #0d6efd;
+    color: #fff;
+    border-color: #0d6efd;
+}
+
+.stepper-label {
+    display: block;
+    white-space: nowrap;
+    text-align: center;
+    font-size: 11px;
+    color: #0d6efd;
+}
+
+/* Schedule Styles */
+.schedule-heading {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    margin-bottom: 12px;
+}
+
+.schedule-heading h2 {
+    margin-bottom: 0;
+}
+
+.schedule-toggle {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    border: none;
+    background: transparent;
+    color: #0d6efd;
+    font-size: 14px;
+    font-weight: 600;
+    cursor: pointer;
+    padding: 4px 6px;
+}
+
+.schedule-toggle-icon {
+    display: inline-block;
+    transition: transform 0.2s ease;
+}
+
+.schedule-toggle.is-collapsed .schedule-toggle-icon {
+    transform: rotate(-90deg);
+}
+
+.schedule-collapsible.is-collapsed {
+    display: none;
+}
+
+/* Reservation Info Card Styles */
+.reservation-info-card {
+    border: 1px solid #e2e8f0;
+    padding: 12px;
+    display: block;
+    box-sizing: border-box;
+    overflow: hidden; /* zapobiega wychodzeniu zawartości poza ramkę karty */
+}
+
+.heading-reservation-ifo h4 {
+    font-size: 15px;
+    margin: 0 0 8px 0;
+    font-weight: 600;
+    text-align: left !important;
+}
+
+.reservation-info-body {
+    /* Wyświetl obraz nad tekstem: kolumnowy układ zamiast domyślnego wiersza */
+    display: flex !important;
+    flex-direction: column !important;
+    gap: 10px;
+    align-items: stretch !important; /* tekst zajmuje całą szerokość */
+}
+
+.reservation-info-text {
+    width: 100% !important;
+}
+
+.reservation-info-text p {
+    margin: 0 0 6px 0;
+}
+
+.reservation-info-image {
+    /* Usuń ograniczający flex-basis i ustaw obraz na pełną szerokość karty */
+    flex: none !important;
+    width: 100% !important;
+    max-width: none !important;
+    margin: 0 0 12px !important;
+    border: 1px solid #e2e8f0;
+    border-radius: 4px;
+    overflow: hidden;
+    background: #f8fafc;
+}
+
+.reservation-info-image img {
+    display: block !important;
+    width: 100% !important;
+    height: auto !important;
+}
+
+/* Linia dzieląca po środku transportu */
+.transport-divider {
+    width: 60%;
+    height: 1px;
+    background: #e2e8f0;
+    margin: 12px auto;
+    border-radius: 1px;
+}
+
+@media (max-width: 992px) {
+    .reservation-info-body {
+        flex-direction: column;
+    }
+
+    .reservation-info-image {
+        width: 100%;
+        max-width: 160px;
+    }
+}
+
+/* Układ górnej sekcji: tekst po lewej, zdjęcie po prawej (spójne, oparte na flexboxie) */
+.reservation-info-top {
+    display: flex;
+    flex-direction: row;
+    align-items: stretch; /* stretch żeby dzieci (tekst i obraz) miały tę samą wysokość */
+    gap: 12px;
+    width: 100%;
+    box-sizing: border-box;
+    /* nie pozwalamy na zawijanie - obraz ma stałą szerokość */
+    flex-wrap: nowrap;
+}
+
+.reservation-info-top-text {
+    flex: 1 1 auto;
+    min-width: 0; /* zabezpieczenie, żeby tekst mógł się kurczyć */
+    display: flex; /* zapobiega margin-collapsing i ułatwia wyrównanie wysokości */
+    flex-direction: column;
+    justify-content: flex-start;
+}
+
+/* Reset domyślnych marginesów paragrafów wewnątrz bloku informacyjnego, aby wysokość była przewidywalna */
+.reservation-info-top-text p {
+    margin: 0 0 8px 0;
+}
+
+/* Obrazek sidebarowy: stała szerokość po prawej, nie wypada poza kartę */
+.reservation-info-image.reservation-info-image--sidebar {
+    flex: 0 0 120px !important; /* stała baza: 120px */
+    width: 120px !important;
+    max-width: 120px !important;
+    box-sizing: border-box !important;
+    overflow: hidden !important;
+    margin: 0 0 0 12px !important; /* odstęp między tekstem a obrazem */
+    border: 1px solid #e2e8f0;
+    border-radius: 4px;
+    background: #f8fafc;
+    align-self: stretch; /* zapewnia rozciągnięcie kontenera obrazka do wysokości tekstu */
+    display: block !important;
+}
+
+.reservation-info-image.reservation-info-image--sidebar img {
+    display: block !important;
+    width: 100% !important;
+    height: 100% !important; /* wypełnij wysokość kontenera */
+    object-fit: cover !important;
+}
+
+@media (max-width: 768px) {
+    .reservation-info-image.reservation-info-image--sidebar {
+        width: 100% !important;
+        max-width: 100% !important;
+        margin: 0 0 12px 0 !important;
+        flex: 0 0 auto !important;
+        align-self: stretch;
+        height: auto !important; /* na mobile przywróć naturalną wysokość */
+    }
+    .reservation-info-image.reservation-info-image--sidebar img {
+        height: auto !important; /* przywróć naturalną wysokość na small screens */
+        width: 100% !important;
+    }
+}
+
+/* Na bardzo szerokich ekranach zwiększ szerokość obrazka sidebarowego, ale pozwól mu się kurczyć gdy brakuje miejsca */
+@media (min-width: 1200px) {
+    .reservation-info-image.reservation-info-image--sidebar {
+        /* elastyczna szerokość: min 160px, preferencyjnie 18vw, max 320px
+           ale z możliwością shrink (flex-shrink:1) aby nie wypychać rodzica */
+        flex: 0 1 clamp(160px, 18vw, 320px) !important;
+        width: clamp(160px, 18vw, 320px) !important;
+        max-width: 100% !important; /* nigdy nie przekraczaj szerokości rodzica */
+        box-sizing: border-box !important;
+    }
+}
+
+@media (min-width: 1600px) {
+    #reservation5-main {
+        grid-template-columns: 1fr 480px; /* extra-wide screens -> larger sidebar */
+    }
+}
+
+/* Dla tabletów i mniejszych ekranów cofnij nadpisanie do 100% aby zachować responsywność */
+@media (max-width: 991.98px) {
+    .col-md-8.offset-md-2 {
+        flex: 0 0 100% !important;
+        max-width: 100% !important;
+        margin-left: 0 !important;
+        margin-right: 0 !important;
+    }
+
+    /* Upewnij się, że sidebar .col-sm-3 także zajmuje pełną szerokość na mniejszych ekranach */
+    .col-sm-3 {
+        flex: 0 0 100% !important;
+        max-width: 100% !important;
+        margin-left: 0 !important;
+        margin-right: 0 !important;
+    }
+
+    /* wewnętrzne elementy w sidebarzie też zajmują pełną szerokość */
+    .col-sm-3 .white_box,
+    .col-sm-3 .reservation-info-card,
+    .col-sm-3 .reservation-info-image,
+    .col-sm-3 .reservation-info-body {
+        width: 100% !important;
+        max-width: 100% !important;
+        box-sizing: border-box !important;
+    }
+}
+
+/* Dodatkowo upewnij się, że zawartość wewnątrz kolumny zajmuje pełną dostępna szerokość */
+.col-md-8.offset-md-2 .white_box,
+.col-md-8.offset-md-2 .reservation-stepper,
+.col-md-8.offset-md-2 .reservation-form {
+    width: 100%;
+    box-sizing: border-box;
+}
+
+/* Pełnej szerokości obrazek nad nagłówkiem karty */
+.reservation-info-image.reservation-info-image--full {
+    width: 100% !important;
+    max-width: 100% !important;
+    margin: 0 0 12px 0 !important;
+    overflow: hidden !important;
+    border-radius: 4px;
+    border: 1px solid #e2e8f0;
+    background: #f8fafc;
+    display: block !important;
+}
+
+.reservation-info-image.reservation-info-image--full img {
+    width: 100% !important;
+    height: auto !important;
+    display: block !important;
+    object-fit: cover !important; /* przydatne jeśli chcesz przyciąć obraz estetycznie */
+}
+
+/* Page-specific override: on reservation1 (container .reservation-page) remove the default right margin on #itinerary */
+.reservation-page #itinerary {
+    margin-right: 0 !important;
+}
+
+/* Sidebar background (lekko szare tło) i białe karty wewnątrz */
+.col-sm-3 {
+    box-sizing: border-box;
+    padding: 12px; /* trochę odstępu wewnątrz kolumny, aby widać szare tło między kartami */
+}
+
+/* Ustaw białe tło dla wewnętrznych kart, które mają ramkę */
+.col-sm-3 .white_box,
+.col-sm-3 .reservation-info-card,
+.col-sm-3 .heading-reservation-ifo {
+    box-sizing: border-box !important;
+}
+
+/* Jeśli chcesz, żeby karty miały delikatny cień i zaokrąglenie — opcjonalne */
+.col-sm-3 .white_box,
+.col-sm-3 .reservation-info-card {
+    border-radius: 12px;
+    background-color: #ffffff !important;
+}
+
+/* Zabezpieczenie na mobile aby padding nie powodował poziomego scrolla */
+@media (max-width: 991.98px) {
+    .col-sm-3 {
+        padding-left: 12px !important;
+        padding-right: 12px !important;
+    }
+}
+
+
+
+
+.confirmation-panel .reservation-info-image--full img {
+    width: 100% !important;
+    height: auto !important;
+    object-fit: cover !important;
+    display: block !important;
+}
+
+/* Responsywność: na mniejszych ekranach ułóż kolumnowo — obraz nad treścią */
+@media (max-width: 768px) {
+    .confirmation-panel .reservation-info-card {
+        grid-template-columns: 1fr;
+    }
+    .confirmation-panel .reservation-info-image--full {
+        order: 1;
+        width: 100% !important;
+        height: 200px !important;
+        flex: 0 0 auto !important;
+    }
+    .confirmation-panel .reservation-info-body {
+        order: 2;
+    }
+}
+
+/* Specyficzne nadpisanie: wewnątrz confirmation-panel wymuś ograniczoną szerokość obrazka
+   aby nie wypychał / nie przykrywał treści (nadpisuje wcześniejsze reguły z !important) */
+.confirmation-panel .reservation-info-image--full {
+    flex: 0 0 auto !important;
+    width: 100% !important;
+    max-width: 360px !important;
+    height: auto !important;
+}
+
+.confirmation-panel .reservation-info-image--full img {
+    width: 100% !important;
+    height: auto !important;
+    object-fit: cover !important;
+    display: block !important;
+}
+
+@media (max-width: 992px) {
+    .confirmation-panel {
+        padding: 14px;
+    }
+    .confirmation-panel .reservation-info-image--full img {
+        height: 220px !important;
+    }
+}
+
+@media (max-width: 576px) {
+    .confirmation-panel .reservation-info-image--full img {
+        height: 160px !important;
+    }
+}
+
+/* Adjust typography specifically for reservation pages (normalize font weight and size) */
+.reservation-page,
+.reservation-page .white_box,
+.reservation-page .reservation-info-card,
+.reservation-page .reservation-info-text,
+.reservation-page .reservation-info-body,
+.reservation-page .reservation-info-card .reservation-info-text,
+.reservation-page .form-check-label,
+.reservation-page .form-group {
+    font-family: inherit !important; /* use site's default */
+    font-size: 15px !important; /* slightly larger to match site */
+    font-weight: 400 !important; /* normal weight */
+    color: #222 !important;
+}
+
+/* Make <strong> slightly bolder but not heavy */
+.reservation-page strong,
+.reservation-page h2,
+.reservation-page h4 {
+    font-weight: 600 !important; /* semi-bold */
+}
+
+/* Zmniejszony rozmiar h2 tylko dla okna z treścią regulaminu (_terms.blade.php) */
+/* Celujemy w wrappery używane w modal/template i w dynamicznym overlay (terms-scrollable, terms-inline-body) */
+.terms-scrollable h2,
+.terms-inline-body h2,
+.modal-dialog .terms-scrollable h2 {
+    font-size: 20px !important;
+    padding-top: 30px;
+}
+
+/* Slight spacing improvements for consent labels */
+.reservation-page .form-check-label {
+    display: block;
+    margin-left: 0;
+}
+
+/* Ensure smaller descriptive text remains smaller */
+.reservation-page .small.text-muted {
+    font-size: 13px !important;
+    color: #6b7280 !important;
+}
+
+/* Modal overlay (terms) */
+.modal-overlay {
+    position: fixed;
+    top: 0;
+    right: 0;
+    bottom: 0;
+    left: 0;
+    background: rgba(15, 23, 42, 0.6);
+    display: none;
+    align-items: center;
+    justify-content: center;
+    z-index: 2147483000; /* very high to ensure it's above most elements */
+    padding: 24px;
+    pointer-events: none; /* disabled until opened */
+}
+
+.modal-overlay.is-open {
+    display: flex !important;
+    pointer-events: auto !important;
+}
+
+.modal-dialog {
+    background: #fff;
+    max-width: 1000px;
+    width: 100%;
+    max-height: 90vh;
+    overflow: auto;
+    border-radius: 12px;
+    padding: 24px;
+    box-shadow: 0 20px 50px rgba(2,6,23,0.3);
+    position: relative;
+    z-index: 2147483001; /* ensure dialog is above overlay background */
+}
+
+.modal-close {
+    position: absolute;
+    top: 12px;
+    right: 12px;
+    border: none;
+    background: transparent;
+    font-size: 28px;
+    line-height: 1;
+    cursor: pointer;
+    color: #374151;
+}
+
+.modal-body {
+    margin-top: 8px;
+    color: #111827;
+    font-size: 15px;
+    line-height: 1.6;
+}
+
+/* Ensure modal body is scrollable and headers inside modal are a bit smaller */
+.modal-dialog .modal-body {
+    max-height: 70vh !important;
+    overflow: auto !important;
+    padding: 18px !important;
+    -webkit-overflow-scrolling: touch;
+}
+
+.modal-dialog .modal-body h1 {
+    font-size: 20px !important; /* slightly smaller than page h1 */
+    margin-top: 0 !important;
+    margin-bottom: 8px !important;
+}
+
+.modal-dialog .modal-body h2 {
+    font-size: 16px !important; /* smaller subheads */
+    margin-top: 12px !important;
+    margin-bottom: 8px !important;
+}
+
+.modal-dialog .modal-body div,
+.modal-dialog .modal-body p {
+    font-size: 14px !important;
+    line-height: 1.5 !important;
+}
+
+/* When modal is open, prevent page scroll */
+body.modal-open {
+    overflow: hidden;
+}
+
+/* Link style for consent link */
+.consent-link {
+    color: #0d6efd;
+    text-decoration: underline;
+    cursor: pointer;
+}
+
+@media (max-width: 576px) {
+    .modal-dialog {
+        padding: 16px;
+        border-radius: 8px;
+    }
+}
+
+/* Terms scrollable wrapper inside modal */
+.terms-scrollable {
+    overflow-y: auto !important;
+    overflow-x: hidden !important;
+    -webkit-overflow-scrolling: touch !important;
+    box-sizing: border-box !important;
+    overscroll-behavior: contain !important; /* prevent scroll chaining to body */
+}
+
+/* Inline terms fallback - ensure it's scrollable and doesn't block page */
+.terms-inline-body {
+    max-height: calc(100vh - 260px) !important;
+    overflow-y: auto !important;
+    overflow-x: hidden !important;
+    -webkit-overflow-scrolling: touch !important;
+    overscroll-behavior: contain !important;
+    padding-right: 8px !important;
+    box-sizing: border-box !important;
+}
+
+/* when inline terms visible, ensure body can still scroll if needed */
+body.terms-inline-open {
+    overflow: auto !important;
+}
+
+/* Specific padding for the first heading inside terms content only */
+.terms-scrollable .terms-heading-1,
+.terms-inline-body .terms-heading-1,
+.modal-dialog .terms-scrollable .terms-heading-1 {
+    padding-top: 25px !important;
+}
+
+/* Image card used on reservation5 to mimic reference layout */
+.image-card {
+    background: #ffffff;
+    border-radius: 12px;
+    padding: 8px;
+    overflow: hidden;
+    margin-bottom: 12px;
+}
+
+.image-card .reservation-info-image {
+    border-radius: 8px;
+    overflow: hidden;
+    display: block;
+}
+
+.image-card .reservation-info-image img {
+    display: block !important;
+    width: 100% !important;
+    height: auto !important;
+    object-fit: cover !important;
+}
+
+@media (min-width: 1200px) {
+    /* on very wide screens make image card visually larger but not exceed the sidebar width */
+    .image-card {
+        padding: 12px;
+    }
+}
+
+/* When image-card is used inside the top area, ensure it fills the available height and frames the image */
+.reservation-info-top .image-card {
+    padding: 8px !important;
+    display: flex !important;
+    align-items: stretch !important; /* make card stretch to match text height */
+    background: #ffffff !important;
+    border-radius: 12px !important;
+    margin-bottom: 0 !important;
+}
+
+.reservation-info-top .image-card .reservation-info-image {
+    flex: 0 0 clamp(160px, 20vw, 320px) !important; /* fixed-ish width but able to scale on large screens */
+    width: clamp(160px, 20vw, 320px) !important;
+    box-sizing: border-box !important;
+    border-radius: 8px !important;
+    overflow: hidden !important;
+    background: transparent !important; /* card supplies white background */
+}
+
+.reservation-info-top .image-card .reservation-info-image img {
+    width: 100% !important;
+    height: 100% !important; /* fill the card height */
+    object-fit: cover !important;
+    display: block !important;
+}
+
+@media (max-width: 768px) {
+    .reservation-info-top .image-card {
+        display: block !important;
+        padding: 0 !important;
+        border-radius: 8px !important;
+        margin-bottom: 12px !important;
+    }
+    .reservation-info-top .image-card .reservation-info-image {
+        width: 100% !important;
+        flex: 0 0 auto !important;
+        max-height: none !important;
+    }
+    .reservation-info-top .image-card .reservation-info-image img {
+        height: auto !important;
+        width: 100% !important;
+    }
+}
+
+/* Ensure sidebar image fills the height when we set the wrapper height dynamically (scoped to reservation5) */
+#reservation5-main .confirmation-summary .col-md-4 .image-card .reservation-info-image img {
+    width: 100% !important;
+    height: 100% !important; /* fill wrapper height set by JS */
+    object-fit: cover !important;
+    display: block !important;
+}
+
+/* Force two-column layout for reservation5 using CSS Grid to avoid wrapping issues */
+#reservation5-main {
+    display: grid !important;
+    grid-template-columns: minmax(0, 1fr) 420px; /* base: left flexible, right fixed-ish */
+    gap: 24px;
+    align-items: start;
+    margin-top: 18px;
+}
+
+/* On large screens prefer a fixed-width right sidebar similar to reference */
+@media

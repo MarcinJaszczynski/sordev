@@ -29,45 +29,64 @@ protected static ?string $label = 'Miejsce';
     {
         return $form
             ->schema([
-                TextInput::make('name')
-                    ->required()
-                    ->maxLength(255)
-                    ->live(onBlur: true)
-                    ->afterStateUpdated(function ($state, $set) {
-                        if ($state) {
-                            $coords = \App\Services\PlaceGeocodeService::getCoordinates($state);
-                            if ($coords) {
-                                $set('latitude', $coords['lat']);
-                                $set('longitude', $coords['lon']);
-                            }
-                        }
-                    }),
-                Textarea::make('description'),
-                TagsInput::make('tags'),
-                Toggle::make('starting_place')->label('Miejsce początkowe')->default(true),
-                TextInput::make('latitude')
-                    ->label('Szerokość geograficzna')
-                    ->numeric()
-                    ->nullable()
-                    ->suffixAction(
-                        \Filament\Forms\Components\Actions\Action::make('fetch_latlon')
-                            ->label('Pobierz z API')
-                            ->icon('heroicon-o-arrow-path')
-                            ->action(function ($get, $set) {
-                                $name = $get('name');
-                                if ($name) {
-                                    $coords = \App\Services\PlaceGeocodeService::getCoordinates($name);
+                Forms\Components\Section::make('Dane miejsca')
+                    ->columns(2)
+                    ->schema([
+                        TextInput::make('name')
+                            ->label('Nazwa miejsca')
+                            ->required()
+                            ->maxLength(255)
+                            ->columnSpanFull()
+                            ->live(onBlur: true)
+                            ->afterStateUpdated(function ($state, $set) {
+                                if ($state) {
+                                    $coords = \App\Services\PlaceGeocodeService::getCoordinates($state);
                                     if ($coords) {
                                         $set('latitude', $coords['lat']);
                                         $set('longitude', $coords['lon']);
                                     }
                                 }
-                            })
-                    ),
-                TextInput::make('longitude')
-                    ->label('Długość geograficzna')
-                    ->numeric()
-                    ->nullable(),
+                            }),
+                        \Filament\Forms\Components\RichEditor::make('description')
+                            ->label('Opis')
+                            ->nullable()
+                            ->columnSpan(2)
+                            ->helperText('Krótki opis lokalizacji (opcjonalnie).'),
+                        TagsInput::make('tags')
+                            ->label('Tagi'),
+                        Toggle::make('starting_place')
+                            ->label('Miejsce początkowe')
+                            ->default(true)
+                            ->inline(false),
+                    ]),
+
+                Forms\Components\Section::make('Współrzędne GPS')
+                    ->columns(2)
+                    ->schema([
+                        TextInput::make('latitude')
+                            ->label('Szerokość geograficzna')
+                            ->numeric()
+                            ->nullable()
+                            ->suffixAction(
+                                \Filament\Forms\Components\Actions\Action::make('fetch_latlon')
+                                    ->label('Pobierz z API')
+                                    ->icon('heroicon-o-arrow-path')
+                                    ->action(function ($get, $set) {
+                                        $name = $get('name');
+                                        if ($name) {
+                                            $coords = \App\Services\PlaceGeocodeService::getCoordinates($name);
+                                            if ($coords) {
+                                                $set('latitude', $coords['lat']);
+                                                $set('longitude', $coords['lon']);
+                                            }
+                                        }
+                                    })
+                            ),
+                        TextInput::make('longitude')
+                            ->label('Długość geograficzna')
+                            ->numeric()
+                            ->nullable(),
+                    ]),
             ]);
     }
 

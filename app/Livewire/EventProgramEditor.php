@@ -65,19 +65,27 @@ class EventProgramEditor extends Component
             ->orderBy('order')
             ->get();
 
+        $participantCount = max(1, (int) ($this->event->participant_count ?? 1));
+
         // Grupuj według dni
-        return $programPoints->groupBy('day')->map(function ($points, $day) {
+        return $programPoints->groupBy('day')->map(function ($points, $day) use ($participantCount) {
             return [
                 'day' => $day,
-                'points' => $points->map(function ($point) {
+                'points' => $points->map(function ($point) use ($participantCount) {
+                    // Identyczna formuła jak silnik kalkulacji: ceil(qty / groupSize) * unitPrice
+                    $groupSize = max(1, (int) ($point->group_size ?? 1));
+                    $unitPrice = (float) ($point->unit_price ?? 0);
+                    $calculatedTotal = (float) ceil($participantCount / $groupSize) * $unitPrice;
+
                     return [
                         'id' => $point->id,
                         'name' => $point->templatePoint->name ?? 'Brak nazwy',
                         'description' => $point->templatePoint->description ?? '',
                         'order' => $point->order,
                         'unit_price' => $point->unit_price,
+                        'group_size' => $point->group_size ?? 1,
                         'quantity' => $point->quantity,
-                        'total_price' => $point->total_price,
+                        'total_price' => $calculatedTotal,
                         'notes' => $point->notes,
                         'include_in_program' => $point->include_in_program,
                         'include_in_calculation' => $point->include_in_calculation,

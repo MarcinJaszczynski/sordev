@@ -52,18 +52,24 @@ class ContactResource extends Resource
     public static function form(Form $form): Form
     {
         return $form->schema([
-            Forms\Components\TextInput::make('first_name')
-                ->label('Imię')
-                ->required(),
-            Forms\Components\TextInput::make('last_name')
-                ->label('Nazwisko')
-                ->required(),
-            Forms\Components\TextInput::make('phone')
-                ->label('Telefon'),
-            Forms\Components\TextInput::make('email')
-                ->label('Email'),
-            Forms\Components\Textarea::make('notes')
-                ->label('Uwagi'),
+            Forms\Components\Section::make('Dane osobowe')
+                ->columns(2)
+                ->schema([
+                    Forms\Components\TextInput::make('first_name')
+                        ->label('Imię')
+                        ->required(),
+                    Forms\Components\TextInput::make('last_name')
+                        ->label('Nazwisko')
+                        ->required(),
+                    Forms\Components\TextInput::make('phone')
+                        ->label('Telefon')
+                        ->tel(),
+                    Forms\Components\TextInput::make('email')
+                        ->label('Email')
+                        ->email(),
+                    Forms\Components\RichEditor::make('notes')
+                        ->columnSpanFull(),
+                ]),
         ]);
     }
 

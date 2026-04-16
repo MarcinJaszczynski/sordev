@@ -16,7 +16,9 @@ class DocumentSectionResource extends Resource
     protected static ?string $model = DocumentSection::class;
 
     protected static ?string $navigationIcon = 'heroicon-o-folder';
-    protected static ?string $navigationLabel = 'Document Sections';
+    protected static ?string $navigationLabel = 'Sekcje dokumentów';
+    protected static ?string $navigationGroup = 'Narzędzia';
+    protected static ?int $navigationSort = 30;
 
     public static function form(Form $form): Form
     {
@@ -32,7 +34,7 @@ class DocumentSectionResource extends Resource
         return $table->columns([
             TextColumn::make('title')->searchable(),
             TextColumn::make('slug'),
-            TextColumn::make('order_number')->label('Order')->sortable(),
+            TextColumn::make('order_number')->label('Kolejność')->sortable(),
         ])->defaultSort('order_number');
     }
 

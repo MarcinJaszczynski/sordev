@@ -33,7 +33,10 @@ class EventCalculation extends Page
             Actions\Action::make('back')
                 ->label('Wróć do edycji')
                 ->icon('heroicon-o-arrow-left')
-                ->url(fn () => static::getResource()::getUrl('edit', ['record' => $this->record->id]))
+                ->url(fn () => static::getResource()::getUrl('edit', [
+                    'record' => $this->record->id,
+                    'activeRelationManager' => 0,
+                ]))
                 ->color('gray'),
             Actions\Action::make('edit-program')
                 ->label('Edytuj program')
@@ -51,9 +54,7 @@ class EventCalculation extends Page
                         ->maxLength(255)
                         ->default('Snapshot kalkulacji ' . now()->format('d.m.Y H:i')),
                     
-                    \Filament\Forms\Components\Textarea::make('description')
-                        ->label('Opis')
-                        ->rows(3)
+                    \Filament\Forms\Components\RichEditor::make('description')
                         ->maxLength(500)
                         ->helperText('Opisz powód utworzenia tego snapshotu'),
                 ])

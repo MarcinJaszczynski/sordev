@@ -29,4 +29,16 @@ class CreateTask extends CreateRecord
         $data['author_id'] = auth()->id();
         return $data;
     }
+
+    /**
+     * After creating a task, clear the notification cache for the user
+     */
+    protected function afterCreate(): void
+    {
+        parent::afterCreate();
+        $userId = auth()->id();
+        if ($userId) {
+            \App\Services\NotificationService::clearCacheForUser($userId);
+        }
+    }
 }

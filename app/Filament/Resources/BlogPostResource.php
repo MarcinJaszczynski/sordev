@@ -24,97 +24,115 @@ class BlogPostResource extends Resource
     public static function form(Form $form): Form
     {
         return $form->schema([
-            Forms\Components\TextInput::make('title')
-                ->required()
-                ->reactive()
-                ->afterStateUpdated(function ($state, $set) {
-                    if ($state) {
-                        $set('slug', Str::slug($state));
-                    }
-                }),
+            Forms\Components\Section::make('Podstawowe')
+                ->columns(2)
+                ->schema([
+                    Forms\Components\TextInput::make('title')
+                        ->label('Tytuł')
+                        ->required()
+                        ->columnSpanFull()
+                        ->reactive()
+                        ->afterStateUpdated(function ($state, $set) {
+                            if ($state) {
+                                $set('slug', Str::slug($state));
+                            }
+                        }),
+                    Forms\Components\TextInput::make('slug')
+                        ->required()
+                        ->unique(ignorable: fn($record) => $record),
+                    Forms\Components\TextInput::make('excerpt')
+                        ->label('Krótki opis')
+                        ->maxLength(500),
+                ]),
 
-            Forms\Components\TextInput::make('slug')
-                ->required()
-                ->unique(ignorable: fn($record) => $record),
-            Forms\Components\TextInput::make('excerpt')
-                ->label('Krótki opis')
-                ->maxLength(500),
+            Forms\Components\Section::make('Treść')
+                ->schema([
+                    Forms\Components\RichEditor::make('content')
+                        ->label('Treść')
+                        ->required()
+                        ->toolbarButtons([
+                            'bold', 'italic', 'underline', 'strike', 'link', 'bulletList', 'orderedList', 'blockquote', 'codeBlock', 'h2', 'h3', 'color', 'highlight', 'undo', 'redo'
+                        ])
+                        ->columnSpanFull(),
+                ]),
 
-            Forms\Components\RichEditor::make('content')
-                ->label('Treść')
-                ->required(),
+            Forms\Components\Section::make('Media')
+                ->columns(2)
+                ->schema([
+                    Forms\Components\FileUpload::make('featured_image')
+                        ->image()
+                        ->label('Obraz wyróżniający')
+                        ->disk('public')
+                        ->acceptedFileTypes(['image/jpeg', 'image/png', 'image/webp', 'image/gif'])
+                        ->getUploadedFileUsing(function ($file, $storedFileNames): ?array {
+                            if (blank($file)) {
+                                return null;
+                            }
+                            try {
+                                $disk = Storage::disk('public');
+                                /** @var \Illuminate\Filesystem\FilesystemAdapter $disk */
+                                $size = $disk->exists($file) ? $disk->size($file) : 0;
+                                $type = $disk->exists($file) ? $disk->mimeType($file) : null;
+                            } catch (\Throwable $e) {
+                                $size = 0;
+                                $type = null;
+                            }
+                            return [
+                                'name' => basename($file),
+                                'size' => $size,
+                                'type' => $type,
+                                'url' => '/storage/' . ltrim($file, '/'),
+                            ];
+                        })
+                        ->nullable(),
+                    Forms\Components\FileUpload::make('gallery')
+                        ->label('Galeria')
+                        ->image()
+                        ->multiple()
+                        ->disk('public')
+                        ->directory('blog/gallery')
+                        ->preserveFilenames()
+                        ->acceptedFileTypes(['image/jpeg', 'image/png', 'image/webp', 'image/gif'])
+                        ->getUploadedFileUsing(function ($file, $storedFileNames): ?array {
+                            if (blank($file)) {
+                                return null;
+                            }
+                            try {
+                                $disk = Storage::disk('public');
+                                /** @var \Illuminate\Filesystem\FilesystemAdapter $disk */
+                                $size = $disk->exists($file) ? $disk->size($file) : 0;
+                                $type = $disk->exists($file) ? $disk->mimeType($file) : null;
+                            } catch (\Throwable $e) {
+                                $size = 0;
+                                $type = null;
+                            }
+                            return [
+                                'name' => basename($file),
+                                'size' => $size,
+                                'type' => $type,
+                                'url' => '/storage/' . ltrim($file, '/'),
+                            ];
+                        })
+                        ->nullable(),
+                ]),
 
-            Forms\Components\FileUpload::make('featured_image')
-                ->image()
-                ->label('Obraz wyróżniający')
-                ->disk('public')
-                ->acceptedFileTypes(['image/jpeg', 'image/png', 'image/webp', 'image/gif'])
-                ->getUploadedFileUsing(function ($file, $storedFileNames): ?array {
-                    if (blank($file)) {
-                        return null;
-                    }
-
-                    try {
-                        $disk = Storage::disk('public');
-                        /** @var \Illuminate\Filesystem\FilesystemAdapter $disk */
-
-                        $size = $disk->exists($file) ? $disk->size($file) : 0;
-                        $type = $disk->exists($file) ? $disk->mimeType($file) : null;
-                    } catch (\Throwable $e) {
-                        $size = 0;
-                        $type = null;
-                    }
-
-                    return [
-                        'name' => basename($file),
-                        'size' => $size,
-                        'type' => $type,
-                        'url' => '/storage/' . ltrim($file, '/'),
-                    ];
-                })
-                ->nullable(),
-
-            Forms\Components\FileUpload::make('gallery')
-                ->label('Galeria')
-                ->image()
-                ->multiple()
-                ->disk('public')
-                ->directory('blog/gallery')
-                ->preserveFilenames()
-                ->acceptedFileTypes(['image/jpeg', 'image/png', 'image/webp', 'image/gif'])
-                ->getUploadedFileUsing(function ($file, $storedFileNames): ?array {
-                    if (blank($file)) {
-                        return null;
-                    }
-
-                    try {
-                        $disk = Storage::disk('public');
-                        /** @var \Illuminate\Filesystem\FilesystemAdapter $disk */
-
-                        $size = $disk->exists($file) ? $disk->size($file) : 0;
-                        $type = $disk->exists($file) ? $disk->mimeType($file) : null;
-                    } catch (\Throwable $e) {
-                        $size = 0;
-                        $type = null;
-                    }
-
-                    return [
-                        'name' => basename($file),
-                        'size' => $size,
-                        'type' => $type,
-                        'url' => '/storage/' . ltrim($file, '/'),
-                    ];
-                })
-                ->nullable(),
-
-            Forms\Components\Select::make('tags')
-                ->label('Tagi')
-                ->relationship('tags', 'name')
-                ->multiple(),
-
-            Forms\Components\Toggle::make('is_featured')->label('Polecany'),
-            Forms\Components\Toggle::make('is_published')->label('Opublikowany'),
-            Forms\Components\DateTimePicker::make('published_at')->label('Data publikacji'),
+            Forms\Components\Section::make('Publikacja i tagi')
+                ->columns(3)
+                ->schema([
+                    Forms\Components\Select::make('tags')
+                        ->label('Tagi')
+                        ->relationship('tags', 'name')
+                        ->multiple()
+                        ->columnSpanFull(),
+                    Forms\Components\Toggle::make('is_featured')
+                        ->label('Polecany')
+                        ->inline(false),
+                    Forms\Components\Toggle::make('is_published')
+                        ->label('Opublikowany')
+                        ->inline(false),
+                    Forms\Components\DateTimePicker::make('published_at')
+                        ->label('Data publikacji'),
+                ]),
         ]);
     }
 

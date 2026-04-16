@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use App\Models\Concerns\HasTasks;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\SoftDeletes;
@@ -25,7 +26,7 @@ use App\Models\ContractorType;
  */
 class Contractor extends Model
 {
-    use HasFactory, SoftDeletes;
+    use HasFactory, SoftDeletes, HasTasks;
 
     /**
      * Pola masowo przypisywalne
@@ -33,10 +34,19 @@ class Contractor extends Model
      */
     protected $fillable = [
         'name',
+        'firstname',
+        'surname',
+        'email',
+        'phone',
+        'nip',
+        'www',
         'street',
         'house_number',
         'city',
         'postal_code',
+        'region',
+        'country',
+        'description',
         'status',
         'office_notes',
     ];
@@ -55,5 +65,29 @@ class Contractor extends Model
     public function types()
     {
         return $this->belongsToMany(ContractorType::class, 'contractor_contractortype')->withTimestamps();
+    }
+
+    /**
+     * Punkty programu imprezy wykonywane przez tego kontrahenta
+     */
+    public function programPoints()
+    {
+        return $this->hasMany(EventProgramPoint::class);
+    }
+
+    /**
+     * Wydatki/koszty rozliczenia związane z tym kontrahentą
+     */
+    public function settlementCosts()
+    {
+        return $this->hasMany(EventSettlementCost::class);
+    }
+
+    /**
+     * Rezerwacje złożone przez tego kontrahenta
+     */
+    public function reservations()
+    {
+        return $this->hasMany(Reservation::class);
     }
 }

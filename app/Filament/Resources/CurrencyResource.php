@@ -39,14 +39,15 @@ class CurrencyResource extends Resource
                 ->label('Nazwa')
                 ->required(),
             Forms\Components\TextInput::make('symbol')
-                ->label('Symbol')
+                ->label('Symbol / kod')
                 ->required(),
             Forms\Components\TextInput::make('exchange_rate')
-                ->label('Kurs wymiany')
+                ->label('Kurs wymiany (do PLN)')
                 ->numeric()
                 ->default(1)
-                ->required(),
-        ]);
+                ->required()
+                ->step(0.0001),
+        ])->columns(3);
     }
 
     /**

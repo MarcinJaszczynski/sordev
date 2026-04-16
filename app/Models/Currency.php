@@ -63,6 +63,14 @@ class Currency extends Model
     }
 
     /**
+     * Historyczne kursy walut
+     */
+    public function rateSnapshots()
+    {
+        return $this->hasMany(CurrencyRateSnapshot::class);
+    }
+
+    /**
      * Zwraca (cache static) tablicę ID waluty PLN (różne warianty nazwy/kodu).
      */
     public static function plnIds(): array

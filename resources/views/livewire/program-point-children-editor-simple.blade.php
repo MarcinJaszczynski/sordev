@@ -44,8 +44,8 @@ class="security-protected-component">
     <div class="bg-white shadow rounded-lg p-4 fi-section-content">
         <div class="flex justify-between items-center mb-4">
             <h3 class="text-lg font-semibold text-gray-700">
-                Podpunkty programu: {{ Str::limit(e($programPoint->name), 50) }}
-                <span class="text-sm text-gray-500 ml-2">({{ count($children) }} {{ Str::plural('element', count($children), ['element', 'elementy', 'elementów']) }})</span>
+                Podpunkty programu: {{ \Illuminate\Support\Str::limit(e($programPoint->name), 50) }}
+                <span class="text-sm text-gray-500 ml-2">({{ count($children) }} {{ \Illuminate\Support\Str::plural('element', count($children), ['element', 'elementy', 'elementów']) }})</span>
             </h3>
             <button 
                 wire:click="showAddModal"
@@ -109,7 +109,7 @@ class="security-protected-component">
                         @endif
                         @if(!empty($child['office_notes']) && is_string($child['office_notes']))
                             <div class="text-xs text-blue-600 italic mt-1">
-                                Uwagi dla biura: {!! strip_tags(Str::limit($child['office_notes'], 100)) !!}
+                                Uwagi dla biura: {!! strip_tags(\Illuminate\Support\Str::limit($child['office_notes'], 100)) !!}
                             </div>
                         @endif
                     </div>
@@ -117,7 +117,7 @@ class="security-protected-component">
                     <!-- Description -->
                     <div class="w-72 px-2 py-1 border-r border-gray-200 flex-shrink-0">
                         @if(!empty($child['description']) && is_string($child['description']))
-                            <div class="text-xs text-gray-600">{!! Str::limit(strip_tags($child['description']), 150) !!}</div>
+                            <div class="text-xs text-gray-600">{!! \Illuminate\Support\Str::limit(strip_tags($child['description']), 150) !!}</div>
                         @else
                             <p class="text-xs text-gray-400 italic">Brak opisu.</p>
                         @endif
@@ -220,7 +220,7 @@ class="security-protected-component">
                             <div>
                                 <h2 class="text-xl font-semibold text-gray-900">Dodaj podpunkt</h2>
                                 <p class="text-sm text-gray-600 mt-1">
-                                    Do punktu: <span class="font-medium">{{ e(Str::limit($programPoint->name, 60)) }}</span>
+                                    Do punktu: <span class="font-medium">{{ e(\Illuminate\Support\Str::limit($programPoint->name, 60)) }}</span>
                                 </p>
                             </div>
                             <button wire:click="closeModal" 
@@ -342,7 +342,7 @@ class="security-protected-component">
                                             @if(isset($point['description']) && is_string($point['description']) && trim($point['description']))
                                                 <div class="mb-3">
                                                     <div class="text-sm text-gray-700 bg-gray-50 p-3 rounded-lg border-l-4 border-gray-300">
-                                                        {!! Str::limit(strip_tags($point['description']), 200) !!}
+                                                        {!! \Illuminate\Support\Str::limit(strip_tags($point['description']), 200) !!}
                                                     </div>
                                                 </div>
                                             @endif
@@ -373,7 +373,7 @@ class="security-protected-component">
                                 <h3 class="text-lg font-medium text-gray-900 mb-2">Nie znaleziono punktów programu</h3>
                                 <p class="text-gray-500 mb-4">
                                     @if($searchTerm && is_string($searchTerm))
-                                        Brak wyników dla: <span class="font-medium">"{{ e(Str::limit($searchTerm, 50)) }}"</span>
+                                        Brak wyników dla: <span class="font-medium">"{{ e(\Illuminate\Support\Str::limit($searchTerm, 50)) }}"</span>
                                     @else
                                         Brak dostępnych punktów programu
                                     @endif

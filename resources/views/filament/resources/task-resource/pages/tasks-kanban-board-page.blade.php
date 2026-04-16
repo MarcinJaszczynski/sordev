@@ -2,26 +2,40 @@
     {{-- Enhanced Kanban Board inspired by filament-kanban --}}
     
     {{-- Advanced Filters & Controls --}}
-    <div class="mb-6 flex flex-col sm:flex-row justify-between gap-4 p-4 rounded-lg f-kanban-controls">
+    <div class="mb-4 flex flex-col gap-4 p-4 rounded-lg f-kanban-controls sticky top-0 z-30 backdrop-blur bg-white/95 dark:bg-gray-900/95 border border-gray-200 dark:border-gray-700">
         <div class="flex flex-wrap gap-2">
             <input 
                 wire:model.live="searchTerm" 
                 type="text" 
-                placeholder="🔍 Szukaj zadań..."
+                placeholder="Szukaj zadań po tytule lub opisie"
                 class="fi-input block w-full border py-2 px-3 text-base outline-none transition duration-75 placeholder:text-gray-400 sm:text-sm sm:leading-6 rounded-lg shadow-sm"
             />
             
             <select wire:model.live="filterBy" class="fi-select-input block w-full border py-2 pe-8 ps-3 text-base outline-none transition duration-75 sm:text-sm sm:leading-6 rounded-lg shadow-sm">
-                <option value="">🎯 Wszystkie zadania</option>
-                <option value="author">📝 Moje zadania</option>
-                <option value="assignee">👤 Przypisane do mnie</option>
+                <option value="">Wszystkie zadania</option>
+                <option value="author">Moje zadania</option>
+                <option value="assignee">Przypisane do mnie</option>
             </select>
             
             <select wire:model.live="priorityFilter" class="fi-select-input block w-full border py-2 pe-8 ps-3 text-base outline-none transition duration-75 sm:text-sm sm:leading-6 rounded-lg shadow-sm">
-                <option value="">🔥 Wszystkie priorytety</option>
-                <option value="high">🔴 Wysoki</option>
-                <option value="medium">🟡 Średni</option>
-                <option value="low">🟢 Niski</option>
+                <option value="">Wszystkie priorytety</option>
+                <option value="high">Wysoki</option>
+                <option value="medium">Średni</option>
+                <option value="low">Niski</option>
+            </select>
+
+            <select wire:model.live="contextFilter" class="fi-select-input block w-full border py-2 pe-8 ps-3 text-base outline-none transition duration-75 sm:text-sm sm:leading-6 rounded-lg shadow-sm">
+                <option value="">Wszystkie konteksty</option>
+                <option value="__unassigned">Wolne / nieprzypisane</option>
+                @foreach($taskableTypes as $type => $label)
+                    <option value="{{ $type }}">{{ $label }}</option>
+                @endforeach
+            </select>
+
+            <select wire:model.live="dueFilter" class="fi-select-input block w-full border py-2 pe-8 ps-3 text-base outline-none transition duration-75 sm:text-sm sm:leading-6 rounded-lg shadow-sm">
+                <option value="">Wszystkie terminy</option>
+                <option value="has_due_date">Tylko z terminem</option>
+                <option value="overdue">Tylko po terminie</option>
             </select>
         </div>
         
@@ -39,23 +53,109 @@
         </div>
     </div>
 
+    <div class="mb-6 grid grid-cols-2 md:grid-cols-4 gap-3">
+        <button type="button" wire:click="applyQuickFilter('all')" class="text-left rounded-lg border border-gray-200 dark:border-gray-700 px-3 py-2 hover:bg-gray-50 dark:hover:bg-gray-800/60 transition">
+            <p class="text-xs text-gray-500 dark:text-gray-400">Wszystkie</p>
+            <p class="text-lg font-semibold text-gray-900 dark:text-gray-100">{{ $tasks->count() }}</p>
+        </button>
+        <button type="button" wire:click="applyQuickFilter('assigned_to_me')" class="text-left rounded-lg border border-gray-200 dark:border-gray-700 px-3 py-2 hover:bg-gray-50 dark:hover:bg-gray-800/60 transition">
+            <p class="text-xs text-gray-500 dark:text-gray-400">Przypisane do mnie</p>
+            <p class="text-lg font-semibold text-gray-900 dark:text-gray-100">{{ $tasks->where('assignee_id', $currentUser?->id)->count() }}</p>
+        </button>
+        <button type="button" wire:click="applyQuickFilter('high_priority')" class="text-left rounded-lg border border-gray-200 dark:border-gray-700 px-3 py-2 hover:bg-gray-50 dark:hover:bg-gray-800/60 transition">
+            <p class="text-xs text-gray-500 dark:text-gray-400">Wysoki priorytet</p>
+            <p class="text-lg font-semibold text-gray-900 dark:text-gray-100">{{ $tasks->where('priority', 'high')->count() }}</p>
+        </button>
+        <button type="button" wire:click="applyQuickFilter('overdue')" class="text-left rounded-lg border border-gray-200 dark:border-gray-700 px-3 py-2 hover:bg-gray-50 dark:hover:bg-gray-800/60 transition">
+            <p class="text-xs text-gray-500 dark:text-gray-400">Po terminie</p>
+            <p class="text-lg font-semibold text-gray-900 dark:text-gray-100">{{ $tasks->filter(fn($task) => $task->due_date && $task->due_date->isPast())->count() }}</p>
+        </button>
+    </div>
+
+    <div x-data="{ openCalendar: true, openKanban: true }" class="space-y-4">
+    <div class="mb-0 rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 p-4 shadow-sm">
+        <div class="mb-3 flex items-center justify-between">
+            <div>
+                <h3 class="text-base font-semibold text-gray-900 dark:text-gray-100">Kalendarz zadań (terminy)</h3>
+                <span class="text-xs text-gray-500 dark:text-gray-400">Widoczne są zadania z ustawioną datą wykonania</span>
+            </div>
+            <button type="button" @click="openCalendar = !openCalendar" class="px-2 py-1 text-xs rounded border border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-300">
+                <span x-text="openCalendar ? 'Zwiń' : 'Rozwiń'"></span>
+            </button>
+        </div>
+        <div
+            x-show="openCalendar"
+            x-collapse
+            wire:key="task-calendar-{{ md5(json_encode($calendarEvents ?? [])) }}"
+            x-data="taskCalendarWidget({ events: @js($calendarEvents ?? []) })"
+            x-init="init()"
+            x-effect="if (openCalendar) { ensureVisible() }"
+            class="rounded-lg border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800/40 p-2"
+        >
+            <div x-ref="calendar" style="min-height: 520px;"></div>
+        </div>
+    </div>
+
     {{-- Enhanced Kanban Board using filament-kanban style --}}
+    <div class="mb-2 flex items-center justify-between">
+        <h3 class="text-base font-semibold text-gray-900 dark:text-gray-100">Tablica Kanban</h3>
+        <button type="button" @click="openKanban = !openKanban" class="px-2 py-1 text-xs rounded border border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-300">
+            <span x-text="openKanban ? 'Zwiń' : 'Rozwiń'"></span>
+        </button>
+    </div>
     <div 
+        x-show="openKanban"
+        x-collapse
         x-data="kanbanBoard()" 
         x-init="init()" 
-        class="md:flex overflow-x-auto overflow-y-hidden gap-4 pb-4 p-4 rounded-xl f-kanban-root"
+        class="kanban-board flex overflow-x-auto overflow-y-hidden gap-4 pb-4 p-4 rounded-xl f-kanban-root"
         style="min-height: 70vh;"
-        wire:ignore
     >
         @foreach ($statuses as $status)
-            <div class="kanban-column md:w-[24rem] flex-shrink-0 mb-5 md:min-h-full flex flex-col f-kanban-column"> 
+            @php
+                $columnPalette = [
+                    [
+                        'column' => 'bg-slate-50/60 dark:bg-slate-900/20 border-slate-200 dark:border-slate-800',
+                        'header' => 'bg-slate-100/80 dark:bg-slate-900/40',
+                        'dot' => 'bg-slate-500',
+                        'cardStyle' => 'background-color:#f8fafc;border-color:#64748b;',
+                    ],
+                    [
+                        'column' => 'bg-blue-50/50 dark:bg-blue-900/10 border-blue-200 dark:border-blue-900/40',
+                        'header' => 'bg-blue-100/70 dark:bg-blue-900/20',
+                        'dot' => 'bg-blue-500',
+                        'cardStyle' => 'background-color:#eff6ff;border-color:#3b82f6;',
+                    ],
+                    [
+                        'column' => 'bg-emerald-50/50 dark:bg-emerald-900/10 border-emerald-200 dark:border-emerald-900/40',
+                        'header' => 'bg-emerald-100/70 dark:bg-emerald-900/20',
+                        'dot' => 'bg-emerald-500',
+                        'cardStyle' => 'background-color:#ecfdf5;border-color:#10b981;',
+                    ],
+                    [
+                        'column' => 'bg-amber-50/50 dark:bg-amber-900/10 border-amber-200 dark:border-amber-900/40',
+                        'header' => 'bg-amber-100/70 dark:bg-amber-900/20',
+                        'dot' => 'bg-amber-500',
+                        'cardStyle' => 'background-color:#fffbeb;border-color:#f59e0b;',
+                    ],
+                    [
+                        'column' => 'bg-violet-50/50 dark:bg-violet-900/10 border-violet-200 dark:border-violet-900/40',
+                        'header' => 'bg-violet-100/70 dark:bg-violet-900/20',
+                        'dot' => 'bg-violet-500',
+                        'cardStyle' => 'background-color:#f5f3ff;border-color:#8b5cf6;',
+                    ],
+                ];
+                $palette = $columnPalette[$loop->index % count($columnPalette)];
+            @endphp
+
+            <div class="kanban-column flex-1 min-w-[16rem] mb-5 md:min-h-full flex flex-col f-kanban-column border rounded-xl p-2 {{ $palette['column'] }}"> 
                 
                 {{-- Enhanced Column Header inspired by filament-kanban --}}
-                <h3 class="kanban-column-header mb-3 px-3 py-2 font-bold text-base flex items-center justify-between rounded-lg f-kanban-column-header">
+                <h3 class="kanban-column-header mb-3 px-3 py-2 font-bold text-base flex items-center justify-between rounded-lg f-kanban-column-header {{ $palette['header'] }}">
                     <div class="flex items-center gap-2">
-                        <span class="text-blue-400 dark:text-blue-300">●</span>
-                        <span class="text-white dark:text-gray-100">{{ $status->name }}</span>
-                        <span class="text-xs font-black text-gray-200 px-2 py-1 rounded-full f-kanban-count">
+                        <span class="h-2.5 w-2.5 rounded-full {{ $palette['dot'] }}"></span>
+                        <span class="text-gray-900 dark:text-gray-100">{{ $status->name }}</span>
+                        <span class="text-xs font-black text-gray-700 dark:text-gray-200 px-2 py-1 rounded-full f-kanban-count">
                             {{ $tasks->where('status_id', $status->id)->count() }}
                         </span>
                     </div>
@@ -65,36 +165,54 @@
                         <div class="relative" x-data="{ open: false }">
                             <button 
                                 @click="open = !open"
-                                class="text-gray-300 dark:text-gray-400 hover:text-white dark:hover:text-gray-200 transition-colors p-1 rounded hover:bg-gray-600 dark:hover:bg-gray-700"
+                                class="text-gray-500 dark:text-gray-400 hover:text-gray-800 dark:hover:text-gray-100 transition-colors p-1 rounded hover:bg-gray-100 dark:hover:bg-gray-700"
                                 title="Sortuj zadania">
                                 <x-heroicon-m-bars-3-bottom-left class="w-4 h-4" />
                             </button>
                             
                             <div x-show="open" @click.away="open = false" class="absolute right-0 top-8 z-50 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-600 rounded-lg shadow-lg min-w-48">
                                 <div class="py-1">
-                                    <button wire:click="sortColumn({{ $status->id }}, 'priority_desc')" class="w-full text-left px-3 py-2 text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700">📈 Priorytet (wys-nis)</button>
-                                    <button wire:click="sortColumn({{ $status->id }}, 'priority_asc')" class="w-full text-left px-3 py-2 text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700">📉 Priorytet (nis-wys)</button>
-                                    <button wire:click="sortColumn({{ $status->id }}, 'due_date_asc')" class="w-full text-left px-3 py-2 text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700">📅 Data (najwcześniej)</button>
-                                    <button wire:click="sortColumn({{ $status->id }}, 'due_date_desc')" class="w-full text-left px-3 py-2 text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700">📅 Data (najpóźniej)</button>
-                                    <button wire:click="sortColumn({{ $status->id }}, 'title_asc')" class="w-full text-left px-3 py-2 text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700">🔤 Tytuł (A-Z)</button>
-                                    <button wire:click="sortColumn({{ $status->id }}, 'title_desc')" class="w-full text-left px-3 py-2 text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700">🔤 Tytuł (Z-A)</button>
-                                    <button wire:click="sortColumn({{ $status->id }}, 'created_desc')" class="w-full text-left px-3 py-2 text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700">🕒 Najnowsze</button>
-                                    <button wire:click="sortColumn({{ $status->id }}, 'created_asc')" class="w-full text-left px-3 py-2 text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700">🕒 Najstarsze</button>
+                                    <button wire:click="sortColumn({{ $status->id }}, 'activity_desc')" class="w-full text-left px-3 py-2 text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700">Aktywność (najnowsza)</button>
+                                    <button wire:click="sortColumn({{ $status->id }}, 'activity_asc')" class="w-full text-left px-3 py-2 text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700">Aktywność (najstarsza)</button>
+                                    <button wire:click="sortColumn({{ $status->id }}, 'priority_desc')" class="w-full text-left px-3 py-2 text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700">Priorytet (wysoki → niski)</button>
+                                    <button wire:click="sortColumn({{ $status->id }}, 'priority_asc')" class="w-full text-left px-3 py-2 text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700">Priorytet (niski → wysoki)</button>
+                                    <button wire:click="sortColumn({{ $status->id }}, 'due_date_asc')" class="w-full text-left px-3 py-2 text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700">Termin (najwcześniej)</button>
+                                    <button wire:click="sortColumn({{ $status->id }}, 'due_date_desc')" class="w-full text-left px-3 py-2 text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700">Termin (najpóźniej)</button>
+                                    <button wire:click="sortColumn({{ $status->id }}, 'title_asc')" class="w-full text-left px-3 py-2 text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700">Tytuł (A-Z)</button>
+                                    <button wire:click="sortColumn({{ $status->id }}, 'title_desc')" class="w-full text-left px-3 py-2 text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700">Tytuł (Z-A)</button>
+                                    <button wire:click="sortColumn({{ $status->id }}, 'created_desc')" class="w-full text-left px-3 py-2 text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700">Najnowsze</button>
+                                    <button wire:click="sortColumn({{ $status->id }}, 'created_asc')" class="w-full text-left px-3 py-2 text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700">Najstarsze</button>
                                 </div>
                             </div>
                         </div>
                     </div>
                 </h3>
 
+                {{-- Column progress bar --}}
+                @php
+                    $colCount = $tasks->where('status_id', $status->id)->count();
+                    $totalCount = max($tasks->count(), 1);
+                    $colPercent = round(($colCount / $totalCount) * 100);
+                @endphp
+                @if($colCount > 0)
+                <div class="mx-1 mb-2">
+                    <div class="w-full bg-gray-200 dark:bg-gray-700 rounded-full h-1.5">
+                        <div class="h-1.5 rounded-full transition-all duration-500 {{ $palette['dot'] }}" style="width: {{ $colPercent }}%"></div>
+                    </div>
+                </div>
+                @endif
+
                 {{-- Tasks Container using filament-kanban styling --}}
                 <div 
                     class="tasks-container flex flex-col flex-1 gap-3 p-0"
                     data-status-id="{{ $status->id }}"
                 >
-                    @foreach ($tasks->where('status_id', $status->id)->sortBy('order') as $task)
+                    @foreach ($tasks->where('status_id', $status->id) as $task)
                         <div 
                             id="{{ $task->id }}" 
                             wire:click="editTask({{ $task->id }})"
+                            x-data="{}"
+                            style="{{ $palette['cardStyle'] }}"
                             class="task-card record group f-kanban-task px-4 py-4 cursor-grab transition hover:shadow-xl transform hover:-translate-y-1 relative" 
                             @if($task->updated_at && now()->diffInSeconds($task->updated_at, true) < 3)
                                 x-data
@@ -108,164 +226,253 @@
                                 "
                             @endif
                         >
-                            {{-- Task Header --}}
-                            <div class="flex items-start justify-between mb-3">
-                                <h4 class="font-bold text-base leading-5 flex-1 pr-2">
+                            @php
+                                $statusName = mb_strtolower($task->status?->name ?? '');
+                                $isNewTask = str_contains($statusName, 'nowe') || str_contains($statusName, 'nowy');
+                                $isInProgressTask = str_contains($statusName, 'w trakcie');
+                                $isOverdueTask = $task->due_date && $task->due_date->isPast();
+                                $hasRecentComment = $task->comments?->contains(fn ($comment) => $comment->created_at && now()->diffInHours($comment->created_at, true) <= 24) ?? false;
+                                $isRecentlyUpdated = $task->updated_at && now()->diffInHours($task->updated_at, true) <= 24;
+                                $isRecentlyActive = $hasRecentComment || $isRecentlyUpdated;
+
+                                $titleColorClass = 'text-gray-900 dark:text-gray-100';
+
+                                if ($isOverdueTask) {
+                                    $titleColorClass = 'text-red-700 dark:text-red-300';
+                                } elseif ($isRecentlyActive) {
+                                    $titleColorClass = 'text-orange-700 dark:text-orange-300';
+                                } elseif ($isInProgressTask) {
+                                    $titleColorClass = 'text-blue-700 dark:text-blue-300';
+                                } elseif ($isNewTask) {
+                                    $titleColorClass = 'text-green-700 dark:text-green-300';
+                                }
+
+                                $priorityLabel = match ($task->priority) {
+                                    'low' => 'Niski',
+                                    'medium' => 'Średni',
+                                    'high' => 'Wysoki',
+                                    default => 'Brak priorytetu',
+                                };
+                                $priorityStyles = match ($task->priority) {
+                                    'low' => 'background-color:#166534;color:#ffffff;border-color:#14532d;',
+                                    'medium' => 'background-color:#b45309;color:#ffffff;border-color:#78350f;',
+                                    'high' => 'background-color:#b91c1c;color:#ffffff;border-color:#7f1d1d;',
+                                    default => 'background-color:#4b5563;color:#ffffff;border-color:#374151;',
+                                };
+
+                                $latestComment = $task->comments?->sortByDesc('created_at')->first();
+                                $latestAttachmentAt = $task->attachments?->sortByDesc('created_at')->first()?->created_at;
+                                $latestSubtaskAt = $task->subtasks?->sortByDesc('updated_at')->first()?->updated_at;
+
+                                $latestActivity = collect([
+                                    ['label' => 'zadanie', 'at' => $task->updated_at ?: $task->created_at],
+                                    ['label' => 'komentarz', 'at' => $latestComment?->created_at],
+                                    ['label' => 'załącznik', 'at' => $latestAttachmentAt],
+                                    ['label' => 'podzadanie', 'at' => $latestSubtaskAt],
+                                ])
+                                    ->filter(fn (array $item): bool => filled($item['at']))
+                                    ->sortByDesc(fn (array $item): int => $item['at']->timestamp)
+                                    ->first();
+
+                                $attachments = $task->attachments?->sortByDesc('created_at') ?? collect();
+                                $attachmentPreview = $attachments->take(3);
+
+                                $completedSubtasks = $task->subtasks?->where('status.name', 'Zakończone')->count() ?? 0;
+                                $totalSubtasks = $task->subtasks?->count() ?? 0;
+                                $progressPercent = $totalSubtasks > 0 ? round(($completedSubtasks / $totalSubtasks) * 100) : 0;
+                            @endphp
+
+                            {{-- 1) Tytuł + priorytet --}}
+                            <div class="flex items-start justify-between gap-3 mb-2">
+                                <h4 class="font-bold text-base leading-5 flex-1 {{ $titleColorClass }}">
                                     {{ $task->title }}
                                 </h4>
-                                
-                                {{-- Priority Badge --}}
-                                <span class="priority-badge flex-shrink-0 text-xs px-2 py-1 rounded-full font-bold border f-kanban-priority" 
-                                    style="background-color: {{ match ($task->priority) {
-                                        'low' => '#059669',
-                                        'medium' => '#D97706', 
-                                        'high' => '#DC2626',
-                                        default => '#6B7280'
-                                    } }}; color: white; border-color: {{ match ($task->priority) {
-                                        'low' => '#047857',
-                                        'medium' => '#B45309',
-                                        'high' => '#B91C1C', 
-                                        default => '#4B5563'
-                                    } }};">
-                                    {{ match ($task->priority) {
-                                        'low' => 'LOW',
-                                        'medium' => 'MED',
-                                        'high' => 'HIGH',
-                                        default => 'NONE'
-                                    } }}
+                                <span class="priority-badge flex-shrink-0 text-xs px-2 py-1 rounded-full font-bold border" style="{{ $priorityStyles }}">
+                                    {{ $priorityLabel }}
                                 </span>
                             </div>
 
-                            {{-- Task Description --}}
+                            {{-- 2) Skrócony opis --}}
                             @if($task->description)
-                                <p class="text-sm text-gray-300 dark:text-gray-400 mb-3 line-clamp-2 font-normal">
-                                    {{ Str::limit(strip_tags($task->description), 100) }}
-                                </p>
+                                @php
+                                    $rawDescription = (string) $task->description;
+                                    $descriptionHasHtml = $rawDescription !== strip_tags($rawDescription);
+                                    $descriptionPreviewHtml = $descriptionHasHtml
+                                        ? strip_tags($rawDescription, '<p><br><strong><b><em><i><u><ul><ol><li><blockquote>')
+                                        : nl2br(e(\Illuminate\Support\Str::limit($rawDescription, 420)));
+                                @endphp
+                                <div class="mb-3 relative">
+                                    <div class="text-[13px] leading-6 font-medium text-black dark:text-gray-100 max-h-28 overflow-hidden [&_strong]:font-black [&_b]:font-black [&_em]:italic [&_i]:italic [&_u]:underline [&_ul]:list-disc [&_ul]:pl-5 [&_ol]:list-decimal [&_ol]:pl-5 [&_li]:mb-0.5 [&_blockquote]:border-l-2 [&_blockquote]:border-gray-300 dark:[&_blockquote]:border-gray-600 [&_blockquote]:pl-3 [&_p]:mb-1">
+                                        {!! $descriptionPreviewHtml !!}
+                                    </div>
+                                    <div class="pointer-events-none absolute inset-x-0 bottom-0 h-7 bg-gradient-to-t from-transparent via-white/70 to-transparent dark:via-gray-900/70"></div>
+                                </div>
                             @endif
 
-                            {{-- Task Meta Info --}}
-                            <div class="space-y-2 mb-3">
-                                @if($task->assignee)
-                                    <div class="flex items-center text-sm px-3 py-2 rounded-lg f-kanban-meta">
-                                        <x-heroicon-m-user class="w-4 h-4 mr-2 text-gray-400 dark:text-gray-500" />
-                                        <span class="font-medium text-white dark:text-gray-200">{{ $task->assignee->name }}</span>
-                                    </div>
-                                @endif
-
+                            {{-- 3) Do kiedy --}}
+                            <div class="mb-2 text-xs text-gray-700 dark:text-gray-200 px-3 py-2 rounded-lg f-kanban-pill">
+                                <span class="font-semibold">Do kiedy:</span>
                                 @if($task->due_date)
-                                    <div class="flex items-center text-sm px-3 py-2 rounded-lg {{ $task->due_date->isPast() ? 'f-kanban-meta-danger' : 'f-kanban-meta-default' }}">
-                                        <x-heroicon-m-clock class="w-4 h-4 mr-2" />
-                                        <span class="font-medium">{{ $task->due_date->format('d.m.Y H:i') }}</span>
-                                        @if($task->due_date->isPast())
-                                            <span class="ml-2 text-red-100 dark:text-red-200 font-bold">PRZETERMINOWANE ⚠️</span>
-                                        @elseif($task->due_date->diffInDays() <= 1)
-                                            <span class="ml-2 text-orange-200 dark:text-orange-300 font-bold">PILNE 🔥</span>
-                                        @endif
-                                    </div>
-                                @endif
-
-                                {{-- Subtasks Progress --}}
-                                @if($task->subtasks && $task->subtasks->count() > 0)
-                                    @php
-                                        $completedSubtasks = $task->subtasks->where('status.name', 'Zakończone')->count();
-                                        $totalSubtasks = $task->subtasks->count();
-                                        $progressPercent = $totalSubtasks > 0 ? round(($completedSubtasks / $totalSubtasks) * 100) : 0;
-                                    @endphp
-                                    <div class="bg-gray-600 dark:bg-gray-700 px-3 py-2 rounded-lg border border-gray-500 dark:border-gray-600">
-                                        <div class="flex items-center justify-between text-sm text-gray-200 dark:text-gray-300 mb-2">
-                                            <div class="flex items-center">
-                                                <x-heroicon-m-list-bullet class="w-4 h-4 mr-2 text-gray-400" />
-                                                <span class="font-medium">Podzadania: {{ $completedSubtasks }}/{{ $totalSubtasks }}</span>
-                                            </div>
-                                            <span class="text-xs font-bold text-green-300 dark:text-green-400">{{ $progressPercent }}%</span>
-                                        </div>
-                                        <div class="w-full bg-gray-500 dark:bg-gray-600 rounded-full h-2 border border-gray-400 dark:border-gray-500">
-                                            <div class="bg-green-500 dark:bg-green-400 h-2 rounded-full transition-all duration-300" style="width: {{ $progressPercent }}%"></div>
-                                        </div>
-                                    </div>
+                                    <span class="ml-1 font-medium">{{ $task->due_date->format('d.m.Y H:i') }}</span>
+                                    @if($task->due_date->isPast())
+                                        <span class="ml-2 font-bold text-red-700 dark:text-red-300">Po terminie</span>
+                                    @endif
+                                @else
+                                    <span class="ml-1">Brak terminu</span>
                                 @endif
                             </div>
 
-                            {{-- Task Footer --}}
-                            <div class="flex items-center justify-between pt-3 border-t border-gray-600 dark:border-gray-700">
-                                <div class="flex items-center gap-2">
-                                    @if($task->attachments && $task->attachments->count() > 0)
-                                        <span class="text-xs text-gray-300 dark:text-gray-400 flex items-center bg-gray-600 dark:bg-gray-700 px-2 py-1 rounded-md border border-gray-500 dark:border-gray-600">
-                                            <x-heroicon-m-paper-clip class="w-3 h-3 mr-1" />
-                                            <span class="font-medium">{{ $task->attachments->count() }}</span>
-                                        </span>
-                                    @endif
-                                    
-                                    @if($task->comments && $task->comments->count() > 0)
-                                        <span class="text-xs text-gray-300 dark:text-gray-400 flex items-center bg-gray-600 dark:bg-gray-700 px-2 py-1 rounded-md border border-gray-500 dark:border-gray-600">
-                                            <x-heroicon-m-chat-bubble-left class="w-3 h-3 mr-1" />
-                                            <span class="font-medium">{{ $task->comments->count() }}</span>
-                                        </span>
-                                    @endif
+                            {{-- 4) Dla kogo --}}
+                            <div class="mb-3 text-xs text-gray-700 dark:text-gray-200 px-3 py-2 rounded-lg f-kanban-pill">
+                                <span class="font-semibold">Dla kogo:</span>
+                                <span class="ml-1 font-medium">{{ $task->assignee?->name ?? 'Nie przypisano' }}</span>
+                            </div>
 
-                                    {{-- Task Actions Quick Access --}}
-                                    <div class="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
-                                        <button 
-                                            wire:click.stop="showSubtasks({{ $task->id }})"
-                                            class="text-gray-400 dark:text-gray-500 hover:text-blue-400 dark:hover:text-blue-300 transition-colors p-1 rounded hover:bg-gray-600 dark:hover:bg-gray-700"
-                                            title="Pokaż podzadania">
-                                            <x-heroicon-m-squares-plus class="w-4 h-4" />
-                                        </button>
-                                        
-                                        <button 
-                                            wire:click.stop="showComments({{ $task->id }})"
-                                            class="text-gray-400 dark:text-gray-500 hover:text-green-400 dark:hover:text-green-300 transition-colors p-1 rounded hover:bg-gray-600 dark:hover:bg-gray-700"
-                                            title="Komentarze">
-                                            <x-heroicon-m-chat-bubble-left-ellipsis class="w-4 h-4" />
-                                        </button>
-                                        
-                                        <button 
-                                            wire:click.stop="showAttachments({{ $task->id }})"
-                                            class="text-gray-400 dark:text-gray-500 hover:text-purple-400 dark:hover:text-purple-300 transition-colors p-1 rounded hover:bg-gray-600 dark:hover:bg-gray-700"
-                                            title="Załączniki">
-                                            <x-heroicon-m-paper-clip class="w-4 h-4" />
-                                        </button>
+                            {{-- 5) Bezpośrednie linki do kontekstu --}}
+                            @if(!empty($taskContextTrees[$task->id]))
+                                <div class="mb-3">
+                                    <p class="text-xs font-semibold text-gray-700 dark:text-gray-300 mb-1.5">Dotyczy:</p>
+                                    <div class="flex flex-wrap items-center gap-1.5 text-xs">
+                                    @foreach($taskContextTrees[$task->id] as $node)
+                                        @if(!empty($node['url']))
+                                            <a
+                                                href="{{ $node['url'] }}"
+                                                target="_blank"
+                                                rel="noopener"
+                                                wire:click.stop
+                                                class="inline-flex items-center px-2 py-1 rounded-md border border-cyan-200 dark:border-cyan-800 bg-cyan-50 dark:bg-cyan-900/40 text-cyan-700 dark:text-cyan-200 hover:bg-cyan-100 dark:hover:bg-cyan-800/60 transition"
+                                            >
+                                                {{ $node['label'] }}
+                                            </a>
+                                        @else
+                                            <span class="inline-flex items-center px-2 py-1 rounded-md border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800 text-gray-700 dark:text-gray-200">{{ $node['label'] }}</span>
+                                        @endif
+
+                                        @if(! $loop->last)
+                                            <span class="text-gray-400">&gt;</span>
+                                        @endif
+                                    @endforeach
                                     </div>
                                 </div>
-                                
-                                {{-- Delete Button --}}
+                            @endif
+
+                            {{-- 6) Ostatnia aktywność --}}
+                            @if($latestActivity)
+                                <div class="mb-3 text-xs text-orange-700 dark:text-orange-200 rounded-lg border border-orange-200 dark:border-orange-800 bg-orange-50 dark:bg-orange-900/30 px-3 py-2 font-semibold">
+                                    <x-heroicon-m-bolt class="w-3.5 h-3.5" />
+                                    <span class="ml-1">Ostatnia aktywność: {{ ucfirst($latestActivity['label']) }} {{ $latestActivity['at']->diffForHumans() }}</span>
+                                </div>
+                            @endif
+
+                            {{-- 7) Ostatni komentarz --}}
+                            @if($latestComment)
+                                @php
+                                    $rawComment = (string) ($latestComment->content ?? '');
+                                    $commentHasHtml = $rawComment !== strip_tags($rawComment);
+                                    $commentPreviewHtml = $commentHasHtml
+                                        ? strip_tags($rawComment, '<p><br><strong><b><em><i><u><ul><ol><li><blockquote>')
+                                        : nl2br(e(\Illuminate\Support\Str::limit($rawComment, 360)));
+                                @endphp
+                                <div class="mb-3 rounded-xl border border-emerald-200 dark:border-emerald-800 px-3 py-2.5 bg-emerald-50/85 dark:bg-emerald-900/20 shadow-sm ring-1 ring-emerald-200/50 dark:ring-emerald-900/30">
+                                    <div class="flex items-center justify-between gap-2 mb-1">
+                                        <span class="text-[10px] uppercase tracking-[0.12em] font-black text-emerald-800 dark:text-emerald-200">Ostatni komentarz</span>
+                                        <span class="text-xs text-emerald-700/80 dark:text-emerald-300/90">{{ $latestComment->created_at?->diffForHumans() }}</span>
+                                    </div>
+                                    <p class="text-xs font-bold text-emerald-900 dark:text-emerald-100 mb-1.5">{{ $latestComment->author?->name ?? 'Nieznany autor' }}</p>
+                                    <div class="relative rounded-lg border-l-4 border-emerald-400/80 dark:border-emerald-500/80 bg-white/75 dark:bg-emerald-950/25 pl-3 pr-2 py-1.5">
+                                        <div class="text-[13px] leading-6 font-medium text-emerald-900 dark:text-emerald-50 max-h-28 overflow-hidden [&_strong]:font-black [&_b]:font-black [&_em]:italic [&_i]:italic [&_u]:underline [&_ul]:list-disc [&_ul]:pl-5 [&_ol]:list-decimal [&_ol]:pl-5 [&_li]:mb-0.5 [&_blockquote]:border-l-2 [&_blockquote]:border-emerald-300 dark:[&_blockquote]:border-emerald-700 [&_blockquote]:pl-3 [&_p]:mb-1">
+                                            {!! $commentPreviewHtml !!}
+                                        </div>
+                                        <div class="pointer-events-none absolute inset-x-0 bottom-0 h-7 bg-gradient-to-t from-emerald-50/95 via-emerald-50/70 to-transparent dark:from-emerald-950/95 dark:via-emerald-950/70"></div>
+                                    </div>
+                                </div>
+                            @endif
+
+                            {{-- 8) Bezpośrednie linki do plików --}}
+                            @if($attachmentPreview->isNotEmpty())
+                                <div class="mb-3">
+                                    <p class="text-xs font-semibold text-gray-700 dark:text-gray-300 mb-1.5">Powiązane pliki:</p>
+                                    <div class="flex flex-wrap gap-1.5">
+                                        @foreach($attachmentPreview as $attachment)
+                                            @if($attachment->public_url)
+                                                <a
+                                                    href="{{ $attachment->public_url }}"
+                                                    target="_blank"
+                                                    rel="noopener"
+                                                    wire:click.stop
+                                                    class="inline-flex items-center gap-1 px-2 py-1 text-xs rounded-md border border-purple-200 dark:border-purple-800 bg-purple-50 dark:bg-purple-900/30 text-purple-700 dark:text-purple-200 hover:bg-purple-100 dark:hover:bg-purple-800/50 transition"
+                                                >
+                                                    <x-heroicon-m-paper-clip class="w-3 h-3" />
+                                                    {{ \Illuminate\Support\Str::limit($attachment->filename, 28) }}
+                                                </a>
+                                            @endif
+                                        @endforeach
+
+                                        @if($attachments->count() > 3)
+                                            <button
+                                                type="button"
+                                                wire:click.stop="showAttachments({{ $task->id }})"
+                                                class="inline-flex items-center px-2 py-1 text-xs rounded-md border border-gray-300 dark:border-gray-600 bg-white/80 dark:bg-gray-800 text-gray-700 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-700 transition"
+                                            >
+                                                +{{ $attachments->count() - 3 }} więcej
+                                            </button>
+                                        @endif
+                                    </div>
+                                </div>
+                            @endif
+
+                            {{-- 9) Podzadania X/Y --}}
+                            @if($totalSubtasks > 0)
+                                <div class="mb-3 px-3 py-2 rounded-lg f-kanban-pill">
+                                    <div class="flex items-center justify-between text-sm text-gray-700 dark:text-gray-200 mb-1.5">
+                                        <span class="font-semibold">Podzadania {{ $completedSubtasks }}/{{ $totalSubtasks }}</span>
+                                        <span class="text-xs font-bold text-green-700 dark:text-green-400">{{ $progressPercent }}%</span>
+                                    </div>
+                                    <div class="w-full bg-gray-200 dark:bg-gray-700 rounded-full h-1.5 border border-gray-300 dark:border-gray-600">
+                                        <div class="bg-green-500 dark:bg-green-400 h-1.5 rounded-full transition-all duration-300" style="width: {{ $progressPercent }}%"></div>
+                                    </div>
+                                </div>
+                            @endif
+
+                            <div class="flex items-center justify-between pt-2 border-t border-gray-200 dark:border-gray-700">
+                                <div class="flex items-center gap-1.5">
+                                    <button
+                                        wire:click.stop="showSubtasks({{ $task->id }})"
+                                        class="text-xs text-gray-700 dark:text-gray-300 flex items-center px-2 py-1 rounded-md border border-gray-300 dark:border-gray-600 bg-white/90 dark:bg-gray-800 hover:bg-gray-100 dark:hover:bg-gray-700"
+                                        title="Pokaż podzadania"
+                                    >
+                                        <x-heroicon-m-squares-plus class="w-3.5 h-3.5 mr-1" />
+                                        Podzadania
+                                    </button>
+                                    <button
+                                        wire:click.stop="showComments({{ $task->id }})"
+                                        class="text-xs text-gray-700 dark:text-gray-300 flex items-center px-2 py-1 rounded-md border border-gray-300 dark:border-gray-600 bg-white/90 dark:bg-gray-800 hover:bg-gray-100 dark:hover:bg-gray-700"
+                                        title="Pokaż komentarze"
+                                    >
+                                        <x-heroicon-m-chat-bubble-left-ellipsis class="w-3.5 h-3.5 mr-1" />
+                                        Komentarze
+                                    </button>
+                                    <button
+                                        wire:click.stop="showAttachments({{ $task->id }})"
+                                        class="text-xs text-gray-700 dark:text-gray-300 flex items-center px-2 py-1 rounded-md border border-gray-300 dark:border-gray-600 bg-white/90 dark:bg-gray-800 hover:bg-gray-100 dark:hover:bg-gray-700"
+                                        title="Pokaż załączniki"
+                                    >
+                                        <x-heroicon-m-paper-clip class="w-3.5 h-3.5 mr-1" />
+                                        Pliki
+                                    </button>
+                                </div>
+
                                 <div class="opacity-0 group-hover:opacity-100 transition-opacity">
                                     <button 
                                         wire:click.stop="deleteTask({{ $task->id }})"
                                         onclick="return confirm('Czy na pewno chcesz usunąć to zadanie?')"
-                                        class="text-gray-400 dark:text-gray-500 hover:text-red-400 dark:hover:text-red-300 transition-colors p-1 rounded hover:bg-gray-600 dark:hover:bg-gray-700"
+                                        class="text-gray-500 dark:text-gray-400 hover:text-red-600 dark:hover:text-red-300 transition-colors p-1 rounded hover:bg-gray-100 dark:hover:bg-gray-700"
                                         title="Usuń zadanie">
                                         <x-heroicon-m-trash class="w-4 h-4" />
                                     </button>
                                 </div>
                             </div>
 
-                            {{-- Rozwijana lista konwersacji po najechaniu --}}
-                            <div x-data="{ open: false }" @mouseenter="open = true" @mouseleave="open = false" class="absolute right-2 top-2 z-40">
-                                <button type="button" class="text-xs text-blue-400 hover:text-blue-200 focus:outline-none" @mouseenter="open = true">
-                                    💬
-                                </button>
-                                <div x-show="open" x-transition class="mt-2 w-72 bg-white dark:bg-gray-900 border border-gray-300 dark:border-gray-700 rounded-lg shadow-lg p-3 text-sm text-gray-800 dark:text-gray-100" style="display: none;">
-                                    <div class="font-semibold mb-2 text-blue-700 dark:text-blue-300">Wiadomości / Komentarze</div>
-                                    @if($task->comments && $task->comments->count() > 0)
-                                        <ul class="divide-y divide-gray-200 dark:divide-gray-700 max-h-48 overflow-y-auto">
-                                            @foreach($task->comments as $comment)
-                                                <li class="py-2">
-                                                    <div class="flex items-center gap-2">
-                                                        <span class="font-bold">{{ $comment->author->name ?? 'Anonim' }}</span>
-                                                        <span class="text-xs text-gray-500">{{ $comment->created_at->format('d.m.Y H:i') }}</span>
-                                                    </div>
-                                                    <div class="text-xs text-gray-700 dark:text-gray-300 mt-1">
-                                                        {{ $comment->content }}
-                                                    </div>
-                                                </li>
-                                            @endforeach
-                                        </ul>
-                                    @else
-                                        <div class="text-gray-400 text-xs">Brak wiadomości</div>
-                                    @endif
-                                </div>
-                            </div>
                         </div>
                     @endforeach
                     
@@ -277,8 +484,18 @@
                         </div>
                     @endif
                 </div>
+
+                {{-- Per-column quick add button --}}
+                <button
+                    wire:click="openQuickAddModal({{ $status->id }})"
+                    class="mt-2 w-full flex items-center justify-center gap-1.5 px-3 py-2 text-sm text-gray-500 dark:text-gray-400 border-2 border-dashed border-gray-300 dark:border-gray-600 rounded-lg hover:border-gray-400 dark:hover:border-gray-500 hover:text-gray-700 dark:hover:text-gray-200 hover:bg-white/60 dark:hover:bg-gray-800/50 transition-all duration-150"
+                >
+                    <x-heroicon-m-plus class="w-4 h-4" />
+                    Dodaj zadanie
+                </button>
             </div>
         @endforeach
+    </div>
     </div>
 
     {{-- Quick Add Task Modal --}}
@@ -341,6 +558,38 @@
                     @error('quickTaskAssigneeId') <span class="text-red-500 text-sm">{{ $message }}</span> @enderror
                 </div>
             </div>
+
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div>
+                    <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Kontekst zadania</label>
+                    <select 
+                        wire:model.live="quickTaskableType"
+                        class="block w-full border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-gray-200 rounded-md shadow-sm focus:ring-primary-500 focus:border-primary-500 sm:text-sm"
+                    >
+                        <option value="">Wolne / nieprzypisane</option>
+                        @foreach($taskableTypes as $type => $label)
+                            <option value="{{ $type }}">{{ $label }}</option>
+                        @endforeach
+                    </select>
+                    @error('quickTaskableType') <span class="text-red-500 text-sm">{{ $message }}</span> @enderror
+                </div>
+
+                @if($quickTaskableType)
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Powiązany rekord</label>
+                        <select 
+                            wire:model="quickTaskableId"
+                            class="block w-full border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-gray-200 rounded-md shadow-sm focus:ring-primary-500 focus:border-primary-500 sm:text-sm"
+                        >
+                            <option value="">Wybierz rekord</option>
+                            @foreach($quickTaskableRecords as $recordId => $recordLabel)
+                                <option value="{{ $recordId }}">{{ $recordLabel }}</option>
+                            @endforeach
+                        </select>
+                        @error('quickTaskableId') <span class="text-red-500 text-sm">{{ $message }}</span> @enderror
+                    </div>
+                @endif
+            </div>
         </div>
 
         <x-slot name="footer">
@@ -365,6 +614,70 @@
 
         @if($editingTask)
         <div class="space-y-6">
+            <div class="rounded-lg border border-gray-200 dark:border-gray-700 p-4">
+                <h4 class="text-sm font-semibold text-gray-900 dark:text-gray-100 mb-3">Szczegóły zadania</h4>
+                <div class="grid grid-cols-2 md:grid-cols-4 gap-3 mb-3">
+                    <div class="rounded-md bg-gray-50 dark:bg-gray-800 px-3 py-2">
+                        <p class="text-xs text-gray-500 dark:text-gray-400">ID</p>
+                        <p class="text-sm font-semibold text-gray-900 dark:text-gray-100">#{{ $editingTask->id }}</p>
+                    </div>
+                    <div class="rounded-md bg-gray-50 dark:bg-gray-800 px-3 py-2">
+                        <p class="text-xs text-gray-500 dark:text-gray-400">Utworzone</p>
+                        <p class="text-sm font-semibold text-gray-900 dark:text-gray-100">{{ $editingTask->created_at?->format('d.m.Y H:i') ?? '—' }}</p>
+                    </div>
+                    <div class="rounded-md bg-gray-50 dark:bg-gray-800 px-3 py-2">
+                        <p class="text-xs text-gray-500 dark:text-gray-400">Ostatnia aktualizacja</p>
+                        <p class="text-sm font-semibold text-gray-900 dark:text-gray-100">{{ $editingTask->updated_at?->diffForHumans() ?? '—' }}</p>
+                    </div>
+                    <div class="rounded-md bg-gray-50 dark:bg-gray-800 px-3 py-2">
+                        <p class="text-xs text-gray-500 dark:text-gray-400">Kontekst</p>
+                        <p class="text-sm font-semibold text-gray-900 dark:text-gray-100">{{ $editingTask->task_context_label ?: 'Wolne / nieprzypisane' }}</p>
+                    </div>
+                </div>
+
+                @if(!empty($editingTaskContextUrl))
+                    <a
+                        href="{{ $editingTaskContextUrl }}"
+                        target="_blank"
+                        rel="noopener"
+                        class="inline-flex items-center gap-2 text-sm font-semibold px-3 py-2 rounded-md border border-cyan-200 dark:border-cyan-800 bg-cyan-50 dark:bg-cyan-900/40 text-cyan-700 dark:text-cyan-200 hover:bg-cyan-100 dark:hover:bg-cyan-800/60 transition"
+                    >
+                        <x-heroicon-m-arrow-top-right-on-square class="w-4 h-4" />
+                        Otwórz powiązany element
+                    </a>
+                @endif
+
+                @if(!empty($editingTaskContextTree))
+                    <div class="mt-3 flex flex-wrap items-center gap-1.5 text-xs">
+                        @foreach($editingTaskContextTree as $node)
+                            @if(!empty($node['url']))
+                                <a href="{{ $node['url'] }}" target="_blank" rel="noopener" class="inline-flex items-center px-2 py-1 rounded-md border border-cyan-200 dark:border-cyan-800 bg-cyan-50 dark:bg-cyan-900/40 text-cyan-700 dark:text-cyan-200 hover:bg-cyan-100 dark:hover:bg-cyan-800/60 transition">{{ $node['label'] }}</a>
+                            @else
+                                <span class="inline-flex items-center px-2 py-1 rounded-md border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800 text-gray-700 dark:text-gray-200">{{ $node['label'] }}</span>
+                            @endif
+                            @if(! $loop->last)
+                                <span class="text-gray-400">&gt;</span>
+                            @endif
+                        @endforeach
+                    </div>
+                @endif
+
+                <div class="grid grid-cols-1 md:grid-cols-3 gap-3">
+                    <div class="rounded-md border border-gray-200 dark:border-gray-700 px-3 py-2">
+                        <p class="text-xs text-gray-500 dark:text-gray-400">Podzadania</p>
+                        <p class="text-sm font-semibold text-gray-900 dark:text-gray-100">{{ $editingTask->subtasks->count() ?? 0 }}</p>
+                    </div>
+                    <div class="rounded-md border border-gray-200 dark:border-gray-700 px-3 py-2">
+                        <p class="text-xs text-gray-500 dark:text-gray-400">Komentarze</p>
+                        <p class="text-sm font-semibold text-gray-900 dark:text-gray-100">{{ $editingTask->comments->count() ?? 0 }}</p>
+                    </div>
+                    <div class="rounded-md border border-gray-200 dark:border-gray-700 px-3 py-2">
+                        <p class="text-xs text-gray-500 dark:text-gray-400">Załączniki</p>
+                        <p class="text-sm font-semibold text-gray-900 dark:text-gray-100">{{ $editingTask->attachments->count() ?? 0 }}</p>
+                    </div>
+                </div>
+            </div>
+
             {{-- Basic Task Info --}}
             <div class="grid grid-cols-1 gap-4">
                 <div>
@@ -379,11 +692,11 @@
 
                 <div>
                     <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Opis</label>
-                    <textarea 
+                    <textarea
                         wire:model="editModalData.description"
-                        rows="4" 
-                        class="block w-full border-gray-300 dark:border-gray-600 rounded-md shadow-sm focus:ring-primary-500 focus:border-primary-500 sm:text-sm dark:bg-gray-700 dark:text-gray-300"
                         placeholder="Wprowadź opis zadania"
+                        rows="5"
+                        class="block w-full border-gray-300 dark:border-gray-600 rounded-md shadow-sm focus:ring-primary-500 focus:border-primary-500 sm:text-sm dark:bg-gray-700 dark:text-gray-300"
                     ></textarea>
                 </div>
             </div>
@@ -449,6 +762,79 @@
                 </div>
             </div>
 
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div>
+                    <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Kontekst zadania</label>
+                    <select 
+                        wire:model.live="editModalData.taskable_type"
+                        class="block w-full border-gray-300 dark:border-gray-600 rounded-md shadow-sm focus:ring-primary-500 focus:border-primary-500 sm:text-sm dark:bg-gray-700 dark:text-gray-300"
+                    >
+                        <option value="">Wolne / nieprzypisane</option>
+                        @foreach($taskableTypes as $type => $label)
+                            <option value="{{ $type }}">{{ $label }}</option>
+                        @endforeach
+                    </select>
+                    @error('editModalData.taskable_type') <span class="text-red-500 text-sm">{{ $message }}</span> @enderror
+                </div>
+
+                @if(!empty($editModalData['taskable_type']))
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Powiązany rekord</label>
+                        <select 
+                            wire:model="editModalData.taskable_id"
+                            class="block w-full border-gray-300 dark:border-gray-600 rounded-md shadow-sm focus:ring-primary-500 focus:border-primary-500 sm:text-sm dark:bg-gray-700 dark:text-gray-300"
+                        >
+                            <option value="">Wybierz rekord</option>
+                            @foreach($editTaskableRecords as $recordId => $recordLabel)
+                                <option value="{{ $recordId }}">{{ $recordLabel }}</option>
+                            @endforeach
+                        </select>
+                        @error('editModalData.taskable_id') <span class="text-red-500 text-sm">{{ $message }}</span> @enderror
+                    </div>
+                @endif
+            </div>
+
+            <div class="grid grid-cols-1 lg:grid-cols-2 gap-4">
+                <div class="rounded-lg border border-gray-200 dark:border-gray-700 p-4">
+                    <h4 class="text-sm font-semibold text-gray-900 dark:text-gray-100 mb-3">Ostatnie komentarze</h4>
+                    <div class="space-y-3 max-h-44 overflow-y-auto">
+                        @forelse(($editingTask->comments ?? collect())->sortByDesc('created_at')->take(3) as $comment)
+                            <div class="rounded-md bg-gray-50 dark:bg-gray-800 px-3 py-2">
+                                <div class="flex items-center justify-between gap-2 mb-1">
+                                    <span class="text-xs font-semibold text-gray-800 dark:text-gray-200">{{ $comment->author?->name ?? 'Nieznany autor' }}</span>
+                                    <span class="text-xs text-gray-500 dark:text-gray-400">{{ $comment->created_at?->format('d.m.Y H:i') }}</span>
+                                </div>
+                                <p class="text-sm text-gray-700 dark:text-gray-300">{{ \Illuminate\Support\Str::limit($comment->content, 140) }}</p>
+                            </div>
+                        @empty
+                            <p class="text-sm text-gray-500 dark:text-gray-400">Brak komentarzy.</p>
+                        @endforelse
+                    </div>
+                </div>
+
+                <div class="rounded-lg border border-gray-200 dark:border-gray-700 p-4">
+                    <h4 class="text-sm font-semibold text-gray-900 dark:text-gray-100 mb-3">Podzadania (podgląd)</h4>
+                    <div class="space-y-2 max-h-44 overflow-y-auto">
+                        @forelse(($editingTask->subtasks ?? collect())->take(5) as $subtask)
+                            <div class="rounded-md bg-gray-50 dark:bg-gray-800 px-3 py-2">
+                                <p class="text-sm font-medium text-gray-900 dark:text-gray-100">{{ $subtask->title }}</p>
+                                <div class="mt-1 flex items-center gap-2 text-xs text-gray-500 dark:text-gray-400">
+                                    <span>{{ $subtask->status->name ?? '—' }}</span>
+                                    @if($subtask->assignee)
+                                        <span>• {{ $subtask->assignee->name }}</span>
+                                    @endif
+                                    @if($subtask->due_date)
+                                        <span>• {{ $subtask->due_date->format('d.m.Y H:i') }}</span>
+                                    @endif
+                                </div>
+                            </div>
+                        @empty
+                            <p class="text-sm text-gray-500 dark:text-gray-400">Brak podzadań.</p>
+                        @endforelse
+                    </div>
+                </div>
+            </div>
+
             {{-- Quick Actions --}}
             <div class="bg-gray-50 dark:bg-gray-800 p-4 rounded-lg">
                 <h4 class="font-medium text-gray-900 dark:text-gray-100 mb-3">Szybkie akcje</h4>
@@ -468,19 +854,26 @@
                         class="px-3 py-1 bg-purple-100 text-purple-800 dark:bg-purple-900 dark:text-purple-200 rounded text-sm hover:bg-purple-200 dark:hover:bg-purple-800 transition-colors">
                         📎 Załączniki ({{ $editingTask->attachments->count() ?? 0 }})
                     </button>
+                    <a
+                        href="{{ \App\Filament\Resources\TaskResource::getUrl('edit', ['record' => $editingTask]) }}"
+                        class="px-3 py-1 bg-gray-200 text-gray-800 dark:bg-gray-700 dark:text-gray-100 rounded text-sm hover:bg-gray-300 dark:hover:bg-gray-600 transition-colors"
+                    >
+                        ↗ Pełny widok
+                    </a>
                 </div>
             </div>
         </div>
         @endif
 
         <x-slot name="footer">
-            <x-filament::button wire:click="saveTask">
-                Zapisz zmiany
-            </x-filament::button>
-
-            <x-filament::button color="gray" x-on:click="isOpen = false">
-                Anuluj
-            </x-filament::button>
+            <div class="flex justify-end gap-2">
+                <x-filament::button color="gray" x-on:click="isOpen = false">
+                    Anuluj
+                </x-filament::button>
+                <x-filament::button color="primary" wire:click="saveTask">
+                    Zapisz
+                </x-filament::button>
+            </div>
         </x-slot>
     </x-filament::modal>
 
@@ -494,214 +887,177 @@
 
         @if($currentTaskForDetails)
         <div class="space-y-4">
-            {{-- Add/Edit Subtask --}}
-            <div class="bg-gray-50 dark:bg-gray-800 p-4 rounded-lg">
-                @if($editingSubtask)
-                    {{-- Edycja podzadania --}}
-                    <div class="space-y-4">
-                        <div>
-                            <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Tytuł podzadania *</label>
-                            <input 
-                                wire:model="editSubtaskData.title"
-                                type="text" 
-                                class="block w-full border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-gray-200 rounded-md shadow-sm focus:ring-primary-500 focus:border-primary-500 sm:text-sm"
-                                placeholder="Wprowadź tytuł podzadania"
-                                required
-                            />
-                            @error('editSubtaskData.title') <span class="text-red-500 text-sm">{{ $message }}</span> @enderror
-                        </div>
-                        <div>
-                            <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Opis</label>
-                            <textarea 
-                                wire:model="editSubtaskData.description"
-                                rows="3" 
-                                class="block w-full border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-gray-200 rounded-md shadow-sm focus:ring-primary-500 focus:border-primary-500 sm:text-sm"
-                                placeholder="Wprowadź opis podzadania (opcjonalnie)"
-                            ></textarea>
-                            @error('editSubtaskData.description') <span class="text-red-500 text-sm">{{ $message }}</span> @enderror
-                        </div>
-                        <div class="grid grid-cols-2 gap-4">
-                            <div>
-                                <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Priorytet</label>
-                                <select 
-                                    wire:model="editSubtaskData.priority"
-                                    class="block w-full border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-gray-200 rounded-md shadow-sm focus:ring-primary-500 focus:border-primary-500 sm:text-sm"
-                                >
-                                    <option value="low">🟢 Niski</option>
-                                    <option value="medium">🟡 Średni</option>
-                                    <option value="high">🔴 Wysoki</option>
-                                </select>
-                                @error('editSubtaskData.priority') <span class="text-red-500 text-sm">{{ $message }}</span> @enderror
-                            </div>
-                            <div>
-                                <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Przypisz do</label>
-                                <select 
-                                    wire:model="editSubtaskData.assignee_id"
-                                    class="block w-full border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-gray-200 rounded-md shadow-sm focus:ring-primary-500 focus:border-primary-500 sm:text-sm"
-                                >
-                                    <option value="">Nie przypisano</option>
-                                    @foreach($users as $user)
-                                        <option value="{{ $user->id }}">{{ $user->name }}</option>
-                                    @endforeach
-                                </select>
-                                @error('editSubtaskData.assignee_id') <span class="text-red-500 text-sm">{{ $message }}</span> @enderror
-                            </div>
-                        </div>
-                        <div class="grid grid-cols-2 gap-4">
-                            <div>
-                                <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Status</label>
-                                <select 
-                                    wire:model="editSubtaskData.status_id"
-                                    class="block w-full border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-gray-200 rounded-md shadow-sm focus:ring-primary-500 focus:border-primary-500 sm:text-sm"
-                                >
-                                    <option value="">Wybierz status</option>
-                                    @foreach($statuses as $status)
-                                        <option value="{{ $status->id }}">{{ $status->name }}</option>
-                                    @endforeach
-                                </select>
-                                @error('editSubtaskData.status_id') <span class="text-red-500 text-sm">{{ $message }}</span> @enderror
-                            </div>
-                            <div>
-                                <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Termin wykonania</label>
-                                <input 
-                                    wire:model="editSubtaskData.due_date"
-                                    type="datetime-local" 
-                                    class="block w-full border-gray-300 dark:border-gray-600 rounded-md shadow-sm focus:ring-primary-500 focus:border-primary-500 sm:text-sm"
-                                />
-                                @error('editSubtaskData.due_date') <span class="text-red-500 text-sm">{{ $message }}</span> @enderror
-                            </div>
-                        </div>
-                        <div class="flex justify-end gap-2">
-                            <x-filament::button color="gray" wire:click="cancelEditSubtask">Wróć do listy</x-filament::button>
-                            <x-filament::button color="primary" wire:click="saveSubtask">Zapisz podzadanie</x-filament::button>
-                        </div>
-                    </div>
-                @elseif($showAdvancedSubtaskForm)
-                    {{-- Zaawansowane dodawanie podzadania --}}
-                    <div class="space-y-4">
-                        <div>
-                            <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Tytuł podzadania *</label>
-                            <input 
-                                wire:model="editSubtaskData.title"
-                                type="text" 
-                                class="block w-full border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-gray-200 rounded-md shadow-sm focus:ring-primary-500 focus:border-primary-500 sm:text-sm"
-                                placeholder="Wprowadź tytuł podzadania"
-                                required
-                            />
-                            @error('editSubtaskData.title') <span class="text-red-500 text-sm">{{ $message }}</span> @enderror
-                        </div>
-                        <div>
-                            <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Opis</label>
-                            <textarea 
-                                wire:model="editSubtaskData.description"
-                                rows="3" 
-                                class="block w-full border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-gray-200 rounded-md shadow-sm focus:ring-primary-500 focus:border-primary-500 sm:text-sm"
-                                placeholder="Wprowadź opis podzadania (opcjonalnie)"
-                            ></textarea>
-                            @error('editSubtaskData.description') <span class="text-red-500 text-sm">{{ $message }}</span> @enderror
-                        </div>
-                        <div class="grid grid-cols-2 gap-4">
-                            <div>
-                                <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Priorytet</label>
-                                <select 
-                                    wire:model="editSubtaskData.priority"
-                                    class="block w-full border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-gray-200 rounded-md shadow-sm focus:ring-primary-500 focus:border-primary-500 sm:text-sm"
-                                >
-                                    <option value="low">🟢 Niski</option>
-                                    <option value="medium" selected>🟡 Średni</option>
-                                    <option value="high">🔴 Wysoki</option>
-                                </select>
-                                @error('editSubtaskData.priority') <span class="text-red-500 text-sm">{{ $message }}</span> @enderror
-                            </div>
-                            <div>
-                                <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Przypisz do</label>
-                                <select 
-                                    wire:model="editSubtaskData.assignee_id"
-                                    class="block w-full border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-gray-200 rounded-md shadow-sm focus:ring-primary-500 focus:border-primary-500 sm:text-sm"
-                                >
-                                    <option value="">Nie przypisano</option>
-                                    @foreach($users as $user)
-                                        <option value="{{ $user->id }}">{{ $user->name }}</option>
-                                    @endforeach
-                                </select>
-                                @error('editSubtaskData.assignee_id') <span class="text-red-500 text-sm">{{ $message }}</span> @enderror
-                            </div>
-                        </div>
-                        <div class="grid grid-cols-2 gap-4">
-                            <div>
-                                <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Status</label>
-                                <select 
-                                    wire:model="editSubtaskData.status_id"
-                                    class="block w-full border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-gray-200 rounded-md shadow-sm focus:ring-primary-500 focus:border-primary-500 sm:text-sm"
-                                >
-                                    <option value="">Wybierz status</option>
-                                    @foreach($statuses as $status)
-                                        <option value="{{ $status->id }}">{{ $status->name }}</option>
-                                    @endforeach
-                                </select>
-                                @error('editSubtaskData.status_id') <span class="text-red-500 text-sm">{{ $message }}</span> @enderror
-                            </div>
-                            <div>
-                                <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Termin wykonania</label>
-                                <input 
-                                    wire:model="editSubtaskData.due_date"
-                                    type="datetime-local" 
-                                    class="block w-full border-gray-300 dark:border-gray-600 rounded-md shadow-sm focus:ring-primary-500 focus:border-primary-500 sm:text-sm"
-                                />
-                                @error('editSubtaskData.due_date') <span class="text-red-500 text-sm">{{ $message }}</span> @enderror
-                            </div>
-                        </div>
-                        <div class="flex justify-end gap-2">
-                            <x-filament::button color="gray" wire:click="cancelAdvancedSubtaskForm">Wróć do listy</x-filament::button>
-                            <x-filament::button color="primary" wire:click="addAdvancedSubtask">Dodaj podzadanie</x-filament::button>
-                        </div>
-                    </div>
-                @else
-                    <div class="flex gap-2 items-center">
-                        <input 
-                            wire:model="newSubtaskTitle"
-                            wire:keydown.enter="addSubtask"
-                            type="text" 
-                            placeholder="Dodaj nowe podzadanie..."
-                            class="flex-1 block border-gray-300 rounded-md shadow-sm focus:ring-primary-500 focus:border-primary-500 sm:text-sm"
-                        />
-                        <button 
-                            wire:click="addSubtask"
-                            class="px-4 py-2 bg-primary-600 text-white rounded-md hover:bg-primary-700 transition-colors">
-                            Dodaj
-                        </button>
-                        <button 
-                            wire:click="showAdvancedSubtaskForm"
-                            class="px-4 py-2 bg-gray-300 text-gray-800 rounded-md hover:bg-gray-400 transition-colors">
-                            Zaawansowane dodawanie
-                        </button>
-                    </div>
-                @endif
+            @if(!empty($currentTaskHierarchy))
+                <div class="rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 px-3 py-2">
+                    <div class="flex flex-wrap items-center gap-1.5 text-xs">
+                        @foreach($currentTaskHierarchy as $node)
+                            <button
+                                type="button"
+                                wire:click="openSubtaskDetails({{ $node['id'] }})"
+                                class="inline-flex items-center px-2 py-1 rounded-md border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800 text-gray-700 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-700 transition"
+                            >
+                                {{ $node['title'] }}
+                            </button>
 
-                {{-- Lista istniejących podzadań (widoczna zawsze pod formularzem) --}}
-                <div class="mt-6">
-                    <h4 class="font-semibold text-gray-700 dark:text-gray-200 mb-2">Lista podzadań</h4>
-                    @if($currentTaskForDetails && $currentTaskForDetails->subtasks && $currentTaskForDetails->subtasks->count() > 0)
-                        <ul class="divide-y divide-gray-200 dark:divide-gray-700">
+                            @if(! $loop->last)
+                                <span class="text-gray-400">&gt;</span>
+                            @endif
+                        @endforeach
+                    </div>
+                </div>
+            @endif
+
+            @if(!empty($currentTaskContextUrl))
+                <div>
+                    <a
+                        href="{{ $currentTaskContextUrl }}"
+                        target="_blank"
+                        rel="noopener"
+                        class="inline-flex items-center gap-2 text-sm font-semibold px-3 py-2 rounded-md border border-cyan-200 dark:border-cyan-800 bg-cyan-50 dark:bg-cyan-900/40 text-cyan-700 dark:text-cyan-200 hover:bg-cyan-100 dark:hover:bg-cyan-800/60 transition"
+                    >
+                        <x-heroicon-m-arrow-top-right-on-square class="w-4 h-4" />
+                        Przejdź do powiązanego elementu
+                    </a>
+                </div>
+            @endif
+
+            @if(!empty($currentTaskContextTree))
+                <div class="flex flex-wrap items-center gap-1.5 text-xs">
+                    @foreach($currentTaskContextTree as $node)
+                        @if(!empty($node['url']))
+                            <a href="{{ $node['url'] }}" target="_blank" rel="noopener" class="inline-flex items-center px-2 py-1 rounded-md border border-cyan-200 dark:border-cyan-800 bg-cyan-50 dark:bg-cyan-900/40 text-cyan-700 dark:text-cyan-200 hover:bg-cyan-100 dark:hover:bg-cyan-800/60 transition">{{ $node['label'] }}</a>
+                        @else
+                            <span class="inline-flex items-center px-2 py-1 rounded-md border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800 text-gray-700 dark:text-gray-200">{{ $node['label'] }}</span>
+                        @endif
+                        @if(! $loop->last)
+                            <span class="text-gray-400">&gt;</span>
+                        @endif
+                    @endforeach
+                </div>
+            @endif
+
+            <div class="bg-gray-50 dark:bg-gray-800 p-4 rounded-lg space-y-4">
+                <div class="flex flex-wrap items-center gap-2">
+                    @if($currentTaskForDetails->parent_id)
+                        <x-filament::button color="gray" size="sm" wire:click="goToParentTaskDetails">
+                            ↑ Wróć do nadrzędnego
+                        </x-filament::button>
+                    @endif
+                    <x-filament::button color="info" size="sm" wire:click="showComments({{ $currentTaskForDetails->id }})">
+                        Komentarze ({{ $currentTaskForDetails->comments->count() }})
+                    </x-filament::button>
+                    <x-filament::button color="gray" size="sm" wire:click="showAttachments({{ $currentTaskForDetails->id }})">
+                        Załączniki ({{ $currentTaskForDetails->attachments->count() }})
+                    </x-filament::button>
+                </div>
+
+                <div>
+                    <h4 class="text-sm font-semibold text-gray-900 dark:text-gray-100 mb-2">
+                        {{ $editingSubtask ? 'Edycja podzadania' : 'Nowe podzadanie (pełne pola jak zadanie)' }}
+                    </h4>
+                    <div class="space-y-3">
+                        <div>
+                            <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Tytuł *</label>
+                            <input wire:model="editSubtaskData.title" type="text" class="block w-full border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-gray-200 rounded-md shadow-sm focus:ring-primary-500 focus:border-primary-500 sm:text-sm" />
+                            @error('editSubtaskData.title') <span class="text-red-500 text-sm">{{ $message }}</span> @enderror
+                        </div>
+
+                        <div>
+                            <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Opis</label>
+                            <textarea wire:model="editSubtaskData.description" rows="3" class="block w-full border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-gray-200 rounded-md shadow-sm focus:ring-primary-500 focus:border-primary-500 sm:text-sm"></textarea>
+                            @error('editSubtaskData.description') <span class="text-red-500 text-sm">{{ $message }}</span> @enderror
+                        </div>
+
+                        <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
+                            <div>
+                                <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Status</label>
+                                <select wire:model="editSubtaskData.status_id" class="block w-full border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-gray-200 rounded-md shadow-sm focus:ring-primary-500 focus:border-primary-500 sm:text-sm">
+                                    <option value="">Wybierz status</option>
+                                    @foreach($statuses as $status)
+                                        <option value="{{ $status->id }}">{{ $status->name }}</option>
+                                    @endforeach
+                                </select>
+                                @error('editSubtaskData.status_id') <span class="text-red-500 text-sm">{{ $message }}</span> @enderror
+                            </div>
+
+                            <div>
+                                <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Priorytet</label>
+                                <select wire:model="editSubtaskData.priority" class="block w-full border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-gray-200 rounded-md shadow-sm focus:ring-primary-500 focus:border-primary-500 sm:text-sm">
+                                    <option value="low">Niski</option>
+                                    <option value="medium">Średni</option>
+                                    <option value="high">Wysoki</option>
+                                </select>
+                                @error('editSubtaskData.priority') <span class="text-red-500 text-sm">{{ $message }}</span> @enderror
+                            </div>
+
+                            <div>
+                                <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Przypisane do</label>
+                                <select wire:model="editSubtaskData.assignee_id" class="block w-full border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-gray-200 rounded-md shadow-sm focus:ring-primary-500 focus:border-primary-500 sm:text-sm">
+                                    <option value="">Nie przypisano</option>
+                                    @foreach($users as $user)
+                                        <option value="{{ $user->id }}">{{ $user->name }}</option>
+                                    @endforeach
+                                </select>
+                                @error('editSubtaskData.assignee_id') <span class="text-red-500 text-sm">{{ $message }}</span> @enderror
+                            </div>
+
+                            <div>
+                                <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Termin wykonania</label>
+                                <input wire:model="editSubtaskData.due_date" type="datetime-local" class="block w-full border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-gray-200 rounded-md shadow-sm focus:ring-primary-500 focus:border-primary-500 sm:text-sm" />
+                                @error('editSubtaskData.due_date') <span class="text-red-500 text-sm">{{ $message }}</span> @enderror
+                            </div>
+                        </div>
+
+                        <div class="flex justify-end gap-2">
+                            @if($editingSubtask)
+                                <x-filament::button color="gray" wire:click="cancelEditSubtask">Anuluj edycję</x-filament::button>
+                                <x-filament::button color="primary" wire:click="saveSubtask">Zapisz podzadanie</x-filament::button>
+                            @else
+                                <x-filament::button color="primary" wire:click="addSubtask">Dodaj podzadanie</x-filament::button>
+                            @endif
+                        </div>
+                    </div>
+                </div>
+
+                <div class="mt-2">
+                    <h4 class="font-semibold text-gray-700 dark:text-gray-200 mb-2">Podzadania tego elementu</h4>
+                    @if($currentTaskForDetails->subtasks && $currentTaskForDetails->subtasks->count() > 0)
+                        <div class="space-y-2">
                             @foreach($currentTaskForDetails->subtasks as $subtask)
-                                <li class="py-2 flex items-center justify-between">
-                                    <div>
-                                        <span class="font-medium text-gray-900 dark:text-gray-100">{{ $subtask->title }}</span>
-                                        <span class="text-xs text-gray-500 ml-2">{{ $subtask->status->name ?? '' }}</span>
-                                        @if($subtask->assignee)
-                                            <span class="text-xs text-blue-600 dark:text-blue-300 ml-2">👤 {{ $subtask->assignee->name }}</span>
-                                        @endif
-                                        @if($subtask->due_date)
-                                            <span class="text-xs text-purple-600 dark:text-purple-300 ml-2">📅 {{ $subtask->due_date->format('d.m.Y H:i') }}</span>
-                                        @endif
+                                <div class="rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 p-3">
+                                    <div class="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-2">
+                                        <div class="min-w-0">
+                                            <p class="font-semibold text-gray-900 dark:text-gray-100 truncate">{{ $subtask->title }}</p>
+                                            <div class="mt-1 flex flex-wrap items-center gap-2 text-xs">
+                                                <span class="px-2 py-1 rounded-full bg-gray-100 dark:bg-gray-800 text-gray-700 dark:text-gray-200">{{ $subtask->status->name ?? 'Brak statusu' }}</span>
+                                                <span class="px-2 py-1 rounded-full bg-blue-100 dark:bg-blue-900/50 text-blue-700 dark:text-blue-200">Priorytet: {{ ucfirst($subtask->priority ?? 'medium') }}</span>
+                                                @if($subtask->assignee)
+                                                    <span class="px-2 py-1 rounded-full bg-emerald-100 dark:bg-emerald-900/50 text-emerald-700 dark:text-emerald-200">{{ $subtask->assignee->name }}</span>
+                                                @endif
+                                                @if($subtask->due_date)
+                                                    <span class="px-2 py-1 rounded-full bg-amber-100 dark:bg-amber-900/50 text-amber-700 dark:text-amber-200">{{ $subtask->due_date->format('d.m.Y H:i') }}</span>
+                                                @endif
+                                            </div>
+                                            <div class="mt-2 flex flex-wrap items-center gap-2 text-xs text-gray-500 dark:text-gray-400">
+                                                <span>Podzadania: {{ $subtask->subtasks_count ?? 0 }}</span>
+                                                <span>•</span>
+                                                <span>Komentarze: {{ $subtask->comments_count ?? 0 }}</span>
+                                                <span>•</span>
+                                                <span>Załączniki: {{ $subtask->attachments_count ?? 0 }}</span>
+                                            </div>
+                                        </div>
+
+                                        <div class="flex flex-wrap gap-2">
+                                            <x-filament::button size="sm" color="gray" wire:click="openSubtaskDetails({{ $subtask->id }})">Otwórz</x-filament::button>
+                                            <x-filament::button size="sm" color="info" wire:click="showComments({{ $subtask->id }})">Komentarze</x-filament::button>
+                                            <x-filament::button size="sm" color="gray" wire:click="showAttachments({{ $subtask->id }})">Załączniki</x-filament::button>
+                                            <x-filament::button size="sm" color="warning" wire:click="editSubtask({{ $subtask->id }})">Edytuj</x-filament::button>
+                                            <x-filament::button size="sm" color="danger" wire:click="deleteSubtask({{ $subtask->id }})">Usuń</x-filament::button>
+                                        </div>
                                     </div>
-                                    <div class="flex gap-2">
-                                        <button wire:click="editSubtask({{ $subtask->id }})" class="text-blue-500 hover:underline text-xs">Edytuj</button>
-                                        <button wire:click="deleteSubtask({{ $subtask->id }})" class="text-red-500 hover:underline text-xs">Usuń</button>
-                                    </div>
-                                </li>
+                                </div>
                             @endforeach
-                        </ul>
+                        </div>
                     @else
                         <div class="text-gray-400 text-sm">Brak podzadań</div>
                     @endif
@@ -726,6 +1082,20 @@
 
         @if($currentTaskForDetails)
         <div class="space-y-4">
+            @if(!empty($currentTaskContextUrl))
+                <div>
+                    <a
+                        href="{{ $currentTaskContextUrl }}"
+                        target="_blank"
+                        rel="noopener"
+                        class="inline-flex items-center gap-2 text-sm font-semibold px-3 py-2 rounded-md border border-cyan-200 dark:border-cyan-800 bg-cyan-50 dark:bg-cyan-900/40 text-cyan-700 dark:text-cyan-200 hover:bg-cyan-100 dark:hover:bg-cyan-800/60 transition"
+                    >
+                        <x-heroicon-m-arrow-top-right-on-square class="w-4 h-4" />
+                        Przejdź do powiązanego elementu
+                    </a>
+                </div>
+            @endif
+
             {{-- Add New Comment --}}
             <div class="bg-gray-50 dark:bg-gray-800 p-4 rounded-lg">
                 <div class="space-y-2">
@@ -760,9 +1130,8 @@
                                 <p class="text-sm text-gray-500 whitespace-pre-wrap">{{ $comment->content }}</p>
                             </div>
                             
-                            @if($comment->author_id === Auth::id() || (Auth::user() && Auth::user()->roles->contains('name', 'admin')))
+                            @if($comment->author_id === auth()->id() || (auth()->user() && auth()->user()->roles->contains('name', 'admin')))
                                 <div class="flex items-center gap-2 mb-2">
-                                    <button wire:click="editComment({{ $comment->id }})" class="text-blue-500 hover:underline text-xs">Edytuj</button>
                                     <button wire:click="deleteComment({{ $comment->id }})" class="text-red-500 hover:underline text-xs" onclick="return confirm('Czy na pewno chcesz usunąć ten komentarz?')">Usuń</button>
                                 </div>
                             @endif
@@ -795,6 +1164,20 @@
 
         @if($currentTaskForDetails)
         <div class="space-y-4">
+            @if(!empty($currentTaskContextUrl))
+                <div>
+                    <a
+                        href="{{ $currentTaskContextUrl }}"
+                        target="_blank"
+                        rel="noopener"
+                        class="inline-flex items-center gap-2 text-sm font-semibold px-3 py-2 rounded-md border border-cyan-200 dark:border-cyan-800 bg-cyan-50 dark:bg-cyan-900/40 text-cyan-700 dark:text-cyan-200 hover:bg-cyan-100 dark:hover:bg-cyan-800/60 transition"
+                    >
+                        <x-heroicon-m-arrow-top-right-on-square class="w-4 h-4" />
+                        Przejdź do powiązanego elementu
+                    </a>
+                </div>
+            @endif
+
             {{-- Attachments List --}}
             <div class="space-y-3 max-h-96 overflow-y-auto">
                 @forelse($currentTaskForDetails->attachments ?? [] as $attachment)
@@ -811,7 +1194,7 @@
                         <div class="flex items-center gap-2">
                             @if($attachment->file_path)                        
                                 <a 
-                                    href="{{ asset('storage/' . $attachment->file_path) }}" 
+                                    href="{{ $attachment->public_url }}" 
                                     target="_blank"
                                     class="px-3 py-1 bg-blue-100 text-blue-800 rounded text-sm hover:bg-blue-200 transition-colors">
                                     Pobierz
@@ -837,19 +1220,103 @@
     </x-filament::modal>
 
     {{-- Enhanced JavaScript with filament-kanban integration --}}
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/fullcalendar@6.1.15/index.global.min.css">
+    <script src="https://cdn.jsdelivr.net/npm/fullcalendar@6.1.15/index.global.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/sortablejs@1.15.0/Sortable.min.js"></script>
     <script>
-        document.addEventListener('DOMContentLoaded', function() {
-            console.log('DOM Content Loaded');
-            console.log('SortableJS loaded:', typeof Sortable !== 'undefined');
-            console.log('Livewire loaded:', typeof window.Livewire !== 'undefined');
-        });
+        function taskCalendarWidget(config) {
+            return {
+                calendar: null,
+                events: config?.events ?? [],
+                calendarInitAttempts: 0,
+                init() {
+                    this.initializeCalendarWhenReady();
+                },
+                initializeCalendarWhenReady() {
+                    const el = this.$refs.calendar;
+
+                    if (!el) {
+                        return;
+                    }
+
+                    if (typeof window.FullCalendar === 'undefined') {
+                        // FullCalendar is loaded from CDN and can be unavailable for a short time.
+                        if (this.calendarInitAttempts < 30) {
+                            this.calendarInitAttempts += 1;
+                            setTimeout(() => this.initializeCalendarWhenReady(), 150);
+                        }
+
+                        return;
+                    }
+
+                    this.mountCalendar(el);
+                },
+                mountCalendar(el) {
+                    if (!el || typeof window.FullCalendar === 'undefined') {
+                        return;
+                    }
+
+                    if (this.calendar) {
+                        this.calendar.destroy();
+                    }
+
+                    this.calendar = new window.FullCalendar.Calendar(el, {
+                        initialView: 'dayGridMonth',
+                        locale: 'pl',
+                        firstDay: 1,
+                        headerToolbar: {
+                            left: 'prev,next today',
+                            center: 'title',
+                            right: 'dayGridMonth,timeGridWeek,timeGridDay',
+                        },
+                        buttonText: {
+                            today: 'Dzisiaj',
+                            month: 'Miesiąc',
+                            week: 'Tydzień',
+                            day: 'Dzień',
+                        },
+                        events: this.events,
+                        height: 'auto',
+                        navLinks: true,
+                        eventTimeFormat: {
+                            hour: '2-digit',
+                            minute: '2-digit',
+                            hour12: false,
+                        },
+                        eventClick: function (info) {
+                            if (info.event.url) {
+                                info.jsEvent.preventDefault();
+                                window.location.href = info.event.url;
+                            }
+                        },
+                    });
+
+                    this.calendar.render();
+                },
+                ensureVisible() {
+                    if (typeof window.FullCalendar === 'undefined') {
+                        this.initializeCalendarWhenReady();
+                        return;
+                    }
+
+                    if (!this.calendar) {
+                        this.mountCalendar(this.$refs.calendar);
+                        return;
+                    }
+
+                    this.$nextTick(() => {
+                        requestAnimationFrame(() => {
+                            this.calendar.updateSize();
+                        });
+                    });
+                },
+            };
+        }
 
         function kanbanBoard() {
             return {
                 init() {
                     if (window.Livewire && @this) {
-                        console.log('Kanban board initializing...');
                         // Small delay to ensure DOM is fully rendered
                         setTimeout(() => {
                             this.initDragAndDrop();
@@ -858,15 +1325,11 @@
                     }
                 },
                 initDragAndDrop() {
-                    console.log('Initializing drag and drop...');
-                    
                     // Initialize Sortable for each tasks container
                     const containers = document.querySelectorAll('.tasks-container[data-status-id]');
-                    console.log('Found containers:', containers.length);
                     
-                    containers.forEach((container, index) => {
-                        console.log(`Initializing container ${index + 1}:`, container);
-                        const sortable = new Sortable(container, {
+                    containers.forEach((container) => {
+                        new Sortable(container, {
                             group: 'kanban-tasks',
                             animation: 200,
                             ghostClass: 'sortable-ghost',
@@ -877,20 +1340,11 @@
                             fallbackTolerance: 0,
                             
                             onStart: (evt) => {
-                                console.log('Drag started:', evt.item.id);
                                 document.body.classList.add("grabbing");
                                 evt.item.classList.add('shadow-2xl', 'z-50');
                             },
                             
                             onEnd: (evt) => {
-                                console.log('Drag ended:', {
-                                    taskId: evt.item.id,
-                                    fromStatus: evt.from.dataset.statusId,
-                                    toStatus: evt.to.dataset.statusId,
-                                    newIndex: evt.newIndex,
-                                    oldIndex: evt.oldIndex
-                                });
-                                
                                 document.body.classList.remove("grabbing");
                                 evt.item.classList.remove('shadow-2xl', 'z-50');
                                 
@@ -906,11 +1360,8 @@
                                 
                                 // Call Livewire method
                                 if (window.Livewire && @this) {
-                                    console.log('Calling updateTaskStatus...');
                                     @this.call('updateTaskStatus', taskId, newStatusId, newOrder)
-                                        .then((result) => {
-                                            console.log('Task status updated successfully:', result);
-                                        })
+                                        .then(() => null)
                                         .catch((error) => {
                                             console.error('Error updating task status:', error);
                                             // Show user-friendly error
@@ -921,21 +1372,9 @@
                                     console.error('Livewire not available');
                                 }
                             },
-                            
-                            onMove: (evt) => {
-                                console.log('Moving item');
-                                return true;
-                            },
-                            
-                            onClone: (evt) => {
-                                console.log('Cloning item');
-                            }
+                            onMove: () => true,
                         });
-                        
-                        console.log(`Sortable initialized for container ${index + 1}:`, sortable);
                     });
-                    
-                    console.log('Drag and drop initialization completed');
                 },
                 initKeyboardShortcuts() {
                     document.addEventListener('keydown', (e) => {
@@ -978,7 +1417,7 @@
         
         .sortable-drag {
             opacity: 0.9 !important;
-            background: #374151 !important;
+            background: var(--f-surface) !important;
             border: 2px solid #3b82f6 !important;
             transform: rotate(3deg) scale(1.05) !important;
             box-shadow: 0 10px 25px rgba(0, 0, 0, 0.5) !important;
@@ -991,7 +1430,7 @@
         
         .sortable-fallback {
             opacity: 0.8 !important;
-            background: #374151 !important;
+            background: var(--f-surface) !important;
             border: 2px dashed #3b82f6 !important;
         }
         
@@ -1023,89 +1462,57 @@
             font-weight: 500;
         }
         
-        /* Column headers dark theme optimized */
+        .kanban-column {
+            box-shadow: 0 2px 6px rgba(15, 23, 42, 0.12), 0 10px 24px rgba(15, 23, 42, 0.08);
+            border-width: 2px !important;
+        }
+
         .kanban-column-header {
-            background: linear-gradient(135deg, #4b5563 0%, #374151 100%);
-            border: 1px solid #6b7280;
-            text-shadow: 0 1px 2px rgba(0, 0, 0, 0.5);
+            border: 1px solid var(--f-border);
         }
-        
-        .dark .kanban-column-header {
-            background: linear-gradient(135deg, #374151 0%, #1f2937 100%);
-            border: 1px solid #4b5563;
-            text-shadow: 0 1px 3px rgba(0, 0, 0, 0.8);
-        }
-        
-        /* Task cards optimized for dark theme */
-        .task-card {
-            background: #4b5563;
-            border: 1px solid #6b7280;
-        }
-        
-        .dark .task-card {
-            background: #374151;
-            border: 1px solid #4b5563;
-        }
-        
-        .task-card:hover {
-            border-color: #3b82f6;
-        }
-        
-        .dark .task-card:hover {
-            border-color: #60a5fa;
-            background: #1f2937;
-        }
-        
-        /* Priority badges optimized for dark backgrounds */
-        .priority-badge {
-            background-color: #374151;
-            border-color: #4b5563 !important;
-            color: #f9fafb !important;
-        }
-        
-        /* Enhanced contrast and readability - Dark Theme Focused */
+
+        .task-card,
         .record {
-            background: #374151;
-            border: 1px solid #4b5563;
+            border-width: 3px;
+            box-shadow: 0 6px 14px rgba(15, 23, 42, 0.16);
         }
-        
+
+        .dark .task-card,
         .dark .record {
-            background: #1f2937;
-            border: 1px solid #374151;
+            border-color: #9ca3af;
         }
-        
+
+        .task-card:hover,
         .record:hover {
-            background: rgba(59, 130, 246, 0.1);
-            border-color: #3b82f6;
+            border-color: #1d4ed8 !important;
+            box-shadow: 0 10px 22px rgba(37, 99, 235, 0.28);
+        }
+
+        .priority-badge {
+            letter-spacing: 0.03em;
+            box-shadow: inset 0 -1px 0 rgba(0, 0, 0, 0.12);
         }
         
-        .dark .record:hover {
-            background: rgba(59, 130, 246, 0.2);
-            border-color: #60a5fa;
+        .kanban-board {
+            align-items: stretch;
         }
-        
-        /* Better text contrast for dark theme */
-        .dark h3, .dark h4 {
-            color: #f9fafb;
+
+        .kanban-column {
+            min-width: 16rem;
+            flex: 1 1 16rem;
         }
-        
-        .dark .text-xs {
-            color: #d1d5db;
+
+        @media (max-width: 1280px) {
+            .kanban-column {
+                min-width: 18rem;
+                flex: 0 0 18rem;
+            }
         }
-        
-        /* Ensure full dark theme coverage */
-        body.dark {
-            background-color: #0f172a !important;
-        }
-        
-        /* Main page background override */
-        .fi-main {
-            background-color: #111827 !important;
-        }
-        
+
         @media (max-width: 768px) {
-            .md\:w-\[24rem\] {
-                width: 280px;
+            .kanban-column {
+                min-width: 16rem;
+                flex: 0 0 16rem;
             }
         }
     </style>

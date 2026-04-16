@@ -49,7 +49,8 @@ class PlaceDistanceResource extends Resource
                 TextInput::make('api_source')
                     ->label('Źródło API')
                     ->nullable(),
-            ]);
+            ])
+            ->columns(2);
     }
 
     public static function table(Table $table): Table

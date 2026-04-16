@@ -29,12 +29,12 @@
                 </a>
                 <div class="collapse navbar-collapse mean-menu" id="navbarSupportedContent">
                     <ul class="navbar-nav">
-                        <li class="nav-item {{ Route::is('home') ? 'active' : '' }}">
+                        <li class="nav-item {{ \Illuminate\Support\Facades\Route::is('home') ? 'active' : '' }}">
                             <a href="{{ route('home') }}" class="nav-link" class="nav-link">Start</a>
                         </li>
                         <div class="offer-link">
                             <li class="nav-item">
-                                <a href="{{ route('directory-packages')}}" class="nav-link">Oferta wycieczek szkolnych 2025</a>
+                                <a href="{{ route('directory-packages')}}" class="nav-link">Oferta wycieczek szkolnych 2026</a>
                                 <ul class="dropdown">
                                     <div class="background">
                                         <li>
@@ -61,13 +61,13 @@
                         <li class="nav-item">
                             <a href="{{ route('blog.global') }}" class="nav-link">Aktualności</a>
                         </li>
-                        <li class="nav-item {{ Route::is('insurance') ? 'active' : '' }}">
+                        <li class="nav-item {{ \Illuminate\Support\Facades\Route::is('insurance') ? 'active' : '' }}">
                             <a href="{{ route('insurance') }}" class="nav-link">Ubezpieczenia</a>
                         </li>
-                        <li class="nav-item {{ Route::is('documents') ? 'active' : '' }}">
+                        <li class="nav-item {{ \Illuminate\Support\Facades\Route::is('documents') ? 'active' : '' }}">
                             <a href="{{ route('documents.global') }}" class="nav-link">Dokumenty</a>
                         </li>
-                        <li class="nav-item {{ Route::is('faq') ? 'active' : '' }}">
+                        <li class="nav-item {{ \Illuminate\Support\Facades\Route::is('faq') ? 'active' : '' }}">
                             <a href="{{ route('faq') }}" class="nav-link">FAQ</a>
                         </li>
                         <li class="nav-item">

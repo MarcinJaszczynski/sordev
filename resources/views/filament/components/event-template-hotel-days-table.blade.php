@@ -44,16 +44,16 @@
                         Nocleg
                     </th>
                     <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                        Qty
+                        Uczestnicy
                     </th>
                     <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                         Gratis
                     </th>
                     <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                        Staff
+                        Obsługa
                     </th>
                     <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                        Driver
+                        Kierowca
                     </th>
                     <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                         Akcje
@@ -159,7 +159,7 @@
             </button>
         </div>        <div class="text-xs text-gray-500 mt-2">
             Liczba noclegów: {{ count($hotelDays) }} | 
-            Duration days: {{ $page->data['duration_days'] ?? $page->record->duration_days ?? 'N/A' }} |
+            Liczba dni: {{ $page->data['duration_days'] ?? $page->record->duration_days ?? 'brak' }} |
             Prosta wersja: wire:model.live + Ctrl+Click
         </div>
     </div>

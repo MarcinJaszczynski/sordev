@@ -72,13 +72,11 @@
         <div class="package-page-layout-section-one">
             <div class="column-left">
                 @php
-                    $photoPath = $item->featured_image
-                        ? asset('storage/' . $item->featured_image)
-                        : asset('uploads/default.png');
+                    $photoPath = $item->full_image_url ?: asset('uploads/default.png');
                     $photoAlt = $item->featured_image ? $item->name : 'Brak zdjęcia';
                 @endphp
                 <div class="display-photo" style="background-image: url('{{ $photoPath }}'); background-size: cover; background-position: center; background-repeat: no-repeat; min-height: 300px;">
-                    <img src="{{ $photoPath }}" alt="{{ $photoAlt }}">
+                    <img src="{{ $photoPath }}" alt="{{ $photoAlt }}" fetchpriority="high" decoding="async">
                 </div></div>
             <div class="column-right">
                 <div class="title-section">
@@ -153,15 +151,6 @@
                         @else
                             impreza {{ $item->duration_days }}-dniowe
                         @endif
-                        <br>
-                        @php
-                            $transportLabels = $item->transportTypes && $item->transportTypes->count() > 0
-                                ? $item->transportTypes->pluck('name')->filter()->implode(', ')
-                                : null;
-                        @endphp
-                        @if($transportLabels)
-                            <span class="transport-muted">rodzaj transportu: {{ $transportLabels }}</span>
-                        @endif
                     </div>
                     <div class="price-section">
                         <div class="icon"><i class="fas fa-money-bill-wave-alt"></i></div>
@@ -209,8 +198,45 @@
                         @endif
                     </div>
                     <div class="region-section">
-                        <div class="icon"><i class="fas fa-calendar"></i></div>
-                        elastyczne terminy
+                        @php
+                            $transportTypes = $item->transportTypes && $item->transportTypes->count() > 0 ? $item->transportTypes : collect();
+                        @endphp
+                        @if($transportTypes->count() > 0)
+                            <div class="icon" style="display:flex; gap:6px; align-items:center; justify-content:center;">
+                                @foreach($transportTypes as $key => $transportType)
+                                    @php
+                                        $nameLower = mb_strtolower(trim($transportType->name ?? ''));
+                                        $iconHtml = '<i class="fa-solid fa-train"></i>';
+
+                                        if (str_contains($nameLower, 'samolot') || str_contains($nameLower, 'plane')) {
+                                            $iconHtml = '<i class="fa-solid fa-plane"></i>';
+                                        } elseif (str_contains($nameLower, 'autobus') || str_contains($nameLower, 'autokar') || str_contains($nameLower, 'bus')) {
+                                            $iconHtml = '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 640 640" width="1.2em" height="1.2em" style="vertical-align: 0.2em; fill: currentColor; display: inline-block;"><path d="M480 64C568.4 64 640 135.6 640 224L640 448C640 483.3 611.3 512 576 512L570.4 512C557.2 549.3 521.8 576 480 576C438.2 576 402.7 549.3 389.6 512L250.5 512C237.3 549.3 201.8 576 160.1 576C118.4 576 82.9 549.3 69.7 512L64 512C28.7 512 0 483.3 0 448L0 160C0 107 43 64 96 64L480 64zM160 432C133.5 432 112 453.5 112 480C112 506.5 133.5 528 160 528C186.5 528 208 506.5 208 480C208 453.5 186.5 432 160 432zM480 432C453.5 432 432 453.5 432 480C432 506.5 453.5 528 480 528C506.5 528 528 506.5 528 480C528 453.5 506.5 432 480 432zM480 128C462.3 128 448 142.3 448 160L448 352C448 369.7 462.3 384 480 384L544 384C561.7 384 576 369.7 576 352L576 224C576 171 533 128 480 128zM248 288L352 288C369.7 288 384 273.7 384 256L384 160C384 142.3 369.7 128 352 128L248 128L248 288zM96 128C78.3 128 64 142.3 64 160L64 256C64 273.7 78.3 288 96 288L200 288L200 128L96 128z"/></svg>';
+                                        } elseif (str_contains($nameLower, 'pociąg') || str_contains($nameLower, 'pociag') || str_contains($nameLower, 'train')) {
+                                            $iconHtml = '<i class="fa-solid fa-train"></i>';
+                                        } elseif (str_contains($nameLower, 'prom') || str_contains($nameLower, 'statek') || str_contains($nameLower, 'ferry') || str_contains($nameLower, 'boat')) {
+                                            $iconHtml = '<i class="fa-solid fa-sailboat"></i>';
+                                        } elseif (str_contains($nameLower, 'pieszo') || str_contains($nameLower, 'nogach') || str_contains($nameLower, 'walking') || str_contains($nameLower, 'pieszy')) {
+                                            $iconHtml = '<i class="fa-solid fa-person-walking"></i>';
+                                        }
+                                    @endphp
+                                    @if($key > 0)
+                                        <span style="margin:0 3px;">+</span>
+                                    @endif
+                                    {!! $iconHtml !!}
+                                @endforeach
+                            </div>
+                        @else
+                            <div class="icon"><i class="fas fa-calendar"></i></div>
+                        @endif
+                        @php
+                            $transportLabels = $item->transportTypes && $item->transportTypes->count() > 0
+                                ? $item->transportTypes->pluck('name')->filter()->implode(', ')
+                                : null;
+                        @endphp
+                        @if($transportLabels)
+                            <span class="transport-muted">rodzaj transportu: <b>{{ $transportLabels }}</b></span>
+                        @endif
                     </div>
                 </div>
                 <a href="#contact-scroll"><div class="take-to-contact-button">Zapytaj o tę wycieczkę</div></a>

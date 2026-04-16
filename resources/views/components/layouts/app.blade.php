@@ -33,6 +33,7 @@
 
         .container {
             max-width: 1200px;
+            overflow: visible !important;
         }
     </style>
 </head>
@@ -48,13 +49,15 @@
             </nav>
         </div>
     </header>
+
     <main class="container mx-auto py-8">
         @yield('content')
-        {{-- $slot usunięty, bo nie jest używany w tym kontekście --}}
+        {{ $slot ?? '' }}
     </main>
-    <script src="https://cdn.jsdelivr.net/npm/sortablejs@1.15.0/Sortable.min.js"></script>
+
     @livewireScripts
     @stack('scripts')
+    <script src="https://cdn.jsdelivr.net/npm/alpinejs@3.x.x/dist/cdn.min.js" defer></script>
 </body>
 
 </html>

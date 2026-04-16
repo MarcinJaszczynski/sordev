@@ -20,31 +20,40 @@ class MarkupResource extends Resource
     {
         return $form
             ->schema([
-                Forms\Components\TextInput::make('name')
-                    ->label('Nazwa')
-                    ->required(),
-                Forms\Components\Textarea::make('description')
-                    ->label('Opis')
-                    ->rows(2),
-                Forms\Components\TextInput::make('percent')
-                    ->label('Procent narzutu')
-                    ->numeric()
-                    ->required(),
-                Forms\Components\TextInput::make('discount_percent')
-                    ->label('Upust (%)')
-                    ->numeric()
-                    ->default(0),
-                Forms\Components\DatePicker::make('discount_start')
-                    ->label('Upust od'),
-                Forms\Components\DatePicker::make('discount_end')
-                    ->label('Upust do'),
-                Forms\Components\TextInput::make('min_daily_amount_pln')
-                    ->label('Minimalna kwota na dzień (PLN)')
-                    ->numeric()
-                    ->default(0),
-                Forms\Components\Toggle::make('is_default')
-                    ->label('Domyślny narzut')
-                    ->inline(false),
+                Forms\Components\Section::make('Dane narzutu')
+                    ->columns(3)
+                    ->schema([
+                        Forms\Components\TextInput::make('name')
+                            ->label('Nazwa')
+                            ->required()
+                            ->columnSpanFull(),
+                        Forms\Components\TextInput::make('percent')
+                            ->label('Procent narzutu (%)')
+                            ->numeric()
+                            ->required(),
+                        Forms\Components\TextInput::make('min_daily_amount_pln')
+                            ->label('Min. kwota / dzień (PLN)')
+                            ->numeric()
+                            ->default(0),
+                        Forms\Components\Toggle::make('is_default')
+                            ->label('Domyślny narzut')
+                            ->inline(false),
+                        Forms\Components\RichEditor::make('description')
+                            ->columnSpanFull(),
+                    ]),
+
+                Forms\Components\Section::make('Upust')
+                    ->columns(3)
+                    ->schema([
+                        Forms\Components\TextInput::make('discount_percent')
+                            ->label('Upust (%)')
+                            ->numeric()
+                            ->default(0),
+                        Forms\Components\DatePicker::make('discount_start')
+                            ->label('Upust od'),
+                        Forms\Components\DatePicker::make('discount_end')
+                            ->label('Upust do'),
+                    ]),
             ]);
     }
 

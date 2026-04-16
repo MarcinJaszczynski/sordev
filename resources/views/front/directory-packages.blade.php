@@ -464,7 +464,7 @@ document.addEventListener('DOMContentLoaded', function(){
                                         <div class="package-box-layout">
                                             <div
                                                 class="package-box-photo"
-                                                style="background-image: url({{ asset('storage/' . ($item->featured_image ?? '')) }}); cursor: pointer;"
+                                                style="background-image: url({{ $item->preview_image_url ?: asset('uploads/default.png') }}); cursor: pointer;"
                                                 onclick="window.location.href='{{ $item->prettyUrl() }}';">
                                             </div>
                                             <div class="package-box-name-mobile">
@@ -645,7 +645,7 @@ document.addEventListener('DOMContentLoaded', function(){
             <div class="layout">
                             @foreach($random_one_day as $item)
             <div class="package-preview">
-                <div class="photo" style="background-image:url({{ asset('storage/' . ($item->featured_image ?? '')) }})"></div>
+                <div class="photo" style="background-image:url({{ $item->preview_image_url ?: asset('uploads/default.png') }})"></div>
                 <div class="text-window">
                     <div class="title"><a href="{{ $item->prettyUrl() }}">{{ $item->name }}</a></div>
                     <div class="price">
@@ -728,7 +728,7 @@ document.addEventListener('DOMContentLoaded', function(){
             <div class="layout">
                                     @foreach($random_two_day as $item)
                     <div class="package-preview">
-                        <div class="photo" style="background-image:url({{ asset('storage/' . ($item->featured_image ?? '')) }})"></div>
+                        <div class="photo" style="background-image:url({{ $item->preview_image_url ?: asset('uploads/default.png') }})"></div>
                         <div class="text-window">
                             <div class="title"><a href="{{ $item->prettyUrl() }}">{{ $item->name }}</a></div>
                             <div class="price">
@@ -804,7 +804,7 @@ document.addEventListener('DOMContentLoaded', function(){
             <div class="layout">
                 @foreach($random_three_day as $item)
                     <div class="package-preview">
-                        <div class="photo" style="background-image:url({{ asset('storage/' . ($item->featured_image ?? '')) }})"></div>
+                        <div class="photo" style="background-image:url({{ $item->preview_image_url ?: asset('uploads/default.png') }})"></div>
                         <div class="text-window">
                             <div class="title"><a href="{{ $item->prettyUrl() }}">{{ $item->name }}</a></div>
                             <div class="price">
@@ -885,7 +885,7 @@ document.addEventListener('DOMContentLoaded', function(){
             <div class="layout">
                 @foreach($random_four_day as $item)
                     <div class="package-preview">
-                        <div class="photo" style="background-image:url({{ asset('storage/' . ($item->featured_image ?? '')) }})"></div>
+                        <div class="photo" style="background-image:url({{ $item->preview_image_url ?: asset('uploads/default.png') }})"></div>
                         <div class="text-window">
                             <div class="title"><a href="{{ $item->prettyUrl() }}">{{ $item->name }}</a></div>
                             <div class="price">
@@ -966,7 +966,7 @@ document.addEventListener('DOMContentLoaded', function(){
             <div class="layout">
                 @foreach($random_five_day as $item)
                     <div class="package-preview">
-                        <div class="photo" style="background-image:url({{ asset('storage/' . ($item->featured_image ?? '')) }})"></div>
+                        <div class="photo" style="background-image:url({{ $item->preview_image_url ?: asset('uploads/default.png') }})"></div>
                         <div class="text-window">
                             <div class="title"><a href="{{ $item->prettyUrl() }}">{{ $item->name }}</a></div>
                             <div class="price">
@@ -1042,7 +1042,7 @@ document.addEventListener('DOMContentLoaded', function(){
             <div class="layout">
                 @foreach($random_six_day as $item)
                     <div class="package-preview">
-                        <div class="photo" style="background-image:url({{ asset('storage/' . ($item->featured_image ?? '')) }})"></div>
+                        <div class="photo" style="background-image:url({{ $item->preview_image_url ?: asset('uploads/default.png') }})"></div>
                         <div class="text-window">
                             <div class="title"><a href="{{ $item->prettyUrl() }}">{{ $item->name }}</a></div>
                             <div class="price">

@@ -33,3 +33,14 @@ Artisan::command('media:sync {--disk=public} {--dir=}', function () {
     $this->newLine();
     $this->info('Zakończono synchronizację.');
 })->purpose('Synchronizuje istniejące pliki z biblioteką mediów');
+
+Artisan::command('fix:event-program-point-prices', function () {
+    $fixed = 0;
+    \App\Models\EventProgramPoint::chunk(100, function ($points) use (&$fixed) {
+        foreach ($points as $point) {
+            $point->save();
+            $fixed++;
+        }
+    });
+    $this->info("Zaktualizowano ceny dla {$fixed} punktów programu.");
+})->purpose('Masowa naprawa cen w punktach programu imprez');

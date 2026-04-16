@@ -2,6 +2,7 @@
 
 namespace App\Filament\Resources;
 
+use App\Filament\Resources\TaskResource\RelationManagers\TasksRelationManager;
 use App\Filament\Resources\ContractorResource\Pages;
 use App\Filament\Resources\ContractorResource\RelationManagers\ContactsRelationManager;
 use App\Models\Contractor;
@@ -52,38 +53,100 @@ class ContractorResource extends Resource
     public static function form(Form $form): Form
     {
         return $form->schema([
-            Forms\Components\TextInput::make('name')
-                ->label('Nazwa kontrahenta')
-                ->required(),
-            Forms\Components\TextInput::make('street')
-                ->label('Ulica'),
-            Forms\Components\TextInput::make('house_number')
-                ->label('Numer domu'),
-            Forms\Components\TextInput::make('city')
-                ->label('Miejscowość'),
-            Forms\Components\TextInput::make('postal_code')
-                ->label('Kod pocztowy'),
-            Forms\Components\Select::make('status')
-                ->label('Status')
-                ->options([
-                    'active' => 'Aktywny',
-                    'inactive' => 'Nieaktywny',
-                ])
-                ->default('active')
-                ->required(),
-            Forms\Components\Textarea::make('office_notes')
-                ->label('Uwagi dla biura')
-                ->rows(3),
-            Forms\Components\Select::make('types')
-                ->label('Typy kontrahenta')
-                ->multiple()
-                ->relationship('types', 'name')
-                ->searchable()
-                ->preload()
-                ->createOptionForm([
+            Forms\Components\Section::make('Dane podstawowe')
+                ->columns(2)
+                ->schema([
                     Forms\Components\TextInput::make('name')
-                        ->label('Nazwa typu')
+                        ->label('Nazwa kontrahenta')
+                        ->required()
+                        ->columnSpanFull(),
+                    Forms\Components\Select::make('status')
+                        ->label('Status')
+                        ->options([
+                            'active' => 'Aktywny',
+                            'inactive' => 'Nieaktywny',
+                        ])
+                        ->default('active')
                         ->required(),
+                    Forms\Components\Select::make('types')
+                        ->label('Typy kontrahenta')
+                        ->multiple()
+                        ->relationship('types', 'name')
+                        ->searchable()
+                        ->preload()
+                        ->createOptionForm([
+                            Forms\Components\TextInput::make('name')
+                                ->label('Nazwa typu')
+                                ->required(),
+                        ]),
+                ]),
+
+            Forms\Components\Section::make('Dane kontaktowe')
+                ->columns(2)
+                ->schema([
+                    Forms\Components\TextInput::make('phone')
+                        ->label('Telefon')
+                        ->tel()
+                        ->maxLength(50),
+                    Forms\Components\TextInput::make('email')
+                        ->label('E-mail')
+                        ->email()
+                        ->maxLength(255),
+                    Forms\Components\TextInput::make('nip')
+                        ->label('NIP')
+                        ->maxLength(20),
+                    Forms\Components\TextInput::make('www')
+                        ->label('Strona WWW')
+                        ->url()
+                        ->maxLength(255),
+                ]),
+
+            Forms\Components\Section::make('Osoba kontaktowa')
+                ->columns(2)
+                ->collapsed()
+                ->schema([
+                    Forms\Components\TextInput::make('firstname')
+                        ->label('Imię')
+                        ->maxLength(100),
+                    Forms\Components\TextInput::make('surname')
+                        ->label('Nazwisko')
+                        ->maxLength(100),
+                ]),
+
+            Forms\Components\Section::make('Adres')
+                ->columns(4)
+                ->schema([
+                    Forms\Components\TextInput::make('street')
+                        ->label('Ulica')
+                        ->columnSpan(2),
+                    Forms\Components\TextInput::make('house_number')
+                        ->label('Nr domu')
+                        ->columnSpan(1),
+                    Forms\Components\TextInput::make('postal_code')
+                        ->label('Kod pocztowy')
+                        ->columnSpan(1),
+                    Forms\Components\TextInput::make('city')
+                        ->label('Miejscowość')
+                        ->columnSpan(2),
+                    Forms\Components\TextInput::make('region')
+                        ->label('Region / województwo')
+                        ->columnSpan(1),
+                    Forms\Components\TextInput::make('country')
+                        ->label('Kraj')
+                        ->default('Polska')
+                        ->columnSpan(1),
+                ]),
+
+            Forms\Components\Section::make('Opis i uwagi')
+                ->columns(1)
+                ->collapsed()
+                ->schema([
+                    Forms\Components\RichEditor::make('description')
+                        ->label('Opis')
+                        ->columnSpanFull(),
+                    Forms\Components\RichEditor::make('office_notes')
+                        ->label('Uwagi dla biura')
+                        ->columnSpanFull(),
                 ]),
         ]);
     }
@@ -97,45 +160,45 @@ class ContractorResource extends Resource
             ->columns([
                 Tables\Columns\TextColumn::make('name')
                     ->label('Nazwa kontrahenta')
-                    ->searchable(),
-                Tables\Columns\TextColumn::make('street')
-                    ->label('Ulica'),
-                Tables\Columns\TextColumn::make('house_number')
-                    ->label('Numer domu'),
+                    ->searchable()
+                    ->description(fn ($record) => trim(($record->firstname ?? '') . ' ' . ($record->surname ?? '')) ?: null),
+                Tables\Columns\TextColumn::make('phone')
+                    ->label('Telefon')
+                    ->searchable()
+                    ->placeholder('—')
+                    ->copyable(),
+                Tables\Columns\TextColumn::make('email')
+                    ->label('E-mail')
+                    ->searchable()
+                    ->placeholder('—')
+                    ->copyable(),
+                Tables\Columns\TextColumn::make('nip')
+                    ->label('NIP')
+                    ->searchable()
+                    ->placeholder('—')
+                    ->toggleable(isToggledHiddenByDefault: true),
                 Tables\Columns\TextColumn::make('city')
-                    ->label('Miejscowość'),
-                Tables\Columns\TextColumn::make('postal_code')
-                    ->label('Kod pocztowy'),
+                    ->label('Miejscowość')
+                    ->searchable()
+                    ->description(fn ($record) => implode(' ', array_filter([$record->postal_code, $record->street, $record->house_number]))),
                 Tables\Columns\BadgeColumn::make('status')
                     ->label('Status')
                     ->formatStateUsing(fn ($state) => $state === 'active' ? 'Aktywny' : 'Nieaktywny')
                     ->colors([
                         'success' => 'active',
                         'danger' => 'inactive',
-                    ]),
+                    ])
+                    ->sortable(),
                 Tables\Columns\TextColumn::make('office_notes')
                     ->label('Uwagi dla biura')
-                    ->limit(50),
+                    ->limit(50)
+                    ->toggleable(isToggledHiddenByDefault: true),
                 Tables\Columns\TextColumn::make('contacts')
                     ->label('Kontakty')
                     ->formatStateUsing(fn ($state, $record) =>
                         $record->contacts->map(fn ($contact) => $contact->first_name . ' ' . $contact->last_name)->join(', ')
                     )
-                    ->toggleable(),
-                Tables\Columns\TextColumn::make('types')
-                    ->label('Typy')
-                    ->formatStateUsing(fn ($state, $record) =>
-                        $record->types->pluck('name')->join(', ')
-                    )
-                    ->toggleable(),
-                Tables\Columns\TextColumn::make('created_at')
-                    ->label('Utworzono')
-                    ->dateTime()
-                    ->sortable(),
-                Tables\Columns\TextColumn::make('updated_at')
-                    ->label('Zaktualizowano')
-                    ->dateTime()
-                    ->sortable(),
+                    ->toggleable(isToggledHiddenByDefault: true),
             ])
             ->filters([
                 Tables\Filters\SelectFilter::make('status')
@@ -144,6 +207,12 @@ class ContractorResource extends Resource
                         'active' => 'Aktywny',
                         'inactive' => 'Nieaktywny',
                     ]),
+                Tables\Filters\Filter::make('city')
+                    ->label('Miejscowość')
+                    ->form([
+                        Forms\Components\TextInput::make('value')->label('Miejscowość'),
+                    ])
+                    ->query(fn ($query, array $data) => $query->when($data['value'] ?? null, fn ($q, $v) => $q->where('city', 'like', "%{$v}%"))),
                 Tables\Filters\TrashedFilter::make()
                     ->label('Kosz'),
             ])
@@ -164,6 +233,7 @@ class ContractorResource extends Resource
     {
         return [
             ContactsRelationManager::class,
+            TasksRelationManager::class,
         ];
     }
 

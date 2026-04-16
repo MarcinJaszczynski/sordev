@@ -2,7 +2,22 @@
 
 namespace App\Filament\Resources\TaskResource\Pages;
 
+use App\Filament\Resources\ContractorResource;
+use App\Filament\Resources\EventResource;
+use App\Filament\Resources\EventSettlementResource;
+use App\Filament\Resources\EventTemplateProgramPointResource;
+use App\Filament\Resources\EventTemplateResource;
 use App\Filament\Resources\TaskResource;
+use App\Models\Contractor;
+use App\Models\Event;
+use App\Models\EventDocument;
+use App\Models\EventProgramPoint;
+use App\Models\EventSettlementCost;
+use App\Models\EventSettlementDocument;
+use App\Models\EventSettlementParticipantPayment;
+use App\Models\EventTemplate;
+use App\Models\EventTemplateProgramPoint;
+use App\Models\PilotCashPreparation;
 use App\Models\Task;
 use App\Models\TaskStatus;
 use App\Models\TaskComment;
@@ -13,8 +28,10 @@ use Filament\Forms\Components\Select;
 use Filament\Forms\Components\TextInput;
 use Filament\Forms\Components\Textarea;
 use Filament\Resources\Pages\Page;
+use Illuminate\Support\Arr;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Log;
+use Illuminate\Validation\Rule;
 use Filament\Notifications\Notification;
 use Livewire\Attributes\Computed;
 use Filament\Forms\Concerns\InteractsWithForms;
@@ -29,11 +46,14 @@ class TasksKanbanBoardPage extends Page implements HasForms
     protected static string $view = 'filament.resources.task-resource.pages.tasks-kanban-board-page';
     protected static ?string $slug = '/';
     protected static ?string $title = 'Kanban - Zarządzanie zadaniami';
+    protected ?string $maxContentWidth = 'full';
 
     // Właściwości filtrowania
     public $filterBy = '';
     public $priorityFilter = '';
+    public $contextFilter = '';
     public $searchTerm = '';
+    public $dueFilter = '';
     
     // Sortowanie kolumn
     public $columnSorts = [];
@@ -49,6 +69,7 @@ class TasksKanbanBoardPage extends Page implements HasForms
     public $currentTaskForDetails = null;
     public $newComment = '';
     public $newSubtaskTitle = '';
+    public $newSubtaskAssigneeId = null;
     
     // Quick add task
     public $showingQuickAdd = false;
@@ -57,6 +78,8 @@ class TasksKanbanBoardPage extends Page implements HasForms
     public $quickTaskDescription = '';
     public $quickTaskPriority = 'medium';
     public $quickTaskAssigneeId = null;
+    public $quickTaskableType = null;
+    public $quickTaskableId = null;
 
     // --- Subtask editing ---
     public $editingSubtask = false;
@@ -96,7 +119,7 @@ class TasksKanbanBoardPage extends Page implements HasForms
     public function tasks()
     {
         $query = Task::query()
-            ->with(['status', 'assignee', 'author', 'subtasks', 'attachments', 'comments']);
+            ->with(['status', 'assignee', 'author', 'subtasks', 'attachments', 'comments.author', 'taskable']);
 
         // Apply filters
         if ($this->filterBy === 'author') {
@@ -109,11 +132,25 @@ class TasksKanbanBoardPage extends Page implements HasForms
             $query->where('priority', $this->priorityFilter);
         }
 
+        if ($this->contextFilter === '__unassigned') {
+            $query->whereNull('taskable_type');
+        } elseif ($this->contextFilter) {
+            $query->where('taskable_type', $this->contextFilter);
+        }
+
         if ($this->searchTerm) {
             $query->where(function ($q) {
                 $q->where('title', 'like', '%' . $this->searchTerm . '%')
                   ->orWhere('description', 'like', '%' . $this->searchTerm . '%');
             });
+        }
+
+        if ($this->dueFilter === 'overdue') {
+            $query->whereNotNull('due_date')->where('due_date', '<', now());
+        }
+
+        if ($this->dueFilter === 'has_due_date') {
+            $query->whereNotNull('due_date');
         }
 
         $tasks = $query->get();
@@ -128,6 +165,12 @@ class TasksKanbanBoardPage extends Page implements HasForms
                 $sortType = $this->columnSorts[$status->id];
                 
                 switch ($sortType) {
+                    case 'activity_desc':
+                        $statusTasks = $statusTasks->sortByDesc(fn (Task $task) => $this->getTaskActivityTimestamp($task));
+                        break;
+                    case 'activity_asc':
+                        $statusTasks = $statusTasks->sortBy(fn (Task $task) => $this->getTaskActivityTimestamp($task));
+                        break;
                     case 'priority_desc':
                         $statusTasks = $statusTasks->sortByDesc(function ($task) {
                             return ['high' => 3, 'medium' => 2, 'low' => 1][$task->priority] ?? 0;
@@ -157,11 +200,12 @@ class TasksKanbanBoardPage extends Page implements HasForms
                         $statusTasks = $statusTasks->sortBy('created_at');
                         break;
                     default:
-                        $statusTasks = $statusTasks->sortBy('order');
+                        $statusTasks = $statusTasks->sortByDesc(fn (Task $task) => $this->getTaskActivityTimestamp($task));
                         break;
                 }
             } else {
-                $statusTasks = $statusTasks->sortBy('order');
+                // Domyślnie pokazuj najnowszą aktywność: komentarz, załącznik, podzadanie lub aktualizacja zadania.
+                $statusTasks = $statusTasks->sortByDesc(fn (Task $task) => $this->getTaskActivityTimestamp($task));
             }
             
             $sortedTasks = $sortedTasks->merge($statusTasks->values());
@@ -184,7 +228,8 @@ class TasksKanbanBoardPage extends Page implements HasForms
 
     public function editTask($taskId)
     {
-        $task = Task::findOrFail($taskId);
+        $task = Task::with(['status', 'assignee', 'author', 'attachments', 'comments.author', 'subtasks', 'taskable'])
+            ->findOrFail($taskId);
         
         if (!$this->canModifyTask($task)) {
             Notification::make()
@@ -196,7 +241,17 @@ class TasksKanbanBoardPage extends Page implements HasForms
         }
 
         $this->editingTask = $task;
-        $this->editModalData = $task->toArray();
+        $this->editModalData = Arr::only($task->toArray(), [
+            'title',
+            'description',
+            'priority',
+            'status_id',
+            'assignee_id',
+            'due_date',
+            'taskable_type',
+            'taskable_id',
+        ]);
+        $this->editModalData['due_date'] = $task->due_date?->format('Y-m-d\TH:i');
         $this->dispatch('open-modal', id: 'edit-task-modal');
     }
 
@@ -207,7 +262,20 @@ class TasksKanbanBoardPage extends Page implements HasForms
         }
 
         try {
-            $this->editingTask->update($this->editModalData);
+            $this->validate([
+                'editModalData.title' => 'required|string|max:255',
+                'editModalData.description' => 'nullable|string',
+                'editModalData.priority' => 'required|in:low,medium,high',
+                'editModalData.status_id' => 'required|exists:task_statuses,id',
+                'editModalData.assignee_id' => 'nullable|exists:users,id',
+                'editModalData.due_date' => 'nullable|date',
+                'editModalData.taskable_type' => ['nullable', Rule::in(Task::getSupportedTaskableTypes())],
+                'editModalData.taskable_id' => 'nullable|integer|required_with:editModalData.taskable_type',
+            ]);
+
+            $this->editingTask->update($this->sanitizeTaskData($this->editModalData));
+            $this->editingTask->refresh();
+            $this->editingTask->load(['status', 'assignee', 'author', 'attachments', 'comments.author', 'subtasks', 'taskable']);
 
             Notification::make()
                 ->title('Zadanie zaktualizowane')
@@ -311,7 +379,7 @@ class TasksKanbanBoardPage extends Page implements HasForms
 
     public function refreshBoard()
     {
-        $this->reset(['filterBy', 'priorityFilter', 'searchTerm', 'columnSorts']);
+        $this->reset(['filterBy', 'priorityFilter', 'contextFilter', 'searchTerm', 'dueFilter', 'columnSorts']);
         
         // Clear computed properties
         unset($this->tasks);
@@ -323,6 +391,19 @@ class TasksKanbanBoardPage extends Page implements HasForms
             ->send();
     }
 
+    public function applyQuickFilter(string $filter): void
+    {
+        match ($filter) {
+            'all' => $this->reset(['filterBy', 'priorityFilter', 'contextFilter', 'searchTerm', 'dueFilter']),
+            'assigned_to_me' => $this->filterBy = 'assignee',
+            'high_priority' => $this->priorityFilter = 'high',
+            'overdue' => $this->dueFilter = 'overdue',
+            default => null,
+        };
+
+        unset($this->tasks);
+    }
+
     public function sortColumn($statusId, $sortType)
     {
         $this->columnSorts[$statusId] = $sortType;
@@ -331,6 +412,8 @@ class TasksKanbanBoardPage extends Page implements HasForms
         unset($this->tasks);
         
         $sortNames = [
+            'activity_desc' => 'Najnowsza aktywność',
+            'activity_asc' => 'Najstarsza aktywność',
             'priority_desc' => 'Priorytet (wysoki-niski)',
             'priority_asc' => 'Priorytet (niski-wysoki)', 
             'due_date_asc' => 'Data (najwcześniej)',
@@ -352,8 +435,15 @@ class TasksKanbanBoardPage extends Page implements HasForms
 
     public function openQuickAddModal($statusId)
     {
-        $this->quickAddStatusId = $statusId;
-        $this->reset(['quickTaskTitle', 'quickTaskDescription', 'quickTaskPriority', 'quickTaskAssigneeId']);
+        $this->quickAddStatusId = $statusId ?: Task::getDefaultStatusId();
+        $this->reset([
+            'quickTaskTitle',
+            'quickTaskDescription',
+            'quickTaskPriority',
+            'quickTaskAssigneeId',
+            'quickTaskableType',
+            'quickTaskableId',
+        ]);
         $this->showingQuickAdd = true;
         
         $this->dispatch('open-modal', id: 'quick-add-modal');
@@ -366,18 +456,24 @@ class TasksKanbanBoardPage extends Page implements HasForms
             'quickTaskDescription' => 'nullable|string',
             'quickTaskPriority' => 'required|in:low,medium,high',
             'quickTaskAssigneeId' => 'nullable|exists:users,id',
+            'quickTaskableType' => ['nullable', Rule::in(Task::getSupportedTaskableTypes())],
+            'quickTaskableId' => 'nullable|integer|required_with:quickTaskableType',
+        ]);
+
+        $quickTaskData = $this->sanitizeTaskData([
+            'title' => $this->quickTaskTitle,
+            'description' => $this->quickTaskDescription,
+            'priority' => $this->quickTaskPriority,
+            'status_id' => $this->quickAddStatusId ?: Task::getDefaultStatusId(),
+            'author_id' => Auth::id(),
+            'assignee_id' => $this->quickTaskAssigneeId,
+            'taskable_type' => $this->quickTaskableType,
+            'taskable_id' => $this->quickTaskableId,
+            'order' => Task::where('status_id', $this->quickAddStatusId ?: Task::getDefaultStatusId())->max('order') + 1,
         ]);
 
         try {
-            $task = Task::create([
-                'title' => $this->quickTaskTitle,
-                'description' => $this->quickTaskDescription,
-                'priority' => $this->quickTaskPriority,
-                'status_id' => $this->quickAddStatusId,
-                'author_id' => Auth::id(),
-                'assignee_id' => $this->quickTaskAssigneeId,
-                'order' => Task::where('status_id', $this->quickAddStatusId)->max('order') + 1,
-            ]);
+            $task = Task::create($quickTaskData);
 
             $this->showingQuickAdd = false;
             $this->dispatch('close-modal', id: 'quick-add-modal');
@@ -410,7 +506,8 @@ class TasksKanbanBoardPage extends Page implements HasForms
 
     public function showSubtasks($taskId)
     {
-        $this->currentTaskForDetails = Task::with(['subtasks.status', 'subtasks.assignee'])->findOrFail($taskId);
+        $this->currentTaskForDetails = $this->loadDetailsTask($taskId);
+        $this->prepareSubtaskFormDefaults();
         $this->showingSubtasks = true;
         $this->dispatch('open-modal', id: 'subtasks-modal');
     }
@@ -424,7 +521,7 @@ class TasksKanbanBoardPage extends Page implements HasForms
 
     public function showAttachments($taskId)
     {
-        $this->currentTaskForDetails = Task::with('attachments')->findOrFail($taskId);
+        $this->currentTaskForDetails = Task::with('attachments.user')->findOrFail($taskId);
         $this->showingAttachments = true;
         $this->dispatch('open-modal', id: 'attachments-modal');
     }
@@ -464,30 +561,40 @@ class TasksKanbanBoardPage extends Page implements HasForms
 
     public function addSubtask()
     {
-        if (!$this->currentTaskForDetails || !$this->newSubtaskTitle) {
+        if (! $this->currentTaskForDetails) {
             return;
         }
 
-        try {
-            $defaultStatus = TaskStatus::where('is_default', true)->first() 
-                ?? TaskStatus::orderBy('order')->first();
+        $this->validate([
+            'editSubtaskData.title' => 'required|string|max:255',
+            'editSubtaskData.description' => 'nullable|string',
+            'editSubtaskData.priority' => 'required|in:low,medium,high',
+            'editSubtaskData.status_id' => 'required|exists:task_statuses,id',
+            'editSubtaskData.assignee_id' => 'nullable|exists:users,id',
+            'editSubtaskData.due_date' => 'nullable|date',
+        ]);
 
+        try {
             $this->currentTaskForDetails->subtasks()->create([
-                'title' => $this->newSubtaskTitle,
-                'description' => '',
-                'status_id' => $defaultStatus->id,
+                'title' => $this->editSubtaskData['title'],
+                'description' => $this->editSubtaskData['description'] ?? null,
+                'status_id' => $this->editSubtaskData['status_id'],
                 'author_id' => Auth::id(),
-                'assignee_id' => $this->currentTaskForDetails->assignee_id,
-                'priority' => 'medium',
+                'assignee_id' => filled($this->editSubtaskData['assignee_id'] ?? null)
+                    ? $this->editSubtaskData['assignee_id']
+                    : $this->currentTaskForDetails->assignee_id,
+                'priority' => $this->editSubtaskData['priority'],
+                'due_date' => $this->editSubtaskData['due_date'] ?? null,
+                'taskable_type' => $this->currentTaskForDetails->taskable_type,
+                'taskable_id' => $this->currentTaskForDetails->taskable_id,
             ]);
 
-            $this->newSubtaskTitle = '';
-            $this->currentTaskForDetails->refresh();
-            $this->currentTaskForDetails->load(['subtasks.status', 'subtasks.assignee']);
+            $this->currentTaskForDetails = $this->loadDetailsTask($this->currentTaskForDetails->getKey());
+            $this->prepareSubtaskFormDefaults();
 
             Notification::make()
                 ->title('Podzadanie dodane')
-                ->body('Podzadanie zostało pomyślnie dodane.')
+                ->body('Podzadanie zostało pomyślnie dodane z pełnym zestawem pól.')
                 ->success()
                 ->send();
 
@@ -574,12 +681,292 @@ class TasksKanbanBoardPage extends Page implements HasForms
 
     protected function getViewData(): array
     {
+        $tasks = $this->tasks();
+        $taskContextUrls = $tasks->mapWithKeys(fn (Task $task): array => [
+            $task->id => $this->resolveTaskContextUrl($task),
+        ])->all();
+        $taskContextTrees = $tasks->mapWithKeys(fn (Task $task): array => [
+            $task->id => $this->resolveTaskContextTree($task),
+        ])->all();
+
+        $editingTaskContextUrl = $this->editingTask instanceof Task
+            ? $this->resolveTaskContextUrl($this->editingTask)
+            : null;
+
+        $currentTaskContextUrl = $this->currentTaskForDetails instanceof Task
+            ? $this->resolveTaskContextUrl($this->currentTaskForDetails)
+            : null;
+
+        $editingTaskContextTree = $this->editingTask instanceof Task
+            ? $this->resolveTaskContextTree($this->editingTask)
+            : [];
+
+        $currentTaskContextTree = $this->currentTaskForDetails instanceof Task
+            ? $this->resolveTaskContextTree($this->currentTaskForDetails)
+            : [];
+
+        $currentTaskHierarchy = $this->currentTaskForDetails instanceof Task
+            ? $this->resolveTaskHierarchy($this->currentTaskForDetails)
+            : [];
+
         return [
-            'tasks' => $this->tasks(),
+            'tasks' => $tasks,
             'statuses' => $this->statuses(),
             'currentUser' => Auth::user(),
             'users' => \App\Models\User::all(), // Dodano przekazywanie użytkowników
+            'taskableTypes' => Task::getTaskableTypeOptions(),
+            'quickTaskableRecords' => Task::getTaskableRecordOptions($this->quickTaskableType),
+            'editTaskableRecords' => Task::getTaskableRecordOptions($this->editModalData['taskable_type'] ?? null),
+            'taskContextUrls' => $taskContextUrls,
+            'taskContextTrees' => $taskContextTrees,
+            'editingTaskContextUrl' => $editingTaskContextUrl,
+            'editingTaskContextTree' => $editingTaskContextTree,
+            'currentTaskContextUrl' => $currentTaskContextUrl,
+            'currentTaskContextTree' => $currentTaskContextTree,
+            'currentTaskHierarchy' => $currentTaskHierarchy,
+            'calendarEvents' => $tasks
+                ->filter(fn (Task $task) => !empty($task->due_date))
+                ->map(function (Task $task): array {
+                    return [
+                        'id' => (string) $task->id,
+                        'title' => $task->title,
+                        'start' => optional($task->due_date)->toIso8601String(),
+                        'url' => TaskResource::getUrl('edit', ['record' => $task]),
+                        'backgroundColor' => match ($task->priority) {
+                            'high' => '#dc2626',
+                            'medium' => '#d97706',
+                            'low' => '#16a34a',
+                            default => '#2563eb',
+                        },
+                        'borderColor' => match ($task->priority) {
+                            'high' => '#991b1b',
+                            'medium' => '#92400e',
+                            'low' => '#166534',
+                            default => '#1d4ed8',
+                        },
+                        'textColor' => '#ffffff',
+                    ];
+                })
+                ->values()
+                ->all(),
         ];
+    }
+
+    protected function resolveTaskContextUrl(Task $task): ?string
+    {
+        $context = $task->taskable;
+
+        if (! $context) {
+            return null;
+        }
+
+        return match (true) {
+            $context instanceof Event => EventResource::getUrl('edit', ['record' => $context]),
+            $context instanceof EventTemplate => EventTemplateResource::getUrl('edit', ['record' => $context]),
+            $context instanceof EventTemplateProgramPoint => EventTemplateProgramPointResource::getUrl('edit', ['record' => $context]),
+            $context instanceof Contractor => ContractorResource::getUrl('edit', ['record' => $context]),
+            $context instanceof EventProgramPoint => $context->event_id
+                ? EventResource::getUrl('edit-program', ['record' => $context->event_id])
+                : null,
+            $context instanceof EventDocument => $context->event_id
+                ? EventResource::getUrl('edit', ['record' => $context->event_id])
+                : null,
+            $context instanceof EventSettlementCost => $context->settlement_id
+                ? EventSettlementResource::getUrl('edit', ['record' => $context->settlement_id])
+                : null,
+            $context instanceof EventSettlementDocument => $context->settlement_id
+                ? EventSettlementResource::getUrl('edit', ['record' => $context->settlement_id])
+                : null,
+            $context instanceof EventSettlementParticipantPayment => $context->settlement_id
+                ? EventSettlementResource::getUrl('edit', ['record' => $context->settlement_id])
+                : null,
+            $context instanceof PilotCashPreparation => $context->settlement_id
+                ? EventSettlementResource::getUrl('edit', ['record' => $context->settlement_id])
+                : null,
+            default => null,
+        };
+    }
+
+    protected function resolveTaskContextTree(Task $task): array
+    {
+        $context = $task->taskable;
+
+        if (! $context) {
+            return [];
+        }
+
+        return match (true) {
+            $context instanceof Event => [[
+                'label' => $this->formatEventContextLabel($context),
+                'url' => EventResource::getUrl('edit', ['record' => $context]),
+            ]],
+
+            $context instanceof EventProgramPoint => array_values(array_filter([
+                $context->event_id ? [
+                    'label' => $this->formatEventContextLabel($context->event, $context->event_id),
+                    'url' => EventResource::getUrl('edit', ['record' => $context->event_id]),
+                ] : null,
+                $context->event_id ? [
+                    'label' => 'Program imprezy',
+                    'url' => EventResource::getUrl('edit-program', ['record' => $context->event_id]),
+                ] : null,
+                $context->event_id ? [
+                    'label' => 'Punkt programu #' . $context->getKey(),
+                    'url' => EventResource::getUrl('edit-program', ['record' => $context->event_id]),
+                ] : null,
+            ])),
+
+            $context instanceof EventTemplate => [[
+                'label' => 'Szablon: ' . ($context->name ?: ('#' . $context->getKey())),
+                'url' => EventTemplateResource::getUrl('edit', ['record' => $context]),
+            ]],
+
+            $context instanceof EventTemplateProgramPoint => array_values(array_filter([
+                $context->event_template_id ? [
+                    'label' => 'Szablon imprezy',
+                    'url' => EventTemplateResource::getUrl('edit', ['record' => $context->event_template_id]),
+                ] : null,
+                [
+                    'label' => 'Punkt szablonu #' . $context->getKey(),
+                    'url' => EventTemplateProgramPointResource::getUrl('edit', ['record' => $context]),
+                ],
+            ])),
+
+            $context instanceof Contractor => [[
+                'label' => 'Kontrahent: ' . ($context->name ?: ('#' . $context->getKey())),
+                'url' => ContractorResource::getUrl('edit', ['record' => $context]),
+            ]],
+
+            $context instanceof EventDocument => array_values(array_filter([
+                $context->event_id ? [
+                    'label' => $this->formatEventContextLabel($context->event, $context->event_id),
+                    'url' => EventResource::getUrl('edit', ['record' => $context->event_id]),
+                ] : null,
+                $context->event_id ? [
+                    'label' => 'Dokument imprezy #' . $context->getKey(),
+                    'url' => EventResource::getUrl('edit', ['record' => $context->event_id]),
+                ] : null,
+            ])),
+
+            $context instanceof EventSettlementCost => array_values(array_filter([
+                $context->settlement?->event_id ? [
+                    'label' => $this->formatEventContextLabel($context->settlement?->event, $context->settlement->event_id),
+                    'url' => EventResource::getUrl('edit', ['record' => $context->settlement->event_id]),
+                ] : null,
+                $context->settlement_id ? [
+                    'label' => 'Rozliczenie #' . $context->settlement_id,
+                    'url' => EventSettlementResource::getUrl('edit', ['record' => $context->settlement_id]),
+                ] : null,
+                $context->settlement_id ? [
+                    'label' => 'Pozycja kosztu #' . $context->getKey(),
+                    'url' => $this->appendQuery(
+                        EventSettlementResource::getUrl('edit', ['record' => $context->settlement_id]),
+                        ['activeRelationManager' => 0]
+                    ),
+                ] : null,
+            ])),
+
+            $context instanceof EventSettlementDocument => array_values(array_filter([
+                $context->settlement?->event_id ? [
+                    'label' => $this->formatEventContextLabel($context->settlement?->event, $context->settlement->event_id),
+                    'url' => EventResource::getUrl('edit', ['record' => $context->settlement->event_id]),
+                ] : null,
+                $context->settlement_id ? [
+                    'label' => 'Rozliczenie #' . $context->settlement_id,
+                    'url' => EventSettlementResource::getUrl('edit', ['record' => $context->settlement_id]),
+                ] : null,
+                $context->settlement_id ? [
+                    'label' => 'Dokument rozliczenia #' . $context->getKey(),
+                    'url' => $this->appendQuery(
+                        EventSettlementResource::getUrl('edit', ['record' => $context->settlement_id]),
+                        ['activeRelationManager' => 1]
+                    ),
+                ] : null,
+            ])),
+
+            $context instanceof EventSettlementParticipantPayment => array_values(array_filter([
+                $context->settlement?->event_id ? [
+                    'label' => $this->formatEventContextLabel($context->settlement?->event, $context->settlement->event_id),
+                    'url' => EventResource::getUrl('edit', ['record' => $context->settlement->event_id]),
+                ] : null,
+                $context->settlement_id ? [
+                    'label' => 'Rozliczenie #' . $context->settlement_id,
+                    'url' => EventSettlementResource::getUrl('edit', ['record' => $context->settlement_id]),
+                ] : null,
+                $context->settlement_id ? [
+                    'label' => 'Wpłata uczestnika #' . $context->getKey(),
+                    'url' => $this->appendQuery(
+                        EventSettlementResource::getUrl('edit', ['record' => $context->settlement_id]),
+                        ['activeRelationManager' => 2]
+                    ),
+                ] : null,
+            ])),
+
+            $context instanceof PilotCashPreparation => array_values(array_filter([
+                $context->settlement?->event_id ? [
+                    'label' => $this->formatEventContextLabel($context->settlement?->event, $context->settlement->event_id),
+                    'url' => EventResource::getUrl('edit', ['record' => $context->settlement->event_id]),
+                ] : null,
+                $context->settlement_id ? [
+                    'label' => 'Rozliczenie #' . $context->settlement_id,
+                    'url' => EventSettlementResource::getUrl('edit', ['record' => $context->settlement_id]),
+                ] : null,
+                $context->settlement_id ? [
+                    'label' => 'Gotówka pilota #' . $context->getKey(),
+                    'url' => $this->appendQuery(
+                        EventSettlementResource::getUrl('edit', ['record' => $context->settlement_id]),
+                        ['activeRelationManager' => 3]
+                    ),
+                ] : null,
+            ])),
+
+            default => [[
+                'label' => $task->task_context_label,
+                'url' => $this->resolveTaskContextUrl($task),
+            ]],
+        };
+    }
+
+    protected function formatEventContextLabel(?Event $event, ?int $fallbackId = null): string
+    {
+        $eventName = $event?->name ?: ($fallbackId ? ('#' . $fallbackId) : 'Brak imprezy');
+        $eventDate = $event?->start_date?->format('d.m.Y') ?? 'brak daty';
+        $orderingParty = $event?->contractor?->name ?: ($event?->client_name ?: 'brak zamawiającego');
+
+        return sprintf('Impreza: %s • %s • Zamawiający: %s', $eventName, $eventDate, $orderingParty);
+    }
+
+    protected function getTaskActivityTimestamp(Task $task): int
+    {
+        $timestamps = [
+            $task->updated_at?->timestamp,
+            $task->created_at?->timestamp,
+            optional($task->comments?->max('updated_at'))->timestamp,
+            optional($task->comments?->max('created_at'))->timestamp,
+            optional($task->attachments?->max('updated_at'))->timestamp,
+            optional($task->attachments?->max('created_at'))->timestamp,
+            optional($task->subtasks?->max('updated_at'))->timestamp,
+            optional($task->subtasks?->max('created_at'))->timestamp,
+        ];
+
+        return (int) max(array_filter($timestamps, fn ($value) => ! is_null($value)) ?: [0]);
+    }
+
+    protected function appendQuery(string $url, array $query): string
+    {
+        $separator = str_contains($url, '?') ? '&' : '?';
+
+        return $url . $separator . http_build_query($query);
+    }
+
+    public function updatedQuickTaskableType(): void
+    {
+        $this->quickTaskableId = null;
+    }
+
+    public function updatedEditModalDataTaskableType(): void
+    {
+        $this->editModalData['taskable_id'] = null;
     }
 
     // --- Subtask editing ---
@@ -596,20 +983,14 @@ class TasksKanbanBoardPage extends Page implements HasForms
             'due_date' => $subtask->due_date ? $subtask->due_date->format('Y-m-d\TH:i') : null,
         ];
         $this->editingSubtask = true;
+        $this->showAdvancedSubtaskForm = false;
     }
 
     public function cancelEditSubtask()
     {
         $this->editingSubtask = false;
         $this->editSubtaskId = null;
-        $this->editSubtaskData = [
-            'title' => '',
-            'description' => '',
-            'priority' => 'medium',
-            'assignee_id' => null,
-            'status_id' => null,
-            'due_date' => null,
-        ];
+        $this->prepareSubtaskFormDefaults();
     }
 
     public function saveSubtask()
@@ -632,18 +1013,52 @@ class TasksKanbanBoardPage extends Page implements HasForms
         ]);
         $this->editingSubtask = false;
         $this->editSubtaskId = null;
-        $this->editSubtaskData = [
-            'title' => '',
-            'description' => '',
-            'priority' => 'medium',
-            'assignee_id' => null,
-            'status_id' => null,
-            'due_date' => null,
-        ];
-        $this->currentTaskForDetails->refresh();
-        $this->currentTaskForDetails->load(['subtasks.status', 'subtasks.assignee']);
+        $this->currentTaskForDetails = $this->loadDetailsTask($this->currentTaskForDetails->getKey());
+        $this->prepareSubtaskFormDefaults();
         \Filament\Notifications\Notification::make()
             ->title('Podzadanie zapisane')
+            ->success()
+            ->send();
+    }
+
+    public function openSubtaskDetails(int $taskId): void
+    {
+        $this->currentTaskForDetails = $this->loadDetailsTask($taskId);
+        $this->prepareSubtaskFormDefaults();
+    }
+
+    public function goToParentTaskDetails(): void
+    {
+        if (! $this->currentTaskForDetails?->parent_id) {
+            return;
+        }
+
+        $this->currentTaskForDetails = $this->loadDetailsTask($this->currentTaskForDetails->parent_id);
+        $this->prepareSubtaskFormDefaults();
+    }
+
+    public function deleteSubtask(int $subtaskId): void
+    {
+        $subtask = Task::findOrFail($subtaskId);
+
+        if (! $this->canDeleteTask($subtask)) {
+            Notification::make()
+                ->title('Brak uprawnień')
+                ->body('Nie masz uprawnień do usunięcia tego podzadania.')
+                ->danger()
+                ->send();
+
+            return;
+        }
+
+        $subtask->delete();
+
+        if ($this->currentTaskForDetails) {
+            $this->currentTaskForDetails = $this->loadDetailsTask($this->currentTaskForDetails->getKey());
+        }
+
+        Notification::make()
+            ->title('Podzadanie usunięte')
             ->success()
             ->send();
     }
@@ -693,6 +1108,8 @@ class TasksKanbanBoardPage extends Page implements HasForms
             'status_id' => $this->editSubtaskData['status_id'],
             'due_date' => $this->editSubtaskData['due_date'],
             'author_id' => Auth::id(),
+            'taskable_type' => $this->currentTaskForDetails->taskable_type,
+            'taskable_id' => $this->currentTaskForDetails->taskable_id,
         ]);
         $this->showAdvancedSubtaskForm = false;
         $this->editSubtaskData = [
@@ -709,5 +1126,88 @@ class TasksKanbanBoardPage extends Page implements HasForms
             ->title('Podzadanie dodane')
             ->success()
             ->send();
+    }
+
+    protected function prepareSubtaskFormDefaults(): void
+    {
+        $defaultStatusId = Task::getDefaultStatusId();
+
+        $this->editSubtaskData = [
+            'title' => '',
+            'description' => '',
+            'priority' => 'medium',
+            'assignee_id' => $this->currentTaskForDetails?->assignee_id,
+            'status_id' => $defaultStatusId,
+            'due_date' => null,
+        ];
+    }
+
+    protected function loadDetailsTask(int|string $taskId): Task
+    {
+        return Task::with([
+            'parent:id,title,parent_id',
+            'subtasks' => fn ($query) => $query
+                ->with(['status:id,name', 'assignee:id,name'])
+                ->withCount(['subtasks', 'comments', 'attachments'])
+                ->orderByDesc('updated_at'),
+            'comments.author:id,name',
+            'attachments.user:id,name',
+            'status:id,name',
+            'assignee:id,name',
+            'taskable',
+        ])->findOrFail($taskId);
+    }
+
+    protected function resolveTaskHierarchy(Task $task): array
+    {
+        $chain = [];
+        $current = $task;
+        $guard = 0;
+
+        while ($current && $guard < 20) {
+            $chain[] = [
+                'id' => $current->getKey(),
+                'title' => $current->title ?: ('Zadanie #' . $current->getKey()),
+            ];
+
+            if (! $current->parent_id) {
+                break;
+            }
+
+            $current = Task::query()
+                ->select(['id', 'title', 'parent_id'])
+                ->find($current->parent_id);
+
+            $guard++;
+        }
+
+        return array_reverse($chain);
+    }
+
+    protected function sanitizeTaskData(array $data): array
+    {
+        $data = Arr::only($data, [
+            'title',
+            'description',
+            'priority',
+            'status_id',
+            'author_id',
+            'assignee_id',
+            'parent_id',
+            'due_date',
+            'order',
+            'taskable_type',
+            'taskable_id',
+        ]);
+
+        $data['assignee_id'] = filled($data['assignee_id'] ?? null) ? $data['assignee_id'] : null;
+        $data['due_date'] = filled($data['due_date'] ?? null) ? $data['due_date'] : null;
+
+        if (! filled($data['taskable_type'] ?? null) || ! filled($data['taskable_id'] ?? null)) {
+            $data['taskable_type'] = null;
+            $data['taskable_id'] = null;
+        }
+
+        return $data;
     }
 }

@@ -180,7 +180,12 @@ class UnifiedPriceCalculatorBasicTest extends TestCase
                 'event_template_qty_id' => $qty->id,
                 'qty' => 20,
                 'price_per_person' => 150.00,
-                'currencies' => ['PLN' => ['final' => ['price_per_person' => 150.00]]],
+                'currencies' => [
+                    'PLN' => [
+                        'raw' => ['price_per_person' => 150.00],
+                        'final' => ['price_per_person' => 150.00]
+                    ]
+                ],
             ],
         ]);
         $this->assertNotEmpty($engine->calculateDetailed($template, $localPlace->id, null, false), 'Engine returned empty');
@@ -218,7 +223,12 @@ class UnifiedPriceCalculatorBasicTest extends TestCase
                 'event_template_qty_id' => $qty->id,
                 'qty' => 20,
                 'price_per_person' => 200.00,
-                'currencies' => ['PLN' => ['final' => ['price_per_person' => 200.00]]],
+                'currencies' => [
+                    'PLN' => [
+                        'raw' => ['price_per_person' => 200.00],
+                        'final' => ['price_per_person' => 200.00]
+                    ]
+                ],
             ],
         ]);
         $this->assertNotEmpty($engine->calculateDetailed($template, $localPlace->id, null, false), 'Engine returned empty');
@@ -280,13 +290,23 @@ class UnifiedPriceCalculatorBasicTest extends TestCase
                 'event_template_qty_id' => $qty20->id,
                 'qty' => 20,
                 'price_per_person' => 150.00,
-                'currencies' => ['PLN' => ['final' => ['price_per_person' => 150.00]]],
+                'currencies' => [
+                    'PLN' => [
+                        'raw' => ['price_per_person' => 150.00],
+                        'final' => ['price_per_person' => 150.00]
+                    ]
+                ],
             ],
             30 => [
                 'event_template_qty_id' => $qty30->id,
                 'qty' => 30,
                 'price_per_person' => 140.00,
-                'currencies' => ['PLN' => ['final' => ['price_per_person' => 140.00]]],
+                'currencies' => [
+                    'PLN' => [
+                        'raw' => ['price_per_person' => 140.00],
+                        'final' => ['price_per_person' => 140.00]
+                    ]
+                ],
             ],
         ]);
         $this->assertNotEmpty($engine->calculateDetailed($template, $localPlace->id, null, false));

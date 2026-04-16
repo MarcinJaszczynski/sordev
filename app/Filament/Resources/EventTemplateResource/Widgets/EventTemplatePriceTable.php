@@ -31,6 +31,7 @@ class EventTemplatePriceTable extends Widget
     public $prices = [];
     public $detailedCalculations = [];
     public $qtyVariants = [];
+    public array $variantOverrides = [];
 
     public function mount()
     {
@@ -192,6 +193,25 @@ class EventTemplatePriceTable extends Widget
 
     public function getQtyVariantsProperty()
     {
+        if (!empty($this->variantOverrides)) {
+            $variants = [];
+            foreach ($this->variantOverrides as $variant) {
+                $qty = (int) ($variant['qty'] ?? 0);
+                if ($qty < 1) {
+                    continue;
+                }
+
+                $variants[$qty] = [
+                    'qty' => $qty,
+                    'gratis' => max(0, (int) ($variant['gratis'] ?? 0)),
+                    'staff' => max(0, (int) ($variant['staff'] ?? 0)),
+                    'driver' => max(0, (int) ($variant['driver'] ?? 0)),
+                ];
+            }
+
+            return $variants;
+        }
+
         // Zwraca tablicę wariantów qty z kluczem qty
         $variants = [];
         foreach (\App\Models\EventTemplateQty::all() as $variant) {
@@ -236,7 +256,17 @@ class EventTemplatePriceTable extends Widget
             // If the relation/table isn't present or fails, ignore and continue.
         }
 
-        $qtyVariants = \App\Models\EventTemplateQty::all();
+        $qtyVariants = !empty($this->variantOverrides)
+            ? collect($this->variantOverrides)
+                ->map(function (array $variant) {
+                    $model = new \App\Models\EventTemplateQty();
+                    $model->qty = max(1, (int) ($variant['qty'] ?? 1));
+                    $model->gratis = max(0, (int) ($variant['gratis'] ?? 0));
+                    $model->staff = max(0, (int) ($variant['staff'] ?? 0));
+                    $model->driver = max(0, (int) ($variant['driver'] ?? 0));
+                    return $model;
+                })
+            : \App\Models\EventTemplateQty::all();
         $calculations = [];
 
         $bus = $this->record->bus;

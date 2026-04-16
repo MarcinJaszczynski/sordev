@@ -19,6 +19,7 @@ class TransportTypeResource extends Resource
     protected static ?string $navigationIcon = 'heroicon-o-truck';
     protected static ?string $navigationLabel = 'Rodzaj transportu';
     protected static ?string $navigationGroup = 'Szablony imprez';
+    protected static ?int $navigationSort = 50;
 
     public static function form(Form $form): Form
     {
@@ -28,7 +29,7 @@ class TransportTypeResource extends Resource
                     ->label('Nazwa')
                     ->required()
                     ->maxLength(255),
-                Forms\Components\Textarea::make('description')
+                Forms\Components\RichEditor::make('description')
                     ->label('Opis')
                     ->maxLength(1000),
                 Forms\Components\FileUpload::make('icon_path')
@@ -53,7 +54,7 @@ class TransportTypeResource extends Resource
                     ->height(40)
                     ->width(40),
                 Tables\Columns\TextColumn::make('name')->label('Nazwa')->searchable()->sortable(),
-                Tables\Columns\TextColumn::make('description')->label('Opis')->limit(80),
+                Tables\Columns\TextColumn::make('description')->label('Opis')->html(false)->limit(80),
             ])
             ->filters([
                 //

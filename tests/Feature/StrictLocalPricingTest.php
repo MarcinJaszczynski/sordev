@@ -28,13 +28,14 @@ class StrictLocalPricingTest extends TestCase
             'duration_days' => $duration,
             'is_active' => true,
             'name' => $name,
+            'start_place_id' => $warszawa->id,
         ]);
 
         if ($availability) {
             EventTemplateStartingPlaceAvailability::create([
                 'event_template_id' => $template->id,
                 'start_place_id' => $warszawa->id,
-                'end_place_id' => $warszawa->id, // minimalny wymagany end_place_id (schema NOT NULL)
+                'end_place_id' => $template->start_place_id,
                 'available' => true,
                 'note' => null,
             ]);
@@ -73,5 +74,41 @@ class StrictLocalPricingTest extends TestCase
         $this->assertStringContainsString('Wycieczka OK', $html, 'Brak poprawnego szablonu z lokalną ceną');
         $this->assertStringNotContainsString('Bez ceny lokalnej', $html, 'Pojawił się szablon bez lokalnej ceny');
         $this->assertStringNotContainsString('Sierota cenowa', $html, 'Pojawił się szablon z ceną-sierotą bez availability');
+    }
+
+    public function test_template_is_hidden_when_availability_exists_only_for_wrong_end_place()
+    {
+        $zielonaGora = Place::factory()->create(['name' => 'Zielona Góra', 'starting_place' => true]);
+        $warszawa = Place::factory()->create(['name' => 'Warszawa', 'starting_place' => true]);
+        $krakow = Place::factory()->create(['name' => 'Kraków', 'starting_place' => true]);
+
+        $template = EventTemplate::factory()->create([
+            'duration_days' => 1,
+            'is_active' => true,
+            'name' => 'Pomiechówek test',
+            'slug' => 'pomiechowek-test',
+            'start_place_id' => $warszawa->id,
+        ]);
+
+        EventTemplateStartingPlaceAvailability::create([
+            'event_template_id' => $template->id,
+            'start_place_id' => $zielonaGora->id,
+            // Celowo zły end_place: inny niż start_place_id szablonu.
+            'end_place_id' => $krakow->id,
+            'available' => true,
+        ]);
+
+        $qty = EventTemplateQty::create(['qty' => 40]);
+        EventTemplatePricePerPerson::factory()->create([
+            'event_template_id' => $template->id,
+            'event_template_qty_id' => $qty->id,
+            'currency_id' => Currency::first()->id,
+            'start_place_id' => $zielonaGora->id,
+            'price_per_person' => 399,
+        ]);
+
+        $response = $this->get('/zielona-gora/oferty?length_id=1');
+        $response->assertStatus(200);
+        $response->assertDontSee('Pomiechówek test');
     }
 }

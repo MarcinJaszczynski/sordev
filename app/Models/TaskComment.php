@@ -13,8 +13,19 @@ class TaskComment extends Model
     protected $fillable = [
         'content',
         'task_id',
+        'user_id',
         'author_id',
     ];
+
+    public function getAuthorIdAttribute(): ?int
+    {
+        return $this->attributes['user_id'] ?? null;
+    }
+
+    public function setAuthorIdAttribute($value): void
+    {
+        $this->attributes['user_id'] = $value;
+    }
 
     public function task(): BelongsTo
     {
@@ -23,6 +34,11 @@ class TaskComment extends Model
 
     public function author(): BelongsTo
     {
-        return $this->belongsTo(User::class, 'author_id');
+        return $this->belongsTo(User::class, 'user_id');
+    }
+
+    public function user(): BelongsTo
+    {
+        return $this->belongsTo(User::class, 'user_id');
     }
 } 

@@ -1,0 +1,331 @@
+@import 'tailwindcss';
+
+@source '../../vendor/laravel/framework/src/Illuminate/Pagination/resources/views/*.blade.php';
+@source '../../storage/framework/views/*.php';
+@source '../**/*.blade.php';
+@source '../**/*.js';
+
+@theme {
+    --font-sans: 'Instrument Sans', ui-sans-serif, system-ui, sans-serif, 'Apple Color Emoji', 'Segoe UI Emoji',
+        'Segoe UI Symbol', 'Noto Color Emoji';
+}
+/* Theme variables (light + dark) -------------------------------------------------- */
+:root {
+    /* Light theme */
+    --f-bg: #F9FAFB; /* page background */
+    --f-surface: #FFFFFF; /* cards, widgets */
+    --f-muted: #6B7280; /* muted text */
+    --f-text: #0F172A; /* primary text */
+    --f-border: rgba(15,23,42,0.06);
+    --f-primary: #0EA5A4; /* teal-ish primary */
+    --f-accent: #6366F1; /* violet accent */
+    --f-success: #10B981;
+    --f-warning: #F59E0B;
+    --f-danger:  #EF4444;
+}
+
+/* Dark theme when html[data-theme='dark'] is present */
+html[data-theme='dark'] {
+    --f-bg: #0B1220; /* dark page background */
+    --f-surface: #0F1724; /* widget/card background */
+    --f-muted: #94A3B8;
+    --f-text: #E6EEF6;
+    --f-border: rgba(255,255,255,0.04);
+    --f-primary: #06B6D4;
+    --f-accent: #8B5CF6;
+    --f-success: #34D399;
+    --f-warning: #FBBF24;
+    --f-danger:  #F87171;
+}
+
+/* Explicit light theme when html[data-theme='light'] is present */
+html[data-theme='light'] {
+    --f-bg: #F9FAFB;
+    --f-surface: #FFFFFF;
+    --f-muted: #6B7280;
+    --f-text: #0F172A;
+    --f-border: rgba(15,23,42,0.06);
+    --f-primary: #0EA5A4;
+    --f-accent: #6366F1;
+    --f-success: #10B981;
+    --f-warning: #F59E0B;
+    --f-danger:  #EF4444;
+}
+
+/* Filament surface styling: apply variables to main containers */
+body, .filament-app, .filament-page, .filament-main, .filament-widget, .filament-panel, .filament-sidebar {
+    background-color: var(--f-bg) !important;
+    color: var(--f-text) !important;
+}
+
+.filament-widget, .filament-card, .filament-panel, .card, .panel {
+    background-color: var(--f-surface) !important;
+    border: 1px solid var(--f-border) !important;
+    color: var(--f-text) !important;
+}
+
+.filament-navbar, .filament-header, .filament-actions, .filament-table {
+    color: var(--f-text) !important;
+}
+
+/* Buttons and actionable elements */
+.filament-button, .filament-button-primary {
+    --tw-bg-opacity: 1;
+}
+.filament-button-primary {
+    background-color: var(--f-primary) !important;
+    color: white !important;
+}
+
+/* Kanban: ensure column bodies and cards use surface color and readable text */
+.mkh-kanban-board .mkh-column,
+.mkh-kanban-board .mkh-column .mkh-column-body,
+.mkh-kanban-board .mkh-card,
+.filament-kanban .kanban-column,
+.filament-kanban .kanban-card {
+    background-color: var(--f-surface) !important;
+    color: var(--f-text) !important;
+}
+
+.mkh-kanban-board .mkh-card,
+.filament-kanban .kanban-card {
+    border: 1px solid var(--f-border) !important;
+    box-shadow: 0 1px 2px rgba(2,6,23,0.04) !important;
+    border-radius: 0.5rem !important;
+}
+
+/* Aggressive overrides for inner kanban elements (cards, bodies, footers) */
+.mkh-kanban-board .mkh-column *,
+.mkh-kanban-board .mkh-column .mkh-column-body *,
+.mkh-kanban-board .mkh-card *,
+.filament-kanban .kanban-column *,
+.filament-kanban .kanban-card * {
+    background-color: transparent !important; /* clear nested backgrounds */
+    color: inherit !important; /* inherit readable color from parent */
+}
+
+/* Force card body background to surface (covers inline or gradient backgrounds) */
+.mkh-kanban-board .mkh-card,
+.filament-kanban .kanban-card,
+.mkh-kanban-board .mkh-card .card-body,
+.filament-kanban .kanban-card .card-body {
+    background: var(--f-surface) !important;
+}
+
+/* Ensure inner badges and chips have readable contrast */
+.mkh-kanban-board .mkh-card .badge,
+.filament-kanban .kanban-card .badge,
+.mkh-kanban-board .mkh-card .chip,
+.filament-kanban .kanban-card .chip {
+    color: #fff !important;
+}
+
+/* Ensure contrast for badges/pills that may use status colors */
+.mkh-kanban-board .mkh-column-header,
+.mkh-kanban-board .mkh-column-title {
+    color: var(--f-text) !important;
+}
+
+/* End theme variables ------------------------------------------------------------ */
+
+/* Scoped fixes: ensure the Kanban board uses light surfaces when theme=light
+   - Targets the actual Kanban root used in the DOM: div[x-data="kanbanBoard()"]
+   - Overrides Tailwind utility backgrounds (bg-gray-*) inside this subtree only
+     so we don't affect Filament header or other global elements.
+*/
+html[data-theme='light'] div[x-data="kanbanBoard()"] {
+    background-color: var(--f-bg) !important;
+}
+
+html[data-theme='light'] div[x-data="kanbanBoard()"] .kanban-column,
+html[data-theme='light'] div[x-data="kanbanBoard()"] .kanban-column-header,
+html[data-theme='light'] div[x-data="kanbanBoard()"] .tasks-container,
+html[data-theme='light'] div[x-data="kanbanBoard()"] .task-card,
+html[data-theme='light'] div[x-data="kanbanBoard()"] .record {
+    background-color: var(--f-surface) !important;
+    color: var(--f-text) !important;
+    border-color: var(--f-border) !important;
+}
+
+/* Neutralize deeply nested bg-* utility classes inside kanban subtree so
+   parent surface color is visible. This avoids changing header or other
+   components because the selector is scoped to the kanban root. */
+html[data-theme='light'] div[x-data="kanbanBoard()"] .bg-gray-900,
+html[data-theme='light'] div[x-data="kanbanBoard()"] .bg-gray-950,
+html[data-theme='light'] div[x-data="kanbanBoard()"] .bg-gray-800,
+html[data-theme='light'] div[x-data="kanbanBoard()"] .bg-gray-700,
+html[data-theme='light'] div[x-data="kanbanBoard()"] .bg-gray-600,
+html[data-theme='light'] div[x-data="kanbanBoard()"] .bg-white {
+    background-color: transparent !important;
+}
+
+/* Make column headers subtle and keep readable text */
+html[data-theme='light'] div[x-data="kanbanBoard()"] .kanban-column-header {
+    background: linear-gradient(90deg, rgba(15,23,42,0.03), rgba(15,23,42,0.02)) !important;
+}
+
+/* Ensure priority badges remain readable */
+html[data-theme='light'] div[x-data="kanbanBoard()"] .priority-badge {
+    color: #fff !important;
+}
+
+/* Kanban semantic classes — use these in the kanban Blade so styles come from here */
+.f-kanban-controls {
+    background-color: var(--f-surface) !important;
+    border: 1px solid var(--f-border) !important;
+    color: var(--f-text) !important;
+}
+
+.f-kanban-root {
+    background-color: var(--f-bg) !important;
+}
+
+.f-kanban-column {
+    background-color: var(--f-surface) !important;
+    color: var(--f-text) !important;
+    border: 1px solid var(--f-border) !important;
+    border-radius: 0.5rem;
+}
+
+.f-kanban-column-header {
+    background: linear-gradient(90deg, rgba(15,23,42,0.03), rgba(15,23,42,0.02)) !important;
+    color: var(--f-text) !important;
+}
+
+.f-kanban-count {
+    background-color: rgba(15,23,42,0.06) !important;
+    color: var(--f-text) !important;
+    padding: 0.125rem 0.5rem;
+    border-radius: 9999px;
+    font-weight: 800;
+}
+
+.f-kanban-task {
+    background-color: var(--f-surface) !important;
+    color: var(--f-text) !important;
+    border: 1px solid var(--f-border) !important;
+    border-radius: 0.5rem !important;
+}
+
+.f-kanban-meta {
+    background-color: rgba(15,23,42,0.04) !important;
+    color: var(--f-text) !important;
+    border: 1px solid rgba(15,23,42,0.04) !important;
+}
+
+.f-kanban-meta-default {
+    background-color: rgba(15,23,42,0.04) !important;
+    color: var(--f-text) !important;
+    border-color: var(--f-border) !important;
+}
+
+.f-kanban-meta-danger {
+    background-color: rgba(220,38,38,0.12) !important;
+    color: #B91C1C !important;
+    border-color: rgba(220,38,38,0.18) !important;
+}
+
+.f-kanban-pill {
+    background-color: rgba(15,23,42,0.04) !important;
+    color: var(--f-text) !important;
+    border: 1px solid var(--f-border) !important;
+}
+
+.f-kanban-priority {
+    color: #fff !important;
+}
+
+/* Subtle badge for tags on package page */
+/* Stronger selectors to override compiled styles (public/dist-front/css/style.css) */
+.package-box-tags { margin-top: 10px; }
+.package-box-tags a.badge-tag,
+.package-box a.badge-tag,
+.package-page a.badge-tag,
+.type a.badge-tag,
+.badge-tag,
+a.badge-tag,
+.package-box-tags .badge-tag,
+.package-box .badge-tag {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    margin-right: 8px;
+    margin-bottom: 6px; /* avoid vertical shift when wrapping */
+    padding: 5px 12px;
+    min-height: 28px;
+    border-radius: 12px;
+    background-color: #F3F4F6; /* much lighter gray */
+    color: #374151; /* darker gray text for contrast (thinner feel) */
+    text-decoration: none;
+    font-size: 0.86rem;
+    font-weight: 400; /* thinner text */
+    line-height: 1.1;
+    border: 1px solid rgba(15,23,42,0.04);
+}
+
+a.badge-tag:hover,
+.badge-tag:hover {
+    background-color: #E5E7EB; /* slightly darker than base, still light */
+    color: #111827;
+    text-decoration: none;
+}
+
+.package-box-tags .badge-tag,
+.package-box .badge-tag { border-radius: 6px; padding: 3px 8px; font-size: 0.86rem; }
+
+.badge-tag:focus,
+a.badge-tag:focus {
+    outline: none;
+    box-shadow: 0 0 0 3px rgba(99,102,241,0.06);
+    background-color: #E5E7EB;
+}
+
+/* Mobile / front fixes - ensure these live in source so builds keep them */
+/* 1) Allow long package titles to wrap on small screens */
+.package-page-layout-section-two .column-left .title-section .title,
+.package-page-layout-section-two .column-left .title-section h2,
+.package-page-layout-section-two .column-left .title-section .title * {
+    white-space: normal !important;
+    min-width: 0 !important;
+    word-break: break-word !important;
+}
+
+/* 2) Defensive cookie/manage placement to avoid clipping by ancestor overflow */
+#cookie-manage {
+    position: fixed !important;
+    right: 16px !important;
+    bottom: 84px !important; /* slightly above mobile bottom bars */
+    z-index: 2147483647 !important;
+    white-space: normal !important;
+    min-width: 0 !important;
+}
+
+/* 3) meanmenu / hamburger and mobile bar tweaks */
+@media (max-width: 991px) {
+    .mean-container a.meanmenu-reveal span {
+        display: block !important;
+        height: 4px !important;
+        width: 26px !important;
+        margin: 5px auto !important;
+        background: #111827 !important;
+        border-radius: 2px !important;
+    }
+
+    .mean-container a.meanmenu-reveal {
+        padding: 8px 10px !important;
+    }
+
+    /* Ensure our mobile logo doesn't push the hamburger */
+    .mobile-bar .logo img {
+        max-width: 60% !important;
+        height: auto !important;
+    }
+
+    /* Small fix for .scroll-top sizing/box model */
+    .scroll-top {
+        box-sizing: border-box !important;
+        min-width: 0 !important;
+        max-width: 56px !important;
+        height: 56px !important;
+    }
+}

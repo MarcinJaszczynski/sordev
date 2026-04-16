@@ -2,6 +2,7 @@
 
 namespace App\Filament\Resources;
 
+use App\Filament\Resources\TaskResource\RelationManagers\TasksRelationManager;
 use App\Filament\Resources\EventTemplateResource\Pages;
 use App\Models\EventTemplate;
 use App\Models\HotelRoom;
@@ -30,7 +31,7 @@ class EventTemplateResource extends Resource
     protected static ?string $model = EventTemplate::class;
 
     protected static ?string $navigationIcon = 'heroicon-o-rectangle-stack';
-    protected static ?string $navigationGroup = 'Szablony';
+    protected static ?string $navigationGroup = 'Szablony imprez';
     protected static ?string $navigationLabel = 'Szablony imprez';
     protected static ?int $navigationSort = 10;
 
@@ -137,17 +138,13 @@ class EventTemplateResource extends Resource
                     Forms\Components\Grid::make(2)
                         ->schema([
                             Forms\Components\RichEditor::make('event_description')
-                                ->label('Opis imprezy')
-                                ->toolbarButtons(['bold', 'italic', 'bulletList', 'orderedList', 'link', 'undo', 'redo']),
+                                ->toolbarButtons([
+                                    'bold', 'italic', 'underline', 'strike', 'link', 'bulletList', 'orderedList', 'blockquote', 'codeBlock', 'h2', 'h3', 'color', 'highlight', 'undo', 'redo'
+                                ]),
                             Forms\Components\RichEditor::make('office_description')
-                                ->label('Opis dla biura')
-                                ->toolbarButtons(['bold', 'italic', 'bulletList', 'orderedList', 'link', 'undo', 'redo']),
-                            Forms\Components\Textarea::make('short_description')
-                                ->label('Krótki opis')
-                                ->rows(3),
-                            Forms\Components\Textarea::make('notes')
-                                ->label('Uwagi')
-                                ->rows(3),
+                                ->toolbarButtons([
+                                    'bold', 'italic', 'underline', 'strike', 'link', 'bulletList', 'orderedList', 'blockquote', 'codeBlock', 'h2', 'h3', 'color', 'highlight', 'undo', 'redo'
+                                ]),
                         ]),
                     Forms\Components\Grid::make(2)
                         ->schema([
@@ -380,10 +377,10 @@ class EventTemplateResource extends Resource
                                 ->label('Tytuł SEO')
                                 ->maxLength(70)
                                 ->helperText('Tytuł strony widoczny w Google (max 70 znaków)'),
-                            Forms\Components\Textarea::make('seo_description')
-                                ->label('Opis SEO')
-                                ->maxLength(350)
-                                ->rows(2)
+                            Forms\Components\RichEditor::make('seo_description')
+                                ->toolbarButtons([
+                                    'bold', 'italic', 'underline', 'strike', 'link', 'bulletList', 'orderedList', 'blockquote', 'codeBlock', 'h2', 'h3', 'color', 'highlight', 'undo', 'redo'
+                                ])
                                 ->helperText('Opis strony widoczny w Google (max 350 znaków)'),
                             Forms\Components\TextInput::make('seo_keywords')
                                 ->label('Słowa kluczowe')
@@ -588,7 +585,9 @@ class EventTemplateResource extends Resource
      */
     public static function getRelations(): array
     {
-        return [];
+        return [
+            TasksRelationManager::class,
+        ];
     }
 
     /**

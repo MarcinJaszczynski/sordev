@@ -108,7 +108,7 @@ class ProgramPointsRelationManager extends RelationManager
                             ->required(),
                         Forms\Components\TextInput::make('day')->label('Dzień')->numeric()->required(),
                         Forms\Components\TextInput::make('order')->label('Kolejność')->numeric()->required(),
-                        Forms\Components\Textarea::make('notes')->label('Uwagi'),
+                        Forms\Components\RichEditor::make('notes')->label('Uwagi'),
                         Forms\Components\Toggle::make('include_in_program')
                             ->label('Uwzględniaj w programie')
                             ->default(false)
@@ -190,7 +190,7 @@ class ProgramPointsRelationManager extends RelationManager
                             ->required(),
                         Forms\Components\TextInput::make('day')->label('Dzień')->numeric()->required(),
                         Forms\Components\TextInput::make('order')->label('Kolejność')->numeric()->required(),
-                        Forms\Components\Textarea::make('notes')->label('Uwagi'),
+                        Forms\Components\RichEditor::make('notes')->label('Uwagi'),
                         Forms\Components\Toggle::make('include_in_program')
                             ->label('Uwzględniaj w programie')
                             ->default(true)

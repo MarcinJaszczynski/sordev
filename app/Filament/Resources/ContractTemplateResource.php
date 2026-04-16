@@ -7,6 +7,7 @@ use App\Models\ContractTemplate;
 use Filament\Forms;
 use Filament\Tables;
 use Filament\Resources\Resource;
+use Illuminate\Database\Eloquent\Model;
 
 /**
  * Resource Filament dla modelu ContractTemplate.
@@ -37,7 +38,7 @@ class ContractTemplateResource extends Resource
                 ->label('Treść szablonu')
                 ->rows(16)
                 ->required()
-                ->helperText('Możesz używać znaczników w nawiasach kwadratowych, np. [IMIĘ], [DATA], które będą zastępowane przy generowaniu umowy.'),
+                ->helperText('Dostępne znaczniki: [NUMER_UMOWY], [DATA_UMOWY], [TYP_UMOWY], [NAZWA_IMPREZY], [DATA_START], [DATA_KONIEC], [KWOTA], [WALUTA], [ZAMAWIAJACY_IMIE_NAZWISKO], [ZAMAWIAJACY_INSTYTUCJA], [ZAMAWIAJACY_ADRES], [ZAMAWIAJACY_EMAIL], [ZAMAWIAJACY_TELEFON], [OPIEKUN], [UCZESTNIK], [PODOPIECZNY], [DATA_URODZENIA], [DODATKOWE_UBEZPIECZENIE], [LINK_UMOWY].'),
         ]);
     }
 
@@ -74,6 +75,15 @@ class ContractTemplateResource extends Resource
     /**
      * Uprawnienia do widoczności resource w panelu
      */
+    public static function canEdit(Model $record): bool
+    {
+        if (blank($record->getRouteKey())) {
+            return false;
+        }
+
+        return parent::canEdit($record);
+    }
+
     public static function canViewAny(): bool
     {
         $user = \App\Models\User::query()->find(\Illuminate\Support\Facades\Auth::id());

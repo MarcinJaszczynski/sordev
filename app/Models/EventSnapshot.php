@@ -62,13 +62,20 @@ class EventSnapshot extends Model
             ->with('templatePoint')
             ->get()
             ->map(function ($point) {
+                $pointName = $point->templatePoint?->name ?? $point->name ?? ('Punkt #' . $point->id);
+                $pointDescription = $point->templatePoint?->description ?? $point->description ?? null;
+
                 return [
                     'id' => $point->id,
                     'template_point_id' => $point->event_template_program_point_id,
-                    'template_point_name' => $point->templatePoint->name,
-                    'template_point_description' => $point->templatePoint->description,
+                    'template_point_name' => $pointName,
+                    'template_point_description' => $pointDescription,
+                    'name' => $pointName,
+                    'description' => $pointDescription,
                     'day' => $point->day,
                     'order' => $point->order,
+                    'start_time' => $point->start_time,
+                    'end_time' => $point->end_time,
                     'unit_price' => $point->unit_price,
                     'quantity' => $point->quantity,
                     'total_price' => $point->total_price,
@@ -92,7 +99,7 @@ class EventSnapshot extends Model
             'status' => $event->status,
             'notes' => $event->notes,
             'event_template_id' => $event->event_template_id,
-            'event_template_name' => $event->eventTemplate->name,
+            'event_template_name' => $event->eventTemplate?->name,
             'assigned_to' => $event->assigned_to,
             'assigned_user_name' => $event->assignedUser?->name,
         ];
@@ -115,7 +122,7 @@ class EventSnapshot extends Model
                         'points_count' => $points->count(),
                         'points' => $points->map(function ($point) {
                             return [
-                                'name' => $point->templatePoint->name,
+                                'name' => $point->templatePoint?->name ?? $point->name ?? ('Punkt #' . $point->id),
                                 'total_price' => $point->total_price,
                             ];
                         }),
@@ -205,8 +212,12 @@ class EventSnapshot extends Model
             EventProgramPoint::create([
                 'event_id' => $event->id,
                 'event_template_program_point_id' => $pointData['template_point_id'],
+                'name' => $pointData['name'] ?? $pointData['template_point_name'] ?? null,
+                'description' => $pointData['description'] ?? $pointData['template_point_description'] ?? null,
                 'day' => $pointData['day'],
                 'order' => $pointData['order'],
+                'start_time' => $pointData['start_time'] ?? null,
+                'end_time' => $pointData['end_time'] ?? null,
                 'unit_price' => $pointData['unit_price'],
                 'quantity' => $pointData['quantity'],
                 'total_price' => $pointData['total_price'],
@@ -254,8 +265,10 @@ class EventSnapshot extends Model
             ->with('templatePoint')
             ->get()
             ->map(function ($point) {
+                $pointName = $point->templatePoint?->name ?? $point->name ?? ('Punkt #' . $point->id);
+
                 return [
-                    'template_point_name' => $point->templatePoint->name,
+                    'template_point_name' => $pointName,
                     'day' => $point->day,
                     'order' => $point->order,
                     'unit_price' => $point->unit_price,

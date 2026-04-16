@@ -10,7 +10,11 @@ use Filament\Http\Middleware\DispatchServingFilamentEvent;
 use App\Filament\Pages\ImportExportPanel;
 use Filament\Panel;
 use Filament\PanelProvider;
+use Filament\Infolists\Components\TextEntry;
+use Filament\Tables\Table as FilamentTable;
+use Filament\Tables\Columns\TextColumn;
 use Filament\Support\Colors\Color;
+use Filament\Support\Enums\MaxWidth;
 use Filament\Widgets;
 use Filament\Navigation\NavigationGroup;
 use Filament\View\PanelsRenderHook;
@@ -32,6 +36,8 @@ class AdminPanelProvider extends PanelProvider
             ->id('admin')
             ->path('admin')
             ->login()
+            ->brandName('bprafa')
+            ->maxContentWidth(MaxWidth::Full)
             ->colors([
                 'primary' => Color::Amber,
             ])
@@ -42,19 +48,28 @@ class AdminPanelProvider extends PanelProvider
             ])
             ->widgets([
                 Widgets\AccountWidget::class,
-                Widgets\FilamentInfoWidget::class,
+                \App\Filament\Widgets\TaskCalendarWidget::class,
                 \App\Filament\Widgets\SitemapGeneratorWidget::class,
             ])
             ->plugin(FilamentShieldPlugin::make())
             ->navigationGroups([
-                NavigationGroup::make('Admin')
-                    ->label('Admin')
-                    ->collapsed(),
                 NavigationGroup::make('Imprezy')
                     ->label('Imprezy')
                     ->collapsed(false),
-                NavigationGroup::make('Ustawienia')
-                    ->label('Ustawienia')
+                NavigationGroup::make('Szablony imprez')
+                    ->label('Szablony imprez')
+                    ->collapsed(false),
+                NavigationGroup::make('Zadania')
+                    ->label('Zadania')
+                    ->collapsed(false),
+                NavigationGroup::make('Finanse')
+                    ->label('Finanse')
+                    ->collapsed(false),
+                NavigationGroup::make('Kontakty')
+                    ->label('Kontakty')
+                    ->collapsed(),
+                NavigationGroup::make('Komunikacja')
+                    ->label('Komunikacja')
                     ->collapsed(),
                 NavigationGroup::make('Ustawienia kalkulacji')
                     ->label('Ustawienia kalkulacji')
@@ -68,17 +83,17 @@ class AdminPanelProvider extends PanelProvider
                 NavigationGroup::make('Ustawienia transportu')
                     ->label('Ustawienia transportu')
                     ->collapsed(),
-                NavigationGroup::make('Kontakty')
-                    ->label('Kontakty')
+                NavigationGroup::make('Narzędzia')
+                    ->label('Narzędzia')
                     ->collapsed(),
-                NavigationGroup::make('Szablony imprez')
-                    ->label('Szablony imprez')
+                NavigationGroup::make('Biblioteka mediów')
+                    ->label('Biblioteka mediów')
                     ->collapsed(),
-                NavigationGroup::make('Zadania')
-                    ->label('Zadania')
+                NavigationGroup::make('Ustawienia')
+                    ->label('Ustawienia')
                     ->collapsed(),
-                NavigationGroup::make('Komunikacja')
-                    ->label('Komunikacja')
+                NavigationGroup::make('Admin')
+                    ->label('Admin')
                     ->collapsed(),
             ])
             ->middleware([
@@ -95,6 +110,64 @@ class AdminPanelProvider extends PanelProvider
             ->authMiddleware([
                 Authenticate::class,
             ])
+            ->bootUsing(function (Panel $panel): void {
+                $richTextFieldNames = [
+                    'description',
+                    'desc',
+                    'content',
+                    'notes',
+                    'note',
+                    'office_notes',
+                    'pilot_notes',
+                    'driver_notes',
+                    'event_description',
+                    'office_description',
+                    'seo_description',
+                    'transport_notes',
+                    'reason',
+                    'review_notes',
+                    'offer_response_notes',
+                    'offer_modification_notes',
+                    'pickup_place_details',
+                    'admin_notes',
+                    'opis',
+                    'uwagi',
+                ];
+
+                $shouldRenderAsHtml = static function (string $field) use ($richTextFieldNames): bool {
+                    foreach ($richTextFieldNames as $name) {
+                        if ($field === $name || str_ends_with($field, '.' . $name)) {
+                            return true;
+                        }
+                    }
+
+                    return false;
+                };
+
+                FilamentTable::configureUsing(function (FilamentTable $table): void {
+                    $table
+                        ->persistFiltersInSession()
+                        ->persistSearchInSession()
+                        ->persistColumnSearchesInSession()
+                        ->persistSortInSession();
+                });
+
+                TextColumn::configureUsing(function (TextColumn $column) use ($shouldRenderAsHtml): void {
+                    if ($shouldRenderAsHtml($column->getName())) {
+                        $column->html();
+                    }
+                });
+
+                TextEntry::configureUsing(function (TextEntry $entry) use ($shouldRenderAsHtml): void {
+                    if ($shouldRenderAsHtml($entry->getName())) {
+                        $entry->html();
+                    }
+                });
+            })
+            ->renderHook(
+                PanelsRenderHook::HEAD_END,
+                fn (): string => view('filament.components.admin-readability-styles')->render(),
+            )
             ->renderHook(
                 PanelsRenderHook::TOPBAR_END,
                 function (): string {
@@ -103,11 +176,19 @@ class AdminPanelProvider extends PanelProvider
                         return '';
                     }
 
-                    $counts = \App\Services\NotificationService::getUnreadCountsForUser($user->id);
+                    $notificationData = \App\Services\NotificationService::getTopbarDataForUser($user->id);
+                    $counts = $notificationData['counts'];
                     
                     return view('filament.components.topbar-notifications', [
                         'newTasksCount' => $counts['tasks'],
                         'unreadMessagesCount' => $counts['messages'],
+                        'commentsCount' => $counts['comments'] ?? 0,
+                        'newEventsCount' => $counts['new_events'] ?? 0,
+                        'confirmedEventsCount' => $counts['confirmed_events'] ?? 0,
+                        'pendingCancellationEventsCount' => $counts['pending_cancellation_events'] ?? 0,
+                        'importantCount' => $counts['important'] ?? 0,
+                        'notificationItems' => $notificationData['items'] ?? [],
+                        'notificationItemsByType' => $notificationData['items_by_type'] ?? [],
                     ])->render();
                 }
             );

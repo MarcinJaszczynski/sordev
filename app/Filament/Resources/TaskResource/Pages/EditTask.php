@@ -18,4 +18,16 @@ class EditTask extends EditRecord
             Actions\RestoreAction::make(),
         ];
     }
-} 
+
+    /**
+     * After saving a task (e.g., comment, status, event), clear the notification cache for the user
+     */
+    protected function afterSave(): void
+    {
+        parent::afterSave();
+        $userId = auth()->id();
+        if ($userId) {
+            \App\Services\NotificationService::clearCacheForUser($userId);
+        }
+    }
+}

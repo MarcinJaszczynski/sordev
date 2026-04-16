@@ -1,11 +1,10 @@
-<x-filament-widgets::widget>
 @php
     // Pobieranie punktów programu
     $programDays = collect();
     $record = $record ?? $this->record ?? $this->getRecord() ?? null;
-    if ($record) {
+    if ($record && method_exists($record, 'programPoints')) {
         $programPoints = $record->programPoints()
-            ->withPivot(['day', 'order', 'notes', 'include_in_program', 'include_in_calculation', 'active'])
+            ->withPivot(['day', 'order', 'notes', 'start_time', 'end_time', 'include_in_program', 'include_in_calculation', 'active'])
             ->orderBy('event_template_event_template_program_point.day')
             ->orderBy('event_template_event_template_program_point.order')
             ->get();
@@ -45,6 +44,11 @@
                         <tr class="hover:bg-gray-50 dark:hover:bg-gray-900/50">
                             <td class="px-4 py-2 align-top">
                                 <div class="font-medium text-gray-900 dark:text-white">{{ $point->name }}</div>
+                                @if(!empty($point->pivot->start_time) && !empty($point->pivot->end_time))
+                                    <div class="text-xs text-emerald-700 dark:text-emerald-400">
+                                        Godziny: {{ substr((string) $point->pivot->start_time, 0, 5) }} - {{ substr((string) $point->pivot->end_time, 0, 5) }}
+                                    </div>
+                                @endif
                                 <div class="text-xs text-gray-500 dark:text-gray-400">
                                     Czas trwania: {{ $point->duration_hours }}:{{ str_pad($point->duration_minutes, 2, '0', STR_PAD_LEFT) }}
                                 </div>
@@ -76,4 +80,3 @@
         Nie dodano jeszcze żadnych punktów programu
     </div>
 @endif
-</x-filament-widgets::widget>

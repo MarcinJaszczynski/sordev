@@ -27,6 +27,7 @@ class DatabaseSeeder extends Seeder
             ContractorTypesSeeder::class,
             ContractorsSeeder::class,
             ContractorContractorTypeSeeder::class,
+            AgreementContractTemplateSeeder::class,
         ]);
 
         \Spatie\Permission\Models\Role::firstOrCreate(['name' => 'admin']);

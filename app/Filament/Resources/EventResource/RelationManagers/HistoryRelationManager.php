@@ -36,7 +36,7 @@ class HistoryRelationManager extends RelationManager
                     ->label('Nowa wartość')
                     ->readOnly(),
                 
-                Forms\Components\Textarea::make('description')
+                Forms\Components\RichEditor::make('description')
                     ->label('Opis')
                     ->readOnly(),
                 
@@ -87,6 +87,7 @@ class HistoryRelationManager extends RelationManager
                 
                 Tables\Columns\TextColumn::make('description')
                     ->label('Opis')
+                    ->html(false)
                     ->limit(50)
                     ->tooltip(function (Tables\Columns\TextColumn $column): ?string {
                         $state = $column->getState();

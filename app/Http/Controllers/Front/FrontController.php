@@ -8,6 +8,7 @@ use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Mail;
 use Illuminate\Support\Facades\Cookie;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\Http;
 use App\Models\EventTemplate;
@@ -122,6 +123,51 @@ class FrontController extends Controller
         return mb_strtolower($name);
     }
 
+    private function getCachedStartPlaces(): Collection
+    {
+        return Cache::remember('front.start_places.available', 600, function () {
+            $startPlaceIds = EventTemplateStartingPlaceAvailability::query()
+                ->where('available', true)
+                ->select('start_place_id')
+                ->distinct()
+                ->pluck('start_place_id');
+
+            $sortKey = $this->buildPolishSortKeySql('name');
+
+            return Place::whereIn('id', $startPlaceIds)
+                ->where('starting_place', true)
+                ->orderByRaw("$sortKey ASC, LOWER(name) ASC")
+                ->get();
+        });
+    }
+
+    private function getCachedEventTypes(): Collection
+    {
+        return Cache::remember('front.event_types', 600, function () {
+            $sortKey = $this->buildPolishSortKeySql('name');
+
+            return EventType::orderByRaw("$sortKey ASC, LOWER(name) ASC")->get();
+        });
+    }
+
+    private function getCachedTransportTypes(): Collection
+    {
+        return Cache::remember('front.transport_types', 600, function () {
+            $sortKey = $this->buildPolishSortKeySql('name');
+
+            return TransportType::orderByRaw("$sortKey ASC, LOWER(name) ASC")->get();
+        });
+    }
+
+    private function getCachedTags(): Collection
+    {
+        return Cache::remember('front.tags', 600, function () {
+            $sortKey = $this->buildPolishSortKeySql('name');
+
+            return Tag::orderByRaw("$sortKey ASC, LOWER(name) ASC")->get();
+        });
+    }
+
     /**
      * Zwraca SQL-owy klucz sortowania dla nazw z aproksymacją polskiej kolacji:
      *  - ł po l (mapowane na l~)
@@ -185,6 +231,65 @@ class FrontController extends Controller
 
         return $place?->id;
     }
+
+    private function applyStrictLocalAvailabilityFilter($query, int $startPlaceId)
+    {
+        return $query
+            ->whereExists(function ($sub) use ($startPlaceId) {
+                $sub->select(DB::raw('1'))
+                    ->from('event_template_starting_place_availability as a')
+                    ->whereColumn('a.event_template_id', 'event_templates.id')
+                    ->where('a.start_place_id', $startPlaceId)
+                    ->whereColumn('a.end_place_id', 'event_templates.start_place_id')
+                    ->where('a.available', true)
+                    ->whereRaw(
+                        'a.id = (
+                            SELECT MAX(a2.id)
+                            FROM event_template_starting_place_availability a2
+                            WHERE a2.event_template_id = event_templates.id
+                              AND a2.start_place_id = ?
+                              AND a2.end_place_id = event_templates.start_place_id
+                        )',
+                        [$startPlaceId]
+                    );
+            })
+            ->whereHas('pricesPerPerson', function ($q) use ($startPlaceId) {
+                $q->where('start_place_id', $startPlaceId)
+                    ->where('price_per_person', '>', 0);
+            });
+    }
+
+    private function hasStrictLocalAvailabilityForTemplate(EventTemplate $eventTemplate, int $startPlaceId): bool
+    {
+        if (! $eventTemplate->start_place_id) {
+            return false;
+        }
+
+        $latestAvailability = EventTemplateStartingPlaceAvailability::query()
+            ->where('event_template_id', $eventTemplate->id)
+            ->where('start_place_id', $startPlaceId)
+            ->where('end_place_id', $eventTemplate->start_place_id)
+            ->orderByDesc('id')
+            ->first();
+
+        if (! $latestAvailability || ! $latestAvailability->available) {
+            return false;
+        }
+
+        return EventTemplatePricePerPerson::query()
+            ->where('event_template_id', $eventTemplate->id)
+            ->where('start_place_id', $startPlaceId)
+            ->where('price_per_person', '>', 0)
+            ->exists();
+    }
+
+    private function redirectToRegionalOffers(string $regionSlug)
+    {
+        return redirect()
+            ->route('packages', ['regionSlug' => $regionSlug])
+            ->with('warning', 'Oferta jest niedostępna dla wybranego miasta.');
+    }
+
     public function blog(Request $request)
     {
         $orderExpression = DB::raw('COALESCE(published_at, created_at)');
@@ -285,16 +390,7 @@ class FrontController extends Controller
         $region_id = $request->region_id ?? Cookie::get('region_id', 16);
 
         // NEW: start places (for unified selector functionality, appearance unchanged)
-        $startPlaceIds = EventTemplateStartingPlaceAvailability::query()
-            ->where('available', true)
-            ->select('start_place_id')
-            ->distinct()
-            ->pluck('start_place_id');
-        $sortKey = $this->buildPolishSortKeySql('name');
-        $startPlaces = Place::whereIn('id', $startPlaceIds)
-            ->where('starting_place', true)
-            ->orderByRaw("$sortKey ASC, LOWER(name) ASC")
-            ->get();
+        $startPlaces = $this->getCachedStartPlaces();
 
         // Handle regionSlug from URL (like /warszawa/directory-packages)
         $currentStartPlaceId = null;
@@ -620,16 +716,7 @@ class FrontController extends Controller
     public function home(Request $request)
     {
         // Lista dostępnych miejsc startowych (jak w packages())
-        $startPlaceIds = EventTemplateStartingPlaceAvailability::query()
-            ->where('available', true)
-            ->select('start_place_id')
-            ->distinct()
-            ->pluck('start_place_id');
-        $sortKey = $this->buildPolishSortKeySql('name');
-        $startPlaces = Place::whereIn('id', $startPlaceIds)
-            ->where('starting_place', true)
-            ->orderByRaw("$sortKey ASC, LOWER(name) ASC")
-            ->get();
+        $startPlaces = $this->getCachedStartPlaces();
 
         // Kolejność ustalania start_place_id: route slug -> explicit query -> cookie -> (brak domyślnego na home)
         $start_place_id = null;
@@ -673,6 +760,7 @@ class FrontController extends Controller
                 'startingPlaceAvailabilities',
                 'pricesPerPerson.eventTemplateQty',
                 'pricesPerPerson.currency',
+                'transportTypes',
             ]);
         if ($start_place_id) {
             $carouselQuery->whereHas('startingPlaceAvailabilities', function ($q) use ($start_place_id) {
@@ -769,7 +857,7 @@ class FrontController extends Controller
         $start_place_id = null;
         $regionSlug = request()->route('regionSlug');
         if ($regionSlug && $regionSlug !== 'region') {
-            $place = Place::query()->where('starting_place', true)->get()->first(function ($pl) use ($regionSlug) {
+            $place = $this->getCachedStartPlaces()->first(function ($pl) use ($regionSlug) {
                 return str()->slug($pl->name) === $regionSlug;
             });
             if ($place) {
@@ -807,23 +895,14 @@ class FrontController extends Controller
         $tagSlug = request()->get('tag');
         $tagId = null;
         if ($tagSlug) {
-            $tag = Tag::all()->first(function ($t) use ($tagSlug) {
+            $tag = $this->getCachedTags()->first(function ($t) use ($tagSlug) {
                 return str()->slug($t->name) === $tagSlug;
             });
             if ($tag) $tagId = $tag->id;
         }
 
         // Pobierz unikalne start_place_id z event_template_starting_place_availability
-        $startPlaceIds = EventTemplateStartingPlaceAvailability::query()
-            ->where('available', true)
-            ->select('start_place_id')
-            ->distinct()
-            ->pluck('start_place_id');
-        $sortKey = $this->buildPolishSortKeySql('name');
-        $startPlaces = Place::whereIn('id', $startPlaceIds)
-            ->where('starting_place', true)
-            ->orderByRaw("$sortKey ASC, LOWER(name) ASC")
-            ->get();
+        $startPlaces = $this->getCachedStartPlaces();
 
         // Śledzenie czy użyto domyślnej wartości Warszawa
         $usedDefaultWarszawa = false;
@@ -838,10 +917,9 @@ class FrontController extends Controller
         }
 
         // Pobierz wszystkie Event Types dla filtra
-        $sortKey = $this->buildPolishSortKeySql('name');
-        $eventTypes = EventType::orderByRaw("$sortKey ASC, LOWER(name) ASC")->get();
-        $transportTypes = TransportType::orderByRaw("$sortKey ASC, LOWER(name) ASC")->get();
-        $allTags = Tag::orderByRaw("$sortKey ASC, LOWER(name) ASC")->get();
+        $eventTypes = $this->getCachedEventTypes();
+        $transportTypes = $this->getCachedTransportTypes();
+        $allTags = $this->getCachedTags();
 
         // Ustal slug regionu do wykorzystania w linkach/JS (na podstawie wybranego miejsca)
         $current_region_slug = 'region';
@@ -877,25 +955,7 @@ class FrontController extends Controller
                 }
             })
             ->when($start_place_id, function ($query) use ($start_place_id) {
-                // Wymagaj availability + lokalnej ceny PLN >0 (nie dopuszczamy fallbacku do global przy aktywnym filtrze miejsca)
-                // Sprawdzamy, czy najnowszy wpis availability dla danego (event_template, start_place)
-                // ma available = 1 — w przeciwnym razie template nie jest dopuszczany.
-                $query->whereRaw(
-                    "EXISTS (
-                        SELECT 1 FROM event_template_starting_place_availability a
-                        WHERE a.event_template_id = event_templates.id
-                          AND a.start_place_id = ?
-                          AND a.available = 1
-                          AND a.id = (
-                            SELECT MAX(id) FROM event_template_starting_place_availability
-                            WHERE event_template_id = event_templates.id AND start_place_id = ?
-                          )
-                    )",
-                    [$start_place_id, $start_place_id]
-                )->whereHas('pricesPerPerson', function ($q) use ($start_place_id) {
-                    $q->where('start_place_id', $start_place_id)
-                        ->where('price_per_person', '>', 0);
-                });
+                $this->applyStrictLocalAvailabilityFilter($query, (int) $start_place_id);
             })
             ->when($event_type_id, function ($query) use ($event_type_id) {
                 $query->whereHas('eventTypes', function ($q) use ($event_type_id) {
@@ -920,7 +980,7 @@ class FrontController extends Controller
                     ->map(fn($s) => trim((string)$s))
                     ->filter();
                 if ($parts->isNotEmpty()) {
-                    $ids = Tag::all()->filter(function ($t) use ($parts) {
+                    $ids = $this->getCachedTags()->filter(function ($t) use ($parts) {
                         $slug = str()->slug($t->name);
                         return $parts->contains(function ($p) use ($t, $slug) {
                             return str()->slug($p) === $slug || mb_strtolower($p) === mb_strtolower($t->name);
@@ -1086,6 +1146,7 @@ class FrontController extends Controller
                 if ($item->startingPlaceAvailabilities && $item->startingPlaceAvailabilities->count()) {
                     $latestAv = $item->startingPlaceAvailabilities
                         ->where('start_place_id', $start_place_id)
+                        ->where('end_place_id', $item->start_place_id)
                         ->sortByDesc('id')
                         ->first();
                 }
@@ -1203,7 +1264,7 @@ class FrontController extends Controller
         if (!$start_place_id) {
             $regionSlug = $request->route('regionSlug');
             if ($regionSlug && $regionSlug !== 'region') {
-                $place = Place::all()->first(function ($pl) use ($regionSlug) {
+                $place = $this->getCachedStartPlaces()->first(function ($pl) use ($regionSlug) {
                     return str()->slug($pl->name) === $regionSlug;
                 });
                 if ($place) {
@@ -1244,14 +1305,7 @@ class FrontController extends Controller
                 }
             })
             ->when($start_place_id, function ($query) use ($start_place_id) {
-                // Wymagamy NAJNOWSZEJ dostępności (MAX(id)) = true oraz lokalnej ceny > 0
-                $query->whereRaw(
-                    "EXISTS (\n                        SELECT 1 FROM event_template_starting_place_availability a\n                        WHERE a.event_template_id = event_templates.id\n                          AND a.start_place_id = ?\n                          AND a.available = 1\n                          AND a.id = (\n                            SELECT MAX(id) FROM event_template_starting_place_availability\n                            WHERE event_template_id = event_templates.id AND start_place_id = ?\n                          )\n                    )",
-                    [(int)$start_place_id, (int)$start_place_id]
-                )->whereHas('pricesPerPerson', function ($pq) use ($start_place_id) {
-                    $pq->where('start_place_id', $start_place_id)
-                        ->where('price_per_person', '>', 0);
-                });
+                $this->applyStrictLocalAvailabilityFilter($query, (int) $start_place_id);
             })
             ->when($event_type_id, function ($query) use ($event_type_id) {
                 $query->whereHas('eventTypes', function ($q) use ($event_type_id) {
@@ -1324,8 +1378,10 @@ class FrontController extends Controller
                 $hasLocalPrice = $item->pricesPerPerson && $item->pricesPerPerson->first(function ($p) use ($start_place_id) {
                     return (int)$p->start_place_id === (int)$start_place_id;
                 });
-                $hasAvailability = $item->startingPlaceAvailabilities && $item->startingPlaceAvailabilities->first(function ($av) use ($start_place_id) {
-                    return (int)$av->start_place_id === (int)$start_place_id && $av->available;
+                $hasAvailability = $item->startingPlaceAvailabilities && $item->startingPlaceAvailabilities->first(function ($av) use ($start_place_id, $item) {
+                    return (int)$av->start_place_id === (int)$start_place_id
+                        && (int)$av->end_place_id === (int)$item->start_place_id
+                        && $av->available;
                 });
                 return $hasLocalPrice && $hasAvailability;
             })->values();
@@ -1432,6 +1488,10 @@ class FrontController extends Controller
         $expectedSlug = $eventTemplate->slug;
         if ($regionSlug !== $expectedRegion || $dayLength !== $expectedDay || $slug !== $expectedSlug) {
             return redirect()->to($eventTemplate->prettyUrl($startPlaceId ? (int)$startPlaceId : null), 301);
+        }
+
+        if ($startPlaceId && ! $this->hasStrictLocalAvailabilityForTemplate($eventTemplate, (int) $startPlaceId)) {
+            return $this->redirectToRegionalOffers((string) $regionSlug);
         }
 
         // Pricing logic (PLN only, filtered by start_place_id)
@@ -1560,6 +1620,10 @@ class FrontController extends Controller
 
         if ($regionSlug !== $expectedRegionSlug || $dayLength !== $expectedDayLength || $slug !== $expectedSlug) {
             return redirect()->to($eventTemplate->prettyUrl($startPlaceId ?: null));
+        }
+
+        if ($startPlaceId && ! $this->hasStrictLocalAvailabilityForTemplate($eventTemplate, (int) $startPlaceId)) {
+            return $this->redirectToRegionalOffers((string) $regionSlug);
         }
 
         $prices = $eventTemplate->pricesPerPerson ?? collect();

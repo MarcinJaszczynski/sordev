@@ -31,7 +31,7 @@ class CommentsRelationManager extends RelationManager
         return $table
             ->recordTitleAttribute('content')
             ->columns([
-                Tables\Columns\TextColumn::make('user.name')
+                Tables\Columns\TextColumn::make('author.name')
                     ->label('Autor'),
                 Tables\Columns\TextColumn::make('content')
                     ->label('Treść')
@@ -47,7 +47,7 @@ class CommentsRelationManager extends RelationManager
             ->headerActions([
                 Tables\Actions\CreateAction::make()
                     ->mutateFormDataUsing(function (array $data): array {
-                        $data['user_id'] = Auth::id();
+                        $data['author_id'] = Auth::id();
                         return $data;
                     }),
             ])

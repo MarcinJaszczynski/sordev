@@ -28,9 +28,11 @@ class CreateEventFromTemplateTest extends TestCase
             'client_name' => 'K',
             'start_date' => now()->format('Y-m-d'),
             'participant_count' => 10,
+            'hotel_notes' => 'Pokój dla pilota od 8:00.',
         ]);
 
         $this->assertNotNull($event);
+        $this->assertSame('Pokój dla pilota od 8:00.', $event->hotel_notes);
         $this->assertDatabaseHas('event_snapshots', [
             'event_id' => $event->id,
             'type' => 'original',

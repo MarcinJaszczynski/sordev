@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use App\Models\Concerns\HasTasks;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Support\Facades\Log;
@@ -36,7 +37,7 @@ class EventTemplateProgramPoint extends Model
      */
     public function setFeaturedImageAttribute($value)
     {
-        \Log::debug('[setFeaturedImageAttribute] Wejście:', ['value' => $value, 'trace' => debug_backtrace(DEBUG_BACKTRACE_IGNORE_ARGS, 5)]);
+        Log::debug('[setFeaturedImageAttribute] Wejście:', ['value' => $value, 'trace' => debug_backtrace(DEBUG_BACKTRACE_IGNORE_ARGS, 5)]);
         if (is_array($value)) {
             // Jeśli array, weź pierwszy element jeśli istnieje
             $this->attributes['featured_image'] = isset($value[0]) && is_string($value[0]) ? $value[0] : null;
@@ -45,9 +46,9 @@ class EventTemplateProgramPoint extends Model
         } else {
             $this->attributes['featured_image'] = null;
         }
-        \Log::debug('[setFeaturedImageAttribute] Zapisano:', ['featured_image' => $this->attributes['featured_image']]);
+        Log::debug('[setFeaturedImageAttribute] Zapisano:', ['featured_image' => $this->attributes['featured_image']]);
     }
-    use HasFactory;
+    use HasFactory, HasTasks;
 
     /**
      * Mutator: zawsze zapisuje poprawny JSON array stringów dla gallery_images
@@ -91,7 +92,7 @@ class EventTemplateProgramPoint extends Model
      */
     public function getFeaturedImageAttribute($value)
     {
-        \Log::debug('[getFeaturedImageAttribute] Odczyt:', ['value' => $value]);
+        Log::debug('[getFeaturedImageAttribute] Odczyt:', ['value' => $value]);
         return is_string($value) ? $value : null;
     }
 
@@ -178,6 +179,8 @@ class EventTemplateProgramPoint extends Model
                 'day',
                 'order',
                 'notes',
+                'start_time',
+                'end_time',
                 'include_in_program',
                 'include_in_calculation',
                 'active',

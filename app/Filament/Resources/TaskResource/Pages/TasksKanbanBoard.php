@@ -94,9 +94,7 @@ class TasksKanbanBoard extends KanbanBoard
                 ->required()
                 ->maxLength(255),
 
-            Textarea::make('description')
-                ->label('Opis')
-                ->rows(3)
+            \Filament\Forms\Components\RichEditor::make('notes')
                 ->columnSpanFull(),
 
             Select::make('priority')

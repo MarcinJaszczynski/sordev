@@ -166,7 +166,7 @@
     <script src="{{ asset('dist-front/js/counterup.min.js') }}"></script>
     <script src="{{ asset('dist-front/js/multi-countdown.js') }}"></script>
     <script src="{{ asset('dist-front/js/jquery.meanmenu.js') }}"></script>
-    <script src="https://kit.fontawesome.com/758b8e5b95.js" crossorigin="anonymous"></script>
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@fortawesome/fontawesome-free@6.5.2/css/all.min.css">
 
     @php
         $current_region_id = (request()->region_id ?? request()->cookie('region_id', 16));
@@ -214,7 +214,7 @@
                     <h2 class="heading">Na skróty:</h2>
                     <ul class="useful-links">
                         <li><a href="{{ route('home')}}"><i class="fas fa-angle-right"></i> Strona główna</a></li>
-                        <li><a href="{{ route('packages') }}"><i class="fas fa-angle-right"></i> Pełna oferta wycieczek 2024/2025</a></li>
+                        <li><a href="{{ route('packages') }}"><i class="fas fa-angle-right"></i> Pełna oferta wycieczek 2025/2026</a></li>
                         <li><a href="{{ route('blog.global')}}"><i class="fas fa-angle-right"></i> Aktualności</a></li>
                     </ul>
                 </div>
@@ -265,7 +265,7 @@
         <div class="row">
             <div class="col-lg-12 col-md-12">
                 <div class="copyright">
-                    Copyright &copy; 2024, Biuro Podróży RAFA. All Rights Reserved.
+                    Copyright &copy; 2026, Biuro Podróży RAFA. All Rights Reserved.
                 </div>
             </div>
         </div>

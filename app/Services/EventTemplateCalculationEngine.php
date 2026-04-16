@@ -26,7 +26,7 @@ class EventTemplateCalculationEngine
      * Zwraca szczegółowe obliczenia keyed by qty
      * @return array
      */
-    public function calculateDetailed(EventTemplate $template, ?int $startPlaceId = null, ?float $transportKm = null, bool $debug = false): array
+    public function calculateDetailed(EventTemplate $template, ?int $startPlaceId = null, ?float $transportKm = null, bool $debug = false, ?iterable $qtyVariantsOverride = null): array
     {
         // Load all program points for this template (we'll respect per-pivot include_in_calculation
         // flags individually for parents and children). This ensures parent/child inclusion is
@@ -39,32 +39,9 @@ class EventTemplateCalculationEngine
 
         $isForeignTrip = method_exists($template, 'isForeignTrip') ? $template->isForeignTrip() : true;
 
-        // try to get variants that belong to this template
-        try {
-            $qtyVariants = $template->qtyVariants()->get();
-        } catch (\Illuminate\Database\QueryException $e) {
-            // some environments don't have event_template_id column on event_template_qties
-            // fallback: try to collect event_template_qty_id values from existing price rows for this template
-            $qtyIds = DB::table('event_template_price_per_person')
-                ->where('event_template_id', $template->id)
-                ->distinct()
-                ->pluck('event_template_qty_id')
-                ->filter()
-                ->values()
-                ->all();
-
-            if (!empty($qtyIds)) {
-                $qtyVariants = EventTemplateQty::whereIn('id', $qtyIds)->get();
-            } else {
-                // last resort: match by common qty numbers
-                $common = [20, 25, 30, 35, 40];
-                $qtyVariants = EventTemplateQty::whereIn('qty', $common)->get();
-                if ($qtyVariants->isEmpty()) {
-                    // fallback to all
-                    $qtyVariants = EventTemplateQty::all();
-                }
-            }
-        }
+        $qtyVariants = $qtyVariantsOverride !== null
+            ? collect($qtyVariantsOverride)
+            : $this->getQtyVariantsForTemplate($template);
 
         $bus = $template->bus;
         $programKm = $template->program_km ?? 0;
@@ -546,6 +523,85 @@ class EventTemplateCalculationEngine
 
         ksort($results);
         return $results;
+    }
+
+    /**
+     * Dokładna kalkulacja dla niestandardowej liczby uczestników/gratisów.
+     */
+    public function calculateDetailedForCustomGroup(
+        EventTemplate $template,
+        int $participantCount,
+        int $gratisCount = 0,
+        ?int $startPlaceId = null,
+        ?float $transportKm = null,
+        bool $debug = false,
+        ?int $staffCount = null,
+        ?int $driverCount = null
+    ): array {
+        $participantCount = max(1, $participantCount);
+        $gratisCount = max(0, $gratisCount);
+
+        $closestVariant = $this->resolveClosestQtyVariant($template, $participantCount, $gratisCount);
+
+        $customVariant = new EventTemplateQty();
+        $customVariant->event_template_id = $template->id;
+        $customVariant->qty = $participantCount;
+        $customVariant->gratis = $gratisCount;
+        $customVariant->staff = $staffCount ?? (int) ($closestVariant?->staff ?? 1);
+        $customVariant->driver = $driverCount ?? (int) ($closestVariant?->driver ?? 1);
+
+        $results = $this->calculateDetailed(
+            $template,
+            $startPlaceId,
+            $transportKm,
+            $debug,
+            [$customVariant]
+        );
+
+        return $results[$participantCount] ?? [];
+    }
+
+    private function resolveClosestQtyVariant(EventTemplate $template, int $participantCount, int $gratisCount): ?EventTemplateQty
+    {
+        $variants = $this->getQtyVariantsForTemplate($template);
+
+        if ($variants->isEmpty()) {
+            return null;
+        }
+
+        return $variants
+            ->sortBy(fn ($row) =>
+                abs(((int) ($row->qty ?? 0)) - $participantCount) +
+                abs(((int) ($row->gratis ?? 0)) - $gratisCount)
+            )
+            ->first();
+    }
+
+    private function getQtyVariantsForTemplate(EventTemplate $template)
+    {
+        try {
+            $qtyVariants = $template->qtyVariants()->get();
+        } catch (\Illuminate\Database\QueryException $e) {
+            $qtyIds = DB::table('event_template_price_per_person')
+                ->where('event_template_id', $template->id)
+                ->distinct()
+                ->pluck('event_template_qty_id')
+                ->filter()
+                ->values()
+                ->all();
+
+            if (!empty($qtyIds)) {
+                $qtyVariants = EventTemplateQty::whereIn('id', $qtyIds)->get();
+            } else {
+                $common = [20, 25, 30, 35, 40];
+                $qtyVariants = EventTemplateQty::whereIn('qty', $common)->get();
+                if ($qtyVariants->isEmpty()) {
+                    $qtyVariants = EventTemplateQty::all();
+                }
+            }
+        }
+
+        return $qtyVariants;
     }
 
     private function calculatePointCost($qty, $groupSize, $unitPrice)

@@ -7,6 +7,7 @@ use Filament\Forms\Form;
 use Filament\Resources\RelationManagers\RelationManager;
 use Filament\Tables;
 use Filament\Tables\Table;
+use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Facades\Auth;
 
 class AttachmentsRelationManager extends RelationManager
@@ -34,10 +35,13 @@ class AttachmentsRelationManager extends RelationManager
                 Tables\Columns\TextColumn::make('name')
                     ->label('Nazwa pliku')
                     ->searchable()
-                    ->url(fn ($record) => $record->file_path ? \Illuminate\Support\Facades\Storage::url($record->file_path) : null)
+                    ->url(fn ($record) => $record->public_url)
                     ->openUrlInNewTab(),
                 Tables\Columns\TextColumn::make('user.name')
                     ->label('Dodane przez'),
+                Tables\Columns\TextColumn::make('readable_size')
+                    ->label('Rozmiar')
+                    ->placeholder('—'),
                 Tables\Columns\TextColumn::make('created_at')
                     ->label('Data dodania')
                     ->dateTime(),
@@ -49,13 +53,17 @@ class AttachmentsRelationManager extends RelationManager
                 Tables\Actions\CreateAction::make()
                     ->mutateFormDataUsing(function (array $data): array {
                         $data['user_id'] = Auth::id();
+                        $data['mime_type'] = $data['file_path'] ? Storage::mimeType($data['file_path']) : null;
+                        $data['size'] = $data['file_path'] ? Storage::size($data['file_path']) : null;
+                        $data['name'] = $data['name'] ?? basename((string) ($data['file_path'] ?? ''));
+
                         return $data;
                     }),
             ])            ->actions([
                 Tables\Actions\Action::make('download')
                     ->label('Pobierz')
                     ->icon('heroicon-o-arrow-down-tray')
-                    ->url(fn ($record) => $record->file_path ? \Illuminate\Support\Facades\Storage::url($record->file_path) : null)
+                    ->url(fn ($record) => $record->public_url)
                     ->openUrlInNewTab(),
                 Tables\Actions\DeleteAction::make(),
             ])

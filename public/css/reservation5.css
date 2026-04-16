@@ -1,0 +1,543 @@
+/* reservation5.css - full layout to match reference */
+:root{ --accent-green:#2aa36b; --muted-green:#eaf9f3; --text:#222; --muted:#6b6b6b; --danger:#c12b2b; --container:980px; }
+
+body .reservation-page{ font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, "Noto Sans", sans-serif; color:var(--text); }
+.container.narrow{ max-width:var(--container); margin:0 auto; padding:30px 16px; }
+
+/* Banner */
+.confirmation-banner{ background:var(--muted-green); padding:28px 30px; border-radius:6px; text-align:center; margin-bottom:32px; }
+.confirmation-banner .brand{ letter-spacing:6px; color:#999; margin-bottom:6px; }
+.confirmation-banner h1{ margin:0 0 6px; font-size:18px; font-weight:700; }
+.confirmation-banner .lead{ margin:6px 0 0; color:var(--text); font-weight:600; }
+.confirmation-banner .small{ margin-top:8px; color:var(--muted); font-size:0.95rem; }
+
+/* Order summary */
+.order-summary .section-title{ text-align:center; margin-bottom:6px; font-size:18px; font-weight:700; }
+.order-summary .order-date{ text-align:center; color:var(--muted); margin-bottom:14px; }
+
+.summary-grid{ display:flex; gap:24px; align-items:flex-start; }
+.summary-image{ flex:0 0 260px; max-width:260px; }
+.summary-image img{ display:block; width:100%; height:240px; object-fit:cover; border:1px solid #eee; background:#fafafa; }
+
+.summary-details{ flex:1 1 auto; }
+.product-title{ font-weight:700; margin-bottom:8px; font-size:16px; }
+
+/* Price block like reference: small right-aligned box inside details */
+.price-block{ border-left:0; margin-bottom:14px; max-width:360px; }
+.price-row{ display:flex; justify-content:space-between; padding:6px 0; color:var(--muted); border-bottom:none; }
+.price-row.final{ font-weight:700; border-top:1px solid #eee; padding-top:10px; }
+.price-final{ color:var(--danger); font-weight:800; }
+
+.product-meta{ margin-top:6px; border-top:0; padding-top:10px; }
+.meta-row{ display:flex; justify-content:space-between; padding:6px 0; color:var(--muted); }
+
+/* Order total section */
+.order-total{ margin-top:28px; }
+.order-total h3{ text-align:left; font-weight:700; }
+.total-table{ border-top:1px solid #e9e9e9; margin-top:12px; padding-top:12px; }
+.total-row{ display:flex; justify-content:space-between; padding:8px 0; color:var(--muted); }
+.total-line{ display:flex; justify-content:space-between; align-items:center; padding-top:12px; border-top:1px solid #eee; }
+.total-amount{ color:var(--danger); margin-left:8px; }
+
+/* Billing & shipping */
+.billing-shipping{ margin-top:36px; }
+.billing-shipping h3{ text-align:center; margin-bottom:18px; }
+.billing-grid{ display:flex; justify-content:space-between; gap:64px; margin-bottom:20px; }
+.billing-grid .bill, .billing-grid .ship{ width:300px; text-align:center; }
+.bill h4, .ship h4{ font-size:14px; margin-bottom:6px; font-weight:700; }
+.bill p, .ship p{ color:var(--muted); font-size:0.95rem; margin:0; }
+
+.methods-grid{ display:flex; justify-content:center; gap:60px; margin-top:14px; }
+.method{ text-align:center; color:var(--muted); }
+
+.cta-center{ text-align:center; margin-top:20px; }
+.btn-outline-success{ display:inline-block; padding:8px 22px; border-radius:4px; border:2px solid var(--accent-green); color:var(--accent-green); text-decoration:none; }
+
+/* Center the order-summary content and related blocks to match reference */
+.order-summary .summary-grid {
+  max-width: 720px;
+  margin: 0 auto;
+  align-items: flex-start;
+}
+
+.order-total .total-table {
+  max-width: 720px;
+  margin: 0 auto;
+}
+
+.billing-grid {
+  max-width: 720px;
+  margin: 0 auto;
+  justify-content: space-between;
+}
+
+/* Ensure billing-grid fills the column and uses space-between */
+.reservation-page .container.narrow .row > .col-md-8 .billing-grid,
+.reservation-page .container.narrow .billing-grid,
+.reservation-page .billing-grid {
+  max-width: none !important;
+  width: 100% !important;
+  margin-left: 0 !important;
+  margin-right: 0 !important;
+  justify-content: space-between !important;
+  gap: 32px !important;
+  box-sizing: border-box !important;
+}
+
+/* Make the two columns responsive: take up to 48% each */
+.reservation-page .billing-grid .bill,
+.reservation-page .billing-grid .ship {
+  width: 48% !important;
+  max-width: 48% !important;
+  min-width: 180px !important;
+  box-sizing: border-box !important;
+  text-align: center !important; /* centered as requested */
+}
+
+@media (max-width: 767px) {
+  .reservation-page .billing-grid .bill,
+  .reservation-page .billing-grid .ship {
+    width: 100% !important;
+    max-width: 100% !important;
+    text-align: center !important;
+  }
+}
+
+/* ensure product-meta and price-block align within centered container */
+.summary-details { max-width: 420px; }
+.price-block { margin-left: 0; }
+
+/* Ensure order-summary container itself is centered and constrained */
+.order-summary {
+  max-width: none !important;
+  width: 100% !important;
+  margin: 0 auto 8px !important;
+  padding: 0 12px !important;
+  box-sizing: border-box !important;
+}
+
+/* Align order-total and billing-shipping blocks to same width */
+.order-total, .billing-shipping {
+  max-width: 720px;
+  margin: 0 auto 0;
+  padding: 0 12px;
+  box-sizing: border-box;
+}
+
+/* Ensure inner grid uses full width of centered container */
+.summary-grid{ width:100%; }
+
+/* ===== overrides to force centering (high specificity) ===== */
+.reservation-page .container.narrow .order-summary {
+  max-width: 720px !important;
+  margin-left: auto !important;
+  margin-right: auto !important;
+  padding-left: 12px !important;
+  padding-right: 12px !important;
+  box-sizing: border-box !important;
+}
+
+.reservation-page .container.narrow .order-summary .summary-grid {
+  display: flex !important;
+  justify-content: space-between !important;
+  align-items: flex-start !important;
+  gap: 24px !important;
+  width: 100% !important;
+  max-width: 720px !important;
+  margin-left: auto !important;
+  margin-right: auto !important;
+}
+
+.reservation-page .container.narrow .order-total,
+.reservation-page .container.narrow .billing-shipping {
+  max-width: 720px !important;
+  margin-left: auto !important;
+  margin-right: auto !important;
+  padding-left: 12px !important;
+  padding-right: 12px !important;
+}
+
+/* ensure image and details don't push layout off-center */
+.reservation-page .summary-image,
+.reservation-page .summary-details { flex: none !important; }
+.reservation-page .summary-image{ flex:0 0 260px !important; }
+.reservation-page .summary-details{ flex:1 1 auto !important; max-width:420px !important; }
+
+/* End overrides */
+
+/* Force centering on inner wrappers */
+.reservation-page .container.narrow .order-summary-inner,
+.reservation-page .container.narrow .order-total-inner,
+.reservation-page .container.narrow .billing-shipping-inner {
+  max-width: 720px !important;
+  margin-left: auto !important;
+  margin-right: auto !important;
+  padding-left: 12px !important;
+  padding-right: 12px !important;
+  box-sizing: border-box !important;
+}
+
+/* Small adjustment to ensure headings are centered while content stays left/right as in reference */
+.reservation-page .order-summary-inner .section-title,
+.reservation-page .order-summary-inner .order-date {
+  text-align: center !important;
+}
+
+/* ensure summary-grid centers visually */
+.reservation-page .order-summary-inner .summary-grid{
+  display:flex !important;
+  justify-content:space-between !important;
+  width:100% !important;
+}
+
+/* Strong centering using flex on section containers */
+.reservation-page .container.narrow > .order-summary,
+.reservation-page .container.narrow > .order-total,
+.reservation-page .container.narrow > .billing-shipping {
+  display: flex !important;
+  justify-content: center !important;
+  align-items: stretch !important;
+}
+
+.reservation-page .container.narrow .order-summary-inner,
+.reservation-page .container.narrow .order-total-inner,
+.reservation-page .container.narrow .billing-shipping-inner {
+  width: 100% !important;
+  max-width: 720px !important;
+}
+
+/* Make inner wrappers wider on large screens */
+@media (min-width: 1200px) {
+  .reservation-page .container.narrow .order-summary-inner,
+  .reservation-page .container.narrow .order-total-inner,
+  .reservation-page .container.narrow .billing-shipping-inner {
+    max-width: 980px !important;
+    padding-left: 0 !important;
+    padding-right: 0 !important;
+  }
+
+  /* allow image column to grow slightly on very wide screens */
+  .reservation-page .summary-image { flex: 0 0 300px !important; max-width:300px !important; }
+  .reservation-page .summary-image img { height: 280px !important; }
+  .summary-details { max-width: 640px !important; }
+}
+
+/* Match reservation-stepper width: make order-summary-inner wider on mid/large screens */
+@media (min-width: 992px) {
+  .reservation-page .container.narrow .order-summary-inner,
+  .reservation-page .container.narrow .order-total-inner,
+  .reservation-page .container.narrow .billing-shipping-inner {
+    width: 66.666667% !important; /* match col-md-8 */
+    max-width: none !important;
+    margin-left: auto !important;
+    margin-right: auto !important;
+    padding-left: 0 !important;
+    padding-right: 0 !important;
+    box-sizing: border-box !important;
+  }
+
+  /* Highly specific override: make inner wrappers behave like .col-md-8 centered */
+  .reservation-page .container.narrow > .order-summary .order-summary-inner,
+  .reservation-page .container.narrow > .order-total .order-total-inner,
+  .reservation-page .container.narrow > .billing-shipping .billing-shipping-inner {
+    display: block !important;
+    width: 66.666667% !important; /* match col-md-8 */
+    max-width: none !important;
+    margin-left: auto !important;
+    margin-right: auto !important;
+    padding-left: 0 !important;
+    padding-right: 0 !important;
+    box-sizing: border-box !important;
+  }
+}
+
+/* Print */
+@media print{ .btn-outline-success, .confirmation-banner{ display:none; } }
+
+/* ===== fix: prefer Bootstrap column width for order-summary and related sections ===== */
+/* Target sections that are wrapped by .row > .col-md-8.offset-2 */
+.reservation-page .container.narrow .row > .col-md-8 > .order-summary,
+.reservation-page .container.narrow .row > .col-md-8 > .order-total,
+.reservation-page .container.narrow .row > .col-md-8 > .billing-shipping {
+  max-width: none !important; /* remove previous 720px cap */
+  width: 100% !important;      /* fill the col-md-8 width */
+  margin-left: 0 !important;
+  margin-right: 0 !important;
+  padding-left: 0 !important;
+  padding-right: 0 !important;
+  box-sizing: border-box !important;
+}
+
+/* Ensure inner wrappers are full width of the column */
+.reservation-page .container.narrow .row > .col-md-8 > .order-summary > .order-summary-inner,
+.reservation-page .container.narrow .row > .col-md-8 > .order-total > .order-total-inner,
+.reservation-page .container.narrow .row > .col-md-8 > .billing-shipping > .billing-shipping-inner {
+  width: 100% !important;
+  max-width: none !important;
+  margin: 0 !important;
+  padding: 0 12px !important; /* keep small lateral padding for content */
+}
+
+/* Force summary-grid inside the col-md-8 to not be capped at 720px */
+.reservation-page .container.narrow .row > .col-md-8 .summary-grid {
+  max-width: none !important;
+  width: 100% !important;
+  margin-left: 0 !important;
+  margin-right: 0 !important;
+}
+
+/* Also ensure the summary-grid inside uses available width and image/details scale */
+.reservation-page .container.narrow .row > .col-md-8 .summary-grid {
+  width: 100% !important;
+  gap: 24px !important;
+}
+
+/* Remove earlier forced small max-width on direct child selectors */
+.reservation-page .container.narrow > .order-summary,
+.reservation-page .container.narrow > .order-total,
+.reservation-page .container.narrow > .billing-shipping {
+  max-width: none !important;
+}
+
+/* Small responsive tweak: ensure readable layout on very wide screens within the col */
+@media (min-width: 1400px) {
+  .reservation-page .container.narrow .row > .col-md-8 > .order-summary > .order-summary-inner,
+  .reservation-page .container.narrow .row > .col-md-8 > .order-total > .order-total-inner,
+  .reservation-page .container.narrow .row > .col-md-8 > .billing-shipping > .billing-shipping-inner {
+    padding-left: 18px !important;
+    padding-right: 18px !important;
+  }
+}
+
+/* ===== final override: make reservation-stepper sections wider (860px) ===== */
+.reservation-page .container.narrow .reservation-stepper {
+  max-width: 860px !important; /* wider than 720, narrower than full banner */
+  width: 100% !important;
+  margin-left: auto !important;
+  margin-right: auto !important;
+  padding-left: 12px !important;
+  padding-right: 12px !important;
+  box-sizing: border-box !important;
+}
+
+/* Apply to specific sections if they carry the class */
+.reservation-page .container.narrow .order-summary.reservation-stepper,
+.reservation-page .container.narrow .order-total.reservation-stepper,
+.reservation-page .container.narrow .billing-shipping.reservation-stepper {
+  max-width: 860px !important;
+  width: 100% !important;
+}
+
+/* Ensure the inner wrappers fill the available width */
+.reservation-page .container.narrow .reservation-stepper > .order-summary-inner,
+.reservation-page .container.narrow .reservation-stepper > .order-total-inner,
+.reservation-page .container.narrow .reservation-stepper > .billing-shipping-inner {
+  max-width: none !important;
+  width: 100% !important;
+  padding-left: 0 !important;
+  padding-right: 0 !important;
+}
+
+/* Ensure summary-grid uses full width inside reservation-stepper */
+.reservation-page .container.narrow .reservation-stepper .summary-grid {
+  width: 100% !important;
+  max-width: none !important;
+}
+
+/* keep responsive behavior: on very wide screens allow slight increase */
+@media (min-width: 1400px) {
+  .reservation-page .container.narrow .reservation-stepper { max-width: 980px !important; }
+}
+
+/* Make summary image responsive: default small, scale up on wider screens */
+.reservation-page .summary-image{
+  flex: 0 0 260px; /* default for narrow screens */
+  max-width: 260px;
+}
+.reservation-page .summary-image img{
+  width:100%;
+  height:auto; /* allow image to scale */
+  display:block;
+  object-fit:cover;
+  border:1px solid #eee;
+  background:#fafafa;
+}
+
+.reservation-page .summary-details{
+  flex:1 1 auto;
+  max-width: none; /* allow details to grow/shrink */
+}
+
+/* Remove any caps on the grid so it can expand inside its column */
+.reservation-page .summary-grid,
+.reservation-page .order-summary .summary-grid,
+.reservation-page .container.narrow .row > .col-md-8 .summary-grid {
+  max-width: none !important;
+  width: 100% !important;
+}
+
+/* On medium+ screens increase image proportion and allow details to fill remaining space */
+@media (min-width: 992px) {
+  .reservation-page .summary-image{
+    flex: 0 0 35% !important; /* image takes ~35% of column */
+    max-width: 35% !important;
+  }
+  .reservation-page .summary-details{
+    flex: 1 1 65% !important;
+    max-width: 65% !important;
+  }
+}
+
+/* On large screens allow a bit larger image */
+@media (min-width: 1400px) {
+  .reservation-page .summary-image{
+    flex: 0 0 40% !important;
+    max-width: 40% !important;
+  }
+  .reservation-page .summary-details{
+    flex: 1 1 60% !important;
+    max-width: 60% !important;
+  }
+}
+
+/* ===== strong overrides to ensure summary-grid scales and image grows ===== */
+.reservation-page .container.narrow .row > .col-md-8 .order-summary .summary-grid,
+.reservation-page .container.narrow .row > .col-md-8 .order-total .summary-grid,
+.reservation-page .container.narrow .row > .col-md-8 .billing-shipping .summary-grid,
+.reservation-page .order-summary .summary-grid,
+.reservation-page .summary-grid {
+  max-width: none !important;
+  width: 100% !important;
+}
+
+/* Make image take more space on medium+ screens so it's visibly larger */
+@media (min-width: 992px) {
+  .reservation-page .container.narrow .row > .col-md-8 .summary-grid .summary-image {
+    flex: 0 0 45% !important;
+    max-width: 45% !important;
+  }
+  .reservation-page .container.narrow .row > .col-md-8 .summary-grid .summary-details {
+    flex: 1 1 55% !important;
+    max-width: 55% !important;
+  }
+}
+
+@media (min-width: 1400px) {
+  .reservation-page .container.narrow .row > .col-md-8 .summary-grid .summary-image {
+    flex: 0 0 48% !important;
+    max-width: 48% !important;
+  }
+  .reservation-page .container.narrow .row > .col-md-8 .summary-grid .summary-details {
+    flex: 1 1 52% !important;
+    max-width: 52% !important;
+  }
+}
+
+/* Ensure image scales properly */
+.reservation-page .summary-image img {
+  width: 100% !important;
+  height: auto !important;
+  max-height: 520px !important;
+  display: block !important;
+  object-fit: cover !important;
+}
+
+/* Remove any leftover fixed height rules from earlier CSS */
+.reservation-page .summary-image img[height],
+.reservation-page .summary-image img[style] {
+  height: auto !important;
+}
+
+/* End strong overrides */
+
+/* Ensure total-table fills the available column width (remove 720px cap) */
+.reservation-page .container.narrow .row > .col-md-8 .order-total .total-table,
+.reservation-page .container.narrow .order-total .total-table,
+.order-total .total-table {
+  max-width: none !important;
+  width: 100% !important;
+  margin-left: 0 !important;
+  margin-right: 0 !important;
+  padding-left: 0 !important;
+  padding-right: 0 !important;
+  box-sizing: border-box !important;
+}
+
+/* Ensure total rows align within the full width */
+.reservation-page .order-total .total-row,
+.reservation-page .order-total .total-line {
+  width: 100% !important;
+  display: flex !important;
+  justify-content: space-between !important;
+}
+
+/* Final override: make billing-grid fill column and use space-between */
+.reservation-page .container.narrow .row > .col-md-8 .billing-shipping .billing-grid,
+.reservation-page .container.narrow .billing-shipping .billing-grid,
+.reservation-page .billing-shipping .billing-grid,
+.reservation-page .billing-grid {
+  max-width: none !important;
+  width: 100% !important;
+  margin: 0 auto 20px !important;
+  padding-left: 0 !important;
+  padding-right: 0 !important;
+  box-sizing: border-box !important;
+  display: flex !important;
+  justify-content: space-between !important;
+  align-items: flex-start !important;
+  gap: 32px !important;
+}
+
+/* Two responsive columns inside billing-grid */
+.reservation-page .billing-grid .bill,
+.reservation-page .billing-grid .ship {
+  width: 48% !important;
+  max-width: 48% !important;
+  min-width: 180px !important;
+  box-sizing: border-box !important;
+  text-align: center !important; /* centered as requested */
+}
+
+/* On small screens stack them */
+@media (max-width: 767px) {
+  .reservation-page .billing-grid .bill,
+  .reservation-page .billing-grid .ship {
+    width: 100% !important;
+    max-width: 100% !important;
+    text-align: center !important;
+  }
+}
+
+/* Ensure headings inside remain centered if needed */
+.reservation-page .billing-grid .bill h4,
+.reservation-page .billing-grid .ship h4 {
+  text-align: center !important;
+}
+
+/* === Restore reservation-stepper white background and padding (override) === */
+.reservation-page .container.narrow .order-summary.reservation-stepper,
+.reservation-page .container.narrow .order-total.reservation-stepper,
+.reservation-page .container.narrow .billing-shipping.reservation-stepper {
+  background: #ffffff !important;
+  padding: 28px 24px !important;
+  border-radius: 2px !important;
+  box-shadow: none !important;
+}
+
+/* ensure inner wrapper keeps full width with small lateral padding */
+.reservation-page .container.narrow .reservation-stepper > .order-summary-inner,
+.reservation-page .container.narrow .reservation-stepper > .order-total-inner,
+.reservation-page .container.narrow .reservation-stepper > .billing-shipping-inner {
+  width: 100% !important;
+  padding-left: 0 !important;
+  padding-right: 0 !important;
+  box-sizing: border-box !important;
+}
+
+/* make sure confirmation-banner remains the pale-green bar and not overridden */
+.reservation-page .container.narrow .confirmation-banner {
+  background: #eaf7f1 !important;
+}
+
+/* End restore */
+

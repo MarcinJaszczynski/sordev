@@ -27,30 +27,43 @@ class InsuranceResource extends Resource
     {
         return $form
             ->schema([
-                Forms\Components\TextInput::make('name')
-                    ->label('Nazwa')
-                    ->required()
-                    ->maxLength(255),
-                Forms\Components\Textarea::make('description')
-                    ->label('Opis')
-                    ->rows(3)
-                    ->columnSpanFull(),
-                Forms\Components\TextInput::make('price_per_person')
-                    ->label('Cena za osobę (PLN)')
-                    ->required()
-                    ->numeric()
-                    ->prefix('PLN')
-                    ->step(0.01)
-                    ->minValue(0),
-                Forms\Components\Checkbox::make('active')
-                    ->label('Aktywne')
-                    ->default(true),
-                Forms\Components\Checkbox::make('insurance_enabled')
-                    ->label('Ubezpieczenie włączone'),
-                Forms\Components\Checkbox::make('insurance_per_day')
-                    ->label('Ubezpieczenie za dzień'),
-                Forms\Components\Checkbox::make('insurance_per_person')
-                    ->label('Ubezpieczenie za osobę'),
+                Forms\Components\Section::make('Dane ubezpieczenia')
+                    ->columns(3)
+                    ->schema([
+                        Forms\Components\TextInput::make('name')
+                            ->label('Nazwa')
+                            ->required()
+                            ->maxLength(255)
+                            ->columnSpan(2),
+                        Forms\Components\TextInput::make('price_per_person')
+                            ->label('Cena za osobę (PLN)')
+                            ->required()
+                            ->numeric()
+                            ->prefix('PLN')
+                            ->step(0.01)
+                            ->minValue(0)
+                            ->columnSpan(1),
+                        Forms\Components\RichEditor::make('description')
+                            ->columnSpanFull(),
+                    ]),
+
+                Forms\Components\Section::make('Parametry ubezpieczenia')
+                    ->columns(4)
+                    ->schema([
+                        Forms\Components\Toggle::make('active')
+                            ->label('Aktywne')
+                            ->default(true)
+                            ->inline(false),
+                        Forms\Components\Toggle::make('insurance_enabled')
+                            ->label('Ubezpieczenie włączone')
+                            ->inline(false),
+                        Forms\Components\Toggle::make('insurance_per_day')
+                            ->label('Za dzień')
+                            ->inline(false),
+                        Forms\Components\Toggle::make('insurance_per_person')
+                            ->label('Za osobę')
+                            ->inline(false),
+                    ]),
             ]);
     }
 

@@ -18,6 +18,15 @@ class ResolveRegionSlug
 {
     public function handle(Request $request, Closure $next)
     {
+        $routeName = (string) ($request->route()?->getName() ?? '');
+        if (
+            $request->is('livewire/*') ||
+            $request->is('admin/*') ||
+            str_starts_with($routeName, 'filament.')
+        ) {
+            return $next($request);
+        }
+
         $regionSlug = $request->route('regionSlug');
         $placeId = null;
 

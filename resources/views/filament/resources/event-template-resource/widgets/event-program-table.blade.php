@@ -42,6 +42,12 @@
                                 <td class="border px-4 py-2">{{ $point->pivot->order }}</td>
                                 <td class="border px-4 py-2">
                                     <div class="font-medium">{{ $point->name }}</div>
+                                    @if(!empty($point->pivot->start_time) && !empty($point->pivot->end_time))
+                                        <div class="text-xs text-emerald-700 dark:text-emerald-400">
+                                            Godziny:
+                                            {{ substr((string) $point->pivot->start_time, 0, 5) }} - {{ substr((string) $point->pivot->end_time, 0, 5) }}
+                                        </div>
+                                    @endif
                                     <div class="text-xs text-gray-500 dark:text-gray-400">
                                         Czas trwania:
                                         {{ $point->duration_hours }}:{{ str_pad($point->duration_minutes, 2, '0', STR_PAD_LEFT) }}

@@ -560,9 +560,9 @@ if (! function_exists('logger')) {
      * Log a debug message to the logs.
      *
      * @param  string|null  $message
-     * @return ($message is null ? \Illuminate\Log\LogManager : null)
+     * @return ($message is null ? \Psr\Log\LoggerInterface : null)
      */
-    function logger($message = null, array $context = []): ?LogManager
+    function logger($message = null, array $context = []): ?LoggerInterface
     {
         if (is_null($message)) {
             return app('log');
@@ -617,7 +617,6 @@ if (! function_exists('now')) {
      * Create a new Carbon instance for the current time.
      *
      * @param  \DateTimeZone|\UnitEnum|string|null  $tz
-     * @return \Illuminate\Support\Carbon
      */
     function now($tz = null): CarbonInterface
     {
@@ -890,10 +889,11 @@ if (! function_exists('secure_url')) {
      *
      * @param  string  $path
      * @param  mixed  $parameters
+     * @return string
      */
-    function secure_url($path, $parameters = []): string
+    function secure_url($path, $parameters = [])
     {
-        return url()->secure($path, $parameters);
+        return url($path, $parameters, true);
     }
 }
 
@@ -941,8 +941,9 @@ if (! function_exists('to_action')) {
      * @param  mixed  $parameters
      * @param  int  $status
      * @param  array  $headers
+     * @return \Illuminate\Http\RedirectResponse
      */
-    function to_action($action, $parameters = [], $status = 302, $headers = []): RedirectResponse
+    function to_action($action, $parameters = [], $status = 302, $headers = [])
     {
         return redirect()->action($action, $parameters, $status, $headers);
     }
@@ -956,8 +957,9 @@ if (! function_exists('to_route')) {
      * @param  mixed  $parameters
      * @param  int  $status
      * @param  array  $headers
+     * @return \Illuminate\Http\RedirectResponse
      */
-    function to_route($route, $parameters = [], $status = 302, $headers = []): RedirectResponse
+    function to_route($route, $parameters = [], $status = 302, $headers = [])
     {
         return redirect()->route($route, $parameters, $status, $headers);
     }
@@ -1087,7 +1089,7 @@ if (! function_exists('view')) {
      * @param  array  $mergeData
      * @return ($view is null ? \Illuminate\Contracts\View\Factory : \Illuminate\Contracts\View\View)
      */
-    function view($view = null, $data = [], $mergeData = []): ViewContract|ViewFactory
+    function view($view = null, $data = [], $mergeData = []): ViewFactory|ViewContract
     {
         $factory = app(ViewFactory::class);
 

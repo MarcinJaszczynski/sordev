@@ -31,6 +31,15 @@ class SubtasksRelationManager extends RelationManager
                     ->label('Status')
                     ->relationship('status', 'name')
                     ->required(),
+                Forms\Components\Select::make('priority')
+                    ->label('Priorytet')
+                    ->options([
+                        'low' => 'Niski',
+                        'medium' => 'Średni',
+                        'high' => 'Wysoki',
+                    ])
+                    ->default('medium')
+                    ->required(),
                 Forms\Components\Select::make('assignee_id')
                     ->label('Przypisane do')
                     ->relationship('assignee', 'name'),
@@ -48,6 +57,15 @@ class SubtasksRelationManager extends RelationManager
                     ->searchable(),
                 Tables\Columns\TextColumn::make('status.name')
                     ->label('Status'),
+                Tables\Columns\TextColumn::make('priority')
+                    ->label('Priorytet')
+                    ->badge()
+                    ->formatStateUsing(fn (?string $state) => match ($state) {
+                        'high' => 'Wysoki',
+                        'medium' => 'Średni',
+                        'low' => 'Niski',
+                        default => '—',
+                    }),
                 Tables\Columns\TextColumn::make('assignee.name')
                     ->label('Przypisane do'),
                 Tables\Columns\TextColumn::make('due_date')
@@ -61,6 +79,8 @@ class SubtasksRelationManager extends RelationManager
                 Tables\Actions\CreateAction::make()
                     ->mutateFormDataUsing(function (array $data): array {
                         $data['author_id'] = Auth::id();
+                        $data['taskable_type'] = $this->getOwnerRecord()->taskable_type;
+                        $data['taskable_id'] = $this->getOwnerRecord()->taskable_id;
                         return $data;
                     }),
             ])

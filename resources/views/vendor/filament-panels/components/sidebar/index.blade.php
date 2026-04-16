@@ -90,7 +90,7 @@
                     x-data="{}"
                     x-on:click="$store.sidebar.close()"
                     x-show="$store.sidebar.isOpen"
-                    class="ms-auto hidden lg:flex"
+                    class="ms-auto flex"
                 />
             @endif
         </header>

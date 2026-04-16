@@ -5,9 +5,13 @@ use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Auth;
 use App\Models\EventTemplate;
 use App\Http\Controllers\Admin\NotificationController;
+use App\Http\Controllers\Admin\EventIndividualAgreementReportExportController;
+use App\Http\Controllers\Admin\EventOfferWordController;
+use App\Http\Controllers\Admin\EventPrintPdfController;
 use App\Models\Conversation;
 use App\Http\Controllers\EventCsvController;
 use App\Http\Controllers\EventPriceDescriptionController;
+use App\Http\Controllers\Front\AgreementFlowController;
 
 // === FRONTEND ROUTES (dodane z mergingSOR) ===
 use App\Http\Controllers\Front\FrontController;
@@ -55,6 +59,17 @@ Route::get('/blog/{slug}', [FrontController::class, 'blogPost'])->name('blog.pos
 // Global documents routes (no region slug)
 Route::get('/documents', [FrontController::class, 'documents'])->name('documents.global');
 Route::get('/documents/{slug}', [FrontController::class, 'document'])->name('documents.post.global');
+
+Route::get('/umowa/{token}', [AgreementFlowController::class, 'show'])->name('agreement.flow.show');
+Route::post('/umowa/{token}/plan', [AgreementFlowController::class, 'confirmPlan'])->name('agreement.flow.plan');
+Route::get('/umowa/{token}/zgody', [AgreementFlowController::class, 'consents'])->name('agreement.flow.consents');
+Route::post('/umowa/{token}/zgody', [AgreementFlowController::class, 'storeConsents'])->name('agreement.flow.consents.store');
+Route::get('/umowa/{token}/dane', [AgreementFlowController::class, 'personalData'])->name('agreement.flow.personal');
+Route::post('/umowa/{token}/dane', [AgreementFlowController::class, 'storePersonalData'])->name('agreement.flow.personal.store');
+Route::post('/umowa/{token}/zawrzyj', [AgreementFlowController::class, 'sign'])->name('agreement.flow.sign');
+Route::get('/umowa/{token}/platnosc', [AgreementFlowController::class, 'payment'])->name('agreement.flow.payment');
+Route::post('/umowa/{token}/platnosc', [AgreementFlowController::class, 'pay'])->name('agreement.flow.pay');
+Route::get('/umowa/{token}/potwierdzenie', [AgreementFlowController::class, 'success'])->name('agreement.flow.success');
 
 Route::group(['prefix' => '{regionSlug}', 'where' => ['regionSlug' => '[A-Za-z0-9\-]+']], function () {
     Route::post('/send-email', [FrontController::class, 'sendEmail'])->middleware('throttle:5,1')->name('send-email');
@@ -214,6 +229,14 @@ Route::get('/auto-login', function () {
 // Admin notifications API endpoint
 Route::middleware(['auth', 'web'])->prefix('admin')->group(function () {
     Route::get('/notifications/counts', [NotificationController::class, 'getCounts'])->name('admin.notifications.counts');
+    Route::get('/events/{event}/pdf/{audience}', [EventPrintPdfController::class, 'download'])
+        ->where('audience', 'pilot|hotel|driver|folder|all')
+        ->name('admin.events.pdf');
+    Route::get('/events/{event}/individual-agreements-export/{format}', EventIndividualAgreementReportExportController::class)
+        ->where('format', 'csv|xlsx')
+        ->name('admin.events.individual-agreements.export');
+    Route::get('/events/{event}/offer/word', EventOfferWordController::class)
+        ->name('admin.events.offer.word');
     Route::post('/sitemap/generate', function () {
         try {
             \Illuminate\Support\Facades\Artisan::call('sitemap:generate');

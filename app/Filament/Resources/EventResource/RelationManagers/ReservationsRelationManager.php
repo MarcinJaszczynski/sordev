@@ -57,7 +57,7 @@ class ReservationsRelationManager extends RelationManager
                 Forms\Components\DatePicker::make('expires_at')
                     ->label('Wygasa'),
 
-                Forms\Components\Textarea::make('notes')
+                Forms\Components\RichEditor::make('notes')
                     ->label('Uwagi')
                     ->columnSpanFull(),
             ])

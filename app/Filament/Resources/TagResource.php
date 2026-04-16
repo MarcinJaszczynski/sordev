@@ -55,9 +55,7 @@ class TagResource extends Resource
                 Forms\Components\TextInput::make('name')
                     ->label('Nazwa')
                     ->required(),
-                Forms\Components\Textarea::make('description')
-                    ->label('Opis')
-                    ->rows(3),
+                Forms\Components\RichEditor::make('description'),
                 Forms\Components\Select::make('visibility')
                     ->label('Widoczność')
                     ->options(array_combine(

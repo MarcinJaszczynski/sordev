@@ -23,6 +23,7 @@ class KategoriaSzablonuResource extends Resource
     protected static ?string $navigationIcon = 'heroicon-o-folder';
     protected static ?string $navigationLabel = 'Kategorie szablonów';
     protected static ?string $navigationGroup = 'Szablony imprez';
+    protected static ?int $navigationSort = 45;
     protected static ?string $modelLabel = 'kategoria szablonu';
     protected static ?string $pluralModelLabel = 'kategorie szablonów';
 
@@ -62,21 +63,27 @@ class KategoriaSzablonuResource extends Resource
     public static function form(Form $form): Form
     {
         return $form->schema([
-            Forms\Components\TextInput::make('nazwa')
-                ->label('Nazwa kategorii')
-                ->required(),
-            Forms\Components\Textarea::make('opis')
-                ->label('Opis')
-                ->nullable(),
-            Forms\Components\Textarea::make('uwagi')
-                ->label('Uwagi')
-                ->nullable(),
-            Forms\Components\Select::make('parent_id')
-                ->label('Kategoria nadrzędna')
-                ->relationship('parent', 'nazwa')
-                ->searchable()
-                ->preload()
-                ->nullable(),
+            Forms\Components\Section::make('Dane kategorii')
+                ->columns(2)
+                ->schema([
+                    Forms\Components\TextInput::make('nazwa')
+                        ->label('Nazwa kategorii')
+                        ->required()
+                        ->columnSpanFull(),
+                    Forms\Components\Select::make('parent_id')
+                        ->label('Kategoria nadrzędna')
+                        ->relationship('parent', 'nazwa')
+                        ->searchable()
+                        ->preload()
+                        ->nullable()
+                        ->columnSpanFull(),
+                    Forms\Components\RichEditor::make('opis')
+                        ->nullable()
+                        ->columnSpanFull(),
+                    Forms\Components\RichEditor::make('uwagi')
+                        ->nullable()
+                        ->columnSpanFull(),
+                ]),
         ]);
     }
 

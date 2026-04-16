@@ -654,10 +654,10 @@ class EventTemplateTransport extends Page implements HasForms
                             ->nullable()
                             ->placeholder('Wybierz miejsce końcowe'),
 
-                        Textarea::make('transport_notes')
-                            ->label('Notatki transportowe')
-                            ->placeholder('Dodatkowe informacje o transporcie...')
-                            ->rows(4)
+                        \Filament\Forms\Components\RichEditor::make('transport_notes')
+                            ->toolbarButtons([
+                                'bold', 'italic', 'underline', 'strike', 'link', 'bulletList', 'orderedList', 'blockquote', 'codeBlock', 'h2', 'h3', 'color', 'highlight', 'undo', 'redo'
+                            ])
                             ->columnSpanFull(),
                     ])
                     ->columns(2),

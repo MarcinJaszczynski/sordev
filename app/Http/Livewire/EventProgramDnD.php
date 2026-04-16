@@ -67,10 +67,10 @@ class EventProgramDnD extends Component
             });
 
             $this->loadPoints();
-            $this->dispatchBrowserEvent('toast', ['type' => 'success', 'message' => 'Kolejność zapisana']);
+            $this->dispatch('toast', type: 'success', message: 'Kolejność zapisana');
         } catch (\Throwable $e) {
             Log::error('Błąd zapisu kolejności DnD: ' . $e->getMessage());
-            $this->dispatchBrowserEvent('toast', ['type' => 'error', 'message' => 'Błąd zapisu kolejności']);
+            $this->dispatch('toast', type: 'error', message: 'Błąd zapisu kolejności');
         }
     }
 
@@ -92,7 +92,7 @@ class EventProgramDnD extends Component
             $point->save();
             $sibling->save();
             $this->loadPoints();
-            $this->dispatchBrowserEvent('toast', ['type' => 'success', 'message' => 'Przeniesiono w górę']);
+            $this->dispatch('toast', type: 'success', message: 'Przeniesiono w górę');
         }
     }
 
@@ -114,7 +114,7 @@ class EventProgramDnD extends Component
             $point->save();
             $sibling->save();
             $this->loadPoints();
-            $this->dispatchBrowserEvent('toast', ['type' => 'success', 'message' => 'Przeniesiono w dół']);
+            $this->dispatch('toast', type: 'success', message: 'Przeniesiono w dół');
         }
     }
 

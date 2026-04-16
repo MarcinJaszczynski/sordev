@@ -47,7 +47,7 @@
             <div class="package-box-layout">
                 <div
                     class="package-box-photo"
-                    style="background-image: url({{ asset('storage/' . ($item->featured_image ?? '')) }}); cursor: pointer;"
+                    style="background-image: url({{ $item->preview_image_url ?: asset('uploads/default.png') }}); cursor: pointer;"
                     @php
                         $__baseUrl = route('package.pretty', [
                             'regionSlug' => $regionSlugForLinks,
@@ -85,23 +85,6 @@
                                 @endforeach
                             </div>
                         @endif
-                        @if(isset($transportTypeCollection) && $transportTypeCollection->count())
-                            <div class="transport-type-icons transport-type-icons--mobile" aria-label="Środki transportu">
-                                @foreach($transportTypeCollection as $transportType)
-                                    @php
-                                        $iconPath = $transportType->icon_path ? asset('storage/' . ltrim($transportType->icon_path, '/')) : null;
-                                        $fallbackLabel = (string) \Illuminate\Support\Str::of($transportType->name ?? '')->trim()->substr(0, 2)->upper();
-                                    @endphp
-                                    <span class="transport-type-icon" title="{{ $transportType->name }}">
-                                        @if($iconPath)
-                                            <img src="{{ $iconPath }}" alt="{{ $transportType->name }}">
-                                        @else
-                                            <span class="transport-type-fallback">{{ $fallbackLabel }}</span>
-                                        @endif
-                                    </span>
-                                @endforeach
-                            </div>
-                        @endif
                     </div>
                 </div>
                 <div class="package-box-info">
@@ -118,30 +101,41 @@
                             @endif
                         </div>
                         <div class="package-box-small-info">
-                            <div class="package-box-time">
-                                <i class="fas fa-clock"></i> {{ $item->duration_days }} dni
-                            </div>
-                        </div>
-                        @if(isset($transportTypeCollection) && $transportTypeCollection->count())
-                            <div class="transport-type-block">
-                                <div class="transport-type-label">Transport:</div>
-                                <div class="transport-type-icons" aria-label="Środki transportu">
-                                    @foreach($transportTypeCollection as $transportType)
-                                        @php
-                                            $iconPath = $transportType->icon_path ? asset('storage/' . ltrim($transportType->icon_path, '/')) : null;
-                                            $fallbackLabel = (string) \Illuminate\Support\Str::of($transportType->name ?? '')->trim()->substr(0, 2)->upper();
-                                        @endphp
-                                        <span class="transport-type-icon" title="{{ $transportType->name }}">
-                                            @if($iconPath)
-                                                <img src="{{ $iconPath }}" alt="{{ $transportType->name }}">
-                                            @else
-                                                <span class="transport-type-fallback">{{ $fallbackLabel }}</span>
-                                            @endif
-                                        </span>
-                                    @endforeach
+                            <div class="package-box-time-wrapper">
+                                <div class="package-box-time" style="padding-bottom:3px">
+                                    <i class="fas fa-clock"></i> {{ $item->duration_days }} dni
                                 </div>
                             </div>
-                        @endif
+                            @if(isset($transportTypeCollection) && $transportTypeCollection->count())
+                                <div class="package-box-transport-wrapper">
+                                    <div class="package-box-time" style="padding-bottom:3px">
+                                        @foreach($transportTypeCollection as $index => $transportType)
+                                            @php
+                                                $name = trim(strtolower($transportType->name ?? ''));
+                                                $iconHtml = '<i class="fa-solid fa-train" style="margin-right:6px;"></i>';
+                                                if (str_contains($name, 'autokar') || str_contains($name, 'autobus')) {
+                                                    $iconHtml = '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 640 640" width="1.2em" height="1.2em" style="margin-right:6px; vertical-align: -0.15em; fill: currentColor; display: inline-block;"><path d="M480 64C568.4 64 640 135.6 640 224L640 448C640 483.3 611.3 512 576 512L570.4 512C557.2 549.3 521.8 576 480 576C438.2 576 402.7 549.3 389.6 512L250.5 512C237.3 549.3 201.8 576 160.1 576C118.4 576 82.9 549.3 69.7 512L64 512C28.7 512 0 483.3 0 448L0 160C0 107 43 64 96 64L480 64zM160 432C133.5 432 112 453.5 112 480C112 506.5 133.5 528 160 528C186.5 528 208 506.5 208 480C208 453.5 186.5 432 160 432zM480 432C453.5 432 432 453.5 432 480C432 506.5 453.5 528 480 528C506.5 528 528 506.5 528 480C528 453.5 506.5 432 480 432zM480 128C462.3 128 448 142.3 448 160L448 352C448 369.7 462.3 384 480 384L544 384C561.7 384 576 369.7 576 352L576 224C576 171 533 128 480 128zM248 288L352 288C369.7 288 384 273.7 384 256L384 160C384 142.3 369.7 128 352 128L248 128L248 288zM96 128C78.3 128 64 142.3 64 160L64 256C64 273.7 78.3 288 96 288L200 288L200 128L96 128z"/></svg>';
+                                                } elseif (str_contains($name, 'pociąg') || str_contains($name, 'pociag')) {
+                                                    $iconHtml = '<i class="fa-solid fa-train" style="margin-right:6px;"></i>';
+                                                } elseif (str_contains($name, 'samolot')) {
+                                                    $iconHtml = '<i class="fa-solid fa-plane" style="margin-right:6px;"></i>';
+                                                } elseif (str_contains($name, 'prom')) {
+                                                    $iconHtml = '<i class="fa-solid fa-sailboat" style="margin-right:6px;"></i>';
+                                                } elseif (str_contains($name, 'minibus')) {
+                                                    $iconHtml = '<i class="fa-solid fa-van-shuttle" style="margin-right:6px;"></i>';
+                                                }
+                                            @endphp
+                                            <span style="margin:0 3px 0 0; white-space:nowrap;">
+                                                {!! $iconHtml !!}{{ $transportType->name }}
+                                            </span>
+                                            @if($index < $transportTypeCollection->count() - 1)
+                                                <span style="margin:0 3px;">+</span>
+                                            @endif
+                                        @endforeach
+                                    </div>
+                                </div>
+                            @endif
+                        </div>
                         <div class="package-box-positioning-graphic-info"></div>
                         <div class="package-box-graphic-info">
                             <div class="amenity-title">Tagi:</div>

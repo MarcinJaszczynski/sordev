@@ -78,9 +78,12 @@
                                 <span class="text-2xl font-bold text-white mt-2">{{ $loop->iteration }}</span>
                             </div>
                             <!-- Treść bloku -->
-                            <div class="flex-1 flex flex-col md:flex-row md:items-center md:justify-between gap-4 bg-white px-6 py-4">
+                            <div class="flex-1 min-w-0 flex flex-col xl:flex-row xl:items-start xl:justify-between gap-4 bg-white px-6 py-4">
                                 <div class="flex-1 min-w-0">
                                     <div class="text-lg font-semibold text-gray-800 truncate">{{ $point['name'] }}</div>
+                                    @if(!empty($point['start_time']) && !empty($point['end_time']))
+                                        <div class="text-xs text-emerald-700 mt-1 font-medium">Godziny: {{ substr((string) $point['start_time'], 0, 5) }} - {{ substr((string) $point['end_time'], 0, 5) }}</div>
+                                    @endif
                                     <div class="text-xs text-gray-500 mt-1">Czas trwania: {{ isset($point['duration_hours']) || isset($point['duration_minutes']) ? sprintf('%02d:%02d', $point['duration_hours'] ?? 0, $point['duration_minutes'] ?? 0) : '-' }}</div>
                                     @if(!empty($point['office_notes']))
                                         <div class="text-xs text-blue-600 italic mt-1">Uwagi dla biura: {{ $point['office_notes'] }}</div>
@@ -99,7 +102,7 @@
                                         </div>
                                     @endif
                                 </div>
-                                <div class="flex flex-col items-end gap-2">
+                                <div class="flex flex-col items-end gap-2 shrink-0">
                                     @if(!empty($point['featured_image']) && !str_contains($point['featured_image'], 'tmp'))
                                         <img src="{{ Storage::url($point['featured_image']) }}" alt="Miniaturka" class="h-12 w-12 object-cover rounded mb-1" onerror="this.style.display='none'">
                                     @endif
@@ -116,7 +119,7 @@
                                         </div>
                                     @endif
                                 </div>
-                                <div class="flex flex-row gap-3 items-center mt-2 md:mt-0">
+                                <div class="flex flex-row flex-wrap gap-3 items-start xl:justify-end mt-2 xl:mt-0 max-w-full xl:max-w-[360px] shrink-0">
                                     <label class="flex flex-col items-center cursor-pointer group">
                                         <input type="checkbox" 
                                                wire:click="togglePivotProperty({{ $point['pivot_id'] ?? $point['id'] }}, 'include_in_program')" 
@@ -198,7 +201,7 @@
                                                 </div>
                                             @endif
                                             <!-- Checkboxy właściwości podpunktu -->
-                                            <div class="flex flex-row gap-3 items-center mt-2">
+                                            <div class="flex flex-row flex-wrap gap-3 items-start mt-2">
                                                 <label class="flex flex-col items-center cursor-pointer group">
                                                     <input type="checkbox"
                                                            wire:click="toggleChildPivotProperty({{ $child['id'] }}, 'include_in_program')"
@@ -601,6 +604,20 @@
                                     @endif
                                 </div>
                             @endif
+                            <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                                <div>
+                                    <label for="start_time" class="block text-sm font-medium text-gray-700 mb-1">Godzina startu (opcjonalnie)</label>
+                                    <input type="time" wire:model.defer="modalData.start_time" id="start_time"
+                                        class="block w-full rounded-md border-gray-300 shadow-sm focus:border-primary-500 focus:ring-primary-500">
+                                    @error('modalData.start_time') <span class="text-red-500 text-sm">{{ $message }}</span> @enderror
+                                </div>
+                                <div>
+                                    <label for="end_time" class="block text-sm font-medium text-gray-700 mb-1">Godzina końca (opcjonalnie)</label>
+                                    <input type="time" wire:model.defer="modalData.end_time" id="end_time"
+                                        class="block w-full rounded-md border-gray-300 shadow-sm focus:border-primary-500 focus:ring-primary-500">
+                                    @error('modalData.end_time') <span class="text-red-500 text-sm">{{ $message }}</span> @enderror
+                                </div>
+                            </div>
                             <div>
                                 <label for="notes" class="block text-sm font-medium text-gray-700 mb-1">Notatki</label>
                                 <textarea wire:model.defer="modalData.notes" id="notes"

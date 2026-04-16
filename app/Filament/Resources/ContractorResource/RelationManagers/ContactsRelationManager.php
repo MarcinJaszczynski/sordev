@@ -62,9 +62,7 @@ class ContactsRelationManager extends RelationManager
                 Forms\Components\TextInput::make('email')
                     ->label('Email')
                     ->email(),
-                Forms\Components\Textarea::make('notes')
-                    ->label('Uwagi')
-                    ->rows(3),
+                Forms\Components\RichEditor::make('notes'),
             ]);
     }
 

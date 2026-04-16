@@ -25,7 +25,7 @@ class EventTemplateQtyResource extends Resource
 
     // Ikona i etykiety nawigacji w panelu
     protected static ?string $navigationIcon = 'heroicon-o-user-group';
-    protected static ?string $navigationGroup = 'Szablony';
+    protected static ?string $navigationGroup = 'Szablony imprez';
     protected static ?string $navigationLabel = 'Warianty ilości';
     protected static ?int $navigationSort = 30;
     protected static ?string $modelLabel = 'wariant ilości uczestników';

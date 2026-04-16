@@ -19,6 +19,8 @@ class EventProgramTreeEditor extends Component
         'program_point_id' => '',
         'day' => 1,
         'notes' => '',
+        'start_time' => null,
+        'end_time' => null,
         'include_in_program' => true,
         'include_in_calculation' => true,
         'active' => true,
@@ -35,6 +37,8 @@ class EventProgramTreeEditor extends Component
             'modalData.program_point_id' => 'required|exists:event_template_program_points,id',
             'modalData.day' => 'required|integer|min:1|max:' . ($this->eventTemplate->duration_days + 1),
             'modalData.notes' => 'nullable|string',
+            'modalData.start_time' => 'nullable|date_format:H:i',
+            'modalData.end_time' => 'nullable|date_format:H:i',
             'modalData.include_in_program' => 'boolean',
             'modalData.include_in_calculation' => 'boolean',
             'modalData.active' => 'boolean',
@@ -112,6 +116,8 @@ class EventProgramTreeEditor extends Component
                         'day' => $point->pivot->day,
                         'order' => $point->pivot->order,
                         'pivot_notes' => $point->pivot->notes,
+                        'start_time' => $point->pivot->start_time,
+                        'end_time' => $point->pivot->end_time,
                         'program_point_id' => $point->id,
                         'include_in_program' => $point->pivot->include_in_program,
                         'include_in_calculation' => $point->pivot->include_in_calculation,
@@ -169,6 +175,8 @@ class EventProgramTreeEditor extends Component
                     'day' => $point->pivot->day,
                     'order' => $point->pivot->order,
                     'pivot_notes' => $point->pivot->notes,
+                    'start_time' => $point->pivot->start_time,
+                    'end_time' => $point->pivot->end_time,
                     'program_point_id' => $point->id,
                     'include_in_program' => $point->pivot->include_in_program,
                     'include_in_calculation' => $point->pivot->include_in_calculation,
@@ -253,6 +261,8 @@ class EventProgramTreeEditor extends Component
                 'program_point_id' => $pointPivot->event_template_program_point_id,
                 'day' => $pointPivot->day,
                 'notes' => $pointPivot->notes,
+                'start_time' => $pointPivot->start_time ? substr((string) $pointPivot->start_time, 0, 5) : null,
+                'end_time' => $pointPivot->end_time ? substr((string) $pointPivot->end_time, 0, 5) : null,
                 'include_in_program' => (bool)$pointPivot->include_in_program,
                 'include_in_calculation' => (bool)$pointPivot->include_in_calculation,
                 'active' => (bool)$pointPivot->active,
@@ -276,6 +286,8 @@ class EventProgramTreeEditor extends Component
             'program_point_id' => '',
             'day' => 1,
             'notes' => '',
+            'start_time' => null,
+            'end_time' => null,
             'include_in_program' => true,
             'include_in_calculation' => true,
             'active' => true,
@@ -288,6 +300,19 @@ class EventProgramTreeEditor extends Component
     {
         $this->validate();
 
+        $startTime = $this->normalizeTime($this->modalData['start_time'] ?? null);
+        $endTime = $this->normalizeTime($this->modalData['end_time'] ?? null);
+
+        if (($startTime && !$endTime) || (!$startTime && $endTime)) {
+            $this->addError('modalData.end_time', 'Podaj obie godziny: start i koniec.');
+            return;
+        }
+
+        if ($startTime && $endTime && strtotime($endTime) <= strtotime($startTime)) {
+            $this->addError('modalData.end_time', 'Godzina końca musi być późniejsza niż godzina startu.');
+            return;
+        }
+
         try {
             DB::beginTransaction();
 
@@ -299,6 +324,8 @@ class EventProgramTreeEditor extends Component
                 $pointPivot->update([
                     'event_template_program_point_id' => $this->modalData['program_point_id'],
                     'notes' => $this->modalData['notes'],
+                    'start_time' => $startTime,
+                    'end_time' => $endTime,
                     'include_in_program' => $this->modalData['include_in_program'],
                     'include_in_calculation' => $this->modalData['include_in_calculation'],
                     'active' => $this->modalData['active'],
@@ -315,6 +342,8 @@ class EventProgramTreeEditor extends Component
                     'day' => $this->modalData['day'],
                     'order' => $maxOrder !== null ? $maxOrder + 1 : 0,
                     'notes' => $this->modalData['notes'],
+                    'start_time' => $startTime,
+                    'end_time' => $endTime,
                     'include_in_program' => $this->modalData['include_in_program'],
                     'include_in_calculation' => $this->modalData['include_in_calculation'],
                     'active' => $this->modalData['active'],
@@ -430,6 +459,8 @@ class EventProgramTreeEditor extends Component
                     'day' => $pointPivot->day,
                     'order' => ($maxOrder ?? 0) + 1,
                     'notes' => $pointPivot->notes,
+                    'start_time' => $pointPivot->start_time,
+                    'end_time' => $pointPivot->end_time,
                     'include_in_program' => $pointPivot->include_in_program,
                     'include_in_calculation' => $pointPivot->include_in_calculation,
                     'active' => $pointPivot->active,
@@ -535,5 +566,16 @@ class EventProgramTreeEditor extends Component
         }
         $this->eventTemplate->load('dayInsurances');
         $this->loadProgramByDays();
+    }
+
+    private function normalizeTime($value): ?string
+    {
+        if ($value === null) {
+            return null;
+        }
+
+        $value = trim((string) $value);
+
+        return $value === '' ? null : $value;
     }
 }

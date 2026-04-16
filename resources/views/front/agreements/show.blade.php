@@ -1,0 +1,118 @@
+@php
+    $insuranceSelection = old('travel_insurance', data_get($flow ?? [], 'travel_insurance'));
+@endphp
+
+<!doctype html>
+<html lang="pl">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Umowa online - Plan wycieczki</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link rel="stylesheet" href="{{ asset('css/reservation.css') }}">
+</head>
+<body class="bg-light">
+<div class="container py-4 py-md-5 reservation-page">
+    <div class="row justify-content-center">
+        <div class="col-12 col-xl-11">
+            @if(session('info'))
+                <div class="alert alert-info">{{ session('info') }}</div>
+            @endif
+
+            @if(session('success'))
+                <div class="alert alert-success">{{ session('success') }}</div>
+            @endif
+
+            @if($errors->any())
+                <div class="alert alert-danger">
+                    <ul class="mb-0 ps-3">
+                        @foreach($errors->all() as $error)
+                            <li>{{ $error }}</li>
+                        @endforeach
+                    </ul>
+                </div>
+            @endif
+
+            <div class="card border-0 shadow-sm">
+                <div class="card-body p-4 p-lg-5">
+                    @include('front.agreements._stepper', ['agreement' => $agreement, 'active' => 1])
+
+                    <div class="row g-4 align-items-start mt-1">
+                        <div class="col-lg-8">
+                            <h2>Plan wycieczki</h2>
+
+                            <div class="white_box mb-3">
+                                <div class="d-flex flex-wrap justify-content-between gap-2 mb-2">
+                                    <div><strong>Numer umowy:</strong> {{ $agreement->agreement_number ?: ('#' . $agreement->id) }}</div>
+                                    <div><strong>Typ:</strong> {{ $agreement->agreement_type_label }}</div>
+                                </div>
+                                <div><strong>Impreza:</strong> {{ $agreement->event_name ?: ($agreement->event?->name ?? '—') }}</div>
+                                <div><strong>Termin:</strong> {{ optional($agreement->event_start_date)->format('d.m.Y') ?: '—' }} - {{ optional($agreement->event_end_date)->format('d.m.Y') ?: '—' }}</div>
+                                <div><strong>Klient:</strong> {{ $agreement->customer_name ?: '—' }}</div>
+                                <div><strong>Email:</strong> {{ $agreement->customer_email ?: '—' }}</div>
+                                @if($agreement->isIndividual())
+                                    <div><strong>Uczestnik:</strong> {{ $agreement->participant_name ?: ($agreement->participantPayment?->participant_name ?? '—') }}</div>
+                                @endif
+                                <div><strong>Kwota do zapłaty:</strong> {{ number_format((float) $agreement->amount_due, 2, ',', ' ') }} {{ strtoupper((string) ($agreement->currency ?: 'PLN')) }}</div>
+                            </div>
+
+                            <div class="white_box">
+                                <h4 class="mb-3">Treść umowy</h4>
+                                <div class="border rounded p-3 bg-white" style="white-space: pre-wrap; max-height: 360px; overflow:auto;">{{ $agreement->agreement_body }}</div>
+
+                                @if(!empty($agreement->attachments))
+                                    <div class="mt-3">
+                                        <h5 class="mb-2">Załączniki do umowy</h5>
+                                        <ul class="mb-0">
+                                            @foreach((array) $agreement->attachments as $file)
+                                                <li>
+                                                    <a href="{{ \Illuminate\Support\Facades\Storage::disk('public')->url($file) }}" target="_blank" rel="noopener">
+                                                        {{ basename($file) }}
+                                                    </a>
+                                                </li>
+                                            @endforeach
+                                        </ul>
+                                    </div>
+                                @endif
+                            </div>
+                        </div>
+
+                        <div class="col-lg-4">
+                            <div class="white_box reservation-info-card mb-3">
+                                <h4>Informacje o imprezie</h4>
+                                <p class="mb-1"><strong>Status umowy:</strong> {{ $agreement->status_label }}</p>
+                                <p class="mb-1"><strong>Status płatności:</strong> {{ $agreement->payment_status_label }}</p>
+                                <p class="mb-1"><strong>Liczba uczestników:</strong> {{ $agreement->participant_count ?: '—' }}</p>
+                                <p class="mb-0"><strong>Waluta:</strong> {{ strtoupper((string) ($agreement->currency ?: 'PLN')) }}</p>
+                            </div>
+
+                            <form method="POST" action="{{ route('agreement.flow.plan', ['token' => $agreement->public_token]) }}" class="white_box reservation-info-card">
+                                @csrf
+                                <h4>Dodatkowe ubezpieczenie</h4>
+                                <p class="small text-muted">Wybierz jedną z opcji, aby przejść do kolejnego kroku.</p>
+
+                                <div class="form-check mt-3">
+                                    <input class="form-check-input" type="radio" name="travel_insurance" id="travel_insurance_no" value="no" {{ $insuranceSelection === 'no' ? 'checked' : '' }}>
+                                    <label class="form-check-label" for="travel_insurance_no">
+                                        Nie, nie chcę dodatkowego ubezpieczenia.
+                                    </label>
+                                </div>
+
+                                <div class="form-check mt-2">
+                                    <input class="form-check-input" type="radio" name="travel_insurance" id="travel_insurance_yes" value="yes" {{ $insuranceSelection === 'yes' ? 'checked' : '' }}>
+                                    <label class="form-check-label" for="travel_insurance_yes">
+                                        Tak, chcę dodatkowe ubezpieczenie „Bezpieczne Rezerwacje”.
+                                    </label>
+                                </div>
+
+                                <button type="submit" class="btn btn-danger btn-block mt-4">Potwierdź</button>
+                            </form>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+</body>
+</html>

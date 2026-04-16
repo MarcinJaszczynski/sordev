@@ -8,15 +8,31 @@ use Spatie\Sitemap\Tags\Url;
 use App\Models\Place;
 use App\Models\EventTemplate;
 use App\Models\BlogPost;
+use Illuminate\Support\Facades\URL as URLFacade;
 
 class GenerateSitemap extends Command
 {
-    protected $signature = 'sitemap:generate';
+    protected $signature = 'sitemap:generate {--base-url= : Publiczny adres serwisu, np. https://example.com}';
     protected $description = 'Generate XML sitemap for the website';
 
     public function handle()
     {
         $this->info('Generowanie sitemapy...');
+
+        $baseUrl = rtrim((string) ($this->option('base-url') ?: config('app.public_url', config('app.url'))), '/');
+        $host = (string) (parse_url($baseUrl, PHP_URL_HOST) ?? '');
+
+        if ($baseUrl === '' || $host === '' || $this->isLoopbackHost($host)) {
+            $this->error('❌ Ustaw publiczny adres serwisu (APP_PUBLIC_URL/APP_URL) lub podaj --base-url, bo aktualny wskazuje na localhost/127.0.0.1.');
+            return 1;
+        }
+
+        URLFacade::forceRootUrl($baseUrl);
+
+        $scheme = parse_url($baseUrl, PHP_URL_SCHEME);
+        if (is_string($scheme) && in_array($scheme, ['http', 'https'], true)) {
+            URLFacade::forceScheme($scheme);
+        }
 
         $sitemap = Sitemap::create();
 
@@ -131,5 +147,12 @@ class GenerateSitemap extends Command
         
         $this->info("✅ Sitemap wygenerowana pomyślnie: public/sitemap.xml");
         return 0;
+    }
+
+    private function isLoopbackHost(string $host): bool
+    {
+        $host = strtolower($host);
+
+        return in_array($host, ['localhost', '127.0.0.1', '::1'], true);
     }
 }

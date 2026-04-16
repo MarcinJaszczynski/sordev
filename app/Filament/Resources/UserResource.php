@@ -49,39 +49,50 @@ class UserResource extends Resource
     public static function form(Form $form): Form
     {
         return $form->schema([
-            Forms\Components\TextInput::make('name')
-                ->label('Imię i nazwisko')
-                ->required(),
-            Forms\Components\TextInput::make('email')
-                ->label('E-mail')
-                ->email()
-                ->required(),
-            Forms\Components\TextInput::make('password')
-                ->label('Hasło')
-                ->password()
-                ->dehydrateStateUsing(fn($state) => !empty($state) ? bcrypt($state) : null)
-                ->required(fn($context) => $context === 'create')
-                ->maxLength(255)
-                ->nullable(),
-            Forms\Components\Select::make('status')
-                ->label('Status')
-                ->options([
-                    'active' => 'Aktywny',
-                    'inactive' => 'Nieaktywny',
-                ])
-                ->required(),
-            Forms\Components\Select::make('roles')
-                ->label('Role')
-                ->multiple()
-                ->relationship('roles', 'name')
-                ->preload()
-                ->helperText('Wybierz role dla użytkownika'),
-            Forms\Components\Select::make('permissions')
-                ->label('Uprawnienia')
-                ->multiple()
-                ->relationship('permissions', 'name')
-                ->preload()
-                ->helperText('Możesz nadać indywidualne uprawnienia użytkownikowi'),
+            Forms\Components\Section::make('Dane konta')
+                ->columns(2)
+                ->schema([
+                    Forms\Components\TextInput::make('name')
+                        ->label('Imię i nazwisko')
+                        ->required()
+                        ->columnSpanFull(),
+                    Forms\Components\TextInput::make('email')
+                        ->label('E-mail')
+                        ->email()
+                        ->required(),
+                    Forms\Components\TextInput::make('password')
+                        ->label('Hasło')
+                        ->password()
+                        ->dehydrateStateUsing(fn($state) => !empty($state) ? bcrypt($state) : null)
+                        ->required(fn($context) => $context === 'create')
+                        ->maxLength(255)
+                        ->nullable(),
+                    Forms\Components\Select::make('status')
+                        ->label('Status')
+                        ->options([
+                            'active' => 'Aktywny',
+                            'inactive' => 'Nieaktywny',
+                        ])
+                        ->required()
+                        ->columnSpanFull(),
+                ]),
+
+            Forms\Components\Section::make('Uprawnienia i dostęp')
+                ->columns(1)
+                ->schema([
+                    Forms\Components\Select::make('roles')
+                        ->label('Role użytkownika')
+                        ->multiple()
+                        ->relationship('roles', 'name')
+                        ->preload()
+                        ->helperText('Wybierz role dla użytkownika'),
+                    Forms\Components\Select::make('permissions')
+                        ->label('Indywidualne uprawnienia')
+                        ->multiple()
+                        ->relationship('permissions', 'name')
+                        ->preload()
+                        ->helperText('Możesz nadać indywidualne uprawnienia użytkownikowi'),
+                ]),
         ]);
     }
 

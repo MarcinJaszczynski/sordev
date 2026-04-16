@@ -437,7 +437,7 @@ body .insurance .insurance-text-ad {
   width: 100vw;
   height: 100%;
   transform: translateX(-50%);
-  background-image: url('http://mergingsor.test/uploads/banner.png');
+    background-image: url('/uploads/insurance_photo.jpg');
   background-size: cover;
   background-position: center;
   background-repeat: no-repeat;
