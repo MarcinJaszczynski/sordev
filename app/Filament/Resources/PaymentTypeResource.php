@@ -19,12 +19,19 @@ class PaymentTypeResource extends Resource
 {
     /**
      * Powiązany model Eloquent
+     *
      * @var class-string<PaymentType>
-     */    protected static ?string $model = PaymentType::class;
+     */
+    protected static ?string $model = PaymentType::class;
+
     protected static ?string $navigationGroup = 'Ustawienia kalkulacji';
+
     protected static ?string $navigationIcon = 'heroicon-o-calculator';
+
     protected static ?string $navigationLabel = 'Typy płatności';
+
     protected static ?string $pluralModelLabel = 'Typy płatności';
+
     protected static ?string $modelLabel = 'Typ płatności';
 
     /**

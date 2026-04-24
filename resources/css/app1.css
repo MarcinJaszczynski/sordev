@@ -1,4 +1,4 @@
-@import 'tailwindcss';
+@import "tailwindcss";
 
 @source '../../vendor/laravel/framework/src/Illuminate/Pagination/resources/views/*.blade.php';
 @source '../../storage/framework/views/*.php';
@@ -6,70 +6,86 @@
 @source '../**/*.js';
 
 @theme {
-    --font-sans: 'Instrument Sans', ui-sans-serif, system-ui, sans-serif, 'Apple Color Emoji', 'Segoe UI Emoji',
-        'Segoe UI Symbol', 'Noto Color Emoji';
+    --font-sans:
+        "Instrument Sans", ui-sans-serif, system-ui, sans-serif,
+        "Apple Color Emoji", "Segoe UI Emoji", "Segoe UI Symbol",
+        "Noto Color Emoji";
 }
 /* Theme variables (light + dark) -------------------------------------------------- */
 :root {
     /* Light theme */
-    --f-bg: #F9FAFB; /* page background */
-    --f-surface: #FFFFFF; /* cards, widgets */
-    --f-muted: #6B7280; /* muted text */
-    --f-text: #0F172A; /* primary text */
-    --f-border: rgba(15,23,42,0.06);
-    --f-primary: #0EA5A4; /* teal-ish primary */
-    --f-accent: #6366F1; /* violet accent */
-    --f-success: #10B981;
-    --f-warning: #F59E0B;
-    --f-danger:  #EF4444;
+    --f-bg: #f9fafb; /* page background */
+    --f-surface: #ffffff; /* cards, widgets */
+    --f-muted: #6b7280; /* muted text */
+    --f-text: #0f172a; /* primary text */
+    --f-border: rgba(15, 23, 42, 0.06);
+    --f-primary: #0ea5a4; /* teal-ish primary */
+    --f-accent: #6366f1; /* violet accent */
+    --f-success: #10b981;
+    --f-warning: #f59e0b;
+    --f-danger: #ef4444;
 }
 
 /* Dark theme when html[data-theme='dark'] is present */
-html[data-theme='dark'] {
-    --f-bg: #0B1220; /* dark page background */
-    --f-surface: #0F1724; /* widget/card background */
-    --f-muted: #94A3B8;
-    --f-text: #E6EEF6;
-    --f-border: rgba(255,255,255,0.04);
-    --f-primary: #06B6D4;
-    --f-accent: #8B5CF6;
-    --f-success: #34D399;
-    --f-warning: #FBBF24;
-    --f-danger:  #F87171;
+html[data-theme="dark"] {
+    --f-bg: #0b1220; /* dark page background */
+    --f-surface: #0f1724; /* widget/card background */
+    --f-muted: #94a3b8;
+    --f-text: #e6eef6;
+    --f-border: rgba(255, 255, 255, 0.04);
+    --f-primary: #06b6d4;
+    --f-accent: #8b5cf6;
+    --f-success: #34d399;
+    --f-warning: #fbbf24;
+    --f-danger: #f87171;
 }
 
 /* Explicit light theme when html[data-theme='light'] is present */
-html[data-theme='light'] {
-    --f-bg: #F9FAFB;
-    --f-surface: #FFFFFF;
-    --f-muted: #6B7280;
-    --f-text: #0F172A;
-    --f-border: rgba(15,23,42,0.06);
-    --f-primary: #0EA5A4;
-    --f-accent: #6366F1;
-    --f-success: #10B981;
-    --f-warning: #F59E0B;
-    --f-danger:  #EF4444;
+html[data-theme="light"] {
+    --f-bg: #f9fafb;
+    --f-surface: #ffffff;
+    --f-muted: #6b7280;
+    --f-text: #0f172a;
+    --f-border: rgba(15, 23, 42, 0.06);
+    --f-primary: #0ea5a4;
+    --f-accent: #6366f1;
+    --f-success: #10b981;
+    --f-warning: #f59e0b;
+    --f-danger: #ef4444;
 }
 
 /* Filament surface styling: apply variables to main containers */
-body, .filament-app, .filament-page, .filament-main, .filament-widget, .filament-panel, .filament-sidebar {
+body,
+.filament-app,
+.filament-page,
+.filament-main,
+.filament-widget,
+.filament-panel,
+.filament-sidebar {
     background-color: var(--f-bg) !important;
     color: var(--f-text) !important;
 }
 
-.filament-widget, .filament-card, .filament-panel, .card, .panel {
+.filament-widget,
+.filament-card,
+.filament-panel,
+.card,
+.panel {
     background-color: var(--f-surface) !important;
     border: 1px solid var(--f-border) !important;
     color: var(--f-text) !important;
 }
 
-.filament-navbar, .filament-header, .filament-actions, .filament-table {
+.filament-navbar,
+.filament-header,
+.filament-actions,
+.filament-table {
     color: var(--f-text) !important;
 }
 
 /* Buttons and actionable elements */
-.filament-button, .filament-button-primary {
+.filament-button,
+.filament-button-primary {
     --tw-bg-opacity: 1;
 }
 .filament-button-primary {
@@ -90,7 +106,7 @@ body, .filament-app, .filament-page, .filament-main, .filament-widget, .filament
 .mkh-kanban-board .mkh-card,
 .filament-kanban .kanban-card {
     border: 1px solid var(--f-border) !important;
-    box-shadow: 0 1px 2px rgba(2,6,23,0.04) !important;
+    box-shadow: 0 1px 2px rgba(2, 6, 23, 0.04) !important;
     border-radius: 0.5rem !important;
 }
 
@@ -133,15 +149,15 @@ body, .filament-app, .filament-page, .filament-main, .filament-widget, .filament
    - Overrides Tailwind utility backgrounds (bg-gray-*) inside this subtree only
      so we don't affect Filament header or other global elements.
 */
-html[data-theme='light'] div[x-data="kanbanBoard()"] {
+html[data-theme="light"] div[x-data="kanbanBoard()"] {
     background-color: var(--f-bg) !important;
 }
 
-html[data-theme='light'] div[x-data="kanbanBoard()"] .kanban-column,
-html[data-theme='light'] div[x-data="kanbanBoard()"] .kanban-column-header,
-html[data-theme='light'] div[x-data="kanbanBoard()"] .tasks-container,
-html[data-theme='light'] div[x-data="kanbanBoard()"] .task-card,
-html[data-theme='light'] div[x-data="kanbanBoard()"] .record {
+html[data-theme="light"] div[x-data="kanbanBoard()"] .kanban-column,
+html[data-theme="light"] div[x-data="kanbanBoard()"] .kanban-column-header,
+html[data-theme="light"] div[x-data="kanbanBoard()"] .tasks-container,
+html[data-theme="light"] div[x-data="kanbanBoard()"] .task-card,
+html[data-theme="light"] div[x-data="kanbanBoard()"] .record {
     background-color: var(--f-surface) !important;
     color: var(--f-text) !important;
     border-color: var(--f-border) !important;
@@ -150,22 +166,26 @@ html[data-theme='light'] div[x-data="kanbanBoard()"] .record {
 /* Neutralize deeply nested bg-* utility classes inside kanban subtree so
    parent surface color is visible. This avoids changing header or other
    components because the selector is scoped to the kanban root. */
-html[data-theme='light'] div[x-data="kanbanBoard()"] .bg-gray-900,
-html[data-theme='light'] div[x-data="kanbanBoard()"] .bg-gray-950,
-html[data-theme='light'] div[x-data="kanbanBoard()"] .bg-gray-800,
-html[data-theme='light'] div[x-data="kanbanBoard()"] .bg-gray-700,
-html[data-theme='light'] div[x-data="kanbanBoard()"] .bg-gray-600,
-html[data-theme='light'] div[x-data="kanbanBoard()"] .bg-white {
+html[data-theme="light"] div[x-data="kanbanBoard()"] .bg-gray-900,
+html[data-theme="light"] div[x-data="kanbanBoard()"] .bg-gray-950,
+html[data-theme="light"] div[x-data="kanbanBoard()"] .bg-gray-800,
+html[data-theme="light"] div[x-data="kanbanBoard()"] .bg-gray-700,
+html[data-theme="light"] div[x-data="kanbanBoard()"] .bg-gray-600,
+html[data-theme="light"] div[x-data="kanbanBoard()"] .bg-white {
     background-color: transparent !important;
 }
 
 /* Make column headers subtle and keep readable text */
-html[data-theme='light'] div[x-data="kanbanBoard()"] .kanban-column-header {
-    background: linear-gradient(90deg, rgba(15,23,42,0.03), rgba(15,23,42,0.02)) !important;
+html[data-theme="light"] div[x-data="kanbanBoard()"] .kanban-column-header {
+    background: linear-gradient(
+        90deg,
+        rgba(15, 23, 42, 0.03),
+        rgba(15, 23, 42, 0.02)
+    ) !important;
 }
 
 /* Ensure priority badges remain readable */
-html[data-theme='light'] div[x-data="kanbanBoard()"] .priority-badge {
+html[data-theme="light"] div[x-data="kanbanBoard()"] .priority-badge {
     color: #fff !important;
 }
 
@@ -188,12 +208,16 @@ html[data-theme='light'] div[x-data="kanbanBoard()"] .priority-badge {
 }
 
 .f-kanban-column-header {
-    background: linear-gradient(90deg, rgba(15,23,42,0.03), rgba(15,23,42,0.02)) !important;
+    background: linear-gradient(
+        90deg,
+        rgba(15, 23, 42, 0.03),
+        rgba(15, 23, 42, 0.02)
+    ) !important;
     color: var(--f-text) !important;
 }
 
 .f-kanban-count {
-    background-color: rgba(15,23,42,0.06) !important;
+    background-color: rgba(15, 23, 42, 0.06) !important;
     color: var(--f-text) !important;
     padding: 0.125rem 0.5rem;
     border-radius: 9999px;
@@ -208,25 +232,25 @@ html[data-theme='light'] div[x-data="kanbanBoard()"] .priority-badge {
 }
 
 .f-kanban-meta {
-    background-color: rgba(15,23,42,0.04) !important;
+    background-color: rgba(15, 23, 42, 0.04) !important;
     color: var(--f-text) !important;
-    border: 1px solid rgba(15,23,42,0.04) !important;
+    border: 1px solid rgba(15, 23, 42, 0.04) !important;
 }
 
 .f-kanban-meta-default {
-    background-color: rgba(15,23,42,0.04) !important;
+    background-color: rgba(15, 23, 42, 0.04) !important;
     color: var(--f-text) !important;
     border-color: var(--f-border) !important;
 }
 
 .f-kanban-meta-danger {
-    background-color: rgba(220,38,38,0.12) !important;
-    color: #B91C1C !important;
-    border-color: rgba(220,38,38,0.18) !important;
+    background-color: rgba(220, 38, 38, 0.12) !important;
+    color: #b91c1c !important;
+    border-color: rgba(220, 38, 38, 0.18) !important;
 }
 
 .f-kanban-pill {
-    background-color: rgba(15,23,42,0.04) !important;
+    background-color: rgba(15, 23, 42, 0.04) !important;
     color: var(--f-text) !important;
     border: 1px solid var(--f-border) !important;
 }
@@ -237,7 +261,9 @@ html[data-theme='light'] div[x-data="kanbanBoard()"] .priority-badge {
 
 /* Subtle badge for tags on package page */
 /* Stronger selectors to override compiled styles (public/dist-front/css/style.css) */
-.package-box-tags { margin-top: 10px; }
+.package-box-tags {
+    margin-top: 10px;
+}
 .package-box-tags a.badge-tag,
 .package-box a.badge-tag,
 .package-page a.badge-tag,
@@ -254,30 +280,34 @@ a.badge-tag,
     padding: 5px 12px;
     min-height: 28px;
     border-radius: 12px;
-    background-color: #F3F4F6; /* much lighter gray */
+    background-color: #f3f4f6; /* much lighter gray */
     color: #374151; /* darker gray text for contrast (thinner feel) */
     text-decoration: none;
     font-size: 0.86rem;
     font-weight: 400; /* thinner text */
     line-height: 1.1;
-    border: 1px solid rgba(15,23,42,0.04);
+    border: 1px solid rgba(15, 23, 42, 0.04);
 }
 
 a.badge-tag:hover,
 .badge-tag:hover {
-    background-color: #E5E7EB; /* slightly darker than base, still light */
+    background-color: #e5e7eb; /* slightly darker than base, still light */
     color: #111827;
     text-decoration: none;
 }
 
 .package-box-tags .badge-tag,
-.package-box .badge-tag { border-radius: 6px; padding: 3px 8px; font-size: 0.86rem; }
+.package-box .badge-tag {
+    border-radius: 6px;
+    padding: 3px 8px;
+    font-size: 0.86rem;
+}
 
 .badge-tag:focus,
 a.badge-tag:focus {
     outline: none;
-    box-shadow: 0 0 0 3px rgba(99,102,241,0.06);
-    background-color: #E5E7EB;
+    box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.06);
+    background-color: #e5e7eb;
 }
 
 /* Mobile / front fixes - ensure these live in source so builds keep them */

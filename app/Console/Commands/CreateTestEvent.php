@@ -2,21 +2,23 @@
 
 namespace App\Console\Commands;
 
-use Illuminate\Console\Command;
 use App\Models\EventTemplate;
 use App\Services\EventPriceCalculator;
+use Illuminate\Console\Command;
 
 class CreateTestEvent extends Command
 {
     protected $signature = 'create:test-event {templateId=1}';
+
     protected $description = 'Create a test event from template and run per-event calculation';
 
     public function handle()
     {
-        $templateId = (int)$this->argument('templateId');
+        $templateId = (int) $this->argument('templateId');
         $t = EventTemplate::find($templateId);
-        if (!$t) {
+        if (! $t) {
             $this->error('Template not found');
+
             return 1;
         }
 
@@ -28,13 +30,13 @@ class CreateTestEvent extends Command
             'participant_count' => 10,
         ]);
 
-        $this->info('Event created: ' . $e->id);
+        $this->info('Event created: '.$e->id);
 
-        $calc = new EventPriceCalculator();
+        $calc = new EventPriceCalculator;
         $calc->calculateForEvent($e);
 
         $count = \App\Models\EventPricePerPerson::where('event_id', $e->id)->count();
-        $this->info('Prices count: ' . $count);
+        $this->info('Prices count: '.$count);
 
         return 0;
     }

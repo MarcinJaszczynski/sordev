@@ -35,16 +35,17 @@ class DatabaseSeeder extends Seeder
         \Spatie\Permission\Models\Role::firstOrCreate(['name' => 'pilot']);
         \Spatie\Permission\Models\Role::firstOrCreate(['name' => 'biuro']);
         \Spatie\Permission\Models\Role::firstOrCreate(['name' => 'ksiegowosc']);
+        \Spatie\Permission\Models\Role::firstOrCreate(['name' => 'super_admin']);
 
         // Tworzenie uprawnień dla wszystkich modeli (w tym role i permission)
         $models = [
-            'user', 'contractor', 'contact', 'event_template', 'event_template_qty', 'kategoria_szablonu', 'tag', 'task', 'todo_status', 'currency', 'role', 'permission', 'transport_cost', 'markup'
+            'user', 'contractor', 'contact', 'event_template', 'event_template_qty', 'kategoria_szablonu', 'tag', 'task', 'todo_status', 'currency', 'role', 'permission', 'transport_cost', 'markup',
         ];
         $actions = ['view', 'create', 'edit', 'delete'];
         foreach ($models as $model) {
             foreach ($actions as $action) {
                 \Spatie\Permission\Models\Permission::firstOrCreate([
-                    'name' => $action . ' ' . $model
+                    'name' => $action.' '.$model,
                 ]);
             }
         }
@@ -55,7 +56,7 @@ class DatabaseSeeder extends Seeder
         $userRole = \Spatie\Permission\Models\Role::where('name', 'user')->first();
         $userRole->syncPermissions([
             'view user', 'edit user', 'view task', 'edit task', 'view event_template', 'view event_template_qty', 'view kategoria_szablonu', 'view tag', 'view contractor', 'view contact', 'view todo_status', 'view currency', 'view transport_cost',
-            'view markup'
+            'view markup',
         ]);
         $pilotRole = \Spatie\Permission\Models\Role::where('name', 'pilot')->first();
         $pilotRole->syncPermissions(['view task', 'view event_template', 'view markup']);
@@ -64,9 +65,11 @@ class DatabaseSeeder extends Seeder
         $ksiegowoscRole = \Spatie\Permission\Models\Role::where('name', 'ksiegowosc')->first();
         $ksiegowoscRole->syncPermissions(['view user', 'view contractor', 'view event_template', 'view currency', 'view transport_cost', 'edit transport_cost', 'view markup']);
 
-        // Przypisz wszystkie uprawnienia do roli admin (na końcu seedera)
+        // Przypisz wszystkie uprawnienia do roli admin i super_admin (na końcu seedera)
         $adminRole = \Spatie\Permission\Models\Role::where('name', 'admin')->first();
         $adminRole->syncPermissions(\Spatie\Permission\Models\Permission::all());
+        $superAdminRole = \Spatie\Permission\Models\Role::where('name', 'super_admin')->first();
+        $superAdminRole->syncPermissions(\Spatie\Permission\Models\Permission::all());
 
         // Dodatkowe uprawnienie dla wpisów blogowych
         \Spatie\Permission\Models\Permission::firstOrCreate(['name' => 'create blog post']);

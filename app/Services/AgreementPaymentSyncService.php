@@ -10,14 +10,15 @@ class AgreementPaymentSyncService
 {
     public function sync(EventAgreement $agreement, ?EventSettlement $targetSettlement = null): void
     {
-        if (!$this->shouldSync($agreement)) {
+        if (! $this->shouldSync($agreement)) {
             $this->remove($agreement);
+
             return;
         }
 
         $agreement->loadMissing('event');
 
-        $bookingReference = $agreement->agreement_number ?: ('UMOWA-' . $agreement->id);
+        $bookingReference = $agreement->agreement_number ?: ('UMOWA-'.$agreement->id);
         $participantName = $agreement->signer_name
             ?: $agreement->participant_name
             ?: $agreement->customer_name
@@ -30,7 +31,7 @@ class AgreementPaymentSyncService
             default => 'other',
         };
 
-        if (!$agreement->event) {
+        if (! $agreement->event) {
             return;
         }
 
@@ -39,8 +40,8 @@ class AgreementPaymentSyncService
             ?? $participantPayment?->settlement
             ?? EventSettlement::findOrCreateActiveForEvent($agreement->event);
 
-        if (!$participantPayment) {
-            $participantPayment = new EventSettlementParticipantPayment();
+        if (! $participantPayment) {
+            $participantPayment = new EventSettlementParticipantPayment;
         }
 
         $participantPayment->settlement()->associate($settlement);
@@ -53,7 +54,7 @@ class AgreementPaymentSyncService
             'payment_method' => $paymentMethod,
             'document_number' => $agreement->agreement_number,
             'attended' => $participantPayment->exists ? $participantPayment->attended : true,
-            'notes' => 'Synchronizacja z umowy #' . $agreement->id,
+            'notes' => 'Synchronizacja z umowy #'.$agreement->id,
         ]);
 
         $participantPayment->save();
@@ -71,10 +72,10 @@ class AgreementPaymentSyncService
     {
         $participantPayment = $this->resolveParticipantPayment(
             $agreement,
-            $agreement->agreement_number ?: ('UMOWA-' . $agreement->id)
+            $agreement->agreement_number ?: ('UMOWA-'.$agreement->id)
         );
 
-        if (!$participantPayment) {
+        if (! $participantPayment) {
             return;
         }
 
@@ -86,7 +87,7 @@ class AgreementPaymentSyncService
             return;
         }
 
-        if (!str_contains((string) $participantPayment->notes, 'Synchronizacja z umowy #')) {
+        if (! str_contains((string) $participantPayment->notes, 'Synchronizacja z umowy #')) {
             return;
         }
 
@@ -97,7 +98,7 @@ class AgreementPaymentSyncService
 
     private function shouldSync(EventAgreement $agreement): bool
     {
-        if (!$agreement->event_id) {
+        if (! $agreement->event_id) {
             return false;
         }
 
@@ -127,7 +128,7 @@ class AgreementPaymentSyncService
                 ->find($agreement->participant_payment_id);
         }
 
-        if (!$agreement->event) {
+        if (! $agreement->event) {
             return null;
         }
 

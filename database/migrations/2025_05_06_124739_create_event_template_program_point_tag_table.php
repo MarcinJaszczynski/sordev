@@ -13,8 +13,16 @@ return new class extends Migration
     {
         Schema::create('event_template_program_point_tag', function (Blueprint $table) {
             $table->id();
-            $table->foreignId('event_template_program_point_id')->constrained()->onDelete('cascade');
-            $table->foreignId('tag_id')->constrained()->onDelete('cascade');
+            $table->unsignedBigInteger('event_template_program_point_id');
+            $table->unsignedBigInteger('tag_id');
+            $table->foreign('event_template_program_point_id', 'etppt_pp_fk')
+                ->references('id')
+                ->on('event_template_program_points')
+                ->onDelete('cascade');
+            $table->foreign('tag_id', 'etppt_tag_fk')
+                ->references('id')
+                ->on('tags')
+                ->onDelete('cascade');
             $table->timestamps();
         });
     }

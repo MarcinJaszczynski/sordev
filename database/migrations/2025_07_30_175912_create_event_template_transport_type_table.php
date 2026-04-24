@@ -11,6 +11,10 @@ return new class extends Migration
      */
     public function up(): void
     {
+        if (Schema::hasTable('event_template_transport_type')) {
+            return;
+        }
+
         Schema::create('event_template_transport_type', function (Blueprint $table) {
             $table->id();
             $table->unsignedBigInteger('event_template_id');
@@ -19,7 +23,7 @@ return new class extends Migration
 
             $table->foreign('event_template_id')->references('id')->on('event_templates')->onDelete('cascade');
             $table->foreign('transport_type_id')->references('id')->on('transport_types')->onDelete('cascade');
-            $table->unique(['event_template_id', 'transport_type_id']);
+            $table->unique(['event_template_id', 'transport_type_id'], 'ett_etid_ttid_uq');
         });
     }
 

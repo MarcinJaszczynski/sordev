@@ -23,7 +23,7 @@ return new class extends Migration
 
     public function down(): void
     {
-        if (!Schema::hasTable('notifications')) {
+        if (! Schema::hasTable('notifications')) {
             return;
         }
         Schema::dropIfExists('notifications');

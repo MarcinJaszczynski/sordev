@@ -3,16 +3,15 @@
 namespace App\Filament\Pages;
 
 use App\Models\EventSettlementCost;
-use App\Models\EventSettlement;
+use Filament\Forms;
 use Filament\Pages\Page;
 use Filament\Tables;
 use Filament\Tables\Concerns\InteractsWithTable;
 use Filament\Tables\Contracts\HasTable;
 use Filament\Tables\Table;
-use Filament\Forms;
 use Filament\Widgets\StatsOverviewWidget\Stat;
-use Illuminate\Support\Number;
 use Illuminate\Contracts\Database\Query\Builder;
+use Illuminate\Support\Number;
 
 class ExpensesAnalytics extends Page implements HasTable
 {
@@ -28,16 +27,25 @@ class ExpensesAnalytics extends Page implements HasTable
     ];
 
     protected static ?string $navigationIcon = 'heroicon-o-chart-pie';
+
     protected static ?string $navigationLabel = 'Raport wydatków';
+
     protected static string $view = 'filament.pages.expenses-analytics';
+
     protected static ?string $navigationGroup = 'Finanse';
+
     protected static ?int $navigationSort = 13;
 
     public ?string $selectedDateFrom = null;
+
     public ?string $selectedDateTo = null;
+
     public ?string $selectedPaymentStatus = null;
+
     public ?string $selectedContractor = null;
+
     public ?string $selectedEvent = null;
+
     public ?string $selectedPaidBy = null;
 
     public function mount(): void
@@ -96,12 +104,12 @@ class ExpensesAnalytics extends Page implements HasTable
     public function getStats(): array
     {
         $query = EventSettlementCost::query()
-            ->when($this->selectedDateFrom, fn($q) => $q->whereDate('event_settlement_costs.created_at', '>=', $this->selectedDateFrom))
-            ->when($this->selectedDateTo, fn($q) => $q->whereDate('event_settlement_costs.created_at', '<=', $this->selectedDateTo))
-            ->when($this->selectedPaymentStatus, fn($q) => $q->where('payment_status', $this->selectedPaymentStatus))
-            ->when($this->selectedContractor, fn($q) => $q->where('contractor_id', $this->selectedContractor))
-            ->when($this->selectedEvent, fn($q) => $q->whereHas('settlement', fn($q) => $q->where('event_id', $this->selectedEvent)))
-            ->when($this->selectedPaidBy, fn($q) => $q->where('paid_by', $this->selectedPaidBy));
+            ->when($this->selectedDateFrom, fn ($q) => $q->whereDate('event_settlement_costs.created_at', '>=', $this->selectedDateFrom))
+            ->when($this->selectedDateTo, fn ($q) => $q->whereDate('event_settlement_costs.created_at', '<=', $this->selectedDateTo))
+            ->when($this->selectedPaymentStatus, fn ($q) => $q->where('payment_status', $this->selectedPaymentStatus))
+            ->when($this->selectedContractor, fn ($q) => $q->where('contractor_id', $this->selectedContractor))
+            ->when($this->selectedEvent, fn ($q) => $q->whereHas('settlement', fn ($q) => $q->where('event_id', $this->selectedEvent)))
+            ->when($this->selectedPaidBy, fn ($q) => $q->where('paid_by', $this->selectedPaidBy));
 
         $totalPlanned = (clone $query)->sum('planned_amount_pln') ?? 0;
         $totalActual = (clone $query)->sum('actual_amount_pln') ?? 0;
@@ -149,12 +157,12 @@ class ExpensesAnalytics extends Page implements HasTable
         return $table
             ->query(
                 EventSettlementCost::query()
-                    ->when($this->selectedDateFrom, fn($q) => $q->whereDate('event_settlement_costs.created_at', '>=', $this->selectedDateFrom))
-                    ->when($this->selectedDateTo, fn($q) => $q->whereDate('event_settlement_costs.created_at', '<=', $this->selectedDateTo))
-                    ->when($this->selectedPaymentStatus, fn($q) => $q->where('payment_status', $this->selectedPaymentStatus))
-                    ->when($this->selectedContractor, fn($q) => $q->where('contractor_id', $this->selectedContractor))
-                    ->when($this->selectedEvent, fn($q) => $q->whereHas('settlement', fn($q) => $q->where('event_id', $this->selectedEvent)))
-                    ->when($this->selectedPaidBy, fn($q) => $q->where('paid_by', $this->selectedPaidBy))
+                    ->when($this->selectedDateFrom, fn ($q) => $q->whereDate('event_settlement_costs.created_at', '>=', $this->selectedDateFrom))
+                    ->when($this->selectedDateTo, fn ($q) => $q->whereDate('event_settlement_costs.created_at', '<=', $this->selectedDateTo))
+                    ->when($this->selectedPaymentStatus, fn ($q) => $q->where('payment_status', $this->selectedPaymentStatus))
+                    ->when($this->selectedContractor, fn ($q) => $q->where('contractor_id', $this->selectedContractor))
+                    ->when($this->selectedEvent, fn ($q) => $q->whereHas('settlement', fn ($q) => $q->where('event_id', $this->selectedEvent)))
+                    ->when($this->selectedPaidBy, fn ($q) => $q->where('paid_by', $this->selectedPaidBy))
             )
             ->columns([
                 Tables\Columns\TextColumn::make('id')
@@ -189,19 +197,19 @@ class ExpensesAnalytics extends Page implements HasTable
                     ->money('PLN')
                     ->sortable()
                     ->alignEnd()
-                    ->color(fn($state) => $state === null ? 'gray' : null),
+                    ->color(fn ($state) => $state === null ? 'gray' : null),
 
                 Tables\Columns\TextColumn::make('diff_pln')
                     ->label('Różnica PLN')
-                    ->state(fn($record) => $record->actual_amount_pln - $record->planned_amount_pln)
+                    ->state(fn ($record) => $record->actual_amount_pln - $record->planned_amount_pln)
                     ->numeric(2)
                     ->suffix(' PLN')
                     ->alignEnd()
-                    ->color(fn($state) => $state > 0 ? 'danger' : ($state < 0 ? 'success' : 'gray')),
+                    ->color(fn ($state) => $state > 0 ? 'danger' : ($state < 0 ? 'success' : 'gray')),
 
                 Tables\Columns\BadgeColumn::make('payment_status')
                     ->label('Status płatności')
-                    ->formatStateUsing(fn($state) => EventSettlementCost::$paymentStatuses[$state] ?? $state)
+                    ->formatStateUsing(fn ($state) => EventSettlementCost::$paymentStatuses[$state] ?? $state)
                     ->colors([
                         'gray' => 'planned',
                         'warning' => ['reservation_required', 'advance_required', 'advance_paid', 'partially_paid'],
@@ -211,7 +219,7 @@ class ExpensesAnalytics extends Page implements HasTable
 
                 Tables\Columns\BadgeColumn::make('approval_status')
                     ->label('Kontrola')
-                    ->formatStateUsing(fn(?string $state) => EventSettlementCost::$approvalStatuses[$state ?? 'pending'] ?? $state)
+                    ->formatStateUsing(fn (?string $state) => EventSettlementCost::$approvalStatuses[$state ?? 'pending'] ?? $state)
                     ->colors([
                         'warning' => 'pending',
                         'success' => 'approved',
@@ -274,11 +282,11 @@ class ExpensesAnalytics extends Page implements HasTable
         $counts = [];
 
         $query = EventSettlementCost::query()
-            ->when($this->selectedDateFrom, fn($q) => $q->whereDate('event_settlement_costs.created_at', '>=', $this->selectedDateFrom))
-            ->when($this->selectedDateTo, fn($q) => $q->whereDate('event_settlement_costs.created_at', '<=', $this->selectedDateTo))
-            ->when($this->selectedContractor, fn($q) => $q->where('contractor_id', $this->selectedContractor))
-            ->when($this->selectedEvent, fn($q) => $q->whereHas('settlement', fn($q) => $q->where('event_id', $this->selectedEvent)))
-            ->when($this->selectedPaidBy, fn($q) => $q->where('paid_by', $this->selectedPaidBy));
+            ->when($this->selectedDateFrom, fn ($q) => $q->whereDate('event_settlement_costs.created_at', '>=', $this->selectedDateFrom))
+            ->when($this->selectedDateTo, fn ($q) => $q->whereDate('event_settlement_costs.created_at', '<=', $this->selectedDateTo))
+            ->when($this->selectedContractor, fn ($q) => $q->where('contractor_id', $this->selectedContractor))
+            ->when($this->selectedEvent, fn ($q) => $q->whereHas('settlement', fn ($q) => $q->where('event_id', $this->selectedEvent)))
+            ->when($this->selectedPaidBy, fn ($q) => $q->where('paid_by', $this->selectedPaidBy));
 
         foreach (array_keys($statuses) as $status) {
             $counts[$status] = (clone $query)->where('payment_status', $status)->count();
@@ -290,11 +298,11 @@ class ExpensesAnalytics extends Page implements HasTable
     public function getExpensesByContractorData(): array
     {
         $data = EventSettlementCost::query()
-            ->when($this->selectedDateFrom, fn($q) => $q->whereDate('event_settlement_costs.created_at', '>=', $this->selectedDateFrom))
-            ->when($this->selectedDateTo, fn($q) => $q->whereDate('event_settlement_costs.created_at', '<=', $this->selectedDateTo))
-            ->when($this->selectedPaymentStatus, fn($q) => $q->where('payment_status', $this->selectedPaymentStatus))
-            ->when($this->selectedEvent, fn($q) => $q->whereHas('settlement', fn($q) => $q->where('event_id', $this->selectedEvent)))
-            ->when($this->selectedPaidBy, fn($q) => $q->where('paid_by', $this->selectedPaidBy))
+            ->when($this->selectedDateFrom, fn ($q) => $q->whereDate('event_settlement_costs.created_at', '>=', $this->selectedDateFrom))
+            ->when($this->selectedDateTo, fn ($q) => $q->whereDate('event_settlement_costs.created_at', '<=', $this->selectedDateTo))
+            ->when($this->selectedPaymentStatus, fn ($q) => $q->where('payment_status', $this->selectedPaymentStatus))
+            ->when($this->selectedEvent, fn ($q) => $q->whereHas('settlement', fn ($q) => $q->where('event_id', $this->selectedEvent)))
+            ->when($this->selectedPaidBy, fn ($q) => $q->where('paid_by', $this->selectedPaidBy))
             ->join('contractors', 'event_settlement_costs.contractor_id', '=', 'contractors.id')
             ->selectRaw('contractors.name, COUNT(*) as count, SUM(actual_amount_pln) as total')
             ->groupBy('contractors.name')
@@ -310,12 +318,12 @@ class ExpensesAnalytics extends Page implements HasTable
     public function getExpensesByDateData(): array
     {
         $data = EventSettlementCost::query()
-            ->when($this->selectedDateFrom, fn($q) => $q->whereDate('event_settlement_costs.created_at', '>=', $this->selectedDateFrom))
-            ->when($this->selectedDateTo, fn($q) => $q->whereDate('event_settlement_costs.created_at', '<=', $this->selectedDateTo))
-            ->when($this->selectedPaymentStatus, fn($q) => $q->where('payment_status', $this->selectedPaymentStatus))
-            ->when($this->selectedContractor, fn($q) => $q->where('contractor_id', $this->selectedContractor))
-            ->when($this->selectedEvent, fn($q) => $q->whereHas('settlement', fn($q) => $q->where('event_id', $this->selectedEvent)))
-            ->when($this->selectedPaidBy, fn($q) => $q->where('paid_by', $this->selectedPaidBy))
+            ->when($this->selectedDateFrom, fn ($q) => $q->whereDate('event_settlement_costs.created_at', '>=', $this->selectedDateFrom))
+            ->when($this->selectedDateTo, fn ($q) => $q->whereDate('event_settlement_costs.created_at', '<=', $this->selectedDateTo))
+            ->when($this->selectedPaymentStatus, fn ($q) => $q->where('payment_status', $this->selectedPaymentStatus))
+            ->when($this->selectedContractor, fn ($q) => $q->where('contractor_id', $this->selectedContractor))
+            ->when($this->selectedEvent, fn ($q) => $q->whereHas('settlement', fn ($q) => $q->where('event_id', $this->selectedEvent)))
+            ->when($this->selectedPaidBy, fn ($q) => $q->where('paid_by', $this->selectedPaidBy))
             ->selectRaw('DATE(event_settlement_costs.created_at) as date, COUNT(*) as count, SUM(actual_amount_pln) as total')
             ->groupByRaw('DATE(event_settlement_costs.created_at)')
             ->orderBy('date')
@@ -332,11 +340,11 @@ class ExpensesAnalytics extends Page implements HasTable
         $data = [];
 
         $query = EventSettlementCost::query()
-            ->when($this->selectedDateFrom, fn($q) => $q->whereDate('event_settlement_costs.created_at', '>=', $this->selectedDateFrom))
-            ->when($this->selectedDateTo, fn($q) => $q->whereDate('event_settlement_costs.created_at', '<=', $this->selectedDateTo))
-            ->when($this->selectedPaymentStatus, fn($q) => $q->where('payment_status', $this->selectedPaymentStatus))
-            ->when($this->selectedContractor, fn($q) => $q->where('contractor_id', $this->selectedContractor))
-            ->when($this->selectedEvent, fn($q) => $q->whereHas('settlement', fn($q) => $q->where('event_id', $this->selectedEvent)));
+            ->when($this->selectedDateFrom, fn ($q) => $q->whereDate('event_settlement_costs.created_at', '>=', $this->selectedDateFrom))
+            ->when($this->selectedDateTo, fn ($q) => $q->whereDate('event_settlement_costs.created_at', '<=', $this->selectedDateTo))
+            ->when($this->selectedPaymentStatus, fn ($q) => $q->where('payment_status', $this->selectedPaymentStatus))
+            ->when($this->selectedContractor, fn ($q) => $q->where('contractor_id', $this->selectedContractor))
+            ->when($this->selectedEvent, fn ($q) => $q->whereHas('settlement', fn ($q) => $q->where('event_id', $this->selectedEvent)));
 
         foreach (array_keys($options) as $paidBy) {
             $data[$paidBy] = (clone $query)->where('paid_by', $paidBy)->sum('actual_amount_pln') ?? 0;
@@ -347,7 +355,7 @@ class ExpensesAnalytics extends Page implements HasTable
 
     private function filtersSessionKey(): string
     {
-        return static::class . '.filters';
+        return static::class.'.filters';
     }
 
     private function persistCurrentFiltersState(): void

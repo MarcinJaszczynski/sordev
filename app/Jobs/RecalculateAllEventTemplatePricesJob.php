@@ -4,6 +4,7 @@ namespace App\Jobs;
 
 use App\Models\EventTemplate;
 use App\Models\EventTemplatePricePerPerson;
+use App\Services\PriceRecalcProgress;
 use App\Services\UnifiedPriceCalculator;
 use Filament\Notifications\Notification;
 use Illuminate\Bus\Queueable;
@@ -13,13 +14,13 @@ use Illuminate\Queue\InteractsWithQueue;
 use Illuminate\Queue\SerializesModels;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Mail;
-use App\Services\PriceRecalcProgress;
 
 class RecalculateAllEventTemplatePricesJob implements ShouldQueue
 {
     use Dispatchable, InteractsWithQueue, Queueable, SerializesModels;
 
     public int $tries = 3;
+
     public int $timeout = 1200;
 
     public int $userId;
@@ -31,7 +32,7 @@ class RecalculateAllEventTemplatePricesJob implements ShouldQueue
 
     public function handle(): void
     {
-        $calculator = new UnifiedPriceCalculator();
+        $calculator = new UnifiedPriceCalculator;
         $total = EventTemplate::count();
 
         // Start progress for user
@@ -91,7 +92,7 @@ class RecalculateAllEventTemplatePricesJob implements ShouldQueue
                         }
                     } catch (\Throwable $e) {
                         $errors++;
-                        Log::error('Recalculate job error for template #' . $template->id . ': ' . $e->getMessage());
+                        Log::error('Recalculate job error for template #'.$template->id.': '.$e->getMessage());
                         if ($this->userId) {
                             PriceRecalcProgress::addError($this->userId, 1);
                             PriceRecalcProgress::increment($this->userId, 1);
@@ -117,15 +118,15 @@ class RecalculateAllEventTemplatePricesJob implements ShouldQueue
                     ->sendToDatabase($user);
 
                 // Opcjonalnie: e-mail (jeśli user ma e-mail)
-                if (!empty($user->email)) {
+                if (! empty($user->email)) {
                     $summary = "Szablony: {$totalTemplates}\nNowe rekordy: {$totalPricesCreated}\nRazem rekordów po przeliczeniu: {$totalPricesAfter}\nBłędów: {$errors}";
-                    Mail::raw('Przeliczanie cen zakończone.\n' . $summary, function ($m) use ($user) {
+                    Mail::raw('Przeliczanie cen zakończone.\n'.$summary, function ($m) use ($user) {
                         $m->to($user->email)->subject('Podsumowanie przeliczania cen');
                     });
                 }
             }
         } catch (\Throwable $e) {
-            Log::warning('Failed to send completion notification: ' . $e->getMessage());
+            Log::warning('Failed to send completion notification: '.$e->getMessage());
         }
     }
 

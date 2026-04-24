@@ -15,11 +15,17 @@ use Illuminate\Database\Eloquent\Builder;
 class ConversationResource extends Resource
 {
     protected static ?string $model = Conversation::class;
+
     protected static ?string $navigationIcon = 'heroicon-o-chat-bubble-left-right';
+
     protected static ?string $navigationLabel = 'Czat';
+
     protected static ?string $navigationGroup = 'Komunikacja';
+
     protected static ?string $modelLabel = 'rozmowa';
+
     protected static ?string $pluralModelLabel = 'rozmowy';
+
     protected static ?int $navigationSort = 1;
 
     public static function form(Form $form): Form
@@ -63,8 +69,8 @@ class ConversationResource extends Resource
                             $set('participants', [reset($state)]);
                         }
                     })
-                    ->helperText(fn (Forms\Get $get) => $get('type') === 'private' 
-                        ? 'Wybierz jednego użytkownika dla rozmowy 1-na-1' 
+                    ->helperText(fn (Forms\Get $get) => $get('type') === 'private'
+                        ? 'Wybierz jednego użytkownika dla rozmowy 1-na-1'
                         : 'Wybierz wielu użytkowników dla rozmowy grupowej')
                     ->searchable(),
             ]);
@@ -120,7 +126,7 @@ class ConversationResource extends Resource
                 Tables\Actions\Action::make('open_chat')
                     ->label('Otwórz czat')
                     ->icon('heroicon-o-chat-bubble-left-right')
-                    ->url(fn (Conversation $record): string => '/admin/chat?conversation=' . $record->id),
+                    ->url(fn (Conversation $record): string => '/admin/chat?conversation='.$record->id),
                 Tables\Actions\EditAction::make(),
                 Tables\Actions\DeleteAction::make(),
             ])

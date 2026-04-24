@@ -2,9 +2,8 @@
 
 namespace Database\Seeders;
 
-use Illuminate\Database\Console\Seeds\WithoutModelEvents;
-use Illuminate\Database\Seeder;
 use App\Models\User;
+use Illuminate\Database\Seeder;
 use Illuminate\Support\Facades\Hash;
 
 class UserSeeder extends Seeder
@@ -42,7 +41,7 @@ class UserSeeder extends Seeder
             ]
         );
         User::firstOrCreate([
-            'email' => 'piotr.zielinski@example.com'
+            'email' => 'piotr.zielinski@example.com',
         ], [
             'name' => 'Piotr Zieliński',
             'password' => Hash::make('zielony2024'),
@@ -50,7 +49,7 @@ class UserSeeder extends Seeder
             'status' => 'active',
         ]);
         User::firstOrCreate([
-            'email' => 'biuro@firma.pl'
+            'email' => 'biuro@firma.pl',
         ], [
             'name' => 'Biuro Obsługi',
             'password' => Hash::make('biuro123'),
@@ -58,7 +57,7 @@ class UserSeeder extends Seeder
             'status' => 'active',
         ]);
         User::firstOrCreate([
-            'email' => 'ksiegowosc@firma.pl'
+            'email' => 'ksiegowosc@firma.pl',
         ], [
             'name' => 'Dział Księgowości',
             'password' => Hash::make('ksiegowosc123'),

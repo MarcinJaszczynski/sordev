@@ -2,15 +2,15 @@
 
 namespace Tests\Feature;
 
-use Tests\TestCase;
-use Illuminate\Foundation\Testing\RefreshDatabase;
-use App\Models\EventTemplate;
-use App\Models\EventTemplateQty;
 use App\Models\Currency;
-use App\Models\Place;
+use App\Models\EventTemplate;
 use App\Models\EventTemplatePricePerPerson;
-use App\Services\UnifiedPriceCalculator;
+use App\Models\EventTemplateQty;
+use App\Models\Place;
 use App\Services\EventTemplateCalculationEngine;
+use App\Services\UnifiedPriceCalculator;
+use Illuminate\Foundation\Testing\RefreshDatabase;
+use Tests\TestCase;
 
 class UnifiedPriceCalculatorBasicTest extends TestCase
 {
@@ -34,14 +34,17 @@ class UnifiedPriceCalculatorBasicTest extends TestCase
      */
     private function engineFromDb(): EventTemplateCalculationEngine
     {
-        return new class extends EventTemplateCalculationEngine {
-            public function calculateDetailed(\App\Models\EventTemplate $template, ?int $startPlaceId = null, ?float $transportKm = null, bool $debug = false): array
+        return new class extends EventTemplateCalculationEngine
+        {
+            public function calculateDetailed(\App\Models\EventTemplate $template, ?int $startPlaceId = null, ?float $transportKm = null, bool $debug = false, \Traversable|array|null $qtyVariantsOverride = null): array
             {
                 $rows = \App\Models\EventTemplatePricePerPerson::with(['eventTemplateQty', 'currency'])
                     ->where('event_template_id', $template->id)
                     ->get();
 
-                if ($rows->isEmpty()) return [];
+                if ($rows->isEmpty()) {
+                    return [];
+                }
 
                 $grouped = [];
                 foreach ($rows as $r) {
@@ -53,7 +56,9 @@ class UnifiedPriceCalculatorBasicTest extends TestCase
                     if ($qtyNum === null && $qtyId) {
                         $qtyNum = \App\Models\EventTemplateQty::find($qtyId)?->qty ?? null;
                     }
-                    if ($qtyNum === null) continue;
+                    if ($qtyNum === null) {
+                        continue;
+                    }
                     $grouped[$qtyNum][] = $r;
                 }
 
@@ -68,7 +73,7 @@ class UnifiedPriceCalculatorBasicTest extends TestCase
                             }
                         }
                     }
-                    if (!$chosen) {
+                    if (! $chosen) {
                         foreach ($rowsForQty as $r) {
                             if (is_null($r->start_place_id) && ($r->currency->symbol ?? $r->currency->code ?? 'PLN') === 'PLN') {
                                 $chosen = $r;
@@ -76,15 +81,17 @@ class UnifiedPriceCalculatorBasicTest extends TestCase
                             }
                         }
                     }
-                    if (!$chosen) continue;
+                    if (! $chosen) {
+                        continue;
+                    }
 
                     $out[$qtyNum] = [
                         'event_template_qty_id' => $chosen->event_template_qty_id,
                         'qty' => $qtyNum,
-                        'price_per_person' => (float)$chosen->price_per_person,
+                        'price_per_person' => (float) $chosen->price_per_person,
                         'currencies' => [
                             'PLN' => [
-                                'final' => ['price_per_person' => (float)$chosen->price_per_person],
+                                'final' => ['price_per_person' => (float) $chosen->price_per_person],
                             ],
                         ],
                     ];
@@ -97,13 +104,16 @@ class UnifiedPriceCalculatorBasicTest extends TestCase
 
     private function fakeEngineFromArray(array $arr): EventTemplateCalculationEngine
     {
-        return new class($arr) extends EventTemplateCalculationEngine {
+        return new class($arr) extends EventTemplateCalculationEngine
+        {
             private $arr;
+
             public function __construct($arr)
             {
                 $this->arr = $arr;
             }
-            public function calculateDetailed(\App\Models\EventTemplate $template, ?int $startPlaceId = null, ?float $transportKm = null, bool $debug = false): array
+
+            public function calculateDetailed(\App\Models\EventTemplate $template, ?int $startPlaceId = null, ?float $transportKm = null, bool $debug = false, \Traversable|array|null $qtyVariantsOverride = null): array
             {
                 return $this->arr;
             }
@@ -113,25 +123,25 @@ class UnifiedPriceCalculatorBasicTest extends TestCase
     private function setupTestData()
     {
         // Create currencies if they don't exist
-        if (!Currency::where('symbol', 'PLN')->exists()) {
+        if (! Currency::where('symbol', 'PLN')->exists()) {
             Currency::create(['symbol' => 'PLN', 'name' => 'Polski złoty', 'exchange_rate' => 1]);
         }
-        if (!Currency::where('symbol', 'EUR')->exists()) {
+        if (! Currency::where('symbol', 'EUR')->exists()) {
             Currency::create(['symbol' => 'EUR', 'name' => 'Euro', 'exchange_rate' => 4.0]);
         }
 
         // Create qty if doesn't exist
-        if (!EventTemplateQty::where('qty', 20)->exists()) {
+        if (! EventTemplateQty::where('qty', 20)->exists()) {
             EventTemplateQty::create(['qty' => 20, 'gratis' => 0, 'staff' => 0, 'driver' => 0]);
         }
 
         // Create place if doesn't exist
-        if (!Place::where('starting_place', true)->exists()) {
+        if (! Place::where('starting_place', true)->exists()) {
             Place::create(['name' => 'Test Place', 'slug' => 'test-place', 'starting_place' => true]);
         }
     }
 
-    public function testCalculatorReturnsStructuredData()
+    public function test_calculator_returns_structured_data()
     {
         $template = EventTemplate::factory()->create([
             'name' => 'Test Template',
@@ -142,13 +152,13 @@ class UnifiedPriceCalculatorBasicTest extends TestCase
         // brak punktów programu => cena bazowa 0 => powinna istnieć struktura dla qty jeśli silnik zwróci warianty
         // W środowisku testowym może brakować variantów jeśli fabryka nie odwzorowuje relacji globalnych.
         // Wówczas akceptujemy pusty wynik.
-        if (!empty($calc)) {
+        if (! empty($calc)) {
             $first = reset($calc);
             $this->assertArrayHasKey('currencies', $first);
         }
     }
 
-    public function testPriceSelectionPrefersLocalPlnOverGlobal()
+    public function test_price_selection_prefers_local_pln_over_global()
     {
         // Setup
         $template = EventTemplate::factory()->create(['name' => 'Test Template']);
@@ -183,23 +193,23 @@ class UnifiedPriceCalculatorBasicTest extends TestCase
                 'currencies' => [
                     'PLN' => [
                         'raw' => ['price_per_person' => 150.00],
-                        'final' => ['price_per_person' => 150.00]
-                    ]
+                        'final' => ['price_per_person' => 150.00],
+                    ],
                 ],
             ],
         ]);
         $this->assertNotEmpty($engine->calculateDetailed($template, $localPlace->id, null, false), 'Engine returned empty');
         // debug dump engine result to temp file
-        @file_put_contents(sys_get_temp_dir() . '/engine_debug_1.json', json_encode($engine->calculateDetailed($template, $localPlace->id, null, false)));
+        @file_put_contents(sys_get_temp_dir().'/engine_debug_1.json', json_encode($engine->calculateDetailed($template, $localPlace->id, null, false)));
         $calculator = new UnifiedPriceCalculator($engine);
         $result = $calculator->calculate($template, $localPlace->id, false);
 
         // Should select local price (150) over global (200)
-        $this->assertArrayHasKey(20, $result, 'Result keys: ' . json_encode(array_keys($result)) . ' full: ' . json_encode($result)); // qty 20
+        $this->assertArrayHasKey(20, $result, 'Result keys: '.json_encode(array_keys($result)).' full: '.json_encode($result)); // qty 20
         $this->assertEquals(150.00, $result[20]['price_per_person']);
     }
 
-    public function testPriceSelectionFallsBackToGlobalWhenNoLocal()
+    public function test_price_selection_falls_back_to_global_when_no_local()
     {
         // Setup
         $template = EventTemplate::factory()->create(['name' => 'Test Template']);
@@ -226,8 +236,8 @@ class UnifiedPriceCalculatorBasicTest extends TestCase
                 'currencies' => [
                     'PLN' => [
                         'raw' => ['price_per_person' => 200.00],
-                        'final' => ['price_per_person' => 200.00]
-                    ]
+                        'final' => ['price_per_person' => 200.00],
+                    ],
                 ],
             ],
         ]);
@@ -236,11 +246,11 @@ class UnifiedPriceCalculatorBasicTest extends TestCase
         $result = $calculator->calculate($template, $localPlace->id, false);
 
         // Should fallback to global price
-        $this->assertArrayHasKey(20, $result, 'Result keys: ' . json_encode(array_keys($result)) . ' full: ' . json_encode($result));
+        $this->assertArrayHasKey(20, $result, 'Result keys: '.json_encode(array_keys($result)).' full: '.json_encode($result));
         $this->assertEquals(200.00, $result[20]['price_per_person']);
     }
 
-    public function testPriceSelectionReturnsNullWhenNoPrices()
+    public function test_price_selection_returns_null_when_no_prices()
     {
         // Setup
         $template = EventTemplate::factory()->create(['name' => 'Test Template']);
@@ -258,7 +268,7 @@ class UnifiedPriceCalculatorBasicTest extends TestCase
         $this->assertEmpty($result);
     }
 
-    public function testPriceSelectionChoosesLowestAmongMultipleQtys()
+    public function test_price_selection_chooses_lowest_among_multiple_qtys()
     {
         // Setup
         $template = EventTemplate::factory()->create(['name' => 'Test Template']);
@@ -293,8 +303,8 @@ class UnifiedPriceCalculatorBasicTest extends TestCase
                 'currencies' => [
                     'PLN' => [
                         'raw' => ['price_per_person' => 150.00],
-                        'final' => ['price_per_person' => 150.00]
-                    ]
+                        'final' => ['price_per_person' => 150.00],
+                    ],
                 ],
             ],
             30 => [
@@ -304,8 +314,8 @@ class UnifiedPriceCalculatorBasicTest extends TestCase
                 'currencies' => [
                     'PLN' => [
                         'raw' => ['price_per_person' => 140.00],
-                        'final' => ['price_per_person' => 140.00]
-                    ]
+                        'final' => ['price_per_person' => 140.00],
+                    ],
                 ],
             ],
         ]);
@@ -313,8 +323,8 @@ class UnifiedPriceCalculatorBasicTest extends TestCase
         $calculator = new UnifiedPriceCalculator($engine);
         $result = $calculator->calculate($template, $localPlace->id, false);
         // Should return the lowest price among available qtys
-        $this->assertArrayHasKey(20, $result, 'Result keys: ' . json_encode(array_keys($result)) . ' full: ' . json_encode($result));
-        $this->assertArrayHasKey(30, $result, 'Result keys: ' . json_encode(array_keys($result)) . ' full: ' . json_encode($result));
+        $this->assertArrayHasKey(20, $result, 'Result keys: '.json_encode(array_keys($result)).' full: '.json_encode($result));
+        $this->assertArrayHasKey(30, $result, 'Result keys: '.json_encode(array_keys($result)).' full: '.json_encode($result));
         $this->assertEquals(140.00, $result[30]['price_per_person']); // Lower price
     }
 }

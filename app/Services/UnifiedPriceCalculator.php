@@ -42,6 +42,7 @@ use Illuminate\Support\Facades\Log;
 class UnifiedPriceCalculator
 {
     private ?EventTemplateCalculationEngine $engine = null;
+
     private ?\Illuminate\Support\Collection $qtyLookup = null;
 
     public function __construct(?EventTemplateCalculationEngine $engine = null)
@@ -51,23 +52,21 @@ class UnifiedPriceCalculator
 
     /**
      * Oblicza szczegółową strukturę (bez zapisu w DB).
-     * @param EventTemplate $template
-     * @param int|null $startPlaceId
-     * @param bool $debug
+     *
      * @return array
-     * Struktura:
-     * [ qty => [
-     *     'event_template_qty_id' => int,
-     *     'qty' => int,
-     *     'currencies' => [
-     *         'PLN' => [
-     *             'raw' => [ 'price_base','markup_amount','tax_amount','price_with_tax','price_per_person','transport_cost' ],
-     *             'final' => [ 'price_per_person' ],
-     *         ],
-     *         'EUR' => [...],
-     *     ],
-     *     'debug' => [... opcjonalne ...]
-     * ] ]
+     *               Struktura:
+     *               [ qty => [
+     *               'event_template_qty_id' => int,
+     *               'qty' => int,
+     *               'currencies' => [
+     *               'PLN' => [
+     *               'raw' => [ 'price_base','markup_amount','tax_amount','price_with_tax','price_per_person','transport_cost' ],
+     *               'final' => [ 'price_per_person' ],
+     *               ],
+     *               'EUR' => [...],
+     *               ],
+     *               'debug' => [... opcjonalne ...]
+     *               ] ]
      */
     public function calculate(EventTemplate $template, ?int $startPlaceId = null, bool $debug = false): array
     {
@@ -198,30 +197,34 @@ class UnifiedPriceCalculator
     {
         $data = $this->calculate($template, $startPlaceId, false);
         if (empty($data)) {
-            Log::warning("[UnifiedPriceCalculator] Brak danych kalkulacji (template={$template->id}, start_place=" . ($startPlaceId ?? 'null') . ")");
+            Log::warning("[UnifiedPriceCalculator] Brak danych kalkulacji (template={$template->id}, start_place=".($startPlaceId ?? 'null').')');
+
             return;
         }
 
-    $allowForeignCurrencies = method_exists($template, 'isForeignTrip') ? $template->isForeignTrip() : true;
+        $allowForeignCurrencies = method_exists($template, 'isForeignTrip') ? $template->isForeignTrip() : true;
 
-    DB::transaction(function () use ($data, $template, $startPlaceId, $deleteExisting, $allowForeignCurrencies) {
+        DB::transaction(function () use ($data, $template, $startPlaceId, $deleteExisting, $allowForeignCurrencies) {
             if ($deleteExisting) {
                 EventTemplatePricePerPerson::where('event_template_id', $template->id)
-                    ->when($startPlaceId !== null, fn($q) => $q->where('start_place_id', $startPlaceId))
+                    ->when($startPlaceId !== null, fn ($q) => $q->where('start_place_id', $startPlaceId))
                     ->delete();
             }
 
             foreach ($data as $qty => $row) {
                 $qtyId = $row['event_template_qty_id'] ?? null;
-                if (!$qtyId) continue; // zabezpieczenie
+                if (! $qtyId) {
+                    continue;
+                } // zabezpieczenie
                 $currencies = $row['currencies'] ?? [];
                 foreach ($currencies as $code => $cdata) {
-                    if ($code !== 'PLN' && !$allowForeignCurrencies) {
+                    if ($code !== 'PLN' && ! $allowForeignCurrencies) {
                         continue;
                     }
                     $currency = Currency::where('symbol', $code)->orWhere('code', $code)->first();
-                    if (!$currency) {
+                    if (! $currency) {
                         Log::warning("[UnifiedPriceCalculator] Nie znaleziono waluty code={$code} – pomijam zapis.");
+
                         continue;
                     }
                     $raw = $cdata['raw'] ?? [];
@@ -245,7 +248,7 @@ class UnifiedPriceCalculator
                             'tax_breakdown' => $raw['tax_breakdown'] ?? [],
                         ]);
                     } catch (\Throwable $e) {
-                        Log::error("[UnifiedPriceCalculator] Błąd zapisu: " . $e->getMessage(), [
+                        Log::error('[UnifiedPriceCalculator] Błąd zapisu: '.$e->getMessage(), [
                             'template_id' => $template->id,
                             'qty_id' => $qtyId,
                             'currency_code' => $code,
@@ -276,7 +279,7 @@ class UnifiedPriceCalculator
         }
 
         foreach ($availability as $spid) {
-            $this->calculateAndPersist($template, (int)$spid, $deleteExisting);
+            $this->calculateAndPersist($template, (int) $spid, $deleteExisting);
         }
     }
 
@@ -290,6 +293,7 @@ class UnifiedPriceCalculator
             // Use injected engine if available (for testing); otherwise use widget
             if ($this->engine !== null) {
                 $rawData = $this->engine->calculateDetailed($template, $startPlaceId, null, false);
+
                 // Transform engine output to expected format if needed
                 return $rawData ?? [];
             }
@@ -307,7 +311,7 @@ class UnifiedPriceCalculator
 
             return is_array($rows) ? $rows : [];
         } catch (\Throwable $e) {
-            Log::error('[UnifiedPriceCalculator] Widget calculations failed: ' . $e->getMessage(), [
+            Log::error('[UnifiedPriceCalculator] Widget calculations failed: '.$e->getMessage(), [
                 'template_id' => $template->id,
                 'start_place_id' => $startPlaceId,
             ]);

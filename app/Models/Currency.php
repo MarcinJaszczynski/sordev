@@ -23,6 +23,7 @@ class Currency extends Model
 
     /**
      * Pola masowo przypisywalne
+     *
      * @var array<int, string>
      */
     protected $fillable = [
@@ -34,6 +35,7 @@ class Currency extends Model
 
     /**
      * Rzutowanie pól na typy
+     *
      * @var array<string, string>
      */
     protected $casts = [
@@ -76,7 +78,9 @@ class Currency extends Model
     public static function plnIds(): array
     {
         static $cache = null;
-        if ($cache !== null) return $cache;
+        if ($cache !== null) {
+            return $cache;
+        }
         $cache = static::where(function ($q) {
             $q->where('name', 'like', '%polski%złoty%')
                 ->orWhere('name', 'like', '%złoty%polski%')
@@ -84,6 +88,7 @@ class Currency extends Model
                 ->orWhere('name', '=', 'Złoty polski')
                 ->orWhere('code', '=', 'PLN');
         })->pluck('id')->toArray();
+
         return $cache;
     }
 }

@@ -2,30 +2,42 @@
 
 namespace App\Filament\Resources\EventResource\Widgets;
 
-use Filament\Widgets\Widget;
+use App\Filament\Resources\EventSettlementResource;
 use App\Models\Event;
 use App\Models\EventPricePerPerson;
 use App\Models\EventSettlement;
-use App\Filament\Resources\EventSettlementResource;
+use Filament\Widgets\Widget;
 
 class EventPriceTable extends Widget
 {
     protected static string $view = 'filament.resources.event-resource.widgets.event-price-table';
+
     public ?Event $record = null;
-    protected int | string | array $columnSpan = 'full';
-    
+
+    protected int|string|array $columnSpan = 'full';
+
     public $calculations = [];
+
     public $programPoints;
+
     public $costsByDay;
+
     public $transportCost = 0;
+
     public $detailedCalculations = [];
+
     public array $eventOnlyPointsForDetails = [];
+
     public $qtyVariants = [];
+
     public $priceRows = [];
+
     public ?array $currentVariant = null;
+
     public array $nearestVariants = [];
+
     public $editingPrice = null; // holds EventPricePerPerson model data for inline editing
-    
+
     public function mount()
     {
         if ($this->record) {
@@ -52,19 +64,21 @@ class EventPriceTable extends Widget
             ->map(function ($points) {
                 $totalCost = \App\Services\ProgramPointHelper::sumIncluded($points, 'total_price');
                 $programCost = $points->where('include_in_program', true)->sum('total_price');
-                
+
                 return [
                     'points_count' => $points->count(),
                     'total_cost' => $totalCost,
                     'program_cost' => $programCost,
-                    'calculation_points' => $points->filter(function ($p) { return (bool)($p->include_in_calculation ?? true); })->count(),
+                    'calculation_points' => $points->filter(function ($p) {
+                        return (bool) ($p->include_in_calculation ?? true);
+                    })->count(),
                     'program_points' => $points->where('include_in_program', true)->count(),
                     'points' => $points,
                 ];
             });
 
         // Oblicz główne kalkulacje
-    $totalProgramCost = \App\Services\ProgramPointHelper::sumIncluded($this->programPoints, 'total_price');
+        $totalProgramCost = \App\Services\ProgramPointHelper::sumIncluded($this->programPoints, 'total_price');
         $totalCostWithTransport = $totalProgramCost + $this->transportCost;
 
         $this->calculations = [
@@ -76,8 +90,8 @@ class EventPriceTable extends Widget
             'transport_cost' => $this->transportCost,
             'total_cost' => $totalCostWithTransport,
             'program_cost' => $this->programPoints->where('include_in_program', true)->sum('total_price'),
-            'cost_per_person' => $this->record->participant_count > 0 
-                ? $totalCostWithTransport / $this->record->participant_count 
+            'cost_per_person' => $this->record->participant_count > 0
+                ? $totalCostWithTransport / $this->record->participant_count
                 : 0,
             'days_count' => $this->costsByDay->count(),
             'event_data' => [
@@ -117,7 +131,7 @@ class EventPriceTable extends Widget
         ];
 
         foreach ($integerFields as $field => $label) {
-            if (!array_key_exists($field, $data)) {
+            if (! array_key_exists($field, $data)) {
                 continue;
             }
 
@@ -125,11 +139,13 @@ class EventPriceTable extends Widget
 
             if ($value === '' || $value === null) {
                 $payload[$field] = null;
+
                 continue;
             }
 
-            if (!is_numeric($value) || (int) $value < 0) {
-                $errors[] = $label . ' musi być liczbą całkowitą.';
+            if (! is_numeric($value) || (int) $value < 0) {
+                $errors[] = $label.' musi być liczbą całkowitą.';
+
                 continue;
             }
 
@@ -146,7 +162,7 @@ class EventPriceTable extends Widget
         ];
 
         foreach ($numericFields as $field => $label) {
-            if (!array_key_exists($field, $data)) {
+            if (! array_key_exists($field, $data)) {
                 continue;
             }
 
@@ -154,11 +170,13 @@ class EventPriceTable extends Widget
 
             if ($value === '' || $value === null) {
                 $payload[$field] = null;
+
                 continue;
             }
 
-            if (!is_numeric($value)) {
-                $errors[] = $label . ' musi być liczbą.';
+            if (! is_numeric($value)) {
+                $errors[] = $label.' musi być liczbą.';
+
                 continue;
             }
 
@@ -195,8 +213,8 @@ class EventPriceTable extends Widget
     public function calculateTransportCost()
     {
         $this->transportCost = 0;
-        
-        if (!$this->record->bus) {
+
+        if (! $this->record->bus) {
             return;
         }
 
@@ -234,7 +252,7 @@ class EventPriceTable extends Widget
         $this->nearestVariants = [];
 
         $template = $this->record?->eventTemplate;
-        if (!$template) {
+        if (! $template) {
             return;
         }
 
@@ -330,7 +348,7 @@ class EventPriceTable extends Widget
                 ->values()
                 ->all();
 
-            if (!empty($pointsForVariant)) {
+            if (! empty($pointsForVariant)) {
                 $this->eventOnlyPointsForDetails[(string) $qty] = $pointsForVariant;
             }
 
@@ -365,7 +383,7 @@ class EventPriceTable extends Widget
     private function applyPlnDeltaToDetailedTotals(int|string $qty, float $baseDelta): void
     {
         $pln = $this->detailedCalculations[$qty]['PLN'] ?? null;
-        if (!is_array($pln)) {
+        if (! is_array($pln)) {
             return;
         }
 
@@ -380,7 +398,7 @@ class EventPriceTable extends Widget
         }
 
         $taxDeltaTotal = 0.0;
-        if (!empty($this->detailedCalculations[$qty]['taxes']['breakdown']) && is_array($this->detailedCalculations[$qty]['taxes']['breakdown'])) {
+        if (! empty($this->detailedCalculations[$qty]['taxes']['breakdown']) && is_array($this->detailedCalculations[$qty]['taxes']['breakdown'])) {
             foreach ($this->detailedCalculations[$qty]['taxes']['breakdown'] as $idx => $tax) {
                 $percent = (float) ($tax['percentage'] ?? 0);
                 $applyToBase = (bool) ($tax['apply_to_base'] ?? false);
@@ -435,8 +453,9 @@ class EventPriceTable extends Widget
 
     public function settleProgramPoint(int $programPointId)
     {
-        if (!$this->record) {
+        if (! $this->record) {
             $this->dispatch('toast', type: 'error', message: 'Brak aktywnej imprezy.');
+
             return;
         }
 
@@ -445,8 +464,9 @@ class EventPriceTable extends Widget
             ->with(['templatePoint', 'currency'])
             ->find($programPointId);
 
-        if (!$programPoint) {
+        if (! $programPoint) {
             $this->dispatch('toast', type: 'error', message: 'Nie znaleziono punktu programu.');
+
             return;
         }
 
@@ -460,8 +480,9 @@ class EventPriceTable extends Widget
     public function editPrice(int $id)
     {
         $price = EventPricePerPerson::find($id);
-        if (!$price || $price->event_id !== $this->record->id) {
+        if (! $price || $price->event_id !== $this->record->id) {
             $this->dispatch('toast', type: 'error', message: 'Nie znaleziono ceny.');
+
             return;
         }
 
@@ -481,19 +502,22 @@ class EventPriceTable extends Widget
 
         if (empty($data['id'])) {
             $this->dispatch('toast', type: 'error', message: 'Brak identyfikatora ceny.');
+
             return;
         }
 
         $price = EventPricePerPerson::find($data['id']);
-        if (!$price || $price->event_id !== $this->record->id) {
+        if (! $price || $price->event_id !== $this->record->id) {
             $this->dispatch('toast', type: 'error', message: 'Nieprawidłowy rekord ceny.');
+
             return;
         }
 
         [$payload, $errors] = $this->buildPricePayload($data);
 
-        if (!empty($errors)) {
+        if (! empty($errors)) {
             $this->dispatch('toast', type: 'error', message: implode(' ', $errors));
+
             return;
         }
 
@@ -508,8 +532,9 @@ class EventPriceTable extends Widget
     public function deletePrice(int $id)
     {
         $price = EventPricePerPerson::find($id);
-        if (!$price || $price->event_id !== $this->record->id) {
+        if (! $price || $price->event_id !== $this->record->id) {
             $this->dispatch('toast', type: 'error', message: 'Nie znaleziono ceny.');
+
             return;
         }
 

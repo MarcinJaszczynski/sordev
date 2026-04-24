@@ -2,34 +2,55 @@
 
 namespace App\Livewire;
 
-use Livewire\Component;
 use App\Models\EventTemplate;
 use App\Models\EventTemplateProgramPoint;
 use Illuminate\Support\Facades\DB;
+use Livewire\Component;
 
 class EventProgramTree extends Component
 {
     public EventTemplate $eventTemplate;
+
     public array $pointsByDay = [];
+
     public bool $showModal = false;
+
     public int $modalDay = 1;
+
     public ?int $modalPivotId = null;
+
     public bool $editMode = false;
+
     public string $modalName = '';
+
     public string $modalDescription = '';
+
     public string $modalSearchTerm = '';
+
     public array $modalExistingResults = [];
+
     public ?int $modalSelectedExisting = null;
+
     public string $modalOfficeNotes = '';
+
     public string $modalPilotNotes = '';
+
     public array $modalTags = [];
+
     public int $modalDurationHours = 1;
+
     public int $modalDurationMinutes = 0;
+
     public float $modalUnitPrice = 0;
+
     public int $modalGroupSize = 1;
+
     public int $modalCurrencyId = 0;
+
     public bool $modalConvertToPln = false;
+
     public $modalFeaturedImage;
+
     public array $modalGalleryImages = [];
 
     protected $listeners = [
@@ -51,12 +72,13 @@ class EventProgramTree extends Component
     {
         if (strlen($term) < 2) {
             $this->modalExistingResults = [];
+
             return;
         }
         $this->modalExistingResults = EventTemplateProgramPoint::query()
             ->where('name', 'like', "%{$term}%")
             ->limit(10)
-            ->get(['id','name','description'])
+            ->get(['id', 'name', 'description'])
             ->toArray();
     }
 
@@ -101,13 +123,13 @@ class EventProgramTree extends Component
         foreach ($rows as $row) {
             $point = EventTemplateProgramPoint::find($row->event_template_program_point_id);
             $items[] = [
-                'pivot_id'    => $row->pivot_id,
-                'parent_id'   => $row->parent_id,
-                'day'         => $row->day,
-                'order'       => $row->order,
-                'name'        => $point?->name ?? '',
+                'pivot_id' => $row->pivot_id,
+                'parent_id' => $row->parent_id,
+                'day' => $row->day,
+                'order' => $row->order,
+                'name' => $point?->name ?? '',
                 'description' => $point?->description ?? '',
-                'children'    => [],
+                'children' => [],
             ];
         }
 
@@ -125,7 +147,7 @@ class EventProgramTree extends Component
                     $tree[] = &$node;
                 }
             }
-            usort($tree, fn($a, $b) => $a['order'] <=> $b['order']);
+            usort($tree, fn ($a, $b) => $a['order'] <=> $b['order']);
             $grouped[$day] = $tree;
         }
         unset($map, $node, $tree);
@@ -143,7 +165,7 @@ class EventProgramTree extends Component
         // Przekształć na listę grup, by zachować dzień w JSON
         $list = [];
         foreach ($grouped as $day => $tree) {
-            $list[] = ['day' => (int)$day, 'points' => $tree];
+            $list[] = ['day' => (int) $day, 'points' => $tree];
         }
         $this->pointsByDay = $list;
     }
@@ -161,9 +183,9 @@ class EventProgramTree extends Component
             ->delete();
         if (! is_null($parentPivotId)) {
             DB::table('event_template_program_point_parent')->insert([
-                'parent_id'  => $parentPivotId,
-                'child_id'   => $pivotId,
-                'order'      => 0,
+                'parent_id' => $parentPivotId,
+                'child_id' => $pivotId,
+                'order' => 0,
                 'created_at' => now(),
                 'updated_at' => now(),
             ]);
@@ -188,8 +210,8 @@ class EventProgramTree extends Component
         $original = DB::table('event_template_event_template_program_point')
             ->where('id', $pivotId)
             ->first();
-            
-        if (!$original) {
+
+        if (! $original) {
             return;
         }
 
@@ -318,7 +340,7 @@ class EventProgramTree extends Component
             $pivot = DB::table('event_template_event_template_program_point')->where('id', $this->modalPivotId)->first();
             $point = EventTemplateProgramPoint::findOrFail($pivot->event_template_program_point_id);
         } else {
-            $point = new EventTemplateProgramPoint();
+            $point = new EventTemplateProgramPoint;
         }
         // Fill model fields
         $point->name = $this->modalName;
@@ -381,10 +403,10 @@ class EventProgramTree extends Component
             ]);
         // Usuń stare relacje parent-child
         DB::table('event_template_program_point_parent')
-            ->where('child_id', function($q) use ($pivotId) {
+            ->where('child_id', function ($q) use ($pivotId) {
                 $q->select('event_template_program_point_id')
-                  ->from('event_template_event_template_program_point')
-                  ->where('id', $pivotId);
+                    ->from('event_template_event_template_program_point')
+                    ->where('id', $pivotId);
             })
             ->delete();
         // Dodaj nową relację parent-child jeśli jest parent
@@ -416,6 +438,7 @@ class EventProgramTree extends Component
                 'points' => $this->buildTree($i),
             ];
         }
+
         return view('livewire.event-program-tree', ['columns' => $columns]);
     }
 
@@ -442,6 +465,7 @@ class EventProgramTree extends Component
                 }
             }
         }
+
         // Zbuduj drzewo
         return $this->buildTreeRecursive($points);
     }
@@ -456,6 +480,7 @@ class EventProgramTree extends Component
                 $tree->push($point);
             }
         }
+
         return $tree;
     }
 }

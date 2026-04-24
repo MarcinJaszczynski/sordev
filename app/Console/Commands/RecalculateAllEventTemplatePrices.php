@@ -2,14 +2,15 @@
 
 namespace App\Console\Commands;
 
-use Illuminate\Console\Command;
+use App\Filament\Resources\EventTemplateResource\Widgets\EventTemplatePriceTable;
 use App\Models\EventTemplate;
 use App\Models\Place;
-use App\Filament\Resources\EventTemplateResource\Widgets\EventTemplatePriceTable;
+use Illuminate\Console\Command;
 
 class RecalculateAllEventTemplatePrices extends Command
 {
     protected $signature = 'event-templates:recalculate-prices';
+
     protected $description = 'Przelicz ceny dla wszystkich szablonów i miejsc startowych nowym systemem oraz usuń duplikaty';
 
     public function handle()
@@ -19,7 +20,7 @@ class RecalculateAllEventTemplatePrices extends Command
         $total = 0;
         foreach ($templates as $template) {
             foreach ($places as $place) {
-                $widget = new EventTemplatePriceTable();
+                $widget = new EventTemplatePriceTable;
                 $widget->record = $template;
                 $widget->startPlaceId = $place->id;
                 $widget->recalculatePrices();
@@ -30,6 +31,7 @@ class RecalculateAllEventTemplatePrices extends Command
         // Usuwanie duplikatów
         EventTemplatePriceTable::removeDuplicatePrices();
         $this->info("Usunięto duplikaty cen. Przeliczono łącznie: {$total} kombinacji.");
+
         return 0;
     }
 }

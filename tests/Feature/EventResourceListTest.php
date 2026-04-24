@@ -109,15 +109,15 @@ class EventResourceListTest extends TestCase
 
         $event = Event::create([
             'event_template_id' => $template->id,
-            'start_place_id'    => $place->id,
-            'name'              => 'Impreza z rozliczeniem',
-            'client_name'       => 'Klient',
-            'start_date'        => '2026-05-01',
-            'end_date'          => '2026-05-03',
-            'duration_days'     => 3,
+            'start_place_id' => $place->id,
+            'name' => 'Impreza z rozliczeniem',
+            'client_name' => 'Klient',
+            'start_date' => '2026-05-01',
+            'end_date' => '2026-05-03',
+            'duration_days' => 3,
             'participant_count' => 20,
-            'total_cost'        => 8000,
-            'status'            => Event::STATUS_INQUIRY,
+            'total_cost' => 8000,
+            'status' => Event::STATUS_INQUIRY,
         ]);
 
         // Bez rozliczenia - powinno mieć fallback na total_cost
@@ -126,19 +126,19 @@ class EventResourceListTest extends TestCase
 
         // Tworzymy aktywne rozliczenie z participant_due_pln i participant_paid_pln
         DB::table('event_settlements')->insert([
-            'event_id'              => $event->id,
-            'status'                => 'active',
-            'participant_due_pln'   => 7800.00,
-            'participant_paid_pln'  => 7500.00,
-            'created_at'            => now(),
-            'updated_at'            => now(),
+            'event_id' => $event->id,
+            'status' => 'active',
+            'participant_due_pln' => 7800.00,
+            'participant_paid_pln' => 7500.00,
+            'created_at' => now(),
+            'updated_at' => now(),
         ]);
 
         $recordWithSettlement = EventResource::getEloquentQuery()->findOrFail($event->id);
         $this->assertNotNull($recordWithSettlement);
         // Sprawdzenie że kolumna będzie pobierać z settlement
         $settlement = $recordWithSettlement->settlements()
-            ->whereIn('status', ['draft','active','pilot_settled'])
+            ->whereIn('status', ['draft', 'active', 'pilot_settled'])
             ->latest('id')->first();
         $this->assertNotNull($settlement);
         $this->assertSame(7800.0, (float) $settlement->participant_due_pln);

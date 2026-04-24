@@ -1,15 +1,16 @@
 <?php
+
 // Simple script to mark blog posts as active and set published_at to now when missing or in the future.
 // Run: php tools/activate_blog_posts.php
 
-$dbFile = __DIR__ . '/../database/database.sqlite';
-if (!file_exists($dbFile)) {
+$dbFile = __DIR__.'/../database/database.sqlite';
+if (! file_exists($dbFile)) {
     fwrite(STDERR, "Database file not found: $dbFile\n");
     exit(1);
 }
 
 try {
-    $pdo = new PDO('sqlite:' . $dbFile);
+    $pdo = new PDO('sqlite:'.$dbFile);
     $pdo->setAttribute(PDO::ATTR_ERRMODE, PDO::ERRMODE_EXCEPTION);
 
     // Update status -> active where not active
@@ -30,7 +31,7 @@ try {
     echo "Active & published posts count: {$count}\n";
 
 } catch (Exception $e) {
-    fwrite(STDERR, "Error: " . $e->getMessage() . "\n");
+    fwrite(STDERR, 'Error: '.$e->getMessage()."\n");
     exit(1);
 }
 

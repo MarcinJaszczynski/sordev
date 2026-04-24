@@ -77,7 +77,7 @@
         <div class="mb-3 flex items-center justify-between">
             <div>
                 <h3 class="text-base font-semibold text-gray-900 dark:text-gray-100">Kalendarz zadań (terminy)</h3>
-                <span class="text-xs text-gray-500 dark:text-gray-400">Widoczne są zadania z ustawioną datą wykonania</span>
+                <span class="text-xs text-gray-500 dark:text-gray-400">Widoczne są zadania z ustawioną datą wykonania. Kliknij dzień, aby szybko dodać zadanie.</span>
             </div>
             <button type="button" @click="openCalendar = !openCalendar" class="px-2 py-1 text-xs rounded border border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-300">
                 <span x-text="openCalendar ? 'Zwiń' : 'Rozwiń'"></span>
@@ -528,6 +528,16 @@
                     placeholder="Wprowadź opis zadania (opcjonalnie)"
                 ></textarea>
                 @error('quickTaskDescription') <span class="text-red-500 text-sm">{{ $message }}</span> @enderror
+            </div>
+
+            <div>
+                <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Termin (data i godzina)</label>
+                <input
+                    wire:model="quickTaskDueDate"
+                    type="datetime-local"
+                    class="block w-full border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-gray-200 rounded-md shadow-sm focus:ring-primary-500 focus:border-primary-500 sm:text-sm"
+                />
+                @error('quickTaskDueDate') <span class="text-red-500 text-sm">{{ $message }}</span> @enderror
             </div>
 
             <div class="grid grid-cols-2 gap-4">
@@ -1282,6 +1292,9 @@
                             hour: '2-digit',
                             minute: '2-digit',
                             hour12: false,
+                        },
+                        dateClick: (info) => {
+                            this.$wire.openQuickAddModal(null, info.dateStr);
                         },
                         eventClick: function (info) {
                             if (info.event.url) {

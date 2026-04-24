@@ -2,8 +2,8 @@
 
 namespace App\Models;
 
-use App\Services\AgreementTemplateRenderer;
 use App\Services\AgreementPaymentSyncService;
+use App\Services\AgreementTemplateRenderer;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
@@ -14,6 +14,7 @@ class EventAgreement extends Model
     use HasFactory;
 
     public const TYPE_GROUP = 'group';
+
     public const TYPE_INDIVIDUAL = 'individual';
 
     protected $fillable = [
@@ -130,7 +131,7 @@ class EventAgreement extends Model
                 $updates['agreement_body'] = $agreement->renderAgreementBody();
             }
 
-            if (!empty($updates)) {
+            if (! empty($updates)) {
                 $agreement->forceFill($updates)->saveQuietly();
             }
         });
@@ -152,7 +153,7 @@ class EventAgreement extends Model
                 'meta',
             ];
 
-            if (!$agreement->wasRecentlyCreated && !$agreement->wasChanged($syncRelevantFields)) {
+            if (! $agreement->wasRecentlyCreated && ! $agreement->wasChanged($syncRelevantFields)) {
                 return;
             }
 
@@ -221,7 +222,7 @@ class EventAgreement extends Model
 
     public function resolveIndividualAmountDue(?int $payingParticipantsCount = null): float
     {
-        if (!$this->isIndividual()) {
+        if (! $this->isIndividual()) {
             return (float) $this->amount_due;
         }
 
@@ -236,6 +237,12 @@ class EventAgreement extends Model
             $resolvedPrice = $this->event->resolvedPricePerPerson($count);
             if ($resolvedPrice > 0) {
                 return $resolvedPrice;
+            }
+
+            // Legacy fallback: derive per-person share from event total cost.
+            $eventTotalCost = (float) ($this->event->total_cost ?? 0);
+            if ($eventTotalCost > 0) {
+                return round($eventTotalCost / $count, 2);
             }
         }
 
@@ -272,15 +279,15 @@ class EventAgreement extends Model
         $orderingEmail = (string) ($this->signer_email ?: $this->customer_email ?: $this->event?->client_email ?: '—');
         $orderingPhone = (string) ($this->signer_phone ?: $this->customer_phone ?: $this->event?->client_phone ?: '—');
 
-        $bookingReference = $this->participantPayment?->booking_reference ?: ($this->agreement_number ?: ('UMOWA-' . $this->id));
+        $bookingReference = $this->participantPayment?->booking_reference ?: ($this->agreement_number ?: ('UMOWA-'.$this->id));
         $participantCount = max(1, (int) ($this->participant_count ?: $this->event?->participant_count ?: 1));
         $amountDue = (float) $this->amount_due;
         $formattedAmount = number_format($amountDue, 2, ',', ' ');
         $formattedAmountPerPerson = number_format($participantCount > 0 ? ($amountDue / $participantCount) : $amountDue, 2, ',', ' ');
 
         $fullAddress = trim(implode(', ', array_filter([
-            trim((string) data_get($signerAddress, 'street', '')) . ' ' . trim((string) data_get($signerAddress, 'number', '')),
-            trim((string) data_get($signerAddress, 'postal_code', '')) . ' ' . trim((string) data_get($signerAddress, 'city', '')),
+            trim((string) data_get($signerAddress, 'street', '')).' '.trim((string) data_get($signerAddress, 'number', '')),
+            trim((string) data_get($signerAddress, 'postal_code', '')).' '.trim((string) data_get($signerAddress, 'city', '')),
             (string) data_get($signerAddress, 'province', ''),
         ], fn ($value) => trim((string) $value) !== '')));
 
@@ -291,7 +298,7 @@ class EventAgreement extends Model
         };
 
         return [
-            'agreement_number' => $this->agreement_number ?: ('UMOWA-' . $this->id),
+            'agreement_number' => $this->agreement_number ?: ('UMOWA-'.$this->id),
             'agreement_date' => optional($this->agreement_date)->format('d.m.Y') ?: now()->format('d.m.Y'),
             'agreement_type' => (string) ($this->agreement_type ?: self::TYPE_GROUP),
             'agreement_type_label' => $this->agreement_type_label,

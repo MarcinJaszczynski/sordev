@@ -20,13 +20,19 @@ class TodoStatusResource extends Resource
 {
     /**
      * Powiązany model Eloquent
+     *
      * @var class-string<TodoStatus>
      */
     protected static ?string $model = TodoStatus::class;
+
     protected static ?string $navigationIcon = 'heroicon-o-check-circle';
+
     protected static ?string $navigationLabel = 'Statusy zadań';
+
     protected static ?string $navigationGroup = 'Ustawienia ogólne';
+
     protected static ?string $modelLabel = 'status zadania';
+
     protected static ?string $pluralModelLabel = 'statusy zadań';
 
     /**

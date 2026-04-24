@@ -7,14 +7,16 @@ use Illuminate\Console\Command;
 class DumpEventProgramPoints extends Command
 {
     protected $signature = 'debug:dump-event-points {eventId}';
+
     protected $description = 'Dump program points for event as JSON lines';
 
     public function handle()
     {
         $id = $this->argument('eventId');
         $event = \App\Models\Event::find($id);
-        if (!$event) {
+        if (! $event) {
             $this->error('Event not found');
+
             return 1;
         }
 

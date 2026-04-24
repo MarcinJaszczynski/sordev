@@ -20,7 +20,7 @@ class EventSnapshot extends Model
         'program_points',
         'calculations',
         'currency_rates',
-    'template_prices_snapshot',
+        'template_prices_snapshot',
         'total_cost_snapshot',
         'created_by',
         'snapshot_date',
@@ -31,7 +31,7 @@ class EventSnapshot extends Model
         'program_points' => 'array',
         'calculations' => 'array',
         'currency_rates' => 'array',
-    'template_prices_snapshot' => 'array',
+        'template_prices_snapshot' => 'array',
         'total_cost_snapshot' => 'decimal:2',
         'snapshot_date' => 'datetime',
     ];
@@ -62,7 +62,7 @@ class EventSnapshot extends Model
             ->with('templatePoint')
             ->get()
             ->map(function ($point) {
-                $pointName = $point->templatePoint?->name ?? $point->name ?? ('Punkt #' . $point->id);
+                $pointName = $point->templatePoint?->name ?? $point->name ?? ('Punkt #'.$point->id);
                 $pointDescription = $point->templatePoint?->description ?? $point->description ?? null;
 
                 return [
@@ -122,7 +122,7 @@ class EventSnapshot extends Model
                         'points_count' => $points->count(),
                         'points' => $points->map(function ($point) {
                             return [
-                                'name' => $point->templatePoint?->name ?? $point->name ?? ('Punkt #' . $point->id),
+                                'name' => $point->templatePoint?->name ?? $point->name ?? ('Punkt #'.$point->id),
                                 'total_price' => $point->total_price,
                             ];
                         }),
@@ -134,7 +134,7 @@ class EventSnapshot extends Model
         $currencyRates = self::getCurrentCurrencyRates();
 
         // Określ nazwę snapshotu
-        $snapshotName = $name ?? match($type) {
+        $snapshotName = $name ?? match ($type) {
             'original' => 'Pierwotny stan imprezy',
             'manual' => 'Snapshot ręczny',
             'status_change' => 'Zmiana statusu',
@@ -166,7 +166,7 @@ class EventSnapshot extends Model
             // Pobierz kursy z tabeli currencies
             $currencies = \App\Models\Currency::all();
             $rates = [];
-            
+
             foreach ($currencies as $currency) {
                 $rates[$currency->symbol] = [
                     'rate' => $currency->exchange_rate,
@@ -174,7 +174,7 @@ class EventSnapshot extends Model
                     'last_updated' => $currency->last_updated_at ?? $currency->updated_at,
                 ];
             }
-            
+
             return $rates;
         } catch (\Exception $e) {
             return [];
@@ -187,10 +187,10 @@ class EventSnapshot extends Model
     public function restoreToEvent(): void
     {
         $event = $this->event;
-        
+
         // Zapisz obecny stan jako snapshot przed przywróceniem
-        self::createSnapshot($event, 'manual', 'Backup przed przywróceniem', 'Automatyczny backup przed przywróceniem stanu z: ' . $this->name);
-        
+        self::createSnapshot($event, 'manual', 'Backup przed przywróceniem', 'Automatyczny backup przed przywróceniem stanu z: '.$this->name);
+
         // Przywróć dane imprezy (tylko wybrane pola)
         $event->update([
             'name' => $this->event_data['name'],
@@ -203,10 +203,10 @@ class EventSnapshot extends Model
             'notes' => $this->event_data['notes'],
             'assigned_to' => $this->event_data['assigned_to'],
         ]);
-        
+
         // Usuń obecne punkty programu
         $event->programPoints()->delete();
-        
+
         // Odtwórz punkty programu ze snapshotu
         foreach ($this->program_points as $pointData) {
             EventProgramPoint::create([
@@ -227,10 +227,10 @@ class EventSnapshot extends Model
                 'active' => $pointData['active'],
             ]);
         }
-        
+
         // Przelicz koszt całkowity
         $event->calculateTotalCost();
-        
+
         // Zapisz w historii
         $event->logHistory(
             'restored_from_snapshot',
@@ -248,7 +248,7 @@ class EventSnapshot extends Model
     {
         $event = $this->event;
         $currentSnapshot = self::createTemporarySnapshot($event);
-        
+
         return [
             'event_changes' => $this->compareEventData($currentSnapshot),
             'program_changes' => $this->compareProgramPoints($currentSnapshot),
@@ -265,7 +265,7 @@ class EventSnapshot extends Model
             ->with('templatePoint')
             ->get()
             ->map(function ($point) {
-                $pointName = $point->templatePoint?->name ?? $point->name ?? ('Punkt #' . $point->id);
+                $pointName = $point->templatePoint?->name ?? $point->name ?? ('Punkt #'.$point->id);
 
                 return [
                     'template_point_name' => $pointName,
@@ -297,11 +297,11 @@ class EventSnapshot extends Model
     {
         $changes = [];
         $fields = ['name', 'client_name', 'participant_count'];
-        
+
         foreach ($fields as $field) {
             $oldValue = $this->event_data[$field] ?? null;
             $newValue = $currentSnapshot['event_data'][$field] ?? null;
-            
+
             if ($oldValue != $newValue) {
                 $changes[$field] = [
                     'old' => $oldValue,
@@ -309,7 +309,7 @@ class EventSnapshot extends Model
                 ];
             }
         }
-        
+
         return $changes;
     }
 
@@ -320,7 +320,7 @@ class EventSnapshot extends Model
     {
         $oldPoints = collect($this->program_points);
         $newPoints = collect($currentSnapshot['program_points']);
-        
+
         return [
             'removed' => $oldPoints->whereNotIn('template_point_name', $newPoints->pluck('template_point_name'))->values(),
             'added' => $newPoints->whereNotIn('template_point_name', $oldPoints->pluck('template_point_name'))->values(),
@@ -346,10 +346,10 @@ class EventSnapshot extends Model
     private function getModifiedPoints($oldPoints, $newPoints): array
     {
         $modified = [];
-        
+
         foreach ($oldPoints as $oldPoint) {
             $newPoint = $newPoints->firstWhere('template_point_name', $oldPoint['template_point_name']);
-            
+
             if ($newPoint) {
                 $changes = [];
                 if ($oldPoint['total_price'] != $newPoint['total_price']) {
@@ -358,8 +358,8 @@ class EventSnapshot extends Model
                         'new' => $newPoint['total_price'],
                     ];
                 }
-                
-                if (!empty($changes)) {
+
+                if (! empty($changes)) {
                     $modified[] = [
                         'point_name' => $oldPoint['template_point_name'],
                         'changes' => $changes,
@@ -367,7 +367,7 @@ class EventSnapshot extends Model
                 }
             }
         }
-        
+
         return $modified;
     }
 
@@ -376,7 +376,7 @@ class EventSnapshot extends Model
      */
     public function getReadableTypeAttribute(): string
     {
-        return match($this->type) {
+        return match ($this->type) {
             'original' => 'Pierwotny',
             'manual' => 'Ręczny',
             'status_change' => 'Zmiana statusu',

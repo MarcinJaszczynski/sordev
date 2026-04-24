@@ -1,14 +1,15 @@
 <?php
+
 // One-off script: php scripts/save_engine_prices.php <template_id> <start_place_id>
-require __DIR__ . '/../vendor/autoload.php';
-$app = require_once __DIR__ . '/../bootstrap/app.php';
+require __DIR__.'/../vendor/autoload.php';
+$app = require_once __DIR__.'/../bootstrap/app.php';
 $kernel = $app->make(Illuminate\Contracts\Console\Kernel::class);
 $kernel->bootstrap();
 
-use App\Models\EventTemplate;
-use App\Models\EventTemplateQty;
-use App\Models\EventTemplatePricePerPerson;
 use App\Models\Currency;
+use App\Models\EventTemplate;
+use App\Models\EventTemplatePricePerPerson;
+use App\Models\EventTemplateQty;
 use App\Services\EventTemplateCalculationEngine;
 
 $argvCount = $_SERVER['argc'] ?? 0;
@@ -17,18 +18,18 @@ if ($argvCount < 3) {
     exit(1);
 }
 
-$templateId = (int)$_SERVER['argv'][1];
-$startPlaceId = (int)$_SERVER['argv'][2];
+$templateId = (int) $_SERVER['argv'][1];
+$startPlaceId = (int) $_SERVER['argv'][2];
 
 $template = EventTemplate::find($templateId);
-if (!$template) {
+if (! $template) {
     echo "EventTemplate id={$templateId} not found\n";
     exit(2);
 }
 
 echo "Calculating engine prices for template={$templateId}, start_place={$startPlaceId}\n";
 
-$engine = new EventTemplateCalculationEngine();
+$engine = new EventTemplateCalculationEngine;
 $results = $engine->calculateDetailed($template, $startPlaceId);
 
 $qtyVariants = EventTemplateQty::all();
@@ -41,8 +42,9 @@ $plnId = $pln?->id ?? null;
 
 foreach ($qtyVariants as $qtyVariant) {
     $qty = $qtyVariant->qty;
-    if (!isset($results[$qty])) {
+    if (! isset($results[$qty])) {
         echo " - qty={$qty}: no calc result, skipping\n";
+
         continue;
     }
     $calc = $results[$qty];

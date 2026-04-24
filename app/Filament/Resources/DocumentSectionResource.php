@@ -4,11 +4,11 @@ namespace App\Filament\Resources;
 
 use App\Filament\Resources\DocumentSectionResource\Pages;
 use App\Models\DocumentSection;
-use Filament\Resources\Resource;
 use Filament\Forms;
 use Filament\Forms\Form;
-use Filament\Tables\Table;
+use Filament\Resources\Resource;
 use Filament\Tables\Columns\TextColumn;
+use Filament\Tables\Table;
 use Illuminate\Support\Facades\Auth;
 
 class DocumentSectionResource extends Resource
@@ -16,8 +16,11 @@ class DocumentSectionResource extends Resource
     protected static ?string $model = DocumentSection::class;
 
     protected static ?string $navigationIcon = 'heroicon-o-folder';
+
     protected static ?string $navigationLabel = 'Sekcje dokumentów';
+
     protected static ?string $navigationGroup = 'Narzędzia';
+
     protected static ?int $navigationSort = 30;
 
     public static function form(Form $form): Form
@@ -49,8 +52,8 @@ class DocumentSectionResource extends Resource
 
     public static function canCreate(): bool
     {
-    $user = Auth::user();
-        if (!$user || !$user instanceof \App\Models\User) {
+        $user = Auth::user();
+        if (! $user || ! $user instanceof \App\Models\User) {
             return false;
         }
 

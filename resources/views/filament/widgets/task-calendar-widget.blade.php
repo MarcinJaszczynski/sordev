@@ -52,6 +52,7 @@
                 <span class="rounded-md bg-gray-100 px-2 py-1 text-xs font-semibold text-gray-700 dark:bg-gray-800 dark:text-gray-200">
                     Zdarzenia: {{ $eventsCount }}
                 </span>
+                <span class="text-xs text-gray-500 dark:text-gray-400">Kliknij dzień, aby dodać zadanie</span>
                 <x-filament::button size="sm" color="gray" wire:click="resetFilters">Reset filtrów</x-filament::button>
             </div>
         </div>
@@ -65,6 +66,84 @@
         >
             <div x-ref="calendar" style="min-height: 520px;"></div>
         </div>
+
+        <x-filament::modal id="dashboard-quick-task-modal" width="2xl">
+            <x-slot name="header">
+                <x-filament::modal.heading>
+                    Dodaj zadanie z kalendarza
+                </x-filament::modal.heading>
+            </x-slot>
+
+            <div class="space-y-4">
+                <div>
+                    <label class="mb-1 block text-sm font-medium text-gray-700 dark:text-gray-300">Tytuł zadania *</label>
+                    <input
+                        wire:model="quickTaskTitle"
+                        type="text"
+                        class="block w-full rounded-md border-gray-300 shadow-sm focus:border-primary-500 focus:ring-primary-500 sm:text-sm dark:border-gray-600 dark:bg-gray-700 dark:text-gray-200"
+                        placeholder="Np. Wizyta u dentysty"
+                    />
+                    @error('quickTaskTitle') <span class="text-sm text-red-500">{{ $message }}</span> @enderror
+                </div>
+
+                <div>
+                    <label class="mb-1 block text-sm font-medium text-gray-700 dark:text-gray-300">Opis</label>
+                    <textarea
+                        wire:model="quickTaskDescription"
+                        rows="3"
+                        class="block w-full rounded-md border-gray-300 shadow-sm focus:border-primary-500 focus:ring-primary-500 sm:text-sm dark:border-gray-600 dark:bg-gray-700 dark:text-gray-200"
+                        placeholder="Opcjonalny opis"
+                    ></textarea>
+                    @error('quickTaskDescription') <span class="text-sm text-red-500">{{ $message }}</span> @enderror
+                </div>
+
+                <div class="grid grid-cols-1 gap-4 md:grid-cols-2">
+                    <div>
+                        <label class="mb-1 block text-sm font-medium text-gray-700 dark:text-gray-300">Termin</label>
+                        <input
+                            wire:model="quickTaskDueDate"
+                            type="datetime-local"
+                            class="block w-full rounded-md border-gray-300 shadow-sm focus:border-primary-500 focus:ring-primary-500 sm:text-sm dark:border-gray-600 dark:bg-gray-700 dark:text-gray-200"
+                        />
+                        @error('quickTaskDueDate') <span class="text-sm text-red-500">{{ $message }}</span> @enderror
+                    </div>
+
+                    <div>
+                        <label class="mb-1 block text-sm font-medium text-gray-700 dark:text-gray-300">Priorytet</label>
+                        <select
+                            wire:model="quickTaskPriority"
+                            class="block w-full rounded-md border-gray-300 shadow-sm focus:border-primary-500 focus:ring-primary-500 sm:text-sm dark:border-gray-600 dark:bg-gray-700 dark:text-gray-200"
+                        >
+                            <option value="low">Niski</option>
+                            <option value="medium">Średni</option>
+                            <option value="high">Wysoki</option>
+                        </select>
+                        @error('quickTaskPriority') <span class="text-sm text-red-500">{{ $message }}</span> @enderror
+                    </div>
+                </div>
+
+                <div>
+                    <label class="mb-1 block text-sm font-medium text-gray-700 dark:text-gray-300">Przypisz do</label>
+                    <select
+                        wire:model="quickTaskAssigneeId"
+                        class="block w-full rounded-md border-gray-300 shadow-sm focus:border-primary-500 focus:ring-primary-500 sm:text-sm dark:border-gray-600 dark:bg-gray-700 dark:text-gray-200"
+                    >
+                        <option value="">Nie przypisano</option>
+                        @foreach($assigneeOptions as $id => $name)
+                            <option value="{{ $id }}">{{ $name }}</option>
+                        @endforeach
+                    </select>
+                    @error('quickTaskAssigneeId') <span class="text-sm text-red-500">{{ $message }}</span> @enderror
+                </div>
+            </div>
+
+            <x-slot name="footer">
+                <div class="flex justify-end gap-2">
+                    <x-filament::button color="gray" x-on:click="isOpen = false">Anuluj</x-filament::button>
+                    <x-filament::button color="primary" wire:click="createQuickTask">Utwórz zadanie</x-filament::button>
+                </div>
+            </x-slot>
+        </x-filament::modal>
     </x-filament::section>
 
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/fullcalendar@6.1.15/index.global.min.css">
@@ -127,6 +206,9 @@
                             hour: '2-digit',
                             minute: '2-digit',
                             hour12: false,
+                        },
+                        dateClick: (info) => {
+                            this.$wire.openQuickAddModal(info.dateStr);
                         },
                         eventClick: function(info) {
                             if (info.event.url) {

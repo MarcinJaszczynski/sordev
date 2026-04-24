@@ -2,9 +2,9 @@
 
 namespace Database\Factories;
 
+use App\Models\Place;
 use Illuminate\Database\Eloquent\Factories\Factory;
 use Illuminate\Support\Str;
-use App\Models\Place;
 
 /**
  * @extends \Illuminate\Database\Eloquent\Factories\Factory<\App\Models\Place>
@@ -33,7 +33,7 @@ class PlaceFactory extends Factory
      */
     public function starting(): static
     {
-        return $this->state(fn(array $attributes) => [
+        return $this->state(fn (array $attributes) => [
             'starting_place' => true,
         ]);
     }

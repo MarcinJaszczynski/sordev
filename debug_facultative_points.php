@@ -1,21 +1,22 @@
 <?php
+
 // Quick inspector for facultative points (day = duration_days + 1) in the pivot table.
 // Usage: php debug_facultative_points.php [event_template_id]
 
 use Illuminate\Support\Facades\DB;
 
-require __DIR__ . '/vendor/autoload.php';
+require __DIR__.'/vendor/autoload.php';
 
-$app = require __DIR__ . '/bootstrap/app.php';
+$app = require __DIR__.'/bootstrap/app.php';
 
 $kernel = $app->make(Illuminate\Contracts\Console\Kernel::class);
 $kernel->bootstrap();
 
-$argvId = isset($argv[1]) ? (int)$argv[1] : null;
+$argvId = isset($argv[1]) ? (int) $argv[1] : null;
 
 if ($argvId) {
     echo "\n=== Details for event_template_id={$argvId} ===\n";
-    $rows = DB::select(<<<SQL
+    $rows = DB::select(<<<'SQL'
         SELECT p.id as pivot_id, p.event_template_program_point_id as point_id, p.day, p.`order`, p.include_in_program, p.include_in_calculation, p.active,
                et.duration_days, et.name AS template_name,
                etpp.name AS point_name
@@ -26,7 +27,7 @@ if ($argvId) {
         ORDER BY p.day ASC, p.`order` ASC
     SQL, [$argvId]);
 
-    if (!$rows) {
+    if (! $rows) {
         echo "No pivot rows found for template {$argvId}.\n";
         exit(0);
     }
@@ -41,10 +42,13 @@ if ($argvId) {
         $flag = '';
         $duration = $items[0]->duration_days ?? null;
         if ($duration !== null) {
-            if ($day == $duration + 1) $flag = ' [FACULTATIVE DAY]';
-            elseif ($day > $duration) $flag = ' [BEYOND DURATION]';
+            if ($day == $duration + 1) {
+                $flag = ' [FACULTATIVE DAY]';
+            } elseif ($day > $duration) {
+                $flag = ' [BEYOND DURATION]';
+            }
         }
-        echo "Day {$day}{$flag}: " . count($items) . " item(s)\n";
+        echo "Day {$day}{$flag}: ".count($items)." item(s)\n";
         foreach ($items as $it) {
             echo sprintf("  - pivot:%d point:%d order:%d %s%s%s\n",
                 $it->pivot_id,
@@ -54,8 +58,8 @@ if ($argvId) {
                 ($it->include_in_calculation ? '[calc] ' : ''),
                 ($it->active ? '[active] ' : '[inactive] ')
             );
-            if (!empty($it->point_name)) {
-                echo "      name: ".$it->point_name."\n";
+            if (! empty($it->point_name)) {
+                echo '      name: '.$it->point_name."\n";
             }
         }
     }
@@ -63,7 +67,7 @@ if ($argvId) {
 }
 
 // Summary for all templates
-$rows = DB::select(<<<SQL
+$rows = DB::select(<<<'SQL'
     SELECT et.id, et.name, et.duration_days,
            SUM(CASE WHEN p.day = et.duration_days + 1 THEN 1 ELSE 0 END) AS facultative_count,
            SUM(CASE WHEN p.day > et.duration_days THEN 1 ELSE 0 END) AS beyond_count,

@@ -13,7 +13,7 @@ class NotificationController extends Controller
     {
         $user = Auth::user();
 
-        if (!$user) {
+        if (! $user) {
             return response()->json([
                 'tasks' => 0,
                 'messages' => 0,

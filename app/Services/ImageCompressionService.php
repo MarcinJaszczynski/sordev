@@ -1,14 +1,4 @@
-
-    /**
-     * Transliterate filename to ASCII (remove diacritics)
-     */
-    private static function transliterateFilename(string $filename): string
-    {
-        $transliterated = iconv('UTF-8', 'ASCII//TRANSLIT//IGNORE', $filename);
-        // Zamień spacje i niebezpieczne znaki na podkreślenia
-        $transliterated = preg_replace('/[^A-Za-z0-9_.-]/', '_', $transliterated);
-        return $transliterated;
-    }
+<?php
 
 namespace App\Services;
 
@@ -240,6 +230,18 @@ class ImageCompressionService
         }
 
         return trim($directory, '/') . '/' . $filename;
+    }
+
+    /**
+     * Transliterate filename to ASCII (remove diacritics)
+     */
+    private static function transliterateFilename(string $filename): string
+    {
+        $transliterated = iconv('UTF-8', 'ASCII//TRANSLIT//IGNORE', $filename);
+        // Zamień spacje i niebezpieczne znaki na podkreślenia
+        $transliterated = preg_replace('/[^A-Za-z0-9_.-]/', '_', $transliterated);
+
+        return $transliterated;
     }
     
     /**

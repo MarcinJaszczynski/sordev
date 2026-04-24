@@ -7,12 +7,11 @@ use App\Models\PaymentStatus;
 use Filament\Forms;
 use Filament\Forms\Form;
 use Filament\Resources\Resource;
-use Filament\Tables;
-use Filament\Tables\Table;
-use Filament\Tables\Columns\TextColumn;
-use Filament\Tables\Actions\EditAction;
 use Filament\Tables\Actions\DeleteAction;
 use Filament\Tables\Actions\DeleteBulkAction;
+use Filament\Tables\Actions\EditAction;
+use Filament\Tables\Columns\TextColumn;
+use Filament\Tables\Table;
 use Illuminate\Database\Eloquent\Model;
 
 /**
@@ -23,12 +22,19 @@ class PaymentStatusResource extends Resource
 {
     /**
      * Powiązany model Eloquent
+     *
      * @var class-string<PaymentStatus>
-     */    protected static ?string $model = PaymentStatus::class;
+     */
+    protected static ?string $model = PaymentStatus::class;
+
     protected static ?string $navigationIcon = 'heroicon-o-check-badge';
+
     protected static ?string $navigationLabel = 'Statusy płatności';
+
     protected static ?string $navigationGroup = 'Ustawienia kalkulacji';
+
     protected static ?string $modelLabel = 'Status płatności';
+
     protected static ?string $pluralModelLabel = 'Statusy płatności';
 
     /**
@@ -43,8 +49,10 @@ class PaymentStatusResource extends Resource
         if ($user && $user->roles && $user->roles->flatMap->permissions->contains('name', 'view payment_status')) {
             return true;
         }
+
         return false;
     }
+
     /**
      * Uprawnienia do tworzenia, edycji i usuwania
      */
@@ -54,22 +62,27 @@ class PaymentStatusResource extends Resource
         if ($user && $user->roles && ($user->roles->contains('name', 'admin') || $user->roles->flatMap->permissions->contains('name', 'create payment_status'))) {
             return true;
         }
+
         return false;
     }
+
     public static function canEdit(Model $record): bool
     {
         $user = \Illuminate\Support\Facades\Auth::user();
         if ($user && $user->roles && ($user->roles->contains('name', 'admin') || $user->roles->flatMap->permissions->contains('name', 'edit payment_status'))) {
             return true;
         }
+
         return false;
     }
+
     public static function canDelete(Model $record): bool
     {
         $user = \Illuminate\Support\Facades\Auth::user();
         if ($user && $user->roles && ($user->roles->contains('name', 'admin') || $user->roles->flatMap->permissions->contains('name', 'delete payment_status'))) {
             return true;
         }
+
         return false;
     }
 

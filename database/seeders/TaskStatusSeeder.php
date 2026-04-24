@@ -2,13 +2,14 @@
 
 namespace Database\Seeders;
 
-use Illuminate\Database\Seeder;
 use App\Models\TaskStatus;
+use Illuminate\Database\Seeder;
 
 class TaskStatusSeeder extends Seeder
 {
     public function run(): void
-    {        $statuses = [
+    {
+        $statuses = [
             [
                 'name' => 'Do zrobienia',
                 'color' => '#gray',

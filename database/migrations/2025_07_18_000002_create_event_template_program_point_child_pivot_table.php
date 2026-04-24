@@ -20,8 +20,8 @@ return new class extends Migration
             $table->boolean('active')->default(true);
             $table->timestamps();
 
-            $table->foreign('event_template_id')->references('id')->on('event_templates')->onDelete('cascade');
-            $table->foreign('program_point_child_id')->references('id')->on('event_template_program_points')->onDelete('cascade');
+            $table->foreign('event_template_id', 'etppcp_et_fk')->references('id')->on('event_templates')->onDelete('cascade');
+            $table->foreign('program_point_child_id', 'etppcp_ppc_fk')->references('id')->on('event_template_program_points')->onDelete('cascade');
             $table->unique(['event_template_id', 'program_point_child_id'], 'et_child_unique');
         });
     }

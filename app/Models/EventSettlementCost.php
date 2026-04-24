@@ -45,17 +45,17 @@ class EventSettlementCost extends Model
     ];
 
     protected $casts = [
-        'planned_amount'     => 'decimal:2',
-        'planned_rate'       => 'decimal:4',
+        'planned_amount' => 'decimal:2',
+        'planned_rate' => 'decimal:4',
         'planned_amount_pln' => 'decimal:2',
-        'actual_amount'      => 'decimal:2',
-        'actual_rate'        => 'decimal:4',
-        'actual_amount_pln'  => 'decimal:2',
-        'advance_amount'     => 'decimal:2',
-        'paid_at'            => 'datetime',
-        'advance_due_date'   => 'datetime',
-        'reviewed_by'        => 'integer',
-        'reviewed_at'        => 'datetime',
+        'actual_amount' => 'decimal:2',
+        'actual_rate' => 'decimal:4',
+        'actual_amount_pln' => 'decimal:2',
+        'advance_amount' => 'decimal:2',
+        'paid_at' => 'datetime',
+        'advance_due_date' => 'datetime',
+        'reviewed_by' => 'integer',
+        'reviewed_at' => 'datetime',
     ];
 
     public static array $approvalStatuses = [
@@ -66,32 +66,32 @@ class EventSettlementCost extends Model
 
     public static array $paidByOptions = [
         'office' => 'Biuro',
-        'pilot'  => 'Pilot',
+        'pilot' => 'Pilot',
     ];
 
     public static array $advanceTypes = [
         'advance' => 'Zaliczka',
         'deposit' => 'Kaucja',
-        'final'   => 'Dopłata końcowa',
-        'full'    => 'Pełna płatność',
+        'final' => 'Dopłata końcowa',
+        'full' => 'Pełna płatność',
     ];
 
     public static array $paymentMethods = [
-        'cash'     => 'Gotówka',
+        'cash' => 'Gotówka',
         'transfer' => 'Przelew',
-        'card'     => 'Karta',
-        'other'    => 'Inny',
+        'card' => 'Karta',
+        'other' => 'Inny',
     ];
 
     public static array $paymentStatuses = [
-        'planned'              => 'Planowana',
+        'planned' => 'Planowana',
         'reservation_required' => 'Wymaga rezerwacji',
-        'reserved'             => 'Zarezerwowana',
-        'advance_required'     => 'Wymaga zaliczki',
-        'advance_paid'         => 'Zaliczka wpłacona',
-        'partially_paid'       => 'Częściowo opłacona',
-        'paid'                 => 'Opłacona',
-        'cancelled'            => 'Anulowana',
+        'reserved' => 'Zarezerwowana',
+        'advance_required' => 'Wymaga zaliczki',
+        'advance_paid' => 'Zaliczka wpłacona',
+        'partially_paid' => 'Częściowo opłacona',
+        'paid' => 'Opłacona',
+        'cancelled' => 'Anulowana',
     ];
 
     // --- Relacje ---
@@ -147,6 +147,7 @@ class EventSettlementCost extends Model
 
         return $documents->filter(function ($doc) {
             $ids = collect($doc->linked_cost_ids ?? [])->map(fn ($id) => (string) $id)->all();
+
             return in_array((string) $this->id, $ids, true);
         })->values();
     }
@@ -156,6 +157,7 @@ class EventSettlementCost extends Model
         if ($this->source_type === 'program_point' && $this->source_id) {
             return EventProgramPoint::find($this->source_id);
         }
+
         return null;
     }
 
@@ -166,7 +168,10 @@ class EventSettlementCost extends Model
      */
     public function getDiffPlnAttribute(): ?float
     {
-        if ($this->actual_amount_pln === null) return null;
+        if ($this->actual_amount_pln === null) {
+            return null;
+        }
+
         return (float) $this->actual_amount_pln - (float) $this->planned_amount_pln;
     }
 
@@ -178,7 +183,8 @@ class EventSettlementCost extends Model
         }
 
         return $docs->map(function ($doc) {
-            $number = $doc->document_number ?: ('Dokument #' . $doc->id);
+            $number = $doc->document_number ?: ('Dokument #'.$doc->id);
+
             return $number;
         })->join(', ');
     }
@@ -192,6 +198,7 @@ class EventSettlementCost extends Model
     {
         return $this->linkedDocuments()->contains(function ($doc) {
             $files = $doc->files ?? [];
+
             return is_array($files) && count(array_filter($files)) > 0;
         });
     }
@@ -262,7 +269,7 @@ class EventSettlementCost extends Model
                 }
             }
 
-            if ($model->payment_status === 'paid' && !$model->paid_at) {
+            if ($model->payment_status === 'paid' && ! $model->paid_at) {
                 $model->paid_at = now();
             }
         });

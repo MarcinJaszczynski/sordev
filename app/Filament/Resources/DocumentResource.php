@@ -8,9 +8,9 @@ use App\Models\Document;
 use Filament\Forms;
 use Filament\Forms\Form;
 use Filament\Resources\Resource;
-use Filament\Tables\Table;
-use Filament\Tables\Columns\TextColumn;
 use Filament\Tables\Columns\BooleanColumn;
+use Filament\Tables\Columns\TextColumn;
+use Filament\Tables\Table;
 use Illuminate\Support\Facades\Auth;
 
 class DocumentResource extends Resource
@@ -18,8 +18,11 @@ class DocumentResource extends Resource
     protected static ?string $model = Document::class;
 
     protected static ?string $navigationIcon = 'heroicon-o-document-text';
+
     protected static ?string $navigationLabel = 'Dokumenty';
+
     protected static ?string $navigationGroup = 'Narzędzia';
+
     protected static ?int $navigationSort = 20;
 
     public static function form(Form $form): Form
@@ -70,7 +73,7 @@ class DocumentResource extends Resource
     public static function canCreate(): bool
     {
         $user = Auth::user();
-        if (!$user || !$user instanceof \App\Models\User) {
+        if (! $user || ! $user instanceof \App\Models\User) {
             return false;
         }
 

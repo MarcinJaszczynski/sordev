@@ -10,11 +10,11 @@ return new class extends Migration
     {
         if (Schema::hasTable('event_template_event_template_program_point')) {
             Schema::table('event_template_event_template_program_point', function (Blueprint $table) {
-                if (!Schema::hasColumn('event_template_event_template_program_point', 'start_time')) {
+                if (! Schema::hasColumn('event_template_event_template_program_point', 'start_time')) {
                     $table->time('start_time')->nullable()->after('notes');
                 }
 
-                if (!Schema::hasColumn('event_template_event_template_program_point', 'end_time')) {
+                if (! Schema::hasColumn('event_template_event_template_program_point', 'end_time')) {
                     $table->time('end_time')->nullable()->after('start_time');
                 }
             });
@@ -22,11 +22,11 @@ return new class extends Migration
 
         if (Schema::hasTable('event_program_points')) {
             Schema::table('event_program_points', function (Blueprint $table) {
-                if (!Schema::hasColumn('event_program_points', 'start_time')) {
+                if (! Schema::hasColumn('event_program_points', 'start_time')) {
                     $table->time('start_time')->nullable()->after('order');
                 }
 
-                if (!Schema::hasColumn('event_program_points', 'end_time')) {
+                if (! Schema::hasColumn('event_program_points', 'end_time')) {
                     $table->time('end_time')->nullable()->after('start_time');
                 }
             });

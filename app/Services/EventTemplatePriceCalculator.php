@@ -2,11 +2,9 @@
 
 namespace App\Services;
 
-use App\Models\EventTemplate;
-use App\Models\EventTemplateQty;
-use App\Models\EventTemplatePricePerPerson;
 use App\Models\Currency;
-use Illuminate\Support\Facades\DB;
+use App\Models\EventTemplate;
+use App\Models\EventTemplatePricePerPerson;
 use Illuminate\Support\Facades\Log;
 
 /**
@@ -33,7 +31,7 @@ class EventTemplatePriceCalculator
         $qtyVariants = \App\Models\EventTemplateQty::all(); // TODO: sprawdzić czy QTY są globalne czy per szablon
         $currencies = collect();
         // Jeden log per template zamiast spamowania dla każdego punktu
-        Log::debug('[DEBUG] Start kalkulacji (legacy) event_template_id=' . $eventTemplate->id . ' program_points=' . $programPoints->count());
+        Log::debug('[DEBUG] Start kalkulacji (legacy) event_template_id='.$eventTemplate->id.' program_points='.$programPoints->count());
         foreach ($programPoints as $point) {
             if ($point->currency) {
                 $currencies->push($point->currency);
@@ -60,13 +58,14 @@ class EventTemplatePriceCalculator
 
         if ($availableStartPlaces->isEmpty()) {
             \Illuminate\Support\Facades\Log::warning("Brak dostępnych kombinacji miejsc startowych do przeliczenia cen dla event_template_id={$eventTemplate->id}. Przeliczanie zostaje pominięte.");
+
             return;
         }
 
-        \Illuminate\Support\Facades\Log::info("Przeliczanie cen TYLKO dla dostępnych kombinacji miejsc startowych (oznaczonych jako dostępne w adminie) dla event_template_id={$eventTemplate->id}. Liczba kombinacji: " . $availableStartPlaces->count());
+        \Illuminate\Support\Facades\Log::info("Przeliczanie cen TYLKO dla dostępnych kombinacji miejsc startowych (oznaczonych jako dostępne w adminie) dla event_template_id={$eventTemplate->id}. Liczba kombinacji: ".$availableStartPlaces->count());
 
         // Use centralized calculation engine (matches admin widget)
-        $engine = new EventTemplateCalculationEngine();
+        $engine = new EventTemplateCalculationEngine;
 
         // find best PLN currency id (use symbol or name - table has `symbol` and `name`)
         $plnCurrency = Currency::where('symbol', 'PLN')
@@ -80,17 +79,18 @@ class EventTemplatePriceCalculator
             // Pomijaj kalkulację jeśli miejsce startu programu jest tym samym miejscem
             if ($eventTemplate->start_place_id == $availability->start_place_id) {
                 \Illuminate\Support\Facades\Log::info("Pominięto kalkulację dla start_place_id={$availability->start_place_id} (to samo co miejsce startu programu)");
+
                 continue;
             }
 
-            \Illuminate\Support\Facades\Log::info("Przeliczanie (engine) dla start_place_id={$availability->start_place_id} (nazwa: " . ($availability->startPlace->name ?? 'brak') . ")");
+            \Illuminate\Support\Facades\Log::info("Przeliczanie (engine) dla start_place_id={$availability->start_place_id} (nazwa: ".($availability->startPlace->name ?? 'brak').')');
 
             $detailed = $engine->calculateDetailed($eventTemplate, $availability->start_place_id);
 
             // Zapisz wyniki tylko w PLN (zgodne z administracyjnym widokiem)
             foreach ($qtyVariants as $qtyVariant) {
                 $qty = $qtyVariant->qty;
-                if (!isset($detailed[$qty])) {
+                if (! isset($detailed[$qty])) {
                     continue;
                 }
                 $calc = $detailed[$qty];
@@ -99,7 +99,7 @@ class EventTemplatePriceCalculator
                 $taxBreakdown = [];
                 $totalTaxAmount = 0;
                 foreach ($eventTemplate->taxes ?? [] as $tax) {
-                    if (!$tax->is_active) {
+                    if (! $tax->is_active) {
                         continue;
                     }
                     $taxAmount = $tax->calculateTaxAmount($calc['price_base'] ?? 0, $calc['markup_amount'] ?? 0);
@@ -117,7 +117,7 @@ class EventTemplatePriceCalculator
                 }
 
                 // Wymuś zaokrąglenie 'cena za osobę' do 5 zł w górę (PLN)
-                $rawPerPerson = (float)($calc['price_per_person'] ?? 0);
+                $rawPerPerson = (float) ($calc['price_per_person'] ?? 0);
                 $roundedPerPerson = $rawPerPerson > 0 ? ceil($rawPerPerson / 5) * 5 : 0;
 
                 $saveData = [
@@ -133,7 +133,7 @@ class EventTemplatePriceCalculator
                 ];
 
                 try {
-                    \Illuminate\Support\Facades\Log::info("[ENGINE] Próba zapisu ceny: event_template_id={$eventTemplate->id}, event_template_qty_id={$qtyVariant->id}, start_place_id={$availability->start_place_id}, currency_id=" . ($plnCurrencyId ?? 'brak') . ", qty={$qty}");
+                    \Illuminate\Support\Facades\Log::info("[ENGINE] Próba zapisu ceny: event_template_id={$eventTemplate->id}, event_template_qty_id={$qtyVariant->id}, start_place_id={$availability->start_place_id}, currency_id=".($plnCurrencyId ?? 'brak').", qty={$qty}");
                     EventTemplatePricePerPerson::updateOrCreate([
                         'event_template_id' => $eventTemplate->id,
                         'event_template_qty_id' => $qtyVariant->id,
@@ -141,7 +141,7 @@ class EventTemplatePriceCalculator
                         'start_place_id' => $availability->start_place_id,
                     ], $saveData);
                 } catch (\Throwable $e) {
-                    \Illuminate\Support\Facades\Log::error("Błąd podczas zapisu ceny (engine): " . $e->getMessage() . " | Data: " . json_encode([
+                    \Illuminate\Support\Facades\Log::error('Błąd podczas zapisu ceny (engine): '.$e->getMessage().' | Data: '.json_encode([
                         'event_template_id' => $eventTemplate->id,
                         'event_template_qty_id' => $qtyVariant->id,
                         'currency_id' => $plnCurrencyId,
@@ -158,6 +158,7 @@ class EventTemplatePriceCalculator
         // Sprawdź czy startPlaceId jest ustawione (pomijaj tylko null)
         if ($startPlaceId === null) {
             \Illuminate\Support\Facades\Log::warning("POMINIĘTO przeliczanie ceny: brak start_place_id dla event_template_id={$eventTemplate->id}");
+
             return;
         }
 
@@ -179,8 +180,10 @@ class EventTemplatePriceCalculator
                 // Główne punkty - count only parents that have include_in_calculation on pivot
                 foreach ($programPoints->where('currency_id', $currency->id) as $point) {
                     $pointPivot = $programPointPivotMap[$point->id] ?? null;
-                    $pointIncluded = $pointPivot ? (bool)($pointPivot->include_in_calculation ?? true) : true;
-                    if (!$pointIncluded) continue;
+                    $pointIncluded = $pointPivot ? (bool) ($pointPivot->include_in_calculation ?? true) : true;
+                    if (! $pointIncluded) {
+                        continue;
+                    }
 
                     $groupSize = $point->group_size ?? 1;
                     $unitPrice = $point->unit_price ?? 0;
@@ -192,8 +195,10 @@ class EventTemplatePriceCalculator
                 foreach ($programPoints as $point) {
                     foreach ($point->children->where('currency_id', $currency->id) as $child) {
                         $childPivot = $programPointPivotMap[$child->id] ?? null;
-                        $childIncluded = $childPivot ? (bool)($childPivot->include_in_calculation ?? true) : false;
-                        if (!$childIncluded) continue;
+                        $childIncluded = $childPivot ? (bool) ($childPivot->include_in_calculation ?? true) : false;
+                        if (! $childIncluded) {
+                            continue;
+                        }
 
                         $groupSize = $child->group_size ?? 1;
                         $unitPrice = $child->unit_price ?? 0;
@@ -226,7 +231,9 @@ class EventTemplatePriceCalculator
                 $taxBreakdown = [];
                 $totalTaxAmount = 0;
                 foreach ($eventTaxes as $tax) {
-                    if (!$tax->is_active) continue;
+                    if (! $tax->is_active) {
+                        continue;
+                    }
                     $taxAmount = $tax->calculateTaxAmount($total, $markupAmount);
                     if ($taxAmount > 0) {
                         $taxBreakdown[] = [
@@ -235,7 +242,7 @@ class EventTemplatePriceCalculator
                             'tax_percentage' => $tax->percentage,
                             'apply_to_base' => $tax->apply_to_base,
                             'apply_to_markup' => $tax->apply_to_markup,
-                            'tax_amount' => round($taxAmount, 2)
+                            'tax_amount' => round($taxAmount, 2),
                         ];
                         $totalTaxAmount += $taxAmount;
                     }
@@ -262,14 +269,14 @@ class EventTemplatePriceCalculator
                     'updated_at' => now(),
                 ];
                 try {
-                    \Illuminate\Support\Facades\Log::info("[DEBUG] Próba zapisu ceny: event_template_id={$eventTemplate->id}, event_template_qty_id={$qtyVariant->id}, start_place_id={$startPlaceId}, currency_id=" . ($currency->id ?? 'brak') . ", qty={$qty}");
-                    \Illuminate\Support\Facades\Log::info("Saving price data: " . json_encode($saveData)
-                        . " | event_template_id={$eventTemplate->id}"
-                        . ", event_template_qty_id={$qtyVariant->id}"
-                        . ", currency_id=" . ($currency->id ?? 'brak')
-                        . ", currency_code=" . ($currency->code ?? 'brak')
-                        . ", start_place_id={$startPlaceId}"
-                        . ", qty={$qty}");
+                    \Illuminate\Support\Facades\Log::info("[DEBUG] Próba zapisu ceny: event_template_id={$eventTemplate->id}, event_template_qty_id={$qtyVariant->id}, start_place_id={$startPlaceId}, currency_id=".($currency->id ?? 'brak').", qty={$qty}");
+                    \Illuminate\Support\Facades\Log::info('Saving price data: '.json_encode($saveData)
+                        ." | event_template_id={$eventTemplate->id}"
+                        .", event_template_qty_id={$qtyVariant->id}"
+                        .', currency_id='.($currency->id ?? 'brak')
+                        .', currency_code='.($currency->code ?? 'brak')
+                        .", start_place_id={$startPlaceId}"
+                        .", qty={$qty}");
                     EventTemplatePricePerPerson::updateOrCreate([
                         'event_template_id' => $eventTemplate->id,
                         'event_template_qty_id' => $qtyVariant->id,
@@ -277,21 +284,23 @@ class EventTemplatePriceCalculator
                         'start_place_id' => $startPlaceId,
                     ], $saveData);
                 } catch (\Throwable $e) {
-                    \Illuminate\Support\Facades\Log::error("Błąd podczas zapisu ceny: " . $e->getMessage() . " | Data: " . json_encode([
+                    \Illuminate\Support\Facades\Log::error('Błąd podczas zapisu ceny: '.$e->getMessage().' | Data: '.json_encode([
                         'event_template_id' => $eventTemplate->id,
                         'event_template_qty_id' => $qtyVariant->id,
                         'currency_id' => $currency->id,
                         'start_place_id' => $startPlaceId,
-                        'saveData' => $saveData
+                        'saveData' => $saveData,
                     ]));
                 }
             }
         }
     }
+
     private function calculateTransportCost($eventTemplate, $startPlaceId): float
     {
-        if (!$startPlaceId || !$eventTemplate->start_place_id || !$eventTemplate->end_place_id) {
+        if (! $startPlaceId || ! $eventTemplate->start_place_id || ! $eventTemplate->end_place_id) {
             \Illuminate\Support\Facades\Log::info("Transport cost = 0: Missing places. startPlaceId={$startPlaceId}, template_start={$eventTemplate->start_place_id}, template_end={$eventTemplate->end_place_id}");
+
             return 0;
         }
 
@@ -304,7 +313,7 @@ class EventTemplatePriceCalculator
                 ->first()?->distance_km ?? 0;
         }
 
-        // Odległość: koniec programu → miejsce startowe  
+        // Odległość: koniec programu → miejsce startowe
         if ($eventTemplate->end_place_id === $startPlaceId) {
             $d2 = 0;
         } else {
@@ -355,8 +364,8 @@ class EventTemplatePriceCalculator
 
         if (in_array(null, $availableStartPlaceIds)) {
             // Jeśli null jest dozwolone, usuń tylko te które mają start_place_id nie na liście (ale nie null)
-            $availableStartPlaceIdsWithoutNull = array_filter($availableStartPlaceIds, fn($id) => $id !== null);
-            if (!empty($availableStartPlaceIdsWithoutNull)) {
+            $availableStartPlaceIdsWithoutNull = array_filter($availableStartPlaceIds, fn ($id) => $id !== null);
+            if (! empty($availableStartPlaceIdsWithoutNull)) {
                 $query->where(function ($q) use ($availableStartPlaceIdsWithoutNull) {
                     $q->whereNotNull('start_place_id')
                         ->whereNotIn('start_place_id', $availableStartPlaceIdsWithoutNull);
@@ -381,12 +390,12 @@ class EventTemplatePriceCalculator
      */
     private function isPolishCurrency($currency): bool
     {
-        if (!$currency) {
+        if (! $currency) {
             return false;
         }
 
         // Sprawdź kod waluty (jeśli jest ustawiony)
-        if (!empty($currency->code) && $currency->code === 'PLN') {
+        if (! empty($currency->code) && $currency->code === 'PLN') {
             return true;
         }
 

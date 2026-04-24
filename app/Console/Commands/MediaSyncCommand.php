@@ -9,6 +9,7 @@ use Illuminate\Support\Facades\Storage;
 class MediaSyncCommand extends Command
 {
     protected $signature = 'media:sync {--disk=public} {--dir=}';
+
     protected $description = 'Skanuje pliki na dysku i synchronizuje z tabelą media';
 
     public function handle(): int
@@ -17,8 +18,8 @@ class MediaSyncCommand extends Command
         $startDir = $this->option('dir');
         $fs = Storage::disk($disk);
 
-        if ($startDir && !$fs->exists($startDir)) {
-            $this->warn('Podany katalog nie istnieje na dysku: ' . $startDir);
+        if ($startDir && ! $fs->exists($startDir)) {
+            $this->warn('Podany katalog nie istnieje na dysku: '.$startDir);
         }
 
         $this->info("Skanuję dysk '{$disk}' ...");
@@ -37,24 +38,30 @@ class MediaSyncCommand extends Command
             $filename = basename($path);
             $extension = pathinfo($filename, PATHINFO_EXTENSION) ?: null;
 
-            $width = null; $height = null;
+            $width = null;
+            $height = null;
             if ($mime && str_starts_with($mime, 'image/')) {
                 try {
                     $localPath = $fs->path($path);
                     $img = @getimagesize($localPath);
-                    if ($img) { $width = $img[0] ?? null; $height = $img[1] ?? null; }
-                } catch (\Throwable $e) { /* ignore */ }
+                    if ($img) {
+                        $width = $img[0] ?? null;
+                        $height = $img[1] ?? null;
+                    }
+                } catch (\Throwable $e) { /* ignore */
+                }
             }
 
             Media::updateOrCreate(
                 ['disk' => $disk, 'path' => $path],
-                compact('filename','extension','mime','size','width','height')
+                compact('filename', 'extension', 'mime', 'size', 'width', 'height')
             );
         }
 
         $bar->finish();
         $this->newLine();
-        $this->info('Zakończono synchronizację. Plików: ' . count($files));
+        $this->info('Zakończono synchronizację. Plików: '.count($files));
+
         return self::SUCCESS;
     }
 }

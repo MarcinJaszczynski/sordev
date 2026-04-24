@@ -2,8 +2,8 @@
 
 namespace App\Filament\Resources\EventSettlementResource\RelationManagers;
 
-use App\Filament\Resources\TaskResource;
 use App\Filament\Resources\EventSettlementResource\Traits\DispatchesSettlementDataChanged;
+use App\Filament\Resources\TaskResource;
 use App\Models\Currency;
 use App\Models\CurrencyRateSnapshot;
 use App\Models\PilotCashPreparation;
@@ -19,7 +19,9 @@ class PilotCashRelationManager extends RelationManager
     use DispatchesSettlementDataChanged;
 
     protected static string $relationship = 'pilotCashPreparations';
+
     protected static ?string $title = 'Gotówka pilota';
+
     protected static ?string $recordTitleAttribute = 'currency_id';
 
     public function form(Form $form): Form
@@ -30,7 +32,7 @@ class PilotCashRelationManager extends RelationManager
                 ->schema([
                     Forms\Components\Select::make('currency_id')
                         ->label('Waluta')
-                        ->options(fn() => Currency::orderBy('name')->pluck('name', 'id'))
+                        ->options(fn () => Currency::orderBy('name')->pluck('name', 'id'))
                         ->required()
                         ->searchable()
                         ->live()
@@ -88,16 +90,16 @@ class PilotCashRelationManager extends RelationManager
                 ->schema([
                     Forms\Components\Select::make('rate_snapshot_id')
                         ->label('Snapshot kursu')
-                        ->options(fn(Forms\Get $get) => CurrencyRateSnapshot::when(
+                        ->options(fn (Forms\Get $get) => CurrencyRateSnapshot::when(
                             $get('currency_id'),
-                            fn($q, $id) => $q->where('currency_id', $id)
+                            fn ($q, $id) => $q->where('currency_id', $id)
                         )
-                        ->orderByDesc('rate_date')
-                        ->limit(50)
-                        ->get()
-                        ->mapWithKeys(fn($s) => [
-                            $s->id => "{$s->rate_date?->format('d.m.Y')} | zakup: {$s->purchase_rate} sprzedaż: {$s->sale_rate} ({$s->source})"
-                        ]))
+                            ->orderByDesc('rate_date')
+                            ->limit(50)
+                            ->get()
+                            ->mapWithKeys(fn ($s) => [
+                                $s->id => "{$s->rate_date?->format('d.m.Y')} | zakup: {$s->purchase_rate} sprzedaż: {$s->sale_rate} ({$s->source})",
+                            ]))
                         ->nullable()
                         ->searchable()
                         ->live()
@@ -107,7 +109,7 @@ class PilotCashRelationManager extends RelationManager
                                 if ($snap) {
                                     $set('rate_used', $snap->purchase_rate ?? $snap->rate);
                                     $amount = (float) ($get('calculated_amount') ?? 0);
-                                    $rate   = $snap->purchase_rate ?? $snap->rate;
+                                    $rate = $snap->purchase_rate ?? $snap->rate;
                                     $set('pln_equivalent', round($amount * $rate, 2));
                                 }
                             }
@@ -153,7 +155,7 @@ class PilotCashRelationManager extends RelationManager
             ->columns([
                 Tables\Columns\TextColumn::make('currency.name')
                     ->label('Waluta')
-                    ->description(fn($record) => $record->currency?->symbol),
+                    ->description(fn ($record) => $record->currency?->symbol),
 
                 Tables\Columns\TextColumn::make('calculated_amount')
                     ->label('Obliczona')
@@ -182,20 +184,20 @@ class PilotCashRelationManager extends RelationManager
 
                 Tables\Columns\TextColumn::make('to_return_amount')
                     ->label('Do zwrotu')
-                    ->state(fn($record) => $record->to_return_amount)
+                    ->state(fn ($record) => $record->to_return_amount)
                     ->numeric(2)
                     ->color('warning'),
 
                 Tables\Columns\TextColumn::make('to_pay_pilot_amount')
                     ->label('Do dopłaty pilotowi')
-                    ->state(fn($record) => $record->to_pay_pilot_amount)
+                    ->state(fn ($record) => $record->to_pay_pilot_amount)
                     ->numeric(2)
                     ->color('danger'),
 
                 Tables\Columns\TextColumn::make('balance')
                     ->label('Saldo końcowe')
                     ->numeric(2)
-                    ->color(fn($state) => $state > 0 ? 'warning' : ($state < 0 ? 'danger' : 'success')),
+                    ->color(fn ($state) => $state > 0 ? 'warning' : ($state < 0 ? 'danger' : 'success')),
 
                 Tables\Columns\TextColumn::make('rate_used')
                     ->label('Kurs')
@@ -210,10 +212,10 @@ class PilotCashRelationManager extends RelationManager
 
                 Tables\Columns\BadgeColumn::make('status')
                     ->label('Status')
-                    ->formatStateUsing(fn($state) => PilotCashPreparation::$statuses[$state] ?? $state)
+                    ->formatStateUsing(fn ($state) => PilotCashPreparation::$statuses[$state] ?? $state)
                     ->colors([
-                        'gray'    => 'calculated',
-                        'info'    => 'approved',
+                        'gray' => 'calculated',
+                        'info' => 'approved',
                         'warning' => 'provided',
                         'success' => 'settled',
                     ]),
@@ -249,7 +251,7 @@ class PilotCashRelationManager extends RelationManager
             ->headerActions([
                 Tables\Actions\CreateAction::make()
                     ->label('Dodaj walutę pilota')
-                    ->after(fn() => $this->dispatchSettlementDataChanged()),
+                    ->after(fn () => $this->dispatchSettlementDataChanged()),
             ])
             ->actions([
                 Tables\Actions\Action::make('approve')
@@ -265,11 +267,11 @@ class PilotCashRelationManager extends RelationManager
                     ->action(function ($record, array $data) {
                         $record->update([
                             'approved_amount' => $data['approved_amount'],
-                            'status'          => 'approved',
+                            'status' => 'approved',
                         ]);
                         $this->dispatchSettlementDataChanged();
                     })
-                    ->visible(fn($record) => $record->status === 'calculated'),
+                    ->visible(fn ($record) => $record->status === 'calculated'),
 
                 Tables\Actions\Action::make('mark_provided')
                     ->label('Wydano pilotowi')
@@ -287,12 +289,12 @@ class PilotCashRelationManager extends RelationManager
                     ->action(function ($record, array $data) {
                         $record->update([
                             'provided_amount' => $data['provided_amount'],
-                            'provided_at'     => $data['provided_at'],
-                            'status'          => 'provided',
+                            'provided_at' => $data['provided_at'],
+                            'status' => 'provided',
                         ]);
                         $this->dispatchSettlementDataChanged();
                     })
-                    ->visible(fn($record) => in_array($record->status, ['calculated', 'approved'])),
+                    ->visible(fn ($record) => in_array($record->status, ['calculated', 'approved'])),
 
                 Tables\Actions\Action::make('settle')
                     ->label('Rozlicz')
@@ -311,14 +313,14 @@ class PilotCashRelationManager extends RelationManager
                     ])
                     ->action(function ($record, array $data) {
                         $record->update([
-                            'spent_amount'    => $data['spent_amount'],
+                            'spent_amount' => $data['spent_amount'],
                             'returned_amount' => $data['returned_amount'],
-                            'status'          => 'settled',
-                            'settled_at'      => now(),
+                            'status' => 'settled',
+                            'settled_at' => now(),
                         ]);
                         $this->dispatchSettlementDataChanged();
                     })
-                    ->visible(fn($record) => $record->status === 'provided'),
+                    ->visible(fn ($record) => $record->status === 'provided'),
 
                 Tables\Actions\Action::make('create_task')
                     ->label('Dodaj zadanie')
@@ -378,9 +380,9 @@ class PilotCashRelationManager extends RelationManager
                     ->visible(fn (PilotCashPreparation $record) => $record->approval_status !== 'pending'),
 
                 Tables\Actions\EditAction::make()
-                    ->after(fn() => $this->dispatchSettlementDataChanged()),
+                    ->after(fn () => $this->dispatchSettlementDataChanged()),
                 Tables\Actions\DeleteAction::make()
-                    ->after(fn() => $this->dispatchSettlementDataChanged()),
+                    ->after(fn () => $this->dispatchSettlementDataChanged()),
             ]);
     }
 }

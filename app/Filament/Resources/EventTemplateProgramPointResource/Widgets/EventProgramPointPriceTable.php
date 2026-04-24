@@ -2,17 +2,19 @@
 
 namespace App\Filament\Resources\EventTemplateProgramPointResource\Widgets;
 
-use Filament\Widgets\Widget;
 use App\Models\EventTemplateProgramPoint;
-use App\Models\EventTemplate;
 use App\Services\UnifiedPriceCalculator;
 use Filament\Notifications\Notification;
+use Filament\Widgets\Widget;
 
 class EventProgramPointPriceTable extends Widget
 {
     protected static string $view = 'filament.resources.event-template-program-point-resource.widgets.event-program-point-price-table';
+
     public ?EventTemplateProgramPoint $record = null;
-    protected int | string | array $columnSpan = 'full';
+
+    protected int|string|array $columnSpan = 'full';
+
     public $priceRows = [];
 
     public function mount()
@@ -22,7 +24,9 @@ class EventProgramPointPriceTable extends Widget
 
     public function getPriceRowsProperty()
     {
-        if (!$this->record) return collect();
+        if (! $this->record) {
+            return collect();
+        }
         $rows = collect();
         $eventTemplates = $this->record->eventTemplates()->with(['qtyVariants', 'programPoints.currency'])->get();
         foreach ($eventTemplates as $template) {
@@ -53,15 +57,18 @@ class EventProgramPointPriceTable extends Widget
                 }
             }
         }
+
         return $rows;
     }
 
     public function recalculatePrices(): void
     {
-        if (!$this->record) return;
+        if (! $this->record) {
+            return;
+        }
         $eventTemplates = $this->record->eventTemplates;
         foreach ($eventTemplates as $template) {
-            (new UnifiedPriceCalculator())->recalculateForTemplate($template);
+            (new UnifiedPriceCalculator)->recalculateForTemplate($template);
         }
         Notification::make()
             ->title('Ceny zostały przeliczone!')

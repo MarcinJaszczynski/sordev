@@ -28,10 +28,10 @@ return new class extends Migration
         Schema::table('event_template_price_per_person', function (Blueprint $table) {
             $table->dropColumn([
                 'price_base',
-                'markup_amount', 
+                'markup_amount',
                 'tax_amount',
                 'price_with_tax',
-                'tax_breakdown'
+                'tax_breakdown',
             ]);
         });
     }

@@ -4,14 +4,18 @@
         <!-- Tu będą wyświetlane notyfikacje -->
     </div>
 
-    <div class="flex justify-between items-center mb-4">
-        <h2 class="text-xl font-bold">Program wydarzenia: {{ $eventTemplate->name }}</h2>
+    <div class="program-editor-header mb-6">
+        <div>
+            <div class="program-page-eyebrow">Szablon imprezy</div>
+            <h2 class="program-page-title">Program wydarzenia: {{ $eventTemplate->name }}</h2>
+            <p class="program-page-subtitle">Uporządkuj punkty programu, materiały, widoczność i zadania w jednym miejscu.</p>
+        </div>
         <div class="flex items-center space-x-3"> <a
                 href="{{ \App\Filament\Resources\EventTemplateResource::getUrl('edit', ['record' => $eventTemplate->id]) }}"
-                class="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700 flex items-center font-medium border-2 border-blue-800">
+                class="program-toolbar-link">
                 ← Wróć do edycji szablonu
             </a> <button wire:click="showAddModal"
-                class="px-4 py-2 bg-primary-600 text-white rounded hover:bg-primary-700 flex items-center">
+                class="program-toolbar-button">
                 <x-heroicon-o-plus-circle class="w-5 h-5 mr-2" />
                 Dodaj punkt programu
             </button>
@@ -24,16 +28,21 @@
                 $dayNumber = $day['day'];
                 $points = $day['points'];
             @endphp
-            <div class="bg-white shadow rounded-lg p-4 fi-section-content" data-day="{{ $dayNumber }}">
-                <div class="mb-3">
-                    <h3 class="text-lg font-semibold text-gray-700">
+            <div class="program-day-card fi-section-content" data-day="{{ $dayNumber }}">
+                <div class="program-day-header">
+                    <div>
+                        <div class="program-day-eyebrow">Harmonogram dnia</div>
+                        <h3 class="program-day-title">
                         @if($dayNumber > $eventTemplate->duration_days)
                             Fakultatywnie
                         @else
                             Dzień {{ $dayNumber }}
                         @endif
-                    </h3>
-                    <div class="flex flex-wrap gap-4 items-center mt-2">
+                        </h3>
+                    </div>
+                    <div class="program-day-insurance-block">
+                        <div class="program-day-insurance-label">Ubezpieczenia dnia</div>
+                        <div class="flex flex-wrap gap-4 items-center mt-2">
                         @foreach(App\Models\Insurance::active()->get() as $insurance)
                             <label class="flex items-center gap-2">
                                 <input type="checkbox"
@@ -43,249 +52,317 @@
                                 <span class="text-sm text-gray-700">{{ $insurance->name }}</span>
                             </label>
                         @endforeach
+                        </div>
                     </div>
                 </div>
-                <ul class="program-day-list space-y-2 min-h-[100px] border border-dashed border-gray-300 p-2 rounded-md"
+                <ul class="program-day-list space-y-4 min-h-[100px] border border-dashed border-slate-300 bg-slate-50/70 p-3 rounded-2xl"
                     data-day-id="{{ $dayNumber }}" wire:ignore>
                     @forelse ($points as $point)
-                        <li class="program-point-item group flex items-stretch bg-white rounded-2xl shadow-md border border-gray-200 hover:shadow-lg transition overflow-hidden relative"
+                        @php
+                            $colors = [
+                                0 => ['bg' => 'bg-amber-500', 'icon' => 'clipboard-document-list'],
+                                1 => ['bg' => 'bg-sky-600', 'icon' => 'calculator'],
+                                2 => ['bg' => 'bg-emerald-600', 'icon' => 'check-circle'],
+                                3 => ['bg' => 'bg-rose-500', 'icon' => 'puzzle-piece'],
+                            ];
+                            $colorIdx = $loop->index % 4;
+                            $color = $colors[$colorIdx];
+                            $pointDescription = trim(strip_tags((string) ($point['description'] ?? '')));
+                            $pointOfficeNotes = trim(strip_tags((string) ($point['office_notes'] ?? '')));
+                            $pointPivotNotes = trim(strip_tags((string) ($point['pivot_notes'] ?? '')));
+                        @endphp
+                        <li class="program-point-item relative"
                             data-pivot-id="{{ $point['pivot_id'] ?? $point['id'] }}" data-point-id="{{ $point['id'] }}" data-id="{{ $point['pivot_id'] ?? $point['id'] }}">
-                            <!-- Drag handle -->
-                            <div class="flex flex-col items-center justify-center bg-gray-100 px-2 cursor-grab drag-handle select-none">
-                                <x-heroicon-o-bars-3 class="w-6 h-6 text-gray-400" />
-                            </div>
-                            @php
-                                $colors = [
-                                    0 => ['bg' => 'bg-orange-400', 'icon' => 'clipboard-document-list'],
-                                    1 => ['bg' => 'bg-blue-400', 'icon' => 'calculator'],
-                                    2 => ['bg' => 'bg-green-400', 'icon' => 'check-circle'],
-                                    3 => ['bg' => 'bg-red-400', 'icon' => 'puzzle-piece'],
-                                ];
-                                $colorIdx = $loop->index % 4;
-                                $color = $colors[$colorIdx];
-                            @endphp
-                            <!-- Ikona i numer -->
-                            <div class="flex flex-col items-center justify-center {{$color['bg']}} px-4 py-6 min-w-[70px]">
-                                @if($color['icon']==='clipboard-document-list')
-                                    <x-heroicon-o-clipboard-document-list class="w-8 h-8 text-white" />
-                                @elseif($color['icon']==='calculator')
-                                    <x-heroicon-o-calculator class="w-8 h-8 text-white" />
-                                @elseif($color['icon']==='check-circle')
-                                    <x-heroicon-o-check-circle class="w-8 h-8 text-white" />
-                                @elseif($color['icon']==='puzzle-piece')
-                                    <x-heroicon-o-puzzle-piece class="w-8 h-8 text-white" />
-                                @endif
-                                <span class="text-2xl font-bold text-white mt-2">{{ $loop->iteration }}</span>
-                            </div>
-                            <!-- Treść bloku -->
-                            <div class="flex-1 min-w-0 flex flex-col xl:flex-row xl:items-start xl:justify-between gap-4 bg-white px-6 py-4">
-                                <div class="flex-1 min-w-0">
-                                    <div class="text-lg font-semibold text-gray-800 truncate">{{ $point['name'] }}</div>
-                                    @if(!empty($point['start_time']) && !empty($point['end_time']))
-                                        <div class="text-xs text-emerald-700 mt-1 font-medium">Godziny: {{ substr((string) $point['start_time'], 0, 5) }} - {{ substr((string) $point['end_time'], 0, 5) }}</div>
-                                    @endif
-                                    <div class="text-xs text-gray-500 mt-1">Czas trwania: {{ isset($point['duration_hours']) || isset($point['duration_minutes']) ? sprintf('%02d:%02d', $point['duration_hours'] ?? 0, $point['duration_minutes'] ?? 0) : '-' }}</div>
-                                    @if(!empty($point['office_notes']))
-                                        <div class="text-xs text-blue-600 italic mt-1">Uwagi dla biura: {{ $point['office_notes'] }}</div>
-                                    @endif
-                                    @if(!empty($point['pivot_notes']))
-                                        <div class="text-xs text-purple-600 italic mt-1">Notatki: {{ $point['pivot_notes'] }}</div>
-                                    @endif
-                                    @if(!empty($point['description']))
-                                        <div class="text-xs text-gray-600 mt-1">{{ $point['description'] }}</div>
-                                    @endif
-                                    @if(!empty($point['tags']) && is_array($point['tags']))
-                                        <div class="flex flex-wrap gap-1 mt-2">
-                                            @foreach($point['tags'] as $tag)
-                                                <span class="inline-block bg-gray-200 rounded-full px-2 py-0.5 text-xs font-semibold text-gray-700">{{ $tag['name'] }}</span>
-                                            @endforeach
-                                        </div>
-                                    @endif
+                            <div class="program-point-shell">
+                                <div class="program-point-rail">
+                                    <div class="program-point-drag drag-handle select-none" title="Przeciągnij, aby zmienić kolejność">
+                                        <x-heroicon-o-bars-3 class="w-5 h-5 text-slate-400" />
+                                    </div>
+                                    <div class="program-point-index {{ $color['bg'] }}">
+                                        @if($color['icon'] === 'clipboard-document-list')
+                                            <x-heroicon-o-clipboard-document-list class="w-6 h-6 text-white" />
+                                        @elseif($color['icon'] === 'calculator')
+                                            <x-heroicon-o-calculator class="w-6 h-6 text-white" />
+                                        @elseif($color['icon'] === 'check-circle')
+                                            <x-heroicon-o-check-circle class="w-6 h-6 text-white" />
+                                        @elseif($color['icon'] === 'puzzle-piece')
+                                            <x-heroicon-o-puzzle-piece class="w-6 h-6 text-white" />
+                                        @endif
+                                        <span class="program-point-order">{{ $loop->iteration }}</span>
+                                    </div>
                                 </div>
-                                <div class="flex flex-col items-end gap-2 shrink-0">
-                                    @if(!empty($point['featured_image']) && !str_contains($point['featured_image'], 'tmp'))
-                                        <img src="{{ Storage::url($point['featured_image']) }}" alt="Miniaturka" class="h-12 w-12 object-cover rounded mb-1" onerror="this.style.display='none'">
-                                    @endif
-                                    @if(!empty($point['gallery_images']) && is_array($point['gallery_images']))
-                                        <div class="flex flex-wrap gap-1">
-                                            @foreach(array_slice($point['gallery_images'], 0, 4) as $image)
-                                                @if(is_string($image) && !str_contains($image, 'tmp'))
-                                                    <img src="{{ Storage::url($image) }}" alt="Miniaturka galerii" class="h-8 w-8 object-cover rounded" onerror="this.style.display='none'">
-                                                @endif
-                                            @endforeach
-                                            @if(count($point['gallery_images']) > 4)
-                                                <span class="text-xs text-gray-500 self-center bg-gray-200 px-1 rounded">+{{ count($point['gallery_images']) - 4 }}</span>
+
+                                <div class="program-point-body">
+                                    <div class="program-point-main">
+                                        <div class="program-kicker">Punkt programu</div>
+                                        <div class="program-heading-row program-heading-row--spread">
+                                            <h4 class="program-point-title">{{ $point['name'] }}</h4>
+                                            <div class="program-settings-inline">
+                                                <label class="program-setting-tile compact">
+                                                    <input type="checkbox"
+                                                           wire:click="togglePivotProperty({{ $point['pivot_id'] ?? $point['id'] }}, 'include_in_program')"
+                                                           @checked($point['include_in_program'] ?? true)
+                                                           class="form-checkbox text-orange-500">
+                                                    <span class="program-setting-text">Program</span>
+                                                </label>
+                                                <label class="program-setting-tile compact">
+                                                    <input type="checkbox"
+                                                           wire:click="togglePivotProperty({{ $point['pivot_id'] ?? $point['id'] }}, 'include_in_calculation')"
+                                                           @checked($point['include_in_calculation'] ?? true)
+                                                           class="form-checkbox text-blue-500">
+                                                    <span class="program-setting-text">Kalkulacja</span>
+                                                </label>
+                                                <label class="program-setting-tile compact">
+                                                    <input type="checkbox"
+                                                           wire:click="togglePivotProperty({{ $point['pivot_id'] ?? $point['id'] }}, 'active')"
+                                                           @checked($point['active'] ?? true)
+                                                           class="form-checkbox text-green-500">
+                                                    <span class="program-setting-text">Aktywny</span>
+                                                </label>
+                                                <label class="program-setting-tile compact">
+                                                    <input type="checkbox"
+                                                           wire:click="togglePivotProperty({{ $point['pivot_id'] ?? $point['id'] }}, 'show_title_style')"
+                                                           @checked($point['show_title_style'] ?? true)
+                                                           class="form-checkbox text-purple-500">
+                                                    <span class="program-setting-text">Styl tytułu</span>
+                                                </label>
+                                                <label class="program-setting-tile compact">
+                                                    <input type="checkbox"
+                                                           wire:click="togglePivotProperty({{ $point['pivot_id'] ?? $point['id'] }}, 'show_description')"
+                                                           @checked($point['show_description'] ?? true)
+                                                           class="form-checkbox text-pink-500">
+                                                    <span class="program-setting-text">Opis</span>
+                                                </label>
+                                            </div>
+                                        </div>
+
+                                        <div class="program-meta-row">
+                                            @if(!empty($point['start_time']) && !empty($point['end_time']))
+                                                <span class="program-meta-chip">Godziny: {{ substr((string) $point['start_time'], 0, 5) }} - {{ substr((string) $point['end_time'], 0, 5) }}</span>
+                                            @endif
+                                            <span class="program-meta-chip">Czas trwania: {{ isset($point['duration_hours']) || isset($point['duration_minutes']) ? sprintf('%02d:%02d', $point['duration_hours'] ?? 0, $point['duration_minutes'] ?? 0) : '-' }}</span>
+                                            @if(!empty($point['tags']) && is_array($point['tags']))
+                                                <span class="program-meta-chip">Tagów: {{ count($point['tags']) }}</span>
                                             @endif
                                         </div>
-                                    @endif
-                                </div>
-                                <div class="flex flex-row flex-wrap gap-3 items-start xl:justify-end mt-2 xl:mt-0 max-w-full xl:max-w-[360px] shrink-0">
-                                    <label class="flex flex-col items-center cursor-pointer group">
-                                        <input type="checkbox" 
-                                               wire:click="togglePivotProperty({{ $point['pivot_id'] ?? $point['id'] }}, 'include_in_program')" 
-                                               @checked($point['include_in_program'] ?? true) 
-                                               class="form-checkbox h-5 w-5 text-orange-500 rounded border-gray-300 focus:border-orange-500 focus:ring-orange-500">
-                                        <span class="text-xs mt-1 text-gray-700">Program</span>
-                                    </label>
-                                    <label class="flex flex-col items-center cursor-pointer group">
-                                        <input type="checkbox" 
-                                               wire:click="togglePivotProperty({{ $point['pivot_id'] ?? $point['id'] }}, 'include_in_calculation')" 
-                                               @checked($point['include_in_calculation'] ?? true) 
-                                               class="form-checkbox h-5 w-5 text-blue-500 rounded border-gray-300 focus:border-blue-500 focus:ring-blue-500">
-                                        <span class="text-xs mt-1 text-gray-700">Kalkulacja</span>
-                                    </label>
-                                    <label class="flex flex-col items-center cursor-pointer group">
-                                        <input type="checkbox" 
-                                               wire:click="togglePivotProperty({{ $point['pivot_id'] ?? $point['id'] }}, 'active')" 
-                                               @checked($point['active'] ?? true) 
-                                               class="form-checkbox h-5 w-5 text-green-500 rounded border-gray-300 focus:border-green-500 focus:ring-green-500">
-                                        <span class="text-xs mt-1 text-gray-700">Aktywny</span>
-                                    </label>
-                                    <label class="flex flex-col items-center cursor-pointer group">
-                                        <input type="checkbox" 
-                                               wire:click="togglePivotProperty({{ $point['pivot_id'] ?? $point['id'] }}, 'show_title_style')" 
-                                               @checked($point['show_title_style'] ?? true) 
-                                               class="form-checkbox h-5 w-5 text-purple-500 rounded border-gray-300 focus:border-purple-500 focus:ring-purple-500">
-                                        <span class="text-xs mt-1 text-gray-700">Styl tytułu</span>
-                                    </label>
-                                    <label class="flex flex-col items-center cursor-pointer group">
-                                        <input type="checkbox" 
-                                               wire:click="togglePivotProperty({{ $point['pivot_id'] ?? $point['id'] }}, 'show_description')" 
-                                               @checked($point['show_description'] ?? true) 
-                                               class="form-checkbox h-5 w-5 text-pink-500 rounded border-gray-300 focus:border-pink-500 focus:ring-pink-500">
-                                        <span class="text-xs mt-1 text-gray-700">Opis</span>
-                                    </label>
-                                </div>
-                                <!-- Col 6: Actions (przeniesione do wnętrza li) -->
-                                <div class="w-20 pl-2 py-1 flex items-center space-x-2 self-center flex-shrink-0">
-                                    <button
-                                        onclick="if(confirm('Przejść do ekranu edycji punktu programu?')){ window.location.href='/admin/event-template-program-points/{{ $point['id'] }}/edit'; } return false;"
-                                        class="text-gray-400 hover:text-primary-600 p-1" title="Edytuj">
-                                        <x-heroicon-o-pencil-square class="w-5 h-5" />
-                                    </button>
-                                    <button wire:click="duplicatePoint({{ $point['pivot_id'] ?? $point['id'] }})"
-                                        wire:confirm="Czy na pewno chcesz zduplikować ten punkt programu?"
-                                        class="text-gray-400 hover:text-success-600 p-1" title="Duplikuj">
-                                        <x-heroicon-o-document-duplicate class="w-5 h-5" />
-                                    </button>
-                                    <button wire:click="deletePoint({{ $point['pivot_id'] ?? $point['id'] }})"
-                                        wire:confirm="Czy na pewno chcesz usunąć ten punkt z programu?"
-                                        class="text-gray-400 hover:text-danger-600 p-1" title="Usuń">
-                                        <x-heroicon-o-trash class="w-5 h-5" />
-                                    </button>
+
+                                        @if($pointDescription || $pointOfficeNotes || $pointPivotNotes)
+                                            <div class="program-detail-grid">
+                                                @if($pointDescription)
+                                                    <div class="program-detail-card">
+                                                        <div class="program-detail-label">Opis</div>
+                                                        <div class="program-detail-value">{{ \Illuminate\Support\Str::limit($pointDescription, 220) }}</div>
+                                                    </div>
+                                                @endif
+                                                @if($pointOfficeNotes)
+                                                    <div class="program-detail-card">
+                                                        <div class="program-detail-label">Uwagi dla biura</div>
+                                                        <div class="program-detail-value">{{ \Illuminate\Support\Str::limit($pointOfficeNotes, 140) }}</div>
+                                                    </div>
+                                                @endif
+                                                @if($pointPivotNotes)
+                                                    <div class="program-detail-card">
+                                                        <div class="program-detail-label">Notatki w programie</div>
+                                                        <div class="program-detail-value">{{ \Illuminate\Support\Str::limit($pointPivotNotes, 140) }}</div>
+                                                    </div>
+                                                @endif
+                                            </div>
+                                        @else
+                                            <div class="program-inline-empty">Brak opisu i notatek dla tego punktu programu.</div>
+                                        @endif
+
+                                        <div class="program-sidebar-card mt-2">
+                                            <div class="program-card-title">Media</div>
+                                            <div class="program-media-stack">
+                                                @if(!empty($point['featured_image']) && !str_contains($point['featured_image'], 'tmp'))
+                                                    <img src="{{ Storage::url($point['featured_image']) }}" alt="Miniaturka" class="program-featured-image" onerror="this.style.display='none'">
+                                                @endif
+                                                @if(!empty($point['gallery_images']) && is_array($point['gallery_images']))
+                                                    <div class="program-gallery-strip">
+                                                        @foreach(array_slice($point['gallery_images'], 0, 4) as $image)
+                                                            @if(is_string($image) && !str_contains($image, 'tmp'))
+                                                                <img src="{{ Storage::url($image) }}" alt="Miniaturka galerii" class="program-gallery-thumb" onerror="this.style.display='none'">
+                                                            @endif
+                                                        @endforeach
+                                                        @if(count($point['gallery_images']) > 4)
+                                                            <span class="program-gallery-counter">+{{ count($point['gallery_images']) - 4 }}</span>
+                                                        @endif
+                                                    </div>
+                                                @endif
+                                                @if(empty($point['featured_image']) && empty($point['gallery_images']))
+                                                    <div class="program-empty-state">Brak zdjęć dla tego punktu.</div>
+                                                @endif
+                                            </div>
+                                        </div>
+
+                                        @if(!empty($point['tags']) && is_array($point['tags']))
+                                            <div class="program-tag-section">
+                                                <div class="program-detail-label">Tagi</div>
+                                                <div class="program-tag-list">
+                                                    @foreach($point['tags'] as $tag)
+                                                        <span class="program-tag-pill">{{ $tag['name'] }}</span>
+                                                    @endforeach
+                                                </div>
+                                            </div>
+                                        @endif
+                                    </div>
+
+                                    <aside class="program-point-sidebar">
+                                        <div class="program-sidebar-card">
+                                            <div class="program-card-title">Akcje</div>
+                                            <div class="program-actions-stack">
+                                                <a href="{{ $this->getTaskCreateUrlForPoint((int) ($point['id'] ?? 0)) }}"
+                                                   target="_blank"
+                                                   rel="noopener"
+                                                   class="program-action-link program-action-primary"
+                                                   title="Dodaj zadanie">
+                                                    <x-heroicon-o-clipboard-document-list class="w-4 h-4" />
+                                                    <span>Dodaj zadanie</span>
+                                                </a>
+                                                <a href="/admin/event-template-program-points/{{ $point['id'] }}/edit"
+                                                   class="program-action-link"
+                                                   title="Edytuj punkt programu">
+                                                    <x-heroicon-o-pencil-square class="w-4 h-4" />
+                                                    <span>Edytuj punkt</span>
+                                                </a>
+                                                <button wire:click="duplicatePoint({{ $point['pivot_id'] ?? $point['id'] }})"
+                                                    wire:confirm="Czy na pewno chcesz zduplikować ten punkt programu?"
+                                                    class="program-action-link"
+                                                    title="Duplikuj punkt programu">
+                                                    <x-heroicon-o-document-duplicate class="w-4 h-4" />
+                                                    <span>Duplikuj</span>
+                                                </button>
+                                                <button wire:click="deletePoint({{ $point['pivot_id'] ?? $point['id'] }})"
+                                                    wire:confirm="Czy na pewno chcesz usunąć ten punkt z programu?"
+                                                    class="program-action-link program-action-danger"
+                                                    title="Usuń punkt programu">
+                                                    <x-heroicon-o-trash class="w-4 h-4" />
+                                                    <span>Usuń</span>
+                                                </button>
+                                            </div>
+                                        </div>
+                                    </aside>
                                 </div>
                             </div>
                         </li>
                         @if(!empty($point['children']))
                             <li class="children-container">
-                                <ul class="ml-8 mt-1">
+                                <div class="program-children-shell ml-8 mt-3">
+                                    <div class="program-kicker">Podpunkty programu</div>
+                                    <ul class="program-children-list">
                                     @foreach($point['children'] as $child)
-                                        <li class="bg-gray-100 p-3 rounded-md shadow-sm border border-gray-100 flex items-start">
-                                        <!-- Col 0: Empty space for drag handle -->
-                                        <div class="w-12 pr-2 py-1 self-center flex-shrink-0">
-                                            <div class="w-5 h-5 opacity-30">
-                                                <x-heroicon-o-arrow-right class="w-4 h-4 text-gray-400" />
-                                            </div>
-                                        </div>
-                                        <!-- Col 1: Name, Duration, Office Notes -->
-                                        <div class="w-72 px-2 py-1 border-r border-gray-200 flex-shrink-0">
-                                            <div class="font-medium text-gray-700">{{ $child['name'] }}</div>
-                                            @if(isset($child['duration_hours']) || isset($child['duration_minutes']))
-                                                <div class="text-xs text-gray-600 mt-1">
-                                                    Czas trwania: {{ sprintf('%02d:%02d', $child['duration_hours'] ?? 0, $child['duration_minutes'] ?? 0) }}
+                                        @php
+                                            $childDescription = trim(strip_tags((string) ($child['description'] ?? '')));
+                                            $childOfficeNotes = trim(strip_tags((string) ($child['office_notes'] ?? '')));
+                                        @endphp
+                                        <li class="program-child-card">
+                                            <div class="program-child-main">
+                                                <div class="program-child-icon">
+                                                    <x-heroicon-o-arrow-turn-down-right class="w-4 h-4" />
                                                 </div>
-                                            @endif
-                                            @if(!empty($child['office_notes']))
-                                                <div class="text-xs text-blue-600 italic mt-1">
-                                                    Uwagi dla biura: {{ $child['office_notes'] }}
-                                                </div>
-                                            @endif
-                                            <!-- Checkboxy właściwości podpunktu -->
-                                            <div class="flex flex-row flex-wrap gap-3 items-start mt-2">
-                                                <label class="flex flex-col items-center cursor-pointer group">
-                                                    <input type="checkbox"
-                                                           wire:click="toggleChildPivotProperty({{ $child['id'] }}, 'include_in_program')"
-                                                           @checked($child['include_in_program'] ?? true)
-                                                           class="form-checkbox h-5 w-5 text-orange-500 rounded border-gray-300 focus:border-orange-500 focus:ring-orange-500">
-                                                    <span class="text-xs mt-1 text-gray-700">Program</span>
-                                                </label>
-                                                <label class="flex flex-col items-center cursor-pointer group">
-                                                    <input type="checkbox"
-                                                           wire:click="toggleChildPivotProperty({{ $child['id'] }}, 'include_in_calculation')"
-                                                           @checked($child['include_in_calculation'] ?? true)
-                                                           class="form-checkbox h-5 w-5 text-blue-500 rounded border-gray-300 focus:border-blue-500 focus:ring-blue-500">
-                                                    <span class="text-xs mt-1 text-gray-700">Kalkulacja</span>
-                                                </label>
-                                                <label class="flex flex-col items-center cursor-pointer group">
-                                                    <input type="checkbox"
-                                                           wire:click="toggleChildPivotProperty({{ $child['id'] }}, 'active')"
-                                                           @checked($child['active'] ?? true)
-                                                           class="form-checkbox h-5 w-5 text-green-500 rounded border-gray-300 focus:border-green-500 focus:ring-green-500">
-                                                    <span class="text-xs mt-1 text-gray-700">Aktywny</span>
-                                                </label>
-                                                <label class="flex flex-col items-center cursor-pointer group">
-                                                    <input type="checkbox"
-                                                           wire:click="toggleChildPivotProperty({{ $child['id'] }}, 'show_title_style')"
-                                                           @checked($child['show_title_style'] ?? true)
-                                                           class="form-checkbox h-5 w-5 text-purple-500 rounded border-gray-300 focus:border-purple-500 focus:ring-purple-500">
-                                                    <span class="text-xs mt-1 text-gray-700">Styl tytułu</span>
-                                                </label>
-                                                <label class="flex flex-col items-center cursor-pointer group">
-                                                    <input type="checkbox"
-                                                           wire:click="toggleChildPivotProperty({{ $child['id'] }}, 'show_description')"
-                                                           @checked($child['show_description'] ?? true)
-                                                           class="form-checkbox h-5 w-5 text-pink-500 rounded border-gray-300 focus:border-pink-500 focus:ring-pink-500">
-                                                    <span class="text-xs mt-1 text-gray-700">Opis</span>
-                                                </label>
-                                            </div>
-                                        </div>
-                                        <!-- Col 2: Description -->
-                                        <div class="w-72 px-2 py-1 border-r border-gray-200 flex-shrink-0">
-                                            @if(!empty($child['description']))
-                                                <div class="text-xs text-gray-600">{{ $child['description'] }}</div>
-                                            @else
-                                                <p class="text-xs text-gray-400 italic">Brak opisu.</p>
-                                            @endif
-                                        </div>
-                                        <!-- Col 3: Featured Image, Gallery -->
-                                        <div class="w-48 px-2 py-1 border-r border-gray-200 flex-shrink-0">
-                                            @if(!empty($child['featured_image']) && !str_contains($child['featured_image'], 'tmp'))
-                                                <div class="mb-2">
-                                                    <img src="{{ Storage::url($child['featured_image']) }}" alt="Miniaturka" class="h-12 w-12 object-cover rounded" onerror="this.style.display='none'">
-                                                </div>
-                                            @endif
-                                            @if(!empty($child['gallery_images']) && is_array($child['gallery_images']))
-                                                <div class="flex flex-wrap gap-1">
-                                                    @foreach(array_slice($child['gallery_images'], 0, 4) as $image)
-                                                        @if(!str_contains($image, 'tmp'))
-                                                            <img src="{{ Storage::url($image) }}" alt="Miniaturka galerii" class="h-8 w-8 object-cover rounded" onerror="this.style.display='none'">
+                                                <div class="program-child-content">
+                                                    <div class="program-kicker">Podpunkt programu</div>
+                                                    <div class="program-heading-row program-heading-row--spread">
+                                                        <div class="program-child-title">{{ $child['name'] }}</div>
+                                                        <div class="program-settings-inline">
+                                                            <label class="program-setting-tile compact">
+                                                                <input type="checkbox"
+                                                                       wire:click="toggleChildPivotProperty({{ $child['id'] }}, 'include_in_program')"
+                                                                       @checked($child['include_in_program'] ?? true)
+                                                                       class="form-checkbox text-orange-500">
+                                                                <span class="program-setting-text">Program</span>
+                                                            </label>
+                                                            <label class="program-setting-tile compact">
+                                                                <input type="checkbox"
+                                                                       wire:click="toggleChildPivotProperty({{ $child['id'] }}, 'include_in_calculation')"
+                                                                       @checked($child['include_in_calculation'] ?? true)
+                                                                       class="form-checkbox text-blue-500">
+                                                                <span class="program-setting-text">Kalkulacja</span>
+                                                            </label>
+                                                            <label class="program-setting-tile compact">
+                                                                <input type="checkbox"
+                                                                       wire:click="toggleChildPivotProperty({{ $child['id'] }}, 'active')"
+                                                                       @checked($child['active'] ?? true)
+                                                                       class="form-checkbox text-green-500">
+                                                                <span class="program-setting-text">Aktywny</span>
+                                                            </label>
+                                                            <label class="program-setting-tile compact">
+                                                                <input type="checkbox"
+                                                                       wire:click="toggleChildPivotProperty({{ $child['id'] }}, 'show_title_style')"
+                                                                       @checked($child['show_title_style'] ?? true)
+                                                                       class="form-checkbox text-purple-500">
+                                                                <span class="program-setting-text">Styl tytułu</span>
+                                                            </label>
+                                                            <label class="program-setting-tile compact">
+                                                                <input type="checkbox"
+                                                                       wire:click="toggleChildPivotProperty({{ $child['id'] }}, 'show_description')"
+                                                                       @checked($child['show_description'] ?? true)
+                                                                       class="form-checkbox text-pink-500">
+                                                                <span class="program-setting-text">Opis</span>
+                                                            </label>
+                                                        </div>
+                                                    </div>
+                                                    <div class="program-meta-row">
+                                                        <span class="program-meta-chip">Czas trwania: {{ sprintf('%02d:%02d', $child['duration_hours'] ?? 0, $child['duration_minutes'] ?? 0) }}</span>
+                                                        @if(!empty($child['tags']) && is_array($child['tags']))
+                                                            <span class="program-meta-chip">Tagów: {{ count($child['tags']) }}</span>
                                                         @endif
-                                                    @endforeach
-                                                    @if(count($child['gallery_images']) > 4)
-                                                        <span class="text-xs text-gray-500 self-center bg-gray-200 px-1 rounded">+{{ count($child['gallery_images']) - 4 }}</span>
+                                                    </div>
+                                                    @if($childDescription || $childOfficeNotes)
+                                                        <div class="program-detail-grid compact">
+                                                            @if($childDescription)
+                                                                <div class="program-detail-card">
+                                                                    <div class="program-detail-label">Opis</div>
+                                                                    <div class="program-detail-value">{{ \Illuminate\Support\Str::limit($childDescription, 140) }}</div>
+                                                                </div>
+                                                            @endif
+                                                            @if($childOfficeNotes)
+                                                                <div class="program-detail-card">
+                                                                    <div class="program-detail-label">Uwagi dla biura</div>
+                                                                    <div class="program-detail-value">{{ \Illuminate\Support\Str::limit($childOfficeNotes, 120) }}</div>
+                                                                </div>
+                                                            @endif
+                                                        </div>
+                                                    @else
+                                                        <div class="program-inline-empty">Brak opisu podpunktu.</div>
+                                                    @endif
+                                                    @if(!empty($child['tags']) && is_array($child['tags']))
+                                                        <div class="program-tag-list mt-3">
+                                                            @foreach($child['tags'] as $tag)
+                                                                <span class="program-tag-pill">{{ $tag['name'] }}</span>
+                                                            @endforeach
+                                                        </div>
                                                     @endif
                                                 </div>
-                                            @endif
-                                        </div>
-                                        <!-- Col 4: Tags -->
-                                        <div class="w-48 px-2 py-1 flex-shrink-0">
-                                            @if(!empty($child['tags']) && is_array($child['tags']))
-                                                <div class="flex flex-wrap gap-1">
-                                                    @foreach($child['tags'] as $tag)
-                                                        <span class="inline-block bg-gray-200 rounded-full px-2 py-0.5 text-xs font-semibold text-gray-700">{{ $tag['name'] }}</span>
-                                                    @endforeach
+                                            </div>
+
+                                            <div class="program-child-side">
+                                                <div class="program-sidebar-card compact">
+                                                    <div class="program-card-title">Akcje</div>
+                                                    <div class="program-actions-stack compact">
+                                                        <a href="{{ $this->getTaskCreateUrlForChild((int) ($child['id'] ?? 0)) }}"
+                                                           target="_blank"
+                                                           rel="noopener"
+                                                           class="program-action-link program-action-primary"
+                                                           title="Dodaj zadanie do podpunktu">
+                                                            <x-heroicon-o-clipboard-document-list class="w-4 h-4" />
+                                                            <span>Dodaj zadanie</span>
+                                                        </a>
+                                                        <a href="/admin/event-template-program-points/{{ $child['id'] }}/edit"
+                                                           class="program-action-link"
+                                                           title="Edytuj podpunkt programu">
+                                                            <x-heroicon-o-pencil-square class="w-4 h-4" />
+                                                            <span>Edytuj podpunkt</span>
+                                                        </a>
+                                                    </div>
                                                 </div>
-                                            @else
-                                                <p class="text-xs text-gray-400 italic">Brak tagów.</p>
-                                            @endif
-                                        </div>
-                                        <!-- Col 5: Checkboxy właściwości podpunktu -->
+                                            </div>
                                         </li>
                                     @endforeach
-                                </ul>
+                                    </ul>
+                                </div>
                             </li>
                         @endif
-                    </li> <!-- Zamknięcie głównego li dla punktu programu -->
                     @empty
                         <li class="text-center text-gray-400 py-4 italic">Brak punktów programu na ten dzień.</li>
                     @endforelse <!-- endforelse points -->
@@ -293,17 +370,20 @@
             </div>
         @empty
             @for ($i = 1; $i <= $duration_days; $i++)
-                <div class="bg-white shadow rounded-lg p-4 fi-section-content" data-day="{{ $i }}">
-                    <div class="mb-3">
-                        <h3 class="text-lg font-semibold text-gray-700">
+                <div class="program-day-card fi-section-content" data-day="{{ $i }}">
+                    <div class="program-day-header">
+                        <div>
+                            <div class="program-day-eyebrow">Harmonogram dnia</div>
+                            <h3 class="program-day-title">
                             @if($i > $eventTemplate->duration_days)
                                 Fakultatywnie
                             @else
                                 Dzień {{ $i }}
                             @endif
-                        </h3>
+                            </h3>
+                        </div>
                     </div>
-                    <ul class="program-day-list space-y-2 min-h-[100px] border border-dashed border-gray-300 p-2 rounded-md"
+                    <ul class="program-day-list space-y-4 min-h-[100px] border border-dashed border-slate-300 bg-slate-50/70 p-3 rounded-2xl"
                         data-day-id="{{ $i }}">
                         <li class="text-center text-gray-400 py-4 italic">Brak punktów programu na ten dzień.</li>
                         <!-- Dodaj ukryty element, aby Sortable.js widział dropzone nawet gdy lista jest pusta -->
@@ -318,6 +398,118 @@
             display: none !important;
         }
         
+        .program-editor-header {
+            display: flex;
+            justify-content: space-between;
+            gap: 1.5rem;
+            align-items: flex-start;
+            padding: 1.5rem;
+            border: 1px solid #dbe3ef;
+            border-radius: 1.5rem;
+            background: linear-gradient(135deg, #f8fbff 0%, #eef4fb 100%);
+            box-shadow: 0 20px 45px -35px rgba(15, 23, 42, 0.55);
+        }
+
+        .program-page-eyebrow,
+        .program-day-eyebrow,
+        .program-kicker {
+            font-size: 0.72rem;
+            line-height: 1rem;
+            letter-spacing: 0.08em;
+            text-transform: uppercase;
+            color: #64748b;
+            font-weight: 700;
+        }
+
+        .program-page-title {
+            margin-top: 0.35rem;
+            font-size: 1.7rem;
+            line-height: 2rem;
+            color: #0f172a;
+            font-weight: 700;
+        }
+
+        .program-page-subtitle {
+            margin-top: 0.4rem;
+            color: #475569;
+            max-width: 48rem;
+            font-size: 0.95rem;
+        }
+
+        .program-toolbar-link,
+        .program-toolbar-button {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            border-radius: 0.9rem;
+            padding: 0.8rem 1rem;
+            font-weight: 600;
+            transition: 0.2s ease;
+        }
+
+        .program-toolbar-link {
+            background: #ffffff;
+            color: #0f172a;
+            border: 1px solid #cbd5e1;
+        }
+
+        .program-toolbar-link:hover {
+            background: #f8fafc;
+        }
+
+        .program-toolbar-button {
+            background: #0f766e;
+            color: #ffffff;
+            border: 1px solid #115e59;
+        }
+
+        .program-toolbar-button:hover {
+            background: #115e59;
+        }
+
+        .program-day-card {
+            padding: 1rem;
+            border-radius: 1.5rem;
+            border: 1px solid #dbe3ef;
+            background: #fff;
+            box-shadow: 0 20px 45px -38px rgba(15, 23, 42, 0.55);
+        }
+
+        .program-day-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: flex-start;
+            gap: 1.5rem;
+            margin-bottom: 0.75rem;
+        }
+
+        .program-day-title {
+            margin-top: 0.35rem;
+            font-size: 1.25rem;
+            line-height: 1.75rem;
+            font-weight: 700;
+            color: #172554;
+        }
+
+        .program-day-insurance-block {
+            min-width: 20rem;
+            padding: 0.6rem 0.85rem;
+            border-radius: 1rem;
+            background: #f8fafc;
+            border: 1px solid #e2e8f0;
+        }
+
+        .program-day-insurance-label,
+        .program-card-title,
+        .program-detail-label {
+            font-size: 0.76rem;
+            line-height: 1rem;
+            font-weight: 700;
+            color: #64748b;
+            text-transform: uppercase;
+            letter-spacing: 0.06em;
+        }
+
         /* Ładne checkboxy */
         .form-checkbox {
             appearance: none;
@@ -395,13 +587,453 @@
             border-width: 2px;
         }
 
-        /* Program point items */
         .program-point-item {
             transition: all 0.2s ease;
         }
 
-        .program-point-item:hover {
-            box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
+        .program-point-shell {
+            display: grid;
+            grid-template-columns: 5.5rem minmax(0, 1fr);
+            border: 1px solid #dbe3ef;
+            border-radius: 1.1rem;
+            overflow: hidden;
+            background: linear-gradient(180deg, #ffffff 0%, #fbfdff 100%);
+            box-shadow: 0 16px 36px -32px rgba(15, 23, 42, 0.55);
+        }
+
+        .program-point-rail {
+            display: flex;
+            flex-direction: column;
+            background: linear-gradient(180deg, #f8fafc 0%, #eef2f7 100%);
+            border-right: 1px solid #dbe3ef;
+        }
+
+        .program-point-drag {
+            min-height: 3.25rem;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            border-bottom: 1px solid #dbe3ef;
+        }
+
+        .program-point-index {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            gap: 0.6rem;
+            flex: 1;
+            padding: 1rem 0.5rem;
+        }
+
+        .program-point-order {
+            font-size: 1.55rem;
+            line-height: 1.75rem;
+            font-weight: 800;
+            color: #ffffff;
+        }
+
+        .program-point-body {
+            display: grid;
+            grid-template-columns: minmax(0, 1fr) 13.5rem;
+            gap: 0.75rem;
+            padding: 0.85rem;
+        }
+
+        .program-point-main,
+        .program-point-sidebar,
+        .program-child-content {
+            min-width: 0;
+        }
+
+        .program-heading-row {
+            display: flex;
+            align-items: center;
+            gap: 0.75rem;
+            margin-top: 0.2rem;
+        }
+
+        .program-heading-row--spread {
+            justify-content: space-between;
+            align-items: flex-start;
+            flex-wrap: wrap;
+            row-gap: 0.45rem;
+        }
+
+        .program-settings-inline {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 0.35rem;
+            justify-content: flex-end;
+        }
+
+        .program-settings-inline .program-setting-tile {
+            background: #f8fafc;
+        }
+
+        .program-point-title,
+        .program-child-title {
+            font-size: 1rem;
+            line-height: 1.35rem;
+            font-weight: 700;
+            color: #0f172a;
+        }
+
+        .program-meta-row {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 0.5rem;
+            margin-top: 0.45rem;
+        }
+
+        .program-meta-chip {
+            display: inline-flex;
+            align-items: center;
+            gap: 0.35rem;
+            border-radius: 9999px;
+            border: 1px solid #dbe3ef;
+            background: #f8fafc;
+            color: #334155;
+            padding: 0.2rem 0.55rem;
+            font-size: 0.69rem;
+            font-weight: 600;
+        }
+
+        .program-detail-grid {
+            display: grid;
+            grid-template-columns: repeat(3, minmax(0, 1fr));
+            gap: 0.5rem;
+            margin-top: 0.55rem;
+        }
+
+        .program-detail-grid.compact {
+            grid-template-columns: repeat(2, minmax(0, 1fr));
+        }
+
+        .program-detail-card,
+        .program-sidebar-card,
+        .program-children-shell {
+            border: 1px solid #e2e8f0;
+            background: #ffffff;
+            border-radius: 0.75rem;
+            padding: 0.55rem 0.7rem;
+        }
+
+        .program-sidebar-card {
+            background: #f8fafc;
+            margin: 0;
+        }
+
+        .program-sidebar-card.compact {
+            padding: 0.45rem 0.6rem;
+        }
+
+        .program-detail-value {
+            margin-top: 0.3rem;
+            color: #1e293b;
+            font-size: 0.78rem;
+            line-height: 1.2rem;
+            display: -webkit-box;
+            -webkit-line-clamp: 2;
+            -webkit-box-orient: vertical;
+            overflow: hidden;
+        }
+
+        .program-detail-value.is-muted,
+        .program-empty-state {
+            color: #94a3b8;
+        }
+
+        .program-tag-section {
+            margin-top: 0.6rem;
+        }
+
+        .program-tag-list {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 0.45rem;
+            margin-top: 0.35rem;
+        }
+
+        .program-tag-list.mt-3 {
+            margin-top: 0.75rem;
+        }
+
+        .program-tag-pill {
+            display: inline-flex;
+            align-items: center;
+            border-radius: 9999px;
+            background: #e2e8f0;
+            color: #334155;
+            padding: 0.2rem 0.55rem;
+            font-size: 0.68rem;
+            font-weight: 600;
+        }
+
+        .program-media-stack {
+            margin-top: 0.45rem;
+        }
+
+        .program-featured-image {
+            width: 100%;
+            height: 5.25rem;
+            object-fit: cover;
+            border-radius: 0.9rem;
+            border: 1px solid #dbe3ef;
+        }
+
+        .program-gallery-strip {
+            display: grid;
+            grid-template-columns: repeat(4, minmax(0, 1fr));
+            gap: 0.3rem;
+            margin-top: 0.35rem;
+        }
+
+        .program-gallery-thumb,
+        .program-gallery-counter {
+            width: 100%;
+            aspect-ratio: 1 / 1;
+            border-radius: 0.7rem;
+            object-fit: cover;
+            border: 1px solid #dbe3ef;
+        }
+
+        .program-gallery-counter {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            background: #e2e8f0;
+            color: #334155;
+            font-size: 0.8rem;
+            font-weight: 700;
+        }
+
+        .program-point-sidebar,
+        .program-child-side {
+            display: flex;
+            flex-direction: column;
+            gap: 0.45rem;
+        }
+
+        .program-point-sidebar .program-actions-stack,
+        .program-child-side .program-actions-stack {
+            grid-template-columns: 1fr;
+        }
+
+        .program-settings-grid {
+            display: grid;
+            grid-template-columns: repeat(3, minmax(0, 1fr));
+            gap: 0.35rem;
+            margin-top: 0.4rem;
+        }
+
+        .program-settings-grid.compact {
+            grid-template-columns: 1fr;
+        }
+
+        .program-setting-tile {
+            display: flex;
+            align-items: center;
+            gap: 0.38rem;
+            padding: 0.36rem 0.45rem;
+            border-radius: 0.65rem;
+            border: 1px solid #dbe3ef;
+            background: #ffffff;
+            min-width: 0;
+        }
+
+        .program-setting-tile.compact {
+            padding: 0.32rem 0.4rem;
+        }
+
+        .program-setting-text {
+            font-size: 0.69rem;
+            line-height: 1rem;
+            font-weight: 600;
+            color: #334155;
+        }
+
+        .program-actions-stack {
+            display: grid;
+            grid-template-columns: repeat(2, minmax(0, 1fr));
+            gap: 0.35rem;
+            margin-top: 0.4rem;
+        }
+
+        .program-actions-stack.compact {
+            margin-top: 0.35rem;
+        }
+
+        .program-action-link {
+            display: inline-flex;
+            align-items: center;
+            gap: 0.35rem;
+            justify-content: flex-start;
+            width: 100%;
+            border-radius: 0.65rem;
+            border: 1px solid #dbe3ef;
+            background: #ffffff;
+            color: #1e293b;
+            padding: 0.4rem 0.45rem;
+            font-size: 0.7rem;
+            font-weight: 600;
+            transition: 0.2s ease;
+            min-height: 2rem;
+        }
+
+        .program-action-link:hover {
+            background: #f8fafc;
+            border-color: #cbd5e1;
+        }
+
+        .program-action-primary {
+            background: #ecfeff;
+            border-color: #99f6e4;
+            color: #115e59;
+        }
+
+        .program-action-primary:hover {
+            background: #ccfbf1;
+        }
+
+        .program-action-danger {
+            color: #991b1b;
+            background: #fef2f2;
+            border-color: #fecaca;
+        }
+
+        .program-action-danger:hover {
+            background: #fee2e2;
+        }
+
+        .program-children-shell {
+            background: linear-gradient(180deg, #ffffff 0%, #f8fafc 100%);
+            padding: 0.55rem 0.65rem;
+        }
+
+        .program-children-list {
+            display: flex;
+            flex-direction: column;
+            gap: 0.45rem;
+            margin-top: 0.45rem;
+        }
+
+        .program-child-card {
+            display: grid;
+            grid-template-columns: minmax(0, 1fr) 13.5rem;
+            gap: 0.55rem;
+            border: 1px solid #dbe3ef;
+            background: #ffffff;
+            border-radius: 0.8rem;
+            padding: 0.6rem;
+        }
+
+        .program-child-main {
+            display: grid;
+            grid-template-columns: 1.5rem minmax(0, 1fr);
+            gap: 0.55rem;
+        }
+
+        .program-child-icon {
+            margin-top: 0.95rem;
+            color: #64748b;
+        }
+
+        @media (min-width: 1280px) {
+            .program-detail-grid {
+                grid-template-columns: 1.35fr 1fr 1fr;
+            }
+
+            .program-child-card .program-detail-grid.compact {
+                grid-template-columns: 1fr;
+            }
+        }
+
+        @media (max-width: 1279px) {
+            .program-point-body,
+            .program-child-card {
+                grid-template-columns: 1fr;
+            }
+
+            .program-actions-stack {
+                grid-template-columns: 1fr;
+            }
+
+            .program-day-header,
+            .program-editor-header {
+                flex-direction: column;
+            }
+
+            .program-day-insurance-block {
+                min-width: 0;
+                width: 100%;
+            }
+        }
+
+        @media (max-width: 767px) {
+            .program-detail-grid,
+            .program-detail-grid.compact,
+            .program-settings-grid {
+                grid-template-columns: 1fr;
+            }
+
+            .program-settings-inline {
+                justify-content: flex-start;
+            }
+
+            .program-point-shell {
+                grid-template-columns: 1fr;
+            }
+
+            .program-point-rail {
+                flex-direction: row;
+                border-right: 0;
+                border-bottom: 1px solid #dbe3ef;
+            }
+
+            .program-point-drag {
+                min-width: 3.5rem;
+                min-height: 0;
+                border-bottom: 0;
+                border-right: 1px solid #dbe3ef;
+            }
+
+            .program-point-index {
+                flex-direction: row;
+                justify-content: flex-start;
+                padding: 0.8rem 1rem;
+            }
+
+            .program-inline-empty {
+                margin-top: 0.5rem;
+                font-size: 0.72rem;
+                color: #94a3b8;
+                font-style: italic;
+            }
+
+            .program-toolbar-button {
+                width: 100%;
+            }
+
+            .program-editor-header .flex.items-center.space-x-3 {
+                width: 100%;
+                flex-direction: column;
+                gap: 0.75rem;
+            }
+        }
+
+        @media (min-width: 1280px) {
+            .program-action-link span {
+                white-space: nowrap;
+                overflow: hidden;
+                text-overflow: ellipsis;
+            }
+        }
+
+        @media (min-width: 1280px) {
+            .program-point-item:hover .program-point-shell {
+                box-shadow: 0 22px 42px -34px rgba(15, 23, 42, 0.6);
+            }
         }
     </style>
     <div x-data="{ show: @entangle('showModal') }" x-show="show" x-cloak class="fixed inset-0 z-50 overflow-y-auto">

@@ -2,10 +2,10 @@
 
 namespace App\Filament\Resources;
 
-use App\Filament\Resources\TaskResource\RelationManagers\TasksRelationManager as SharedTasksRelationManager;
 use App\Filament\Resources\EventResource\Pages;
 use App\Filament\Resources\EventResource\RelationManagers;
 use App\Filament\Resources\EventResource\Traits\SearchContractorTrait;
+use App\Filament\Resources\TaskResource\RelationManagers\TasksRelationManager as SharedTasksRelationManager;
 use App\Models\Bus;
 use App\Models\Contractor;
 use App\Models\Event;
@@ -20,7 +20,6 @@ use Filament\Resources\Resource;
 use Filament\Tables;
 use Filament\Tables\Table;
 use Illuminate\Database\Eloquent\Builder;
-use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Schema;
 
 class EventResource extends Resource
@@ -28,9 +27,13 @@ class EventResource extends Resource
     use SearchContractorTrait;
 
     protected static ?string $model = Event::class;
+
     protected static ?string $navigationIcon = 'heroicon-o-calendar-days';
+
     protected static ?string $navigationGroup = 'Imprezy';
+
     protected static ?string $navigationLabel = 'Imprezy';
+
     protected static ?int $navigationSort = 1;
 
     public static function form(Form $form): Form
@@ -48,7 +51,7 @@ class EventResource extends Resource
                             ->label('Cena z kalkulacji')
                             ->helperText('Obliczona na podstawie szablonu, km i liczby uczestników')
                             ->content(function ($record, callable $get): string {
-                                if (!$record) {
+                                if (! $record) {
                                     return '—';
                                 }
 
@@ -60,12 +63,12 @@ class EventResource extends Resource
                                     $widget->record = $record;
                                     $widget->loadCalculations();
 
-                                    $plnData   = $widget->detailedCalculations[$participantCount]['PLN'] ?? null;
+                                    $plnData = $widget->detailedCalculations[$participantCount]['PLN'] ?? null;
                                     $totalCost = $plnData ? round((float) ($plnData['total'] ?? 0), 2) : 0.0;
                                     $perPerson = $participantCount > 0 ? $totalCost / $participantCount : 0;
 
-                                    return 'SUMA KOŃCOWA dla PLN: ' . number_format($totalCost, 2, '.', ',') . ' PLN' . "\n" .
-                                           'Cena za osobę (uczestnik): ' . number_format($perPerson, 2, '.', ',') . ' PLN';
+                                    return 'SUMA KOŃCOWA dla PLN: '.number_format($totalCost, 2, '.', ',').' PLN'."\n".
+                                           'Cena za osobę (uczestnik): '.number_format($perPerson, 2, '.', ',').' PLN';
                                 } catch (\Throwable $e) {
                                     return 'Brak danych kalkulacji';
                                 }
@@ -76,7 +79,7 @@ class EventResource extends Resource
                             ->label('Do zapłaty przez biuro')
                             ->helperText('Z aktywnego rozliczenia — po rezerwacjach i ustaleniach')
                             ->content(function ($record): string {
-                                if (!$record) {
+                                if (! $record) {
                                     return '—';
                                 }
                                 try {
@@ -84,9 +87,11 @@ class EventResource extends Resource
                                         ->whereIn('status', ['draft', 'active', 'pilot_settled'])
                                         ->latest('id')->first();
                                     if ($s && $s->planned_cost_pln !== null) {
-                                        return number_format((float) $s->planned_cost_pln, 2, ',', ' ') . ' PLN';
+                                        return number_format((float) $s->planned_cost_pln, 2, ',', ' ').' PLN';
                                     }
-                                } catch (\Throwable) {}
+                                } catch (\Throwable) {
+                                }
+
                                 return '— (brak rozliczenia)';
                             }),
 
@@ -94,7 +99,7 @@ class EventResource extends Resource
                             ->label('Już zapłacono przez biuro')
                             ->helperText('Suma kwot faktycznie przelanych do wykonawców')
                             ->content(function ($record): string {
-                                if (!$record) {
+                                if (! $record) {
                                     return '—';
                                 }
                                 try {
@@ -102,9 +107,11 @@ class EventResource extends Resource
                                         ->whereIn('status', ['draft', 'active', 'pilot_settled'])
                                         ->latest('id')->first();
                                     if ($s && $s->actual_cost_pln !== null) {
-                                        return number_format((float) $s->actual_cost_pln, 2, ',', ' ') . ' PLN';
+                                        return number_format((float) $s->actual_cost_pln, 2, ',', ' ').' PLN';
                                     }
-                                } catch (\Throwable) {}
+                                } catch (\Throwable) {
+                                }
+
                                 return '— (brak rozliczenia)';
                             }),
 
@@ -112,7 +119,7 @@ class EventResource extends Resource
                             ->label('Wpłaty klientów')
                             ->helperText('Suma wpłat ze wszystkich umów tej imprezy')
                             ->content(function ($record): string {
-                                if (!$record) {
+                                if (! $record) {
                                     return '—';
                                 }
                                 try {
@@ -120,8 +127,11 @@ class EventResource extends Resource
                                         return '— (brak umów)';
                                     }
                                     $paid = $record->agreements()->sum('amount_paid');
-                                    return number_format((float) $paid, 2, ',', ' ') . ' PLN';
-                                } catch (\Throwable) {}
+
+                                    return number_format((float) $paid, 2, ',', ' ').' PLN';
+                                } catch (\Throwable) {
+                                }
+
                                 return '—';
                             }),
                     ]),
@@ -145,20 +155,20 @@ class EventResource extends Resource
                             ->afterStateUpdated(fn (callable $get, callable $set) => static::refreshTotalCostFromTemplateState($set, $get))
                             ->helperText('Wybierz szablon, na podstawie którego zostanie utworzona impreza')
                             ->columnSpanFull(),
-                        
+
                         Forms\Components\TextInput::make('name')
                             ->label('Nazwa imprezy')
                             ->required()
                             ->maxLength(255)
                             ->helperText('Wprowadź nazwę imprezy dla klienta'),
-                        
+
                         Forms\Components\Select::make('status')
                             ->label('Status')
                             ->options(Event::getStatusOptions())
                             ->default(Event::STATUS_INQUIRY)
                             ->required(),
                     ]),
-                
+
                 Forms\Components\Section::make('Informacje o kliencie')
                     ->columns(3)
                     ->schema([
@@ -180,7 +190,7 @@ class EventResource extends Resource
                                     return null;
                                 }
 
-                                return $contractor->name . ' (' . ($contractor->city ?? 'brak miasta') . ')';
+                                return $contractor->name.' ('.($contractor->city ?? 'brak miasta').')';
                             })
                             ->reactive()
                             ->afterStateUpdated(function ($state, callable $set): void {
@@ -204,18 +214,18 @@ class EventResource extends Resource
                             ->label('Zamawiający')
                             ->required()
                             ->maxLength(255),
-                        
+
                         Forms\Components\TextInput::make('client_email')
                             ->label('Email klienta')
                             ->email()
                             ->maxLength(255),
-                        
+
                         Forms\Components\TextInput::make('client_phone')
                             ->label('Telefon klienta')
                             ->tel()
                             ->maxLength(20),
                     ]),
-                
+
                 Forms\Components\Section::make('Szczegóły imprezy')
                     ->columns(3)
                     ->schema([
@@ -237,17 +247,19 @@ class EventResource extends Resource
                                     if ($end->lt($start)) {
                                         $set('end_date', $start->toDateString());
                                         $set('duration_days', 1);
+
                                         return;
                                     }
 
                                     $set('duration_days', max(1, $start->diffInDays($end) + 1));
+
                                     return;
                                 }
 
                                 $duration = max(1, (int) ($get('duration_days') ?? 1));
                                 $set('end_date', $start->copy()->addDays($duration - 1)->toDateString());
                             }),
-                        
+
                         Forms\Components\DatePicker::make('end_date')
                             ->label('Data zakończenia')
                             ->native(false)
@@ -264,6 +276,7 @@ class EventResource extends Resource
                                 if ($end->lt($start)) {
                                     $set('end_date', $start->toDateString());
                                     $set('duration_days', 1);
+
                                     return;
                                 }
 
@@ -286,7 +299,7 @@ class EventResource extends Resource
                                 $set('end_date', $start->copy()->addDays($days - 1)->toDateString());
                             })
                             ->helperText('Obliczana automatycznie na podstawie dat lub kopiowana z szablonu'),
-                        
+
                         Forms\Components\TextInput::make('participant_count')
                             ->label('Liczba uczestników')
                             ->numeric()
@@ -304,7 +317,7 @@ class EventResource extends Resource
                             ->reactive()
                             ->afterStateUpdated(fn (callable $get, callable $set) => static::refreshTotalCostFromTemplateState($set, $get))
                             ->helperText('Pole pomocnicze do kalkulacji ceny (nie jest zapisywane w events).'),
-                        
+
                         Forms\Components\TextInput::make('total_cost')
                             ->label('Cena z kalkulacji (PLN)')
                             ->numeric()
@@ -313,7 +326,7 @@ class EventResource extends Resource
                             ->readOnly()
                             ->hidden(fn (string $operation) => $operation === 'edit')
                             ->helperText('Obliczany automatycznie na podstawie szablonu i danych imprezy.'),
-                        
+
                         Forms\Components\Select::make('assigned_to')
                             ->label('Pilot / opiekun')
                             ->options(User::pluck('name', 'id'))
@@ -406,7 +419,7 @@ class EventResource extends Resource
                         Forms\Components\RichEditor::make('pickup_place_details')
                             ->label('Dodatkowe miejsce podstawienia')
                             ->toolbarButtons([
-                                'bold', 'italic', 'underline', 'strike', 'link', 'bulletList', 'orderedList', 'blockquote', 'codeBlock', 'h2', 'h3', 'color', 'highlight', 'undo', 'redo'
+                                'bold', 'italic', 'underline', 'strike', 'link', 'bulletList', 'orderedList', 'blockquote', 'codeBlock', 'h2', 'h3', 'color', 'highlight', 'undo', 'redo',
                             ])
                             ->columnSpanFull()
                             ->visible(fn (): bool => Schema::hasColumn('events', 'pickup_place_details'))
@@ -427,28 +440,28 @@ class EventResource extends Resource
                         Forms\Components\RichEditor::make('office_notes')
                             ->label('Uwagi dla biura')
                             ->toolbarButtons([
-                                'bold', 'italic', 'underline', 'strike', 'link', 'bulletList', 'orderedList', 'blockquote', 'codeBlock', 'h2', 'h3', 'color', 'highlight', 'undo', 'redo'
+                                'bold', 'italic', 'underline', 'strike', 'link', 'bulletList', 'orderedList', 'blockquote', 'codeBlock', 'h2', 'h3', 'color', 'highlight', 'undo', 'redo',
                             ])
                             ->visible(fn (): bool => Schema::hasColumn('events', 'office_notes')),
 
                         Forms\Components\RichEditor::make('pilot_notes')
                             ->label('Uwagi dla pilota')
                             ->toolbarButtons([
-                                'bold', 'italic', 'underline', 'strike', 'link', 'bulletList', 'orderedList', 'blockquote', 'codeBlock', 'h2', 'h3', 'color', 'highlight', 'undo', 'redo'
+                                'bold', 'italic', 'underline', 'strike', 'link', 'bulletList', 'orderedList', 'blockquote', 'codeBlock', 'h2', 'h3', 'color', 'highlight', 'undo', 'redo',
                             ])
                             ->visible(fn (): bool => Schema::hasColumn('events', 'pilot_notes')),
 
                         Forms\Components\RichEditor::make('driver_notes')
                             ->label('Uwagi dla kierowcy')
                             ->toolbarButtons([
-                                'bold', 'italic', 'underline', 'strike', 'link', 'bulletList', 'orderedList', 'blockquote', 'codeBlock', 'h2', 'h3', 'color', 'highlight', 'undo', 'redo'
+                                'bold', 'italic', 'underline', 'strike', 'link', 'bulletList', 'orderedList', 'blockquote', 'codeBlock', 'h2', 'h3', 'color', 'highlight', 'undo', 'redo',
                             ])
                             ->visible(fn (): bool => Schema::hasColumn('events', 'driver_notes')),
 
                         Forms\Components\RichEditor::make('notes')
                             ->label('Uwagi ogólne')
                             ->toolbarButtons([
-                                'bold', 'italic', 'underline', 'strike', 'link', 'bulletList', 'orderedList', 'blockquote', 'codeBlock', 'h2', 'h3', 'color', 'highlight', 'undo', 'redo'
+                                'bold', 'italic', 'underline', 'strike', 'link', 'bulletList', 'orderedList', 'blockquote', 'codeBlock', 'h2', 'h3', 'color', 'highlight', 'undo', 'redo',
                             ])
                             ->placeholder('Dodatkowe uwagi widoczne globalnie dla imprezy.')
                             ->helperText('Tu możesz wpisać uwagi operacyjne do całej imprezy.'),
@@ -464,8 +477,9 @@ class EventResource extends Resource
         $participantCount = max(1, (int) ($get('participant_count') ?? 1));
         $gratisCount = max(0, (int) ($get('gratis_count') ?? 0));
 
-        if (!$templateId || !$startPlaceId || $participantCount < 1) {
+        if (! $templateId || ! $startPlaceId || $participantCount < 1) {
             $set('total_cost', 0);
+
             return;
         }
 
@@ -476,12 +490,12 @@ class EventResource extends Resource
     {
         $template = EventTemplate::find($templateId);
 
-        if (!$template) {
+        if (! $template) {
             return 0.0;
         }
 
         try {
-            $engine = new \App\Services\EventTemplateCalculationEngine();
+            $engine = new \App\Services\EventTemplateCalculationEngine;
             $exact = $engine->calculateDetailedForCustomGroup(
                 $template,
                 $participantCount,
@@ -491,7 +505,7 @@ class EventResource extends Resource
                 false
             );
 
-            if (!empty($exact)) {
+            if (! empty($exact)) {
                 if (array_key_exists('price_base', $exact) && $exact['price_base'] !== null) {
                     return round((float) $exact['price_base'], 2);
                 }
@@ -519,14 +533,13 @@ class EventResource extends Resource
         }
 
         $bestMatch = $priceRows
-            ->sortBy(fn ($row) =>
-                (((int) ($row->start_place_id ?? 0) === $startPlaceId) ? 0 : 1000000) +
+            ->sortBy(fn ($row) => (((int) ($row->start_place_id ?? 0) === $startPlaceId) ? 0 : 1000000) +
                 abs(((int) optional($row->eventTemplateQty)->qty) - $participantCount) +
                 abs(((int) (optional($row->eventTemplateQty)->gratis ?? 0)) - $gratisCount)
             )
             ->first();
 
-        if (!$bestMatch) {
+        if (! $bestMatch) {
             return 0.0;
         }
 
@@ -553,7 +566,7 @@ class EventResource extends Resource
         }
 
         $template = EventTemplate::query()->find($templateId);
-        if (!$template) {
+        if (! $template) {
             return max(0, $fallback);
         }
 
@@ -581,6 +594,7 @@ class EventResource extends Resource
 
         if ($calculated <= 0) {
             $templateTransfer = (float) ($template->transfer_km ?? 0);
+
             return max(0, $templateTransfer > 0 ? $templateTransfer : $fallback);
         }
 
@@ -608,27 +622,27 @@ class EventResource extends Resource
                     ->html()
                     ->state(function ($record): string {
                         $start = $record->start_date ? $record->start_date->format('d.m.Y') : '—';
-                        $end   = $record->end_date   ? $record->end_date->format('d.m.Y')   : null;
-                        $days  = max(1, (int) ($record->duration_days ?? 1));
-                        $daysLabel = $days === 1 ? '1 dzień' : $days . ' dni';
+                        $end = $record->end_date ? $record->end_date->format('d.m.Y') : null;
+                        $days = max(1, (int) ($record->duration_days ?? 1));
+                        $daysLabel = $days === 1 ? '1 dzień' : $days.' dni';
 
                         $termin = '<div style="font-size:0.75rem;color:#6b7280;margin-bottom:2px">'
-                            . e($start);
+                            .e($start);
                         if ($end && $end !== $start) {
-                            $termin .= ' – ' . e($end);
+                            $termin .= ' – '.e($end);
                         }
-                        $termin .= ' <span style="color:#9ca3af">(' . e($daysLabel) . ')</span></div>';
+                        $termin .= ' <span style="color:#9ca3af">('.e($daysLabel).')</span></div>';
 
                         $nazwa = '<div style="font-weight:700;font-size:0.9rem;color:#111827;line-height:1.3">'
-                            . e($record->name ?? '—') . '</div>';
+                            .e($record->name ?? '—').'</div>';
 
                         $szablon = '';
                         if ($record->eventTemplate?->name) {
                             $szablon = '<div style="font-size:0.72rem;color:#9ca3af;margin-top:2px">'
-                                . e($record->eventTemplate->name) . '</div>';
+                                .e($record->eventTemplate->name).'</div>';
                         }
 
-                        return $termin . $nazwa . $szablon;
+                        return $termin.$nazwa.$szablon;
                     }),
 
                 // --- Start / Klient ---
@@ -640,15 +654,16 @@ class EventResource extends Resource
                         $parts = [];
                         if ($record->startPlace?->name) {
                             $parts[] = '<div style="font-size:0.75rem;color:#6b7280;margin-bottom:2px">'
-                                . e($record->startPlace->name) . '</div>';
+                                .e($record->startPlace->name).'</div>';
                         }
-                        $parts[] = '<div style="font-weight:500">' . e($record->client_name ?? '—') . '</div>';
+                        $parts[] = '<div style="font-weight:500">'.e($record->client_name ?? '—').'</div>';
                         if ($record->client_phone) {
-                            $parts[] = '<div style="font-size:0.75rem;color:#6b7280">' . e($record->client_phone) . '</div>';
+                            $parts[] = '<div style="font-size:0.75rem;color:#6b7280">'.e($record->client_phone).'</div>';
                         }
                         if ($record->client_email) {
-                            $parts[] = '<div style="font-size:0.75rem;color:#6b7280">' . e($record->client_email) . '</div>';
+                            $parts[] = '<div style="font-size:0.75rem;color:#6b7280">'.e($record->client_email).'</div>';
                         }
+
                         return implode('', $parts);
                     }),
 
@@ -659,17 +674,19 @@ class EventResource extends Resource
                     ->alignCenter()
                     ->html()
                     ->state(function ($record): string {
-                        $total  = (int) ($record->participant_count ?? 0);
+                        $total = (int) ($record->participant_count ?? 0);
                         $gratis = 0;
                         try {
                             $gratis = $record->resolveGratisCountForParticipantCount($total);
-                        } catch (\Throwable) {}
+                        } catch (\Throwable) {
+                        }
 
-                        $base = '<span style="font-weight:700;font-size:0.9rem">' . e($total) . '</span>';
-                        $gr   = $gratis > 0
-                            ? '<span style="color:#6b7280;font-size:0.8rem">+' . e($gratis) . '</span>'
+                        $base = '<span style="font-weight:700;font-size:0.9rem">'.e($total).'</span>';
+                        $gr = $gratis > 0
+                            ? '<span style="color:#6b7280;font-size:0.8rem">+'.e($gratis).'</span>'
                             : '';
-                        return $base . $gr;
+
+                        return $base.$gr;
                     }),
 
                 // --- Finanse: Do zapłaty / Zapłacono (X/Y) / Brakuje ---
@@ -678,7 +695,7 @@ class EventResource extends Resource
                     ->sortable()
                     ->html()
                     ->state(function ($record): string {
-                        $fmt = fn ($v) => number_format((float) ($v ?? 0), 2, ',', ' ') . ' PLN';
+                        $fmt = fn ($v) => number_format((float) ($v ?? 0), 2, ',', ' ').' PLN';
 
                         $participantCount = max(1, (int) ($record->participant_count ?? 1));
 
@@ -691,7 +708,7 @@ class EventResource extends Resource
                             static $calcCache = [];
                             $cacheKey = (int) ($record->id ?? 0);
 
-                            if (!array_key_exists($cacheKey, $calcCache)) {
+                            if (! array_key_exists($cacheKey, $calcCache)) {
                                 $widget = app(\App\Filament\Resources\EventResource\Widgets\EventPriceTable::class);
                                 $widget->record = $record;
                                 $widget->loadCalculations();
@@ -722,32 +739,31 @@ class EventResource extends Resource
                         $paidAmount = (float) ($record->agreements_amount_paid_total ?? 0);
 
                         $totalCount = (int) ($record->participant_count ?? 0);
-                        $paidCount  = (int) ($record->paid_participants_count ?? 0);
-                        $brakuje    = max(0.0, $dueAmount - $paidAmount);
+                        $paidCount = (int) ($record->paid_participants_count ?? 0);
+                        $brakuje = max(0.0, $dueAmount - $paidAmount);
 
-                        $row = fn (string $label, string $value, string $vColor = '#111827') =>
-                            '<tr>'
-                            . '<td style="padding:1px 8px 1px 0;color:#9ca3af;font-size:0.72rem;white-space:nowrap">' . $label . '</td>'
-                            . '<td style="color:' . $vColor . ';font-size:0.78rem;font-weight:600;white-space:nowrap">' . $value . '</td>'
-                            . '</tr>';
+                        $row = fn (string $label, string $value, string $vColor = '#111827') => '<tr>'
+                            .'<td style="padding:1px 8px 1px 0;color:#9ca3af;font-size:0.72rem;white-space:nowrap">'.$label.'</td>'
+                            .'<td style="color:'.$vColor.';font-size:0.78rem;font-weight:600;white-space:nowrap">'.$value.'</td>'
+                            .'</tr>';
 
                         $paidDisplay = e($fmt($paidAmount));
                         if ($totalCount > 0) {
                             $paidDisplay .= ' <span style="color:#9ca3af;font-weight:400;font-size:0.7rem">('
-                                . $paidCount . '/' . $totalCount . ')</span>';
+                                .$paidCount.'/'.$totalCount.')</span>';
                         }
 
                         $brakujeColor = $brakuje > 0.001 ? '#dc2626' : '#047857';
 
                         return '<table style="border-collapse:collapse">'
-                            . $row('Do zapłaty (łącznie):', e($fmt($dueAmount)))
-                            . $row('Cena za os.:', number_format($pricePerPerson, 2, ',', ' ') . ' PLN', '#1f2937')
-                            . '<tr>'
-                            . '<td style="padding:1px 8px 1px 0;color:#9ca3af;font-size:0.72rem;white-space:nowrap">Zapłacono:</td>'
-                            . '<td style="color:#047857;font-size:0.78rem;font-weight:600;white-space:nowrap">' . $paidDisplay . '</td>'
-                            . '</tr>'
-                            . $row('Brakuje:', e($fmt($brakuje)), $brakujeColor)
-                            . '</table>';
+                            .$row('Do zapłaty (łącznie):', e($fmt($dueAmount)))
+                            .$row('Cena za os.:', number_format($pricePerPerson, 2, ',', ' ').' PLN', '#1f2937')
+                            .'<tr>'
+                            .'<td style="padding:1px 8px 1px 0;color:#9ca3af;font-size:0.72rem;white-space:nowrap">Zapłacono:</td>'
+                            .'<td style="color:#047857;font-size:0.78rem;font-weight:600;white-space:nowrap">'.$paidDisplay.'</td>'
+                            .'</tr>'
+                            .$row('Brakuje:', e($fmt($brakuje)), $brakujeColor)
+                            .'</table>';
                     }),
 
                 // --- Uwagi biura ---
@@ -800,8 +816,8 @@ class EventResource extends Resource
 
                 Tables\Filters\SelectFilter::make('event_template_id')
                     ->label('Szablon')
-                        ->options(EventTemplate::where('deleted_at', null)->pluck('name', 'id'))
-                        ->searchable(),
+                    ->options(EventTemplate::where('deleted_at', null)->pluck('name', 'id'))
+                    ->searchable(),
 
                 Tables\Filters\SelectFilter::make('start_place_id')
                     ->label('Miejsce podstawienia')
@@ -818,7 +834,7 @@ class EventResource extends Resource
                     ->query(function (Builder $query, array $data): Builder {
                         return $query->when(
                             $data['value'] ?? null,
-                            fn (Builder $query, $value): Builder => $query->where('transport_company_name', 'like', '%' . $value . '%'),
+                            fn (Builder $query, $value): Builder => $query->where('transport_company_name', 'like', '%'.$value.'%'),
                         );
                     }),
 
@@ -832,10 +848,10 @@ class EventResource extends Resource
                     ->query(function (Builder $query, array $data): Builder {
                         return $query->when(
                             $data['value'] ?? null,
-                            fn (Builder $query, $value): Builder => $query->where('driver_name', 'like', '%' . $value . '%'),
+                            fn (Builder $query, $value): Builder => $query->where('driver_name', 'like', '%'.$value.'%'),
                         );
                     }),
-                
+
                 Tables\Filters\Filter::make('start_date')
                     ->label('Data rozpoczęcia')
                     ->form([
@@ -925,7 +941,7 @@ class EventResource extends Resource
     {
         $query = parent::getEloquentQuery();
 
-        if (!Schema::hasTable('event_agreements')) {
+        if (! Schema::hasTable('event_agreements')) {
             return $query->with(['qtyVariants:id,event_id,qty,gratis']);
         }
 

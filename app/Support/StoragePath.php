@@ -19,7 +19,7 @@ final class StoragePath
         if (str_starts_with($path, 'http://') || str_starts_with($path, 'https://')) {
             $parsedPath = parse_url($path, PHP_URL_PATH);
 
-            if (!is_string($parsedPath) || $parsedPath === '') {
+            if (! is_string($parsedPath) || $parsedPath === '') {
                 return null;
             }
 
@@ -47,6 +47,6 @@ final class StoragePath
     {
         $normalized = self::normalize($path);
 
-        return $normalized ? '/storage/' . $normalized : null;
+        return $normalized ? '/storage/'.$normalized : null;
     }
 }

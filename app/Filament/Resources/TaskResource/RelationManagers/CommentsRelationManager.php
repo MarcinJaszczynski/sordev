@@ -48,6 +48,7 @@ class CommentsRelationManager extends RelationManager
                 Tables\Actions\CreateAction::make()
                     ->mutateFormDataUsing(function (array $data): array {
                         $data['author_id'] = Auth::id();
+
                         return $data;
                     }),
             ])
@@ -61,4 +62,4 @@ class CommentsRelationManager extends RelationManager
                 ]),
             ]);
     }
-} 
+}

@@ -2,10 +2,10 @@
 
 namespace App\Filament\Resources\EventTemplateResource\Widgets;
 
-use Filament\Widgets\Widget;
-use Illuminate\Support\Facades\Auth;
 use App\Services\PriceRecalcProgress;
+use Filament\Widgets\Widget;
 use Illuminate\Contracts\View\View;
+use Illuminate\Support\Facades\Auth;
 
 class PriceRecalcProgressWidget extends Widget
 {
@@ -14,15 +14,18 @@ class PriceRecalcProgressWidget extends Widget
     protected static bool $isLazy = false;
 
     public $progress = [];
+
     public $visible = false;
+
     public $dismissed = false;
+
     public $lastStartedAt = null;
 
     protected $listeners = [
         'priceRecalcStarted' => 'refreshProgress',
     ];
 
-    protected int | string | array $columnSpan = 1;
+    protected int|string|array $columnSpan = 1;
 
     // Livewire polling every 5 seconds
     protected static ?int $pollingInterval = 5;
@@ -36,6 +39,7 @@ class PriceRecalcProgressWidget extends Widget
     {
         // ensure progress is fresh on each render
         $this->refreshProgress();
+
         return view(static::$view);
     }
 
@@ -57,7 +61,7 @@ class PriceRecalcProgressWidget extends Widget
         $total = $this->progress['total'] ?? 0;
         $finished = $this->progress['finished'] ?? false;
         // pokaż toast dopóki trwa przeliczanie
-        $this->visible = !$this->dismissed && $total > 0 && !$finished;
+        $this->visible = ! $this->dismissed && $total > 0 && ! $finished;
     }
 
     public function closeToast(): void

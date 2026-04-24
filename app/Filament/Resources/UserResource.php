@@ -18,13 +18,19 @@ class UserResource extends Resource
 {
     /**
      * Powiązany model Eloquent
+     *
      * @var class-string<User>
      */
     protected static ?string $model = User::class;
+
     protected static ?string $navigationIcon = 'heroicon-o-users';
+
     protected static ?string $navigationLabel = 'Użytkownicy';
+
     protected static ?string $navigationGroup = 'Admin';
+
     protected static ?string $modelLabel = 'użytkownik';
+
     protected static ?string $pluralModelLabel = 'użytkownicy';
 
     /**
@@ -63,8 +69,8 @@ class UserResource extends Resource
                     Forms\Components\TextInput::make('password')
                         ->label('Hasło')
                         ->password()
-                        ->dehydrateStateUsing(fn($state) => !empty($state) ? bcrypt($state) : null)
-                        ->required(fn($context) => $context === 'create')
+                        ->dehydrateStateUsing(fn ($state) => ! empty($state) ? bcrypt($state) : null)
+                        ->required(fn ($context) => $context === 'create')
                         ->maxLength(255)
                         ->nullable(),
                     Forms\Components\Select::make('status')
@@ -104,15 +110,15 @@ class UserResource extends Resource
         return $table->columns([
             Tables\Columns\TextColumn::make('name')->label('Imię i nazwisko')->searchable(),
             Tables\Columns\TextColumn::make('email')->label('E-mail')->searchable(),
-            Tables\Columns\TextColumn::make('status')->label('Status')->formatStateUsing(fn($state) => $state === 'active' ? 'Aktywny' : 'Nieaktywny'),
+            Tables\Columns\TextColumn::make('status')->label('Status')->formatStateUsing(fn ($state) => $state === 'active' ? 'Aktywny' : 'Nieaktywny'),
         ])
-        ->actions([
-            Tables\Actions\EditAction::make()->label('Edytuj'),
-            Tables\Actions\DeleteAction::make()->label('Usuń'),
-        ])
-        ->bulkActions([
-            Tables\Actions\DeleteBulkAction::make()->label('Usuń zaznaczone'),
-        ]);
+            ->actions([
+                Tables\Actions\EditAction::make()->label('Edytuj'),
+                Tables\Actions\DeleteAction::make()->label('Usuń'),
+            ])
+            ->bulkActions([
+                Tables\Actions\DeleteBulkAction::make()->label('Usuń zaznaczone'),
+            ]);
     }
 
     /**

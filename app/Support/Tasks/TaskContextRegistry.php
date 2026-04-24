@@ -147,7 +147,7 @@ class TaskContextRegistry
             $record instanceof EventSettlementDocument => static::formatSettlementDocumentLabel($record),
             $record instanceof EventSettlementParticipantPayment => static::formatSettlementPaymentLabel($record),
             $record instanceof PilotCashPreparation => static::formatPilotCashLabel($record),
-            default => method_exists($record, '__toString') ? (string) $record : class_basename($record) . ' #' . $record->getKey(),
+            default => method_exists($record, '__toString') ? (string) $record : class_basename($record).' #'.$record->getKey(),
         };
     }
 
@@ -155,7 +155,7 @@ class TaskContextRegistry
     {
         $date = $event->start_date?->format('d.m.Y');
 
-        return trim(sprintf('%s%s (#%d)', $event->name, $date ? ' • ' . $date : '', $event->getKey()));
+        return trim(sprintf('%s%s (#%d)', $event->name, $date ? ' • '.$date : '', $event->getKey()));
     }
 
     protected static function formatEventTemplateLabel(EventTemplate $template): string
@@ -170,9 +170,9 @@ class TaskContextRegistry
             ?: 'Punkt programu';
 
         $eventName = $programPoint->relationLoaded('event') ? $programPoint->event?->name : null;
-        $dayLabel = $programPoint->day ? ' • dzień ' . $programPoint->day : '';
+        $dayLabel = $programPoint->day ? ' • dzień '.$programPoint->day : '';
 
-        return trim($pointName . ($eventName ? ' • ' . $eventName : '') . $dayLabel . ' (#' . $programPoint->getKey() . ')');
+        return trim($pointName.($eventName ? ' • '.$eventName : '').$dayLabel.' (#'.$programPoint->getKey().')');
     }
 
     protected static function formatEventTemplateProgramPointLabel(EventTemplateProgramPoint $programPoint): string
@@ -191,9 +191,9 @@ class TaskContextRegistry
             ? $document->event?->name
             : $document->event?->name;
 
-        $name = $document->name ?: ('Dokument #' . $document->getKey());
+        $name = $document->name ?: ('Dokument #'.$document->getKey());
 
-        return trim($name . ($eventName ? ' • ' . $eventName : ''));
+        return trim($name.($eventName ? ' • '.$eventName : ''));
     }
 
     protected static function formatSettlementCostLabel(EventSettlementCost $cost): string
@@ -202,7 +202,7 @@ class TaskContextRegistry
             ? $cost->settlement?->event?->name
             : $cost->settlement?->event?->name;
 
-        return trim(($cost->name ?: 'Pozycja kosztu') . ($eventName ? ' • ' . $eventName : '') . ' (#' . $cost->getKey() . ')');
+        return trim(($cost->name ?: 'Pozycja kosztu').($eventName ? ' • '.$eventName : '').' (#'.$cost->getKey().')');
     }
 
     protected static function formatSettlementDocumentLabel(EventSettlementDocument $document): string
@@ -211,9 +211,9 @@ class TaskContextRegistry
             ? $document->settlement?->event?->name
             : $document->settlement?->event?->name;
 
-        $docNumber = $document->document_number ?: ('Dokument #' . $document->getKey());
+        $docNumber = $document->document_number ?: ('Dokument #'.$document->getKey());
 
-        return trim($docNumber . ($eventName ? ' • ' . $eventName : ''));
+        return trim($docNumber.($eventName ? ' • '.$eventName : ''));
     }
 
     protected static function formatSettlementPaymentLabel(EventSettlementParticipantPayment $payment): string
@@ -224,7 +224,7 @@ class TaskContextRegistry
 
         $label = $payment->participant_name ?: 'Wpłata uczestnika';
 
-        return trim($label . ($eventName ? ' • ' . $eventName : '') . ' (#' . $payment->getKey() . ')');
+        return trim($label.($eventName ? ' • '.$eventName : '').' (#'.$payment->getKey().')');
     }
 
     protected static function formatPilotCashLabel(PilotCashPreparation $cash): string
@@ -234,6 +234,6 @@ class TaskContextRegistry
             : $cash->settlement?->event?->name;
         $currency = $cash->relationLoaded('currency') ? $cash->currency?->symbol : $cash->currency?->symbol;
 
-        return trim('Gotówka pilota' . ($currency ? ' ' . $currency : '') . ($eventName ? ' • ' . $eventName : '') . ' (#' . $cash->getKey() . ')');
+        return trim('Gotówka pilota'.($currency ? ' '.$currency : '').($eventName ? ' • '.$eventName : '').' (#'.$cash->getKey().')');
     }
 }

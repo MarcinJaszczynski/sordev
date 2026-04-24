@@ -2,17 +2,18 @@
 
 namespace App\Console\Commands;
 
+use App\Models\BlogPost;
+use App\Models\EventTemplate;
+use App\Models\Place;
 use Illuminate\Console\Command;
+use Illuminate\Support\Facades\URL as URLFacade;
 use Spatie\Sitemap\Sitemap;
 use Spatie\Sitemap\Tags\Url;
-use App\Models\Place;
-use App\Models\EventTemplate;
-use App\Models\BlogPost;
-use Illuminate\Support\Facades\URL as URLFacade;
 
 class GenerateSitemap extends Command
 {
     protected $signature = 'sitemap:generate {--base-url= : Publiczny adres serwisu, np. https://example.com}';
+
     protected $description = 'Generate XML sitemap for the website';
 
     public function handle()
@@ -24,6 +25,7 @@ class GenerateSitemap extends Command
 
         if ($baseUrl === '' || $host === '' || $this->isLoopbackHost($host)) {
             $this->error('❌ Ustaw publiczny adres serwisu (APP_PUBLIC_URL/APP_URL) lub podaj --base-url, bo aktualny wskazuje na localhost/127.0.0.1.');
+
             return 1;
         }
 
@@ -38,11 +40,12 @@ class GenerateSitemap extends Command
 
         // Pobierz pierwszy region do generowania URLs
         $defaultRegion = Place::first();
-        if (!$defaultRegion) {
+        if (! $defaultRegion) {
             $this->error('❌ Brak regionów w bazie danych!');
+
             return 1;
         }
-        
+
         $defaultSlug = \Illuminate\Support\Str::slug($defaultRegion->name);
 
         // Dodaj stronę główną (z domyślnym regionem)
@@ -55,7 +58,7 @@ class GenerateSitemap extends Command
         $places = Place::limit(50)->get(); // Limit 50 regionów dla sitemapy
         foreach ($places as $place) {
             $slug = \Illuminate\Support\Str::slug($place->name);
-            
+
             // Strona główna regionu
             $sitemap->add(Url::create(route('home', ['regionSlug' => $slug]))
                 ->setLastModificationDate($place->updated_at ?? now())
@@ -107,24 +110,24 @@ class GenerateSitemap extends Command
             $region = $template->startPlace ?? $defaultRegion;
             if ($region) {
                 $regionSlug = \Illuminate\Support\Str::slug($region->name);
-                
+
                 $templateSlug = \Illuminate\Support\Str::slug($template->name);
-                $dayLength = $template->duration_days . '-dniowe';
-                
+                $dayLength = $template->duration_days.'-dniowe';
+
                 try {
                     $url = route('package.pretty', [
                         'regionSlug' => $regionSlug,
                         'dayLength' => $dayLength,
                         'id' => $template->id,
-                        'slug' => $templateSlug
+                        'slug' => $templateSlug,
                     ]);
-                    
+
                     $sitemap->add(Url::create($url)
                         ->setLastModificationDate($template->updated_at)
                         ->setChangeFrequency(Url::CHANGE_FREQUENCY_WEEKLY)
                         ->setPriority(0.8));
                 } catch (\Exception $e) {
-                    $this->warn("⚠️  Nie można wygenerować URL dla szablonu {$template->id}: " . $e->getMessage());
+                    $this->warn("⚠️  Nie można wygenerować URL dla szablonu {$template->id}: ".$e->getMessage());
                 }
             }
         }
@@ -139,13 +142,14 @@ class GenerateSitemap extends Command
                     ->setPriority(0.7));
             }
         } catch (\Exception $e) {
-            $this->warn("⚠️  Błąd przy dodawaniu artykułów bloga: " . $e->getMessage());
+            $this->warn('⚠️  Błąd przy dodawaniu artykułów bloga: '.$e->getMessage());
         }
 
         // Zapisz sitemapę
         $sitemap->writeToFile(public_path('sitemap.xml'));
-        
-        $this->info("✅ Sitemap wygenerowana pomyślnie: public/sitemap.xml");
+
+        $this->info('✅ Sitemap wygenerowana pomyślnie: public/sitemap.xml');
+
         return 0;
     }
 

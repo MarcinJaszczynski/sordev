@@ -2,13 +2,14 @@
 
 namespace App\Console\Commands;
 
-use Illuminate\Console\Command;
 use App\Models\PlaceDistance;
+use Illuminate\Console\Command;
 use Illuminate\Support\Facades\DB;
 
 class ClearPlaceDistances extends Command
 {
     protected $signature = 'db:clear-place-distances {--force : Wymuś usunięcie bez potwierdzenia}';
+
     protected $description = 'Czyści wszystkie rekordy z tabeli place_distances';
 
     public function handle()
@@ -19,15 +20,17 @@ class ClearPlaceDistances extends Command
 
             if ($count === 0) {
                 $this->info('Tabela place_distances jest już pusta.');
+
                 return 0;
             }
 
             $this->info("Znaleziono {$count} rekordów w tabeli place_distances.");
 
             // Poproś o potwierdzenie, chyba że użyto flagi --force
-            if (!$this->option('force')) {
-                if (!$this->confirm('Czy na pewno chcesz usunąć wszystkie rekordy z tabeli place_distances?')) {
+            if (! $this->option('force')) {
+                if (! $this->confirm('Czy na pewno chcesz usunąć wszystkie rekordy z tabeli place_distances?')) {
                     $this->info('Operacja anulowana.');
+
                     return 0;
                 }
             }
@@ -48,7 +51,8 @@ class ClearPlaceDistances extends Command
 
             return 0;
         } catch (\Exception $e) {
-            $this->error("❌ Błąd podczas czyszczenia tabeli: " . $e->getMessage());
+            $this->error('❌ Błąd podczas czyszczenia tabeli: '.$e->getMessage());
+
             return 1;
         }
     }

@@ -108,7 +108,7 @@ class AgreementFlowController extends Controller
             return redirect()->route('agreement.flow.payment', ['token' => $agreement->public_token]);
         }
 
-        if (!$this->isPlanConfirmed($agreement)) {
+        if (! $this->isPlanConfirmed($agreement)) {
             return redirect()
                 ->route('agreement.flow.show', ['token' => $agreement->public_token])
                 ->with('info', 'Najpierw potwierdź plan wycieczki.');
@@ -168,7 +168,7 @@ class AgreementFlowController extends Controller
             return redirect()->route('agreement.flow.payment', ['token' => $agreement->public_token]);
         }
 
-        if (!$this->hasConsents($agreement)) {
+        if (! $this->hasConsents($agreement)) {
             return redirect()
                 ->route('agreement.flow.consents', ['token' => $agreement->public_token])
                 ->with('info', 'Najpierw zaakceptuj wymagane zgody.');
@@ -188,7 +188,7 @@ class AgreementFlowController extends Controller
             return redirect()->route('agreement.flow.success', ['token' => $agreement->public_token]);
         }
 
-        if (!$this->hasConsents($agreement)) {
+        if (! $this->hasConsents($agreement)) {
             return redirect()->route('agreement.flow.consents', ['token' => $agreement->public_token]);
         }
 
@@ -435,32 +435,32 @@ class AgreementFlowController extends Controller
             return;
         }
 
-        $subject = sprintf('Potwierdzenie zawarcia umowy %s', $agreement->agreement_number ?: ('#' . $agreement->id));
+        $subject = sprintf('Potwierdzenie zawarcia umowy %s', $agreement->agreement_number ?: ('#'.$agreement->id));
         $body = implode("\n", [
             'Dziękujemy za zawarcie umowy.',
             '',
-            'Numer umowy: ' . ($agreement->agreement_number ?: ('#' . $agreement->id)),
-            'Typ umowy: ' . $agreement->agreement_type_label,
-            'Impreza: ' . ($agreement->event_name ?: ($agreement->event?->name ?? '—')),
-            'Uczestnik: ' . ($agreement->participant_name ?: '—'),
-            'Kwota opłacona: ' . number_format((float) $agreement->amount_paid, 2, ',', ' ') . ' ' . strtoupper((string) ($agreement->currency ?: 'PLN')),
-            'Data płatności: ' . optional($agreement->paid_at)->format('d.m.Y H:i'),
+            'Numer umowy: '.($agreement->agreement_number ?: ('#'.$agreement->id)),
+            'Typ umowy: '.$agreement->agreement_type_label,
+            'Impreza: '.($agreement->event_name ?: ($agreement->event?->name ?? '—')),
+            'Uczestnik: '.($agreement->participant_name ?: '—'),
+            'Kwota opłacona: '.number_format((float) $agreement->amount_paid, 2, ',', ' ').' '.strtoupper((string) ($agreement->currency ?: 'PLN')),
+            'Data płatności: '.optional($agreement->paid_at)->format('d.m.Y H:i'),
             '',
-            'Link do umowy: ' . $agreement->public_link,
+            'Link do umowy: '.$agreement->public_link,
         ]);
 
         try {
             Mail::raw($body, function ($message) use ($agreement, $recipient, $subject): void {
                 $message->to($recipient)->subject($subject);
 
-                if (!empty($agreement->customer_email) && $agreement->customer_email !== $recipient) {
+                if (! empty($agreement->customer_email) && $agreement->customer_email !== $recipient) {
                     $message->cc($agreement->customer_email);
                 }
 
                 $pdfBytes = $this->renderAgreementPdf($agreement);
 
-                if (!empty($pdfBytes)) {
-                    $fileName = 'umowa-' . ($agreement->agreement_number ?: $agreement->id) . '.pdf';
+                if (! empty($pdfBytes)) {
+                    $fileName = 'umowa-'.($agreement->agreement_number ?: $agreement->id).'.pdf';
                     $safeName = Str::of($fileName)
                         ->replace(['/', '\\', ' '], ['-', '-', '_'])
                         ->value();
@@ -471,17 +471,18 @@ class AgreementFlowController extends Controller
                 }
 
                 foreach ((array) ($agreement->attachments ?? []) as $relativePath) {
-                    if (!$relativePath) {
+                    if (! $relativePath) {
                         continue;
                     }
 
                     $absolutePath = $this->resolveAgreementAttachmentAbsolutePath((string) $relativePath);
 
-                    if (!$absolutePath) {
+                    if (! $absolutePath) {
                         Log::warning('agreement-confirmation-attachment-missing', [
                             'agreement_id' => $agreement->id,
                             'path' => $relativePath,
                         ]);
+
                         continue;
                     }
 

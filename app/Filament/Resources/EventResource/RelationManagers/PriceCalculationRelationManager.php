@@ -24,7 +24,7 @@ class PriceCalculationRelationManager extends RelationManager
                 ->orderBy('id')
                 ->first();
 
-            if (!$variant) {
+            if (! $variant) {
                 $variant = $event->qtyVariants()
                     ->get()
                     ->sortBy(fn ($row) => abs(((int) ($row->qty ?? 0)) - $participantCount))

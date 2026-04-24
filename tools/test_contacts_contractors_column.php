@@ -1,6 +1,7 @@
 <?php
-require __DIR__ . '/../vendor/autoload.php';
-$app = require __DIR__ . '/../bootstrap/app.php';
+
+require __DIR__.'/../vendor/autoload.php';
+$app = require __DIR__.'/../bootstrap/app.php';
 $kernel = $app->make(Illuminate\Contracts\Console\Kernel::class);
 $kernel->bootstrap();
 
@@ -13,6 +14,7 @@ foreach ($contacts as $c) {
 
 // load with model to check relation
 use App\Models\Contact;
+
 $models = Contact::with('contractors')->limit(10)->get();
 foreach ($models as $m) {
     echo $m->id.' contractors: '.($m->contractors->pluck('name')->implode(', ') ?: '[none]')."\n";

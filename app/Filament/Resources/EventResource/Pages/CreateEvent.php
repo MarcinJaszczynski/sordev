@@ -4,7 +4,6 @@ namespace App\Filament\Resources\EventResource\Pages;
 
 use App\Filament\Resources\EventResource;
 use App\Filament\Resources\EventResource\Traits\SearchContractorTrait;
-use Filament\Resources\Pages\CreateRecord;
 use App\Models\Bus;
 use App\Models\Contractor;
 use App\Models\Currency;
@@ -12,9 +11,10 @@ use App\Models\Event;
 use App\Models\EventTemplate;
 use App\Models\Place;
 use App\Models\User;
+use Filament\Forms;
+use Filament\Resources\Pages\CreateRecord;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Schema;
-use Filament\Forms;
 
 class CreateEvent extends CreateRecord
 {
@@ -65,8 +65,8 @@ class CreateEvent extends CreateRecord
                 ->schema([
                     Forms\Components\Select::make('event_template_id')
                         ->label('Szablon imprezy')
-                            ->options(EventTemplate::where('deleted_at', null)->pluck('name', 'id'))
-                            ->searchable()
+                        ->options(EventTemplate::where('deleted_at', null)->pluck('name', 'id'))
+                        ->searchable()
                         ->placeholder('Bez szablonu (impreza czysta)')
                         ->nullable()
                         ->reactive()
@@ -112,7 +112,7 @@ class CreateEvent extends CreateRecord
                                 return null;
                             }
 
-                            return $contractor->name . ' (' . ($contractor->city ?? 'brak miasta') . ')';
+                            return $contractor->name.' ('.($contractor->city ?? 'brak miasta').')';
                         })
                         ->createOptionForm([
                             Forms\Components\Grid::make(2)->schema([
@@ -150,16 +150,16 @@ class CreateEvent extends CreateRecord
                         ])
                         ->createOptionUsing(function (array $data): int {
                             $contractor = Contractor::create([
-                                'name'         => $data['name'],
-                                'phone'        => $data['phone'] ?? null,
-                                'email'        => $data['email'] ?? null,
-                                'nip'          => $data['nip'] ?? null,
-                                'street'       => $data['street'] ?? null,
+                                'name' => $data['name'],
+                                'phone' => $data['phone'] ?? null,
+                                'email' => $data['email'] ?? null,
+                                'nip' => $data['nip'] ?? null,
+                                'street' => $data['street'] ?? null,
                                 'house_number' => $data['house_number'] ?? null,
-                                'city'         => $data['city'] ?? null,
-                                'postal_code'  => $data['postal_code'] ?? null,
+                                'city' => $data['city'] ?? null,
+                                'postal_code' => $data['postal_code'] ?? null,
                                 'office_notes' => $data['office_notes'] ?? null,
-                                'status'       => 'active',
+                                'status' => 'active',
                             ]);
 
                             return $contractor->id;
@@ -379,7 +379,7 @@ class CreateEvent extends CreateRecord
                                 ? $get('total_cost')
                                 : null,
                         ])
-                        ->hidden(fn (callable $get) => !$get('event_template_id') || !$get('start_place_id')),
+                        ->hidden(fn (callable $get) => ! $get('event_template_id') || ! $get('start_place_id')),
 
                     Forms\Components\TextInput::make('total_cost')
                         ->label('Całkowity koszt (PLN)')
@@ -414,7 +414,7 @@ class CreateEvent extends CreateRecord
             $data['end_date'] = $start->copy()->addDays($durationDays - 1)->toDateString();
         }
 
-        if (!Schema::hasColumn('events', 'contractor_id')) {
+        if (! Schema::hasColumn('events', 'contractor_id')) {
             unset($data['contractor_id']);
         }
 
@@ -434,6 +434,7 @@ class CreateEvent extends CreateRecord
 
             $event = Event::createFromTemplate($template, $data);
             Log::info('CreateEvent:web:after_create_from_template', ['event_id' => $event->id]);
+
             return $event;
         }
 
@@ -465,8 +466,9 @@ class CreateEvent extends CreateRecord
         $participantCount = (int) ($get('participant_count') ?? 1);
         $gratisCount = max(0, (int) ($get('gratis_count') ?? 0));
 
-        if (!$templateId || !$startPlaceId || $participantCount < 1) {
+        if (! $templateId || ! $startPlaceId || $participantCount < 1) {
             $set('total_cost', 0);
+
             return;
         }
 
@@ -477,12 +479,12 @@ class CreateEvent extends CreateRecord
     {
         $template = EventTemplate::find($templateId);
 
-        if (!$template) {
+        if (! $template) {
             return 0.0;
         }
 
         try {
-            $engine = new \App\Services\EventTemplateCalculationEngine();
+            $engine = new \App\Services\EventTemplateCalculationEngine;
             $exact = $engine->calculateDetailedForCustomGroup(
                 $template,
                 $participantCount,
@@ -492,7 +494,7 @@ class CreateEvent extends CreateRecord
                 false
             );
 
-            if (!empty($exact)) {
+            if (! empty($exact)) {
                 if (array_key_exists('price_with_tax', $exact) && $exact['price_with_tax'] !== null) {
                     return round((float) $exact['price_with_tax'], 2);
                 }
@@ -526,7 +528,7 @@ class CreateEvent extends CreateRecord
         }
 
         $plnIds = Currency::plnIds();
-        if (!empty($plnIds)) {
+        if (! empty($plnIds)) {
             $plnRows = $priceRows->whereIn('currency_id', $plnIds);
             if ($plnRows->isNotEmpty()) {
                 $priceRows = $plnRows;
@@ -534,14 +536,13 @@ class CreateEvent extends CreateRecord
         }
 
         $bestMatch = $priceRows
-            ->sortBy(fn ($row) =>
-                (((int) ($row->start_place_id ?? 0) === $startPlaceId) ? 0 : 1000000) +
+            ->sortBy(fn ($row) => (((int) ($row->start_place_id ?? 0) === $startPlaceId) ? 0 : 1000000) +
                 abs(((int) optional($row->eventTemplateQty)->qty) - $participantCount) +
                 abs(((int) (optional($row->eventTemplateQty)->gratis ?? 0)) - $gratisCount)
             )
             ->first();
 
-        if (!$bestMatch) {
+        if (! $bestMatch) {
             return 0.0;
         }
 

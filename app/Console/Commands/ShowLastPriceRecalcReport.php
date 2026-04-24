@@ -8,6 +8,7 @@ use Illuminate\Support\Facades\DB;
 class ShowLastPriceRecalcReport extends Command
 {
     protected $signature = 'prices:last-report {--user=1}';
+
     protected $description = 'Pokaż ostatnie podsumowanie przeliczenia cen (z powiadomień w bazie)';
 
     public function handle(): int
@@ -19,8 +20,9 @@ class ShowLastPriceRecalcReport extends Command
                 ->where('notifiable_id', $userId)
                 ->orderByDesc('created_at')
                 ->first();
-            if (!$row) {
+            if (! $row) {
                 $this->warn('Brak powiadomień dla tego użytkownika.');
+
                 return 0;
             }
             $data = json_decode($row->data ?? '{}', true);
@@ -28,10 +30,12 @@ class ShowLastPriceRecalcReport extends Command
             $body = $data['body'] ?? ($data['content'] ?? json_encode($data));
             $this->info($title);
             $this->line($body);
-            $this->line('Czas: ' . ($row->created_at ?? '')); 
+            $this->line('Czas: '.($row->created_at ?? ''));
+
             return 0;
         } catch (\Throwable $e) {
-            $this->error('Nie udało się odczytać powiadomień: ' . $e->getMessage());
+            $this->error('Nie udało się odczytać powiadomień: '.$e->getMessage());
+
             return 1;
         }
     }

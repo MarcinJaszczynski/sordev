@@ -2,9 +2,9 @@
 
 namespace Database\Seeders;
 
-use Illuminate\Database\Seeder;
-use App\Models\EventTemplateProgramPoint;
 use App\Models\Currency;
+use App\Models\EventTemplateProgramPoint;
+use Illuminate\Database\Seeder;
 
 class EventTemplateProgramPointSeeder extends Seeder
 {
@@ -114,4 +114,4 @@ class EventTemplateProgramPointSeeder extends Seeder
             EventTemplateProgramPoint::create($point);
         }
     }
-} 
+}

@@ -2,8 +2,8 @@
 
 namespace App\Models;
 
-use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
+use Illuminate\Database\Eloquent\Model;
 
 /**
  * Model EventTemplatePricePerPerson
@@ -20,9 +20,12 @@ use Illuminate\Database\Eloquent\Factories\HasFactory;
 class EventTemplatePricePerPerson extends Model
 {
     use HasFactory;
+
     protected $table = 'event_template_price_per_person';
+
     /**
      * Pola masowo przypisywalne
+     *
      * @var array<int, string>
      */
     protected $fillable = [
@@ -59,6 +62,7 @@ class EventTemplatePricePerPerson extends Model
     {
         return $this->belongsTo(EventTemplate::class);
     }
+
     /**
      * Relacja do wariantu ilości uczestników
      */
@@ -66,6 +70,7 @@ class EventTemplatePricePerPerson extends Model
     {
         return $this->belongsTo(EventTemplateQty::class);
     }
+
     /**
      * Relacja do waluty
      */

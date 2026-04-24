@@ -2,8 +2,8 @@
 
 use Illuminate\Database\Migrations\Migration;
 use Illuminate\Database\Schema\Blueprint;
-use Illuminate\Support\Facades\Schema;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Schema;
 
 return new class extends Migration
 {
@@ -12,9 +12,13 @@ return new class extends Migration
      */
     public function up(): void
     {
+        if (Schema::getConnection()->getDriverName() !== 'sqlite') {
+            return;
+        }
+
         // W SQLite nie można bezpośrednio zmienić kolumny na PRIMARY KEY AUTOINCREMENT
         // Musimy przebudować tabelę
-        
+
         // 1. Stwórz tabelę tymczasową z poprawną strukturą
         Schema::create('event_templates_temp', function (Blueprint $table) {
             $table->id(); // To automatycznie tworzy PRIMARY KEY AUTOINCREMENT
@@ -51,11 +55,11 @@ return new class extends Migration
             $table->integer('start_place_id')->nullable();
             $table->integer('end_place_id')->nullable();
         });
-        
+
         // 2. Skopiuj dane z oryginalnej tabeli (z maksymalnym ID + 1 dla auto-increment)
         $maxId = DB::table('event_templates')->max('id') ?? 0;
-        
-        DB::statement("
+
+        DB::statement('
             INSERT INTO event_templates_temp (
                 id, name, slug, duration_days, featured_image, event_description, 
                 gallery, office_description, notes, created_at, updated_at, deleted_at,
@@ -75,14 +79,14 @@ return new class extends Migration
                 transport_notes, start_place_id, end_place_id
             FROM event_templates 
             WHERE id IS NOT NULL
-        ");
-        
+        ');
+
         // 3. Ustaw AUTOINCREMENT na następną wartość
         DB::statement("UPDATE sqlite_sequence SET seq = ? WHERE name = 'event_templates_temp'", [$maxId]);
-        
+
         // 4. Usuń starą tabelę
         Schema::dropIfExists('event_templates');
-        
+
         // 5. Zmień nazwę tabeli tymczasowej na właściwą
         Schema::rename('event_templates_temp', 'event_templates');
     }

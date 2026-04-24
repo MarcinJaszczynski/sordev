@@ -2,9 +2,9 @@
 
 namespace App\Filament\Resources;
 
-use App\Filament\Resources\TaskResource\RelationManagers\TasksRelationManager;
 use App\Filament\Resources\ContractorResource\Pages;
 use App\Filament\Resources\ContractorResource\RelationManagers\ContactsRelationManager;
+use App\Filament\Resources\TaskResource\RelationManagers\TasksRelationManager;
 use App\Models\Contractor;
 use Filament\Forms;
 use Filament\Forms\Form;
@@ -20,15 +20,20 @@ class ContractorResource extends Resource
 {
     /**
      * Powiązany model Eloquent
+     *
      * @var class-string<Contractor>
      */
     protected static ?string $model = Contractor::class;
 
     // Ikona i etykiety nawigacji w panelu
     protected static ?string $navigationIcon = 'heroicon-o-building-office';
+
     protected static ?string $navigationLabel = 'Kontrahenci';
+
     protected static ?string $navigationGroup = 'Kontakty';
+
     protected static ?string $modelLabel = 'kontrahent';
+
     protected static ?string $pluralModelLabel = 'kontrahenci';
 
     /**
@@ -161,7 +166,7 @@ class ContractorResource extends Resource
                 Tables\Columns\TextColumn::make('name')
                     ->label('Nazwa kontrahenta')
                     ->searchable()
-                    ->description(fn ($record) => trim(($record->firstname ?? '') . ' ' . ($record->surname ?? '')) ?: null),
+                    ->description(fn ($record) => trim(($record->firstname ?? '').' '.($record->surname ?? '')) ?: null),
                 Tables\Columns\TextColumn::make('phone')
                     ->label('Telefon')
                     ->searchable()
@@ -195,8 +200,7 @@ class ContractorResource extends Resource
                     ->toggleable(isToggledHiddenByDefault: true),
                 Tables\Columns\TextColumn::make('contacts')
                     ->label('Kontakty')
-                    ->formatStateUsing(fn ($state, $record) =>
-                        $record->contacts->map(fn ($contact) => $contact->first_name . ' ' . $contact->last_name)->join(', ')
+                    ->formatStateUsing(fn ($state, $record) => $record->contacts->map(fn ($contact) => $contact->first_name.' '.$contact->last_name)->join(', ')
                     )
                     ->toggleable(isToggledHiddenByDefault: true),
             ])
@@ -260,6 +264,7 @@ class ContractorResource extends Resource
         if ($user && $user->roles && $user->roles->flatMap->permissions->contains('name', 'view contractor')) {
             return true;
         }
+
         return false;
     }
 }

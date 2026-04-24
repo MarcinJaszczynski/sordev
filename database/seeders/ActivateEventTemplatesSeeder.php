@@ -3,8 +3,8 @@
 namespace Database\Seeders;
 
 use Illuminate\Database\Seeder;
-use Illuminate\Support\Str;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Str;
 
 class ActivateEventTemplatesSeeder extends Seeder
 {
@@ -30,27 +30,27 @@ class ActivateEventTemplatesSeeder extends Seeder
             $updates = ['is_active' => 1, 'updated_at' => $now];
 
             // Uzupełnij slug jeśli pusty
-            if (!$tpl->slug || trim($tpl->slug) === '') {
-                $base = Str::slug($tpl->name ?: ('szablon-' . $tpl->id));
+            if (! $tpl->slug || trim($tpl->slug) === '') {
+                $base = Str::slug($tpl->name ?: ('szablon-'.$tpl->id));
                 if ($base === '') {
-                    $base = 'et-' . $tpl->id;
+                    $base = 'et-'.$tpl->id;
                 }
                 $slug = $base;
                 $conflict = 0;
                 while (DB::table('event_templates')->where('slug', $slug)->where('id', '!=', $tpl->id)->exists()) {
                     $conflict++;
-                    $slug = $base . '-' . $conflict;
+                    $slug = $base.'-'.$conflict;
                 }
                 $updates['slug'] = $slug;
             }
 
             // Ustal duration_days jeśli brak
-            if (empty($tpl->duration_days) || (int)$tpl->duration_days <= 0) {
+            if (empty($tpl->duration_days) || (int) $tpl->duration_days <= 0) {
                 // Spróbuj wydedukować: jeśli istnieje pole 'duration' albo jakiekolwiek program points z pivot 'day'
                 $duration = null;
                 // Źródło 1: kolumna legacy 'length_days' (jeżeli istnieje)
                 if (Schema::hasColumn('event_templates', 'length_days') && $tpl->length_days) {
-                    $duration = (int)$tpl->length_days;
+                    $duration = (int) $tpl->length_days;
                 }
                 // Źródło 2: pivot program points
                 if ($duration === null) {
@@ -58,7 +58,7 @@ class ActivateEventTemplatesSeeder extends Seeder
                         ->where('event_template_id', $tpl->id)
                         ->max('day');
                     if ($maxDay) {
-                        $duration = (int)$maxDay;
+                        $duration = (int) $maxDay;
                     }
                 }
                 // Fallback

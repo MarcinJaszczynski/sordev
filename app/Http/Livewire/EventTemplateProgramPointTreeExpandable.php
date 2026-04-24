@@ -8,6 +8,7 @@ use Livewire\Component;
 class EventTemplateProgramPointTreeExpandable extends Component
 {
     public $expanded = [];
+
     public $tree = [];
 
     public function mount()
@@ -37,6 +38,7 @@ class EventTemplateProgramPointTreeExpandable extends Component
                 'children' => $this->buildTree($node->id),
             ];
         }
+
         return $tree;
     }
 

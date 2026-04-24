@@ -38,7 +38,7 @@ function makePriceRow(float $price, string $currencySymbol, int $qtyId = 1, ?int
 
 function makeTemplate(array $eventTypeNames): EventTemplate
 {
-    $template = new EventTemplate();
+    $template = new EventTemplate;
 
     $types = array_map(function (string $name) {
         return new EventType(['name' => $name]);

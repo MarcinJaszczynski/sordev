@@ -4,16 +4,16 @@ namespace App\Filament\Resources\EventTemplateResource\Pages;
 
 use App\Filament\Resources\EventTemplateResource;
 use App\Models\EventTemplate;
-use Filament\Resources\Pages\Page;
 use Filament\Actions;
-use Illuminate\Support\Facades\DB;
-use Illuminate\Contracts\View\View;
+use Filament\Resources\Pages\Page;
 
 class ProgramEventTemplate extends Page
 {
     // NIE używaj use DispatchesEvents;
     protected static string $resource = EventTemplateResource::class;
+
     protected static string $view = 'filament.resources.event-template-resource.pages.program-event-template';
+
     protected static ?string $slug = '/{record}/program';
 
     public EventTemplate $record;
@@ -21,23 +21,23 @@ class ProgramEventTemplate extends Page
     public function mount($record): void
     {
         \Illuminate\Support\Facades\Log::info('ProgramEventTemplate::mount() wywołane', ['record' => $record]);
-        
+
         // Filament może przekazać id (int/string) lub model (obiekt)
         if ($record instanceof \App\Models\EventTemplate) {
             $this->record = $record;
         } else {
-            $this->record = EventTemplate::findOrFail((int)$record);
+            $this->record = EventTemplate::findOrFail((int) $record);
         }
-        
+
         \Illuminate\Support\Facades\Log::info('EventTemplate załadowany', [
             'id' => $this->record->id,
-            'name' => $this->record->name
+            'name' => $this->record->name,
         ]);
     }
 
     public function getTitle(): string
     {
-        return 'Program: ' . $this->record->name;
+        return 'Program: '.$this->record->name;
     }
 
     protected function getHeaderActions(): array

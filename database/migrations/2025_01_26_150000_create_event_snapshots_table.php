@@ -17,7 +17,7 @@ return new class extends Migration
             $table->enum('type', ['original', 'manual', 'status_change'])->default('original');
             $table->string('name')->nullable(); // nazwa snapshotu
             $table->text('description')->nullable(); // opis powodu utworzenia snapshotu
-            
+
             // Dane imprezy w momencie snapshotu
             $table->json('event_data'); // podstawowe dane imprezy
             $table->json('program_points'); // punkty programu
@@ -25,12 +25,12 @@ return new class extends Migration
             $table->json('currency_rates')->nullable(); // kursy walut
             $table->json('template_prices_snapshot')->nullable(); // uproszczony zrzut cen z szablonu dla tej lokalizacji i qty
             $table->decimal('total_cost_snapshot', 10, 2); // koszt całkowity w momencie snapshotu
-            
+
             // Metadane
             $table->foreignId('created_by')->constrained('users');
             $table->timestamp('snapshot_date'); // data utworzenia snapshotu
             $table->timestamps();
-            
+
             $table->index(['event_id', 'type']);
             $table->index(['event_id', 'snapshot_date']);
         });

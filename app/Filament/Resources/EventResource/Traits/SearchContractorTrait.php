@@ -33,51 +33,51 @@ trait SearchContractorTrait
         $query = Contractor::query();
 
         // Wyszukaj po NIP
-        if (!empty($criteria['nip'])) {
+        if (! empty($criteria['nip'])) {
             if (Schema::hasColumn('contractors', 'nip')) {
-                $query->where('nip', 'like', '%' . $criteria['nip'] . '%');
+                $query->where('nip', 'like', '%'.$criteria['nip'].'%');
             } else {
-                $query->where('office_notes', 'like', '%' . $criteria['nip'] . '%');
+                $query->where('office_notes', 'like', '%'.$criteria['nip'].'%');
             }
         }
 
         // Wyszukaj po nazwie (dokładnie lub częściowo)
-        if (!empty($criteria['name'])) {
-            $query->where('name', 'like', '%' . $criteria['name'] . '%');
+        if (! empty($criteria['name'])) {
+            $query->where('name', 'like', '%'.$criteria['name'].'%');
         }
 
         // Wyszukaj po telefonie (w relacji contacts)
-        if (!empty($criteria['phone'])) {
+        if (! empty($criteria['phone'])) {
             $phone = $criteria['phone'];
 
             $query->where(function ($q) use ($phone) {
                 $hasPhoneColumn = Schema::hasColumn('contractors', 'phone');
 
                 if ($hasPhoneColumn) {
-                    $q->where('phone', 'like', '%' . $phone . '%');
+                    $q->where('phone', 'like', '%'.$phone.'%');
                 }
 
                 if ($hasPhoneColumn) {
                     $q->orWhereHas('contacts', function ($contactQuery) use ($phone) {
-                        $contactQuery->where('phone', 'like', '%' . $phone . '%');
+                        $contactQuery->where('phone', 'like', '%'.$phone.'%');
                     });
                 } else {
                     $q->whereHas('contacts', function ($contactQuery) use ($phone) {
-                        $contactQuery->where('phone', 'like', '%' . $phone . '%');
+                        $contactQuery->where('phone', 'like', '%'.$phone.'%');
                     });
                 }
             });
         }
 
         // Wyszukaj po adresie
-        if (!empty($criteria['city'])) {
-            $query->where('city', 'like', '%' . $criteria['city'] . '%');
+        if (! empty($criteria['city'])) {
+            $query->where('city', 'like', '%'.$criteria['city'].'%');
         }
 
-        if (!empty($criteria['street'])) {
+        if (! empty($criteria['street'])) {
             $query->where(function ($q) use ($criteria) {
-                $q->where('street', 'like', '%' . $criteria['street'] . '%')
-                    ->orWhere('house_number', 'like', '%' . $criteria['street'] . '%');
+                $q->where('street', 'like', '%'.$criteria['street'].'%')
+                    ->orWhere('house_number', 'like', '%'.$criteria['street'].'%');
             });
         }
 
@@ -107,7 +107,7 @@ trait SearchContractorTrait
     {
         $query = Contractor::query();
 
-        if (!empty($searchQuery)) {
+        if (! empty($searchQuery)) {
             $query->where(function ($q) use ($searchQuery) {
                 $q->where('name', 'like', "%{$searchQuery}%")
                     ->orWhere('phone', 'like', "%{$searchQuery}%")
@@ -123,8 +123,8 @@ trait SearchContractorTrait
             ->orderBy('name')
             ->limit(50)
             ->get()
-            ->mapWithKeys(fn(Contractor $c) => [
-                $c->id => "{$c->name} (" . ($c->city ?? 'brak miasta') . ")",
+            ->mapWithKeys(fn (Contractor $c) => [
+                $c->id => "{$c->name} (".($c->city ?? 'brak miasta').')',
             ]);
     }
 }

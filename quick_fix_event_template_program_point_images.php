@@ -1,4 +1,5 @@
 <?php
+
 // quick_fix_event_template_program_point_images.php
 
 use Illuminate\Database\Capsule\Manager as DB;
@@ -6,7 +7,7 @@ use Illuminate\Database\Capsule\Manager as DB;
 require __DIR__.'/vendor/autoload.php';
 
 // Konfiguracja bazy (jeśli nie używasz frameworka, podmień na PDO lub SQLite3)
-$db = new DB();
+$db = new DB;
 $db->addConnection([
     'driver' => 'sqlite',
     'database' => __DIR__.'/database/database.sqlite',

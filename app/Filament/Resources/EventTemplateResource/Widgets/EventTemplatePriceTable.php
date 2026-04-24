@@ -2,15 +2,13 @@
 
 namespace App\Filament\Resources\EventTemplateResource\Widgets;
 
-use Filament\Widgets\Widget;
 use App\Models\EventTemplate;
 use App\Models\EventTemplatePricePerPerson;
-use App\Jobs\RecalculateAllEventTemplatePricesJob;
-use Filament\Notifications\Notification;
 use App\Services\PriceRoundingService;
-use Illuminate\Support\Facades\Log;
+use Filament\Notifications\Notification;
+use Filament\Widgets\Widget;
 use Illuminate\Support\Facades\Auth;
-use function auth;
+use Illuminate\Support\Facades\Log;
 
 class EventTemplatePriceTable extends Widget
 {
@@ -21,22 +19,31 @@ class EventTemplatePriceTable extends Widget
     {
         return ceil($value / 5) * 5;
     }
+
     protected static string $view = 'filament.resources.event-template-resource.widgets.event-template-price-table';
+
     public ?EventTemplate $record = null;
+
     public ?\App\Models\Place $startPlace = null;
+
     public ?int $startPlaceId = null;
+
     public ?float $transportKm = null;
-    protected int | string | array $columnSpan = 'full';
+
+    protected int|string|array $columnSpan = 'full';
 
     public $prices = [];
+
     public $detailedCalculations = [];
+
     public $qtyVariants = [];
+
     public array $variantOverrides = [];
 
     public function mount()
     {
         // Pobierz start_place_id z parametru URL lub z właściwości
-        if (!$this->startPlaceId) {
+        if (! $this->startPlaceId) {
             $this->startPlaceId = request()->get('start_place');
         }
 
@@ -46,7 +53,7 @@ class EventTemplatePriceTable extends Widget
         }
 
         // Dodaj debugging
-        \Illuminate\Support\Facades\Log::info("EventTemplatePriceTable mount - startPlaceId: " . ($this->startPlaceId ?? 'NULL') . ", startPlace: " . ($this->startPlace ? $this->startPlace->name : 'NULL'));
+        \Illuminate\Support\Facades\Log::info('EventTemplatePriceTable mount - startPlaceId: '.($this->startPlaceId ?? 'NULL').', startPlace: '.($this->startPlace ? $this->startPlace->name : 'NULL'));
 
         // Wczytaj markup i podatki wraz z rekordem
         if ($this->record) {
@@ -57,12 +64,14 @@ class EventTemplatePriceTable extends Widget
         $this->detailedCalculations = $this->getDetailedCalculations();
 
         // Dodaj dodatkowe debugging
-        \Illuminate\Support\Facades\Log::info("EventTemplatePriceTable mount - prices count: " . (is_array($this->prices) ? count($this->prices) : $this->prices->count()));
+        \Illuminate\Support\Facades\Log::info('EventTemplatePriceTable mount - prices count: '.(is_array($this->prices) ? count($this->prices) : $this->prices->count()));
     }
 
     public function getPricesProperty()
     {
-        if (!$this->record) return collect();
+        if (! $this->record) {
+            return collect();
+        }
 
         // Znajdź wszystkie polskie waluty (może być duplikatów)
         $polishCurrencyIds = \App\Models\Currency::where(function ($q) {
@@ -108,7 +117,7 @@ class EventTemplatePriceTable extends Widget
             $bestCurrency = $this->findBestPolishCurrency();
 
             // Utwórz kombinowany obiekt cenowy
-            $combinedPrice = new \stdClass();
+            $combinedPrice = new \stdClass;
             $combinedPrice->id = $firstPrice->id;
             $combinedPrice->event_template_id = $firstPrice->event_template_id;
             $combinedPrice->event_template_qty_id = $qtyId;
@@ -132,7 +141,7 @@ class EventTemplatePriceTable extends Widget
                 if ($price->tax_breakdown && is_array($price->tax_breakdown)) {
                     foreach ($price->tax_breakdown as $tax) {
                         $taxName = $tax['tax_name'] ?? 'Nieznany podatek';
-                        if (!isset($taxBreakdown[$taxName])) {
+                        if (! isset($taxBreakdown[$taxName])) {
                             $taxBreakdown[$taxName] = 0;
                         }
                         $taxBreakdown[$taxName] += floatval($tax['tax_amount'] ?? 0);
@@ -145,7 +154,7 @@ class EventTemplatePriceTable extends Widget
             foreach ($taxBreakdown as $taxName => $taxAmount) {
                 $combinedPrice->tax_breakdown[] = [
                     'tax_name' => $taxName,
-                    'tax_amount' => $taxAmount
+                    'tax_amount' => $taxAmount,
                 ];
             }
 
@@ -193,7 +202,7 @@ class EventTemplatePriceTable extends Widget
 
     public function getQtyVariantsProperty()
     {
-        if (!empty($this->variantOverrides)) {
+        if (! empty($this->variantOverrides)) {
             $variants = [];
             foreach ($this->variantOverrides as $variant) {
                 $qty = (int) ($variant['qty'] ?? 0);
@@ -222,12 +231,15 @@ class EventTemplatePriceTable extends Widget
                 'driver' => $variant->driver ?? 0,
             ];
         }
+
         return $variants;
     }
 
     public function getDetailedCalculations()
     {
-        if (!$this->record) return [];
+        if (! $this->record) {
+            return [];
+        }
 
         // Load all program points and respect per-pivot include_in_calculation flags individually
         // Note: EventTemplateProgramPoint has relations 'currency' and 'children', not 'templatePoint'
@@ -256,14 +268,15 @@ class EventTemplatePriceTable extends Widget
             // If the relation/table isn't present or fails, ignore and continue.
         }
 
-        $qtyVariants = !empty($this->variantOverrides)
+        $qtyVariants = ! empty($this->variantOverrides)
             ? collect($this->variantOverrides)
                 ->map(function (array $variant) {
-                    $model = new \App\Models\EventTemplateQty();
+                    $model = new \App\Models\EventTemplateQty;
                     $model->qty = max(1, (int) ($variant['qty'] ?? 1));
                     $model->gratis = max(0, (int) ($variant['gratis'] ?? 0));
                     $model->staff = max(0, (int) ($variant['staff'] ?? 0));
                     $model->driver = max(0, (int) ($variant['driver'] ?? 0));
+
                     return $model;
                 })
             : \App\Models\EventTemplateQty::all();
@@ -332,7 +345,7 @@ class EventTemplatePriceTable extends Widget
 
             foreach ($programPoints as $point) {
                 $pointPivot = $programPointPivotMap[$point->id] ?? null;
-                $pointIncluded = $pointPivot ? (bool)($pointPivot->include_in_calculation ?? true) : true;
+                $pointIncluded = $pointPivot ? (bool) ($pointPivot->include_in_calculation ?? true) : true;
 
                 // Parent point: only render/add to lists when pivot includes it.
                 if ($point->currency) {
@@ -354,19 +367,19 @@ class EventTemplatePriceTable extends Widget
                                 'group_size' => $groupSize,
                                 'cost' => $cost,
                                 'is_child' => false,
-                                'currency_symbol' => $currencySymbol
+                                'currency_symbol' => $currencySymbol,
                             ];
                             $plnTotal += $cost;
                         } elseif ($convertToPln) {
                             $plnPoints[] = [
-                                'name' => $point->name . ' (przeliczone na PLN, kurs: ' . $exchangeRate . ')',
-                                'unit_price' => $unitPrice . ' ' . $currencySymbol,
+                                'name' => $point->name.' (przeliczone na PLN, kurs: '.$exchangeRate.')',
+                                'unit_price' => $unitPrice.' '.$currencySymbol,
                                 'group_size' => $groupSize,
                                 'cost' => $cost * $exchangeRate,
                                 'is_child' => false,
                                 'currency_symbol' => 'PLN',
                                 'original_currency' => $currencySymbol,
-                                'exchange_rate' => $exchangeRate
+                                'exchange_rate' => $exchangeRate,
                             ];
                             $plnTotal += $cost * $exchangeRate;
                         } else {
@@ -376,7 +389,7 @@ class EventTemplatePriceTable extends Widget
                                 'group_size' => $groupSize,
                                 'cost' => $cost,
                                 'is_child' => false,
-                                'currency_symbol' => $currencySymbol
+                                'currency_symbol' => $currencySymbol,
                             ];
                             $currenciesTotals[$currencyCode] = ($currenciesTotals[$currencyCode] ?? 0) + $cost;
                         }
@@ -388,9 +401,11 @@ class EventTemplatePriceTable extends Widget
                     $childPivot = $programPointPivotMap[$child->id] ?? null;
                     // If there's an explicit pivot for the child, use it. Otherwise default to true
                     // (child points are independent entities and should be included unless explicitly excluded).
-                    $childIncluded = $childPivot ? (bool)($childPivot->include_in_calculation ?? true) : true;
+                    $childIncluded = $childPivot ? (bool) ($childPivot->include_in_calculation ?? true) : true;
 
-                    if (!$childIncluded) continue;
+                    if (! $childIncluded) {
+                        continue;
+                    }
                     if ($child->currency) {
                         $childCurrencyCode = $child->currency->symbol;
                         $childCurrencySymbol = $child->currency->symbol ?? $childCurrencyCode;
@@ -403,34 +418,34 @@ class EventTemplatePriceTable extends Widget
 
                         if ($childCurrencyCode === 'PLN') {
                             $plnPoints[] = [
-                                'name' => '→ ' . $child->name,
+                                'name' => '→ '.$child->name,
                                 'unit_price' => $childUnitPrice,
                                 'group_size' => $childGroupSize,
                                 'cost' => $childCost,
                                 'is_child' => true,
-                                'currency_symbol' => $childCurrencySymbol
+                                'currency_symbol' => $childCurrencySymbol,
                             ];
                             $plnTotal += $childCost;
                         } elseif ($childConvertToPln) {
                             $plnPoints[] = [
-                                'name' => '→ ' . $child->name . ' (przeliczone na PLN, kurs: ' . $childExchangeRate . ')',
-                                'unit_price' => $childUnitPrice . ' ' . $childCurrencySymbol,
+                                'name' => '→ '.$child->name.' (przeliczone na PLN, kurs: '.$childExchangeRate.')',
+                                'unit_price' => $childUnitPrice.' '.$childCurrencySymbol,
                                 'group_size' => $childGroupSize,
                                 'cost' => $childCost * $childExchangeRate,
                                 'is_child' => true,
                                 'currency_symbol' => 'PLN',
                                 'original_currency' => $childCurrencySymbol,
-                                'exchange_rate' => $childExchangeRate
+                                'exchange_rate' => $childExchangeRate,
                             ];
                             $plnTotal += $childCost * $childExchangeRate;
                         } else {
                             $currenciesPoints[$childCurrencyCode][] = [
-                                'name' => '→ ' . $child->name,
+                                'name' => '→ '.$child->name,
                                 'unit_price' => $childUnitPrice,
                                 'group_size' => $childGroupSize,
                                 'cost' => $childCost,
                                 'is_child' => true,
-                                'currency_symbol' => $childCurrencySymbol
+                                'currency_symbol' => $childCurrencySymbol,
                             ];
                             $currenciesTotals[$childCurrencyCode] = ($currenciesTotals[$childCurrencyCode] ?? 0) + $childCost;
                         }
@@ -456,7 +471,7 @@ class EventTemplatePriceTable extends Widget
             }
             if ($insuranceTotal > 0) {
                 $plnPoints[] = [
-                    'name' => 'Ubezpieczenie' . (!empty($insuranceNames) ? ' (' . implode(', ', $insuranceNames) . ')' : ''),
+                    'name' => 'Ubezpieczenie'.(! empty($insuranceNames) ? ' ('.implode(', ', $insuranceNames).')' : ''),
                     'unit_price' => null,
                     'group_size' => null,
                     'cost' => $insuranceTotal,
@@ -467,13 +482,13 @@ class EventTemplatePriceTable extends Widget
             }
             $calculations[$qty]['PLN'] = [
                 'total' => $plnTotal,
-                'points' => $plnPoints
+                'points' => $plnPoints,
             ];
             foreach ($currenciesTotals as $code => $total) {
                 if ($code !== 'PLN') {
                     $calculations[$qty][$code] = [
                         'total' => $total,
-                        'points' => $currenciesPoints[$code] ?? []
+                        'points' => $currenciesPoints[$code] ?? [],
                     ];
                 }
             }                // --- NOCLEGI ---
@@ -505,7 +520,9 @@ class EventTemplatePriceTable extends Widget
                 foreach ($roomGroups as $groupType => $groupData) {
                     $peopleCount = $groupData['count'];
                     $roomIds = $groupData['room_ids'];
-                    if ($peopleCount <= 0) continue;
+                    if ($peopleCount <= 0) {
+                        continue;
+                    }
                     if (empty($roomIds)) {
                         // Dodaj informację o braku pokoi dla tej grupy i noclegu
                         $roomAlloc[] = [
@@ -516,8 +533,9 @@ class EventTemplatePriceTable extends Widget
                             'currency' => null,
                             'group_type' => $groupType,
                             'room_count' => 0,
-                            'warning' => 'Brak przypisanych pokoi dla tej grupy (' . $groupType . ') w noclegu.'
+                            'warning' => 'Brak przypisanych pokoi dla tej grupy ('.$groupType.') w noclegu.',
                         ];
+
                         continue;
                     }
                     $rooms = \App\Models\HotelRoom::whereIn('id', $roomIds)->get();
@@ -535,7 +553,7 @@ class EventTemplatePriceTable extends Widget
 
                     foreach ($rooms as $room) {
                         for ($i = $room->people_count; $i <= $maxCapacity; $i++) {
-                            if ($dp[$i - $room->people_count] + $room->price < $dp[$i]) {
+                            if ($dp[$i] > $dp[$i - $room->people_count] + $room->price) {
                                 $dp[$i] = $dp[$i - $room->people_count] + $room->price;
                                 $choice[$i] = $room->id;
                             }
@@ -562,7 +580,7 @@ class EventTemplatePriceTable extends Widget
                             'currency' => null,
                             'group_type' => $groupType,
                             'room_count' => 0,
-                            'warning' => 'Brak możliwej kombinacji pokoi dla tej grupy (' . $groupType . ') w noclegu.'
+                            'warning' => 'Brak możliwej kombinacji pokoi dla tej grupy ('.$groupType.') w noclegu.',
                         ];
                     } else {
                         // Odtwarzanie wyboru pokoi
@@ -618,7 +636,9 @@ class EventTemplatePriceTable extends Widget
                                 $roomTypeCount[$room->id]++;
                                 $peopleAssigned += $toAssign;
 
-                                if ($peopleAssigned >= $peopleCount) break 2;
+                                if ($peopleAssigned >= $peopleCount) {
+                                    break 2;
+                                }
                             }
                         }
                     }
@@ -636,7 +656,7 @@ class EventTemplatePriceTable extends Widget
                 // Dodaj do ogólnej sumy kosztów noclegów (PLN + waluty obce)
                 if ($dayTotalPln > 0) {
                     $plnPoints[] = [
-                        'name' => 'Noclegi - dzień ' . $hotelDay->day,
+                        'name' => 'Noclegi - dzień '.$hotelDay->day,
                         'unit_price' => null,
                         'group_size' => null,
                         'cost' => $dayTotalPln,
@@ -647,7 +667,7 @@ class EventTemplatePriceTable extends Widget
                 }
                 foreach ($dayTotalForeign as $cur => $val) {
                     $currenciesPoints[$cur][] = [
-                        'name' => 'Noclegi - dzień ' . $hotelDay->day,
+                        'name' => 'Noclegi - dzień '.$hotelDay->day,
                         'unit_price' => null,
                         'group_size' => null,
                         'cost' => $val,
@@ -668,11 +688,11 @@ class EventTemplatePriceTable extends Widget
                         'group_size' => null,
                         'cost' => $busTransportCost * $busMultiplier,
                         'is_child' => false,
-                        'currency_symbol' => $busCurrency
+                        'currency_symbol' => $busCurrency,
                     ];
                     $plnTotal += $busTransportCost * $busMultiplier;
                 } else {
-                    if (!isset($currenciesPoints[$busCurrency])) {
+                    if (! isset($currenciesPoints[$busCurrency])) {
                         $currenciesPoints[$busCurrency] = [];
                         $currenciesTotals[$busCurrency] = 0;
                     }
@@ -682,7 +702,7 @@ class EventTemplatePriceTable extends Widget
                         'group_size' => null,
                         'cost' => $busTransportCost * $busMultiplier,
                         'is_child' => false,
-                        'currency_symbol' => $busCurrency
+                        'currency_symbol' => $busCurrency,
                     ];
                     $currenciesTotals[$busCurrency] += $busTransportCost * $busMultiplier;
                 }
@@ -697,7 +717,9 @@ class EventTemplatePriceTable extends Widget
             $totalTaxAmount = 0;
 
             foreach ($taxes as $tax) {
-                if (!$tax->is_active) continue;
+                if (! $tax->is_active) {
+                    continue;
+                }
 
                 $taxAmount = $tax->calculateTaxAmount($plnTotal, $markupCalculation['amount']);
                 if ($taxAmount > 0) {
@@ -706,7 +728,7 @@ class EventTemplatePriceTable extends Widget
                         'percentage' => $tax->percentage,
                         'amount' => $taxAmount,
                         'apply_to_base' => $tax->apply_to_base,
-                        'apply_to_markup' => $tax->apply_to_markup
+                        'apply_to_markup' => $tax->apply_to_markup,
                     ];
                     $totalTaxAmount += $taxAmount;
                 }
@@ -723,12 +745,12 @@ class EventTemplatePriceTable extends Widget
                 'percent_applied' => $markupPercent,
                 'discount_applied' => false, // uproszczona wersja - bez skomplikowanej logiki rabatów
                 'discount_percent' => 0,
-                'min_daily_applied' => false
+                'min_daily_applied' => false,
             ];
 
             $calculations[$qty]['taxes'] = [
                 'total_amount' => $totalTaxAmount,
-                'breakdown' => $taxCalculations
+                'breakdown' => $taxCalculations,
             ];
 
             // PLN na pierwszym miejscu - BEZ narzutu w points
@@ -778,9 +800,9 @@ class EventTemplatePriceTable extends Widget
 
         // Sortuj wyniki po ilości osób (klucz qty)
         ksort($calculations);
+
         return $calculations;
     }
-
 
     public function recalculatePrices(): void
     {
@@ -792,12 +814,13 @@ class EventTemplatePriceTable extends Widget
             $userId = filament()->auth()->user()->id;
         }
 
-        if (!$userId) {
+        if (! $userId) {
             Notification::make()
                 ->title('Błąd')
                 ->body('Nie można pobrać ID użytkownika do powiadomienia.')
                 ->danger()
                 ->send();
+
             return;
         }
 
@@ -826,7 +849,7 @@ class EventTemplatePriceTable extends Widget
      */
     public static function removeDuplicatePrices(): void
     {
-        \Illuminate\Support\Facades\Log::info("Removing duplicate prices globally");
+        \Illuminate\Support\Facades\Log::info('Removing duplicate prices globally');
 
         // Znajdź duplikaty - rekordy z tą samą kombinacją kluczy (dla wszystkich szablonów)
         $duplicateGroups = EventTemplatePricePerPerson::select('event_template_id', 'event_template_qty_id', 'currency_id', 'start_place_id')
@@ -842,7 +865,7 @@ class EventTemplatePriceTable extends Widget
                 'event_template_id' => $group->event_template_id,
                 'event_template_qty_id' => $group->event_template_qty_id,
                 'currency_id' => $group->currency_id,
-                'start_place_id' => $group->start_place_id
+                'start_place_id' => $group->start_place_id,
             ])->orderBy('created_at', 'desc')->get();
 
             // Usuń wszystkie oprócz pierwszego (najnowszego)
@@ -863,12 +886,14 @@ class EventTemplatePriceTable extends Widget
     private function getQtyId($qty): int
     {
         $qtyRecord = \App\Models\EventTemplateQty::where('qty', $qty)->first();
+
         return $qtyRecord ? $qtyRecord->id : 0;
     }
 
     private function calculateMarkup($basePrice): float
     {
         $markupPercent = $this->getMarkupPercent();
+
         return $basePrice * ($markupPercent / 100);
     }
 
@@ -883,9 +908,11 @@ class EventTemplatePriceTable extends Widget
         }
 
         // If markup_id set, try to resolve
-        if (!empty($this->record->markup_id)) {
+        if (! empty($this->record->markup_id)) {
             $m = \App\Models\Markup::find($this->record->markup_id);
-            if ($m && $m->percent !== null) return (float) $m->percent;
+            if ($m && $m->percent !== null) {
+                return (float) $m->percent;
+            }
         }
 
         // Legacy field on template
@@ -895,6 +922,7 @@ class EventTemplatePriceTable extends Widget
 
         // Fallback to default markup record
         $default = \App\Models\Markup::where('is_default', true)->first();
+
         return (float) ($default?->percent ?? 20);
     }
 
@@ -908,6 +936,7 @@ class EventTemplatePriceTable extends Widget
     {
         $taxPercent = 23; // VAT 23%
         $markupAmount = $this->calculateMarkup($basePrice);
+
         return ($basePrice + $markupAmount) * ($taxPercent / 100);
     }
 
@@ -925,7 +954,9 @@ class EventTemplatePriceTable extends Widget
     {
         // Algorytm: (dojazd + program + powrót) * 1.1 + 50 km, liczba autobusów, limity km, nadmiarowe km
         $bus = $this->record->bus;
-        if (!$bus) return 0;
+        if (! $bus) {
+            return 0;
+        }
         $duration = $this->record->duration_days ?? 1;
         $qtyVariant = \App\Models\EventTemplateQty::where('qty', $qty)->first();
         $totalPeople = $qty;
@@ -945,6 +976,7 @@ class EventTemplatePriceTable extends Widget
             return $baseCost * $busCount;
         } else {
             $extraKm = $totalKm - $includedKm;
+
             return ($baseCost + ($extraKm * $bus->extra_km_price)) * $busCount;
         }
     }
@@ -952,9 +984,10 @@ class EventTemplatePriceTable extends Widget
     private function prepareTaxBreakdown(): array
     {
         return [
-            ['tax_name' => 'VAT 23%', 'tax_amount' => 23]
+            ['tax_name' => 'VAT 23%', 'tax_amount' => 23],
         ];
     }
+
     public function calculatePointCost($qty, $groupSize, $unitPrice)
     {
         return ceil($qty / $groupSize) * $unitPrice;
@@ -996,6 +1029,7 @@ class EventTemplatePriceTable extends Widget
                 }
             }
         }
+
         return $totalPLN;
     }
 }

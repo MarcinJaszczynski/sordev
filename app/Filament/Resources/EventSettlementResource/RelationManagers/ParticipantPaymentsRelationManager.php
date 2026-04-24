@@ -2,12 +2,11 @@
 
 namespace App\Filament\Resources\EventSettlementResource\RelationManagers;
 
-use App\Filament\Resources\TaskResource;
 use App\Filament\Resources\EventSettlementResource\Traits\DispatchesSettlementDataChanged;
+use App\Filament\Resources\TaskResource;
 use App\Models\EventSettlementParticipantPayment;
 use Filament\Forms;
 use Filament\Forms\Form;
-use Filament\Infolists;
 use Filament\Resources\RelationManagers\RelationManager;
 use Filament\Tables;
 use Filament\Tables\Table;
@@ -18,7 +17,9 @@ class ParticipantPaymentsRelationManager extends RelationManager
     use DispatchesSettlementDataChanged;
 
     protected static string $relationship = 'participantPayments';
+
     protected static ?string $title = 'Wpłaty uczestników';
+
     protected static ?string $recordTitleAttribute = 'participant_name';
 
     public function form(Form $form): Form
@@ -94,7 +95,7 @@ class ParticipantPaymentsRelationManager extends RelationManager
                 Tables\Columns\TextColumn::make('participant_name')
                     ->label('Uczestnik')
                     ->searchable()
-                    ->description(fn($record) => $record->booking_reference),
+                    ->description(fn ($record) => $record->booking_reference),
 
                 Tables\Columns\IconColumn::make('attended')
                     ->label('Pojechał')
@@ -114,19 +115,19 @@ class ParticipantPaymentsRelationManager extends RelationManager
 
                 Tables\Columns\TextColumn::make('balance')
                     ->label('Saldo')
-                    ->state(fn($record) => $record->paid_amount_pln - $record->due_amount_pln)
+                    ->state(fn ($record) => $record->paid_amount_pln - $record->due_amount_pln)
                     ->money('PLN')
-                    ->color(fn($state) => $state >= 0 ? 'success' : 'danger'),
+                    ->color(fn ($state) => $state >= 0 ? 'success' : 'danger'),
 
                 Tables\Columns\BadgeColumn::make('payment_status')
                     ->label('Status')
-                    ->formatStateUsing(fn($state) => EventSettlementParticipantPayment::$paymentStatuses[$state] ?? $state)
+                    ->formatStateUsing(fn ($state) => EventSettlementParticipantPayment::$paymentStatuses[$state] ?? $state)
                     ->colors([
-                        'gray'    => 'pending',
+                        'gray' => 'pending',
                         'warning' => 'partial',
                         'success' => 'paid',
-                        'info'    => 'overpaid',
-                        'danger'  => 'cancelled',
+                        'info' => 'overpaid',
+                        'danger' => 'cancelled',
                     ]),
 
                 Tables\Columns\TextColumn::make('payment_date')
@@ -170,7 +171,7 @@ class ParticipantPaymentsRelationManager extends RelationManager
             ->headerActions([
                 Tables\Actions\CreateAction::make()
                     ->label('Dodaj uczestnika')
-                    ->after(fn() => $this->dispatchSettlementDataChanged()),
+                    ->after(fn () => $this->dispatchSettlementDataChanged()),
             ])
             ->actions([
                 Tables\Actions\Action::make('mark_paid')
@@ -181,12 +182,12 @@ class ParticipantPaymentsRelationManager extends RelationManager
                     ->action(function ($record) {
                         $record->update([
                             'paid_amount_pln' => $record->due_amount_pln,
-                            'payment_status'  => 'paid',
-                            'payment_date'    => $record->payment_date ?? now(),
+                            'payment_status' => 'paid',
+                            'payment_date' => $record->payment_date ?? now(),
                         ]);
                         $this->dispatchSettlementDataChanged();
                     })
-                    ->visible(fn($record) => $record->payment_status !== 'paid'),
+                    ->visible(fn ($record) => $record->payment_status !== 'paid'),
 
                 Tables\Actions\Action::make('create_task')
                     ->label('Dodaj zadanie')
@@ -246,9 +247,9 @@ class ParticipantPaymentsRelationManager extends RelationManager
                     ->visible(fn (EventSettlementParticipantPayment $record) => $record->approval_status !== 'pending'),
 
                 Tables\Actions\EditAction::make()
-                    ->after(fn() => $this->dispatchSettlementDataChanged()),
+                    ->after(fn () => $this->dispatchSettlementDataChanged()),
                 Tables\Actions\DeleteAction::make()
-                    ->after(fn() => $this->dispatchSettlementDataChanged()),
+                    ->after(fn () => $this->dispatchSettlementDataChanged()),
             ])
             ->bulkActions([
                 Tables\Actions\BulkActionGroup::make([

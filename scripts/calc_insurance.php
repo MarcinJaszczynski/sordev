@@ -1,6 +1,7 @@
 <?php
-require __DIR__ . '/../vendor/autoload.php';
-$app = require_once __DIR__ . '/../bootstrap/app.php';
+
+require __DIR__.'/../vendor/autoload.php';
+$app = require_once __DIR__.'/../bootstrap/app.php';
 $kernel = $app->make(Illuminate\Contracts\Console\Kernel::class);
 $kernel->bootstrap();
 
@@ -11,10 +12,16 @@ $templateId = $argv[1] ?? 146;
 $qtyNumber = $argv[2] ?? 10;
 
 $template = EventTemplate::with(['dayInsurances.insurance'])->find($templateId);
-if (!$template) { echo "Template not found\n"; exit(1); }
+if (! $template) {
+    echo "Template not found\n";
+    exit(1);
+}
 
 $qtyVariant = EventTemplateQty::where('qty', $qtyNumber)->first();
-if (!$qtyVariant) { echo "Qty variant not found\n"; exit(1); }
+if (! $qtyVariant) {
+    echo "Qty variant not found\n";
+    exit(1);
+}
 
 $qty = $qtyVariant->qty;
 $gratis = $qtyVariant->gratis ?? 0;
@@ -26,7 +33,9 @@ $perDay = [];
 foreach ($template->dayInsurances as $di) {
     $day = $di->day;
     $ins = $di->insurance;
-    if (!$ins || !$ins->insurance_enabled) continue;
+    if (! $ins || ! $ins->insurance_enabled) {
+        continue;
+    }
     $perDay[$day][] = $ins->price_per_person;
 }
 

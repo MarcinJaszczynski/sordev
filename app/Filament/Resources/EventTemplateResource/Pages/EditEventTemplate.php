@@ -4,15 +4,12 @@ namespace App\Filament\Resources\EventTemplateResource\Pages;
 
 use App\Filament\Resources\EventTemplateResource;
 use App\Models\EventTemplate;
+use App\Services\UnifiedPriceCalculator;
 use App\Traits\CompressesImages;
 use Filament\Actions;
 use Filament\Resources\Pages\EditRecord;
-use App\Services\UnifiedPriceCalculator;
-use App\Models\EventTemplatePricePerPerson;
-use App\Filament\Resources\EventTemplateResource\Widgets\EventTemplatePriceTable;
-use App\Filament\Resources\EventTemplateResource\Widgets\EventProgramKanbanWidget;
-use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Log;
 
 class EditEventTemplate extends EditRecord
 {
@@ -33,16 +30,16 @@ class EditEventTemplate extends EditRecord
             Actions\Action::make('clone')
                 ->label('Klonuj')
                 ->icon('heroicon-o-document-duplicate')
-                ->action(fn() => $this->cloneEventTemplate()),
+                ->action(fn () => $this->cloneEventTemplate()),
             Actions\Action::make('edit-program')
                 ->label('Edytuj program')
                 ->icon('heroicon-o-bars-3')
-                ->url(fn() => static::getResource()::getUrl('edit-program', ['record' => $this->record->id]))
+                ->url(fn () => static::getResource()::getUrl('edit-program', ['record' => $this->record->id]))
                 ->color('primary'),
             Actions\Action::make('transport')
                 ->label('Transport i kalkulacja')
                 ->icon('heroicon-o-truck')
-                ->url(fn() => static::getResource()::getUrl('transport', ['record' => $this->record->id]))
+                ->url(fn () => static::getResource()::getUrl('transport', ['record' => $this->record->id]))
                 ->color('warning'),
         ];
     }
@@ -64,13 +61,13 @@ class EditEventTemplate extends EditRecord
             'transportTypes',
             'eventTypes',
             'eventPriceDescription',
-            'programPointChildren'
+            'programPointChildren',
         ]);
 
         $clone = EventTemplate::create([
-            'name' => $original->name . ' (Kopia)',
+            'name' => $original->name.' (Kopia)',
             'subtitle' => $original->subtitle,
-            'slug' => $original->slug . '-kopia-' . uniqid(),
+            'slug' => $original->slug.'-kopia-'.uniqid(),
             'duration_days' => $original->duration_days,
             'is_active' => $original->is_active,
             'featured_image' => $original->featured_image,
@@ -114,9 +111,9 @@ class EditEventTemplate extends EditRecord
                 'day' => $point->pivot->day,
                 'order' => $point->pivot->order,
                 'notes' => $point->pivot->notes,
-                'include_in_program' => (bool)$point->pivot->include_in_program,
-                'include_in_calculation' => (bool)$point->pivot->include_in_calculation,
-                'active' => (bool)$point->pivot->active,
+                'include_in_program' => (bool) $point->pivot->include_in_program,
+                'include_in_calculation' => (bool) $point->pivot->include_in_calculation,
+                'active' => (bool) $point->pivot->active,
                 'show_title_style' => $point->pivot->show_title_style,
                 'show_description' => $point->pivot->show_description,
                 'created_at' => now(),
@@ -156,8 +153,8 @@ class EditEventTemplate extends EditRecord
         Log::info("Cloning hotel days: generating {$nights} nights for {$clone->duration_days} day trip");
 
         // Najpierw spróbuj użyć aktualnych danych z komponentu
-        if (!empty($this->hotel_days)) {
-            Log::info("Using hotel days from component state");
+        if (! empty($this->hotel_days)) {
+            Log::info('Using hotel days from component state');
             foreach ($this->hotel_days as $dayIndex => $hotelDay) {
                 if ($dayIndex < $nights) {
                     $clone->hotelDays()->create([
@@ -186,7 +183,7 @@ class EditEventTemplate extends EditRecord
             }
         } else {
             // Jeśli nie ma danych w komponencie, spróbuj z bazy
-            Log::info("Using hotel days from database");
+            Log::info('Using hotel days from database');
             $originalHotelDays = $original->hotelDays()->orderBy('day')->get()->keyBy('day');
 
             for ($i = 1; $i <= $nights; $i++) {
@@ -242,9 +239,9 @@ class EditEventTemplate extends EditRecord
 
         // Automatyczne przeliczenie cen po klonowaniu
         try {
-            (new UnifiedPriceCalculator())->recalculateForTemplate($clone);
+            (new UnifiedPriceCalculator)->recalculateForTemplate($clone);
         } catch (\Throwable $e) {
-            Log::error('Błąd podczas automatycznego przeliczania cen po klonowaniu: ' . $e->getMessage());
+            Log::error('Błąd podczas automatycznego przeliczania cen po klonowaniu: '.$e->getMessage());
         }
 
         // Dodaj powiadomienie o udanym klonowaniu
@@ -261,7 +258,7 @@ class EditEventTemplate extends EditRecord
     {
         parent::mount($record);
 
-        Log::info("Mount called for record {$this->record->id}, hotelDays count: " . $this->record->hotelDays->count());
+        Log::info("Mount called for record {$this->record->id}, hotelDays count: ".$this->record->hotelDays->count());
 
         // Najpierw spróbuj załadować z bazy
         if ($this->record->hotelDays->count() > 0) {
@@ -273,7 +270,7 @@ class EditEventTemplate extends EditRecord
             $this->refreshHotelDays();
         }
 
-        Log::info("Mount finished, hotel_days count: " . count($this->hotel_days));
+        Log::info('Mount finished, hotel_days count: '.count($this->hotel_days));
     }
 
     private function loadHotelDaysFromDatabase(): void
@@ -306,7 +303,7 @@ class EditEventTemplate extends EditRecord
 
     public function addRoom($role, $dayIndex)
     {
-        if (!isset($this->hotel_days[$dayIndex]["hotel_room_ids_{$role}"])) {
+        if (! isset($this->hotel_days[$dayIndex]["hotel_room_ids_{$role}"])) {
             $this->hotel_days[$dayIndex]["hotel_room_ids_{$role}"] = [];
         }
         $this->hotel_days[$dayIndex]["hotel_room_ids_{$role}"][] = null;
@@ -314,7 +311,7 @@ class EditEventTemplate extends EditRecord
 
     public function copyToNextDay($dayIndex)
     {
-        if (!isset($this->hotel_days[$dayIndex + 1])) {
+        if (! isset($this->hotel_days[$dayIndex + 1])) {
             return;
         }
         foreach (['qty', 'gratis', 'staff', 'driver'] as $role) {
@@ -325,7 +322,7 @@ class EditEventTemplate extends EditRecord
 
     public function removeRoomFromDay($dayIndex, $role, $roomId)
     {
-        if (!isset($this->hotel_days[$dayIndex]["hotel_room_ids_{$role}"])) {
+        if (! isset($this->hotel_days[$dayIndex]["hotel_room_ids_{$role}"])) {
             return;
         }
 
@@ -358,12 +355,12 @@ class EditEventTemplate extends EditRecord
             $this->saveHotelDaysToDatabase();
             $this->dispatch('notify', [
                 'type' => 'success',
-                'message' => 'Noclegi zostały zapisane!'
+                'message' => 'Noclegi zostały zapisane!',
             ]);
         } catch (\Exception $e) {
             $this->dispatch('notify', [
                 'type' => 'error',
-                'message' => 'Błąd podczas zapisywania: ' . $e->getMessage()
+                'message' => 'Błąd podczas zapisywania: '.$e->getMessage(),
             ]);
         }
     }
@@ -372,7 +369,8 @@ class EditEventTemplate extends EditRecord
     {
         $response = parent::mutateFormDataBeforeSave($data);
         // Przelicz ceny po zapisaniu zmian
-        (new UnifiedPriceCalculator())->recalculateForTemplate($this->record);
+        (new UnifiedPriceCalculator)->recalculateForTemplate($this->record);
+
         // Zapisz hotel_days do bazy (np. przez relację)
         // $data['hotel_days'] = $this->hotel_days;
         // Implementacja zależna od Twojego modelu
@@ -387,7 +385,7 @@ class EditEventTemplate extends EditRecord
 
         // Nie wykonuj dla nowo utworzonych rekordów podczas klonowania
         // oraz nie wykonuj jeśli to jest przekierowanie po klonowaniu
-        if (!$this->record->wasRecentlyCreated && !request()->has('clone')) {
+        if (! $this->record->wasRecentlyCreated && ! request()->has('clone')) {
             $this->saveHotelDaysToDatabase();
         }
 
@@ -406,9 +404,9 @@ class EditEventTemplate extends EditRecord
 
         // Automatycznie przelicz ceny po zapisaniu
         try {
-            (new UnifiedPriceCalculator())->recalculateForTemplate($this->record);
+            (new UnifiedPriceCalculator)->recalculateForTemplate($this->record);
         } catch (\Exception $e) {
-            Log::error('Error recalculating prices after save: ' . $e->getMessage());
+            Log::error('Error recalculating prices after save: '.$e->getMessage());
         }
     }
 
@@ -424,7 +422,7 @@ class EditEventTemplate extends EditRecord
     private function saveHotelDaysToDatabase()
     {
         try {
-            Log::info("Saving hotel days to database", $this->hotel_days);
+            Log::info('Saving hotel days to database', $this->hotel_days);
 
             // Optymalizowane zapisywanie - aktualizuj tylko zmienione
             $existingDays = $this->record->hotelDays()->get()->keyBy('day');
@@ -460,7 +458,7 @@ class EditEventTemplate extends EditRecord
 
             Log::info('Hotel days saved successfully');
         } catch (\Exception $e) {
-            Log::error('Error saving hotel days: ' . $e->getMessage());
+            Log::error('Error saving hotel days: '.$e->getMessage());
             throw $e;
         }
     }
@@ -523,6 +521,6 @@ class EditEventTemplate extends EditRecord
             }
         }
 
-        Log::info("RefreshHotelDays result: " . count($this->hotel_days) . " nights");
+        Log::info('RefreshHotelDays result: '.count($this->hotel_days).' nights');
     }
 }

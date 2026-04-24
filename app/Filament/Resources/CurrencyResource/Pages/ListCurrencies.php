@@ -5,8 +5,8 @@ namespace App\Filament\Resources\CurrencyResource\Pages;
 use App\Filament\Resources\CurrencyResource;
 use App\Services\CurrencyRateService;
 use Filament\Actions;
-use Filament\Resources\Pages\ListRecords;
 use Filament\Notifications\Notification;
+use Filament\Resources\Pages\ListRecords;
 
 class ListCurrencies extends ListRecords
 {
@@ -29,18 +29,18 @@ class ListCurrencies extends ListRecords
                     try {
                         $service = app(CurrencyRateService::class);
                         $updatedCount = $service->updateRates();
-                        
+
                         Notification::make()
                             ->title('Kursy zostały zaktualizowane')
                             ->body("Zaktualizowano {$updatedCount} walut i przeliczono szablony imprez")
                             ->success()
                             ->duration(5000)
                             ->send();
-                            
+
                     } catch (\Exception $e) {
                         Notification::make()
                             ->title('Błąd aktualizacji kursów')
-                            ->body('Szczegóły: ' . $e->getMessage())
+                            ->body('Szczegóły: '.$e->getMessage())
                             ->danger()
                             ->duration(8000)
                             ->send();

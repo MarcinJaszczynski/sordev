@@ -3,7 +3,6 @@
 namespace App\Filament\Resources\ConversationResource\Pages;
 
 use App\Filament\Resources\ConversationResource;
-use Filament\Actions;
 use Filament\Resources\Pages\CreateRecord;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Support\Facades\Auth;
@@ -15,6 +14,7 @@ class CreateConversation extends CreateRecord
     protected function mutateFormDataBeforeCreate(array $data): array
     {
         $data['created_by'] = Auth::id();
+
         return $data;
     }
 
@@ -30,9 +30,9 @@ class CreateConversation extends CreateRecord
         // Zbierz wszystkich unikalnych uczestników (włączając twórcę)
         $allParticipants = collect($participants);
         $creatorId = Auth::id();
-        
+
         // Dodaj twórcę jeśli nie jest już na liście
-        if (!$allParticipants->contains($creatorId)) {
+        if (! $allParticipants->contains($creatorId)) {
             $allParticipants->push($creatorId);
         }
 
@@ -45,7 +45,7 @@ class CreateConversation extends CreateRecord
                 'updated_at' => now(),
             ];
         }
-        
+
         $record->participants()->attach($participantsData);
 
         return $record;

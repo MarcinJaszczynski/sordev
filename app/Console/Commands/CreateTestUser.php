@@ -2,8 +2,8 @@
 
 namespace App\Console\Commands;
 
-use Illuminate\Console\Command;
 use App\Models\User;
+use Illuminate\Console\Command;
 use Illuminate\Support\Facades\Hash;
 
 class CreateTestUser extends Command
@@ -35,7 +35,7 @@ class CreateTestUser extends Command
             ]
         );
 
-        $this->info('Test user created/found: ' . $user->email);
+        $this->info('Test user created/found: '.$user->email);
         $this->info('Password: password');
     }
 }

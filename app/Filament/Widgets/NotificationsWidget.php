@@ -2,9 +2,8 @@
 
 namespace App\Filament\Widgets;
 
-use App\Models\Task;
 use App\Models\Message;
-use App\Services\NotificationService;
+use App\Models\Task;
 use Filament\Widgets\Widget;
 use Illuminate\Support\Facades\Auth;
 
@@ -14,7 +13,7 @@ class NotificationsWidget extends Widget
 
     protected static ?int $sort = -10; // Wysoko w liście widgetów
 
-    protected int | string | array $columnSpan = 'full';
+    protected int|string|array $columnSpan = 'full';
 
     protected static bool $isLazy = false;
 
@@ -22,13 +21,14 @@ class NotificationsWidget extends Widget
     protected static ?string $pollingInterval = '30s';
 
     public ?string $taskFilter = null; // 'all', 'new', 'in_progress'
+
     public ?string $sortTasks = 'newest'; // 'newest', 'oldest'
 
     public function getViewData(): array
     {
         $user = Auth::user();
 
-        if (!$user) {
+        if (! $user) {
             return [
                 'newTasksCount' => 0,
                 'unreadMessagesCount' => 0,
@@ -50,9 +50,9 @@ class NotificationsWidget extends Widget
             ->with('status');
 
         if ($this->taskFilter === 'new') {
-            $tasksQuery->whereHas('status', fn($q) => $q->where('name', 'Do zrobienia'));
+            $tasksQuery->whereHas('status', fn ($q) => $q->where('name', 'Do zrobienia'));
         } elseif ($this->taskFilter === 'in_progress') {
-            $tasksQuery->whereHas('status', fn($q) => $q->where('name', 'W trakcie'));
+            $tasksQuery->whereHas('status', fn ($q) => $q->where('name', 'W trakcie'));
         }
 
         if ($this->sortTasks === 'oldest') {

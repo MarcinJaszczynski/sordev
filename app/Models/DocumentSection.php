@@ -7,7 +7,7 @@ use Illuminate\Database\Eloquent\Relations\HasMany;
 
 class DocumentSection extends Model
 {
-    protected $fillable = ['title','slug','order_number'];
+    protected $fillable = ['title', 'slug', 'order_number'];
 
     public function documents(): HasMany
     {

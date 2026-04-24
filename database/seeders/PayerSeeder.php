@@ -2,8 +2,8 @@
 
 namespace Database\Seeders;
 
-use Illuminate\Database\Seeder;
 use App\Models\Payer;
+use Illuminate\Database\Seeder;
 
 class PayerSeeder extends Seeder
 {

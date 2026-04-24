@@ -12,7 +12,9 @@ use Filament\Tables\Table;
 class ProgramPointReservationsRelationManager extends RelationManager
 {
     protected static string $relationship = 'reservations';
+
     protected static ?string $title = 'Rezerwacje dla punktu';
+
     protected static ?string $recordTitleAttribute = 'booking_reference';
 
     public function form(Form $form): Form
@@ -138,7 +140,7 @@ class ProgramPointReservationsRelationManager extends RelationManager
 
                 Tables\Columns\BadgeColumn::make('status')
                     ->label('Status')
-                    ->formatStateUsing(fn($state) => Reservation::$statuses[$state] ?? $state)
+                    ->formatStateUsing(fn ($state) => Reservation::$statuses[$state] ?? $state)
                     ->colors([
                         'gray' => 'pending',
                         'warning' => 'partially_confirmed',

@@ -3,14 +3,14 @@
 namespace App\Models;
 
 use App\Models\Concerns\HasTasks;
+use App\Support\Region;
+use App\Support\StoragePath;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\SoftDeletes;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Str;
-use App\Models\EventType;
-use App\Support\Region;
-use App\Support\StoragePath;
 
 /**
  * Model EventTemplate
@@ -31,11 +31,9 @@ use App\Support\StoragePath;
  * @property \Illuminate\Support\Carbon $updated_at
  * @property \Illuminate\Support\Carbon|null $deleted_at
  */
-
-
 class EventTemplate extends Model
 {
-    use HasFactory, SoftDeletes, HasTasks;
+    use HasFactory, HasTasks, SoftDeletes;
 
     /**
      * Automatyczne zapewnienie unikalności slugów przy tworzeniu/aktualizacji.
@@ -52,10 +50,10 @@ class EventTemplate extends Model
 
             // Sprawdzaj unikalność (ignoruj aktualny rekord przy edycji)
             while (static::where('slug', $slug)
-                ->when($model->exists, fn($q) => $q->where('id', '!=', $model->id))
+                ->when($model->exists, fn ($q) => $q->where('id', '!=', $model->id))
                 ->exists()
             ) {
-                $slug = $baseSlug . '-' . $i;
+                $slug = $baseSlug.'-'.$i;
                 $i++;
             }
             $model->slug = $slug;
@@ -69,7 +67,6 @@ class EventTemplate extends Model
         'gallery' => 'array',
         'is_active' => 'boolean',
     ];
-
 
     /**
      * Mutator: zawsze zapisuj featured_image jako string (pierwszy element tablicy lub null)
@@ -99,7 +96,7 @@ class EventTemplate extends Model
         }
 
         // W przeciwnym razie dołóż domyślny katalog dla miniatur
-        return 'event-templates/' . ltrim((string) $value, '/');
+        return 'event-templates/'.ltrim((string) $value, '/');
     }
 
     /**
@@ -113,7 +110,7 @@ class EventTemplate extends Model
         if (is_string($value)) {
             $decoded = json_decode($value, true);
             $items = is_array($decoded) ? $decoded : [];
-        } elseif (!is_array($value)) {
+        } elseif (! is_array($value)) {
             $items = [];
         }
 
@@ -124,7 +121,8 @@ class EventTemplate extends Model
             if (is_string($path) && str_contains($path, '/')) {
                 return $path;
             }
-            return 'event-templates/gallery/' . ltrim((string) $path, '/');
+
+            return 'event-templates/gallery/'.ltrim((string) $path, '/');
         }, $items);
     }
 
@@ -137,7 +135,7 @@ class EventTemplate extends Model
     {
         $fullPath = $this->full_image_path;
 
-        if (!$fullPath) {
+        if (! $fullPath) {
             return null;
         }
 
@@ -148,21 +146,34 @@ class EventTemplate extends Model
         $directory = pathinfo($fullPath, PATHINFO_DIRNAME);
         $filename = pathinfo($fullPath, PATHINFO_BASENAME);
 
-        if (!$directory || $directory === '.' || $directory === '/') {
-            return 'thumbs/' . $filename;
+        if (! $directory || $directory === '.' || $directory === '/') {
+            return 'thumbs/'.$filename;
         }
 
-        return trim($directory, '/') . '/thumbs/' . $filename;
+        return trim($directory, '/').'/thumbs/'.$filename;
     }
 
     public function getFullImageUrlAttribute(): ?string
     {
-        return StoragePath::publicUrl($this->full_image_path);
+        return $this->publicStorageUrlIfExists($this->full_image_path);
     }
 
     public function getPreviewImageUrlAttribute(): ?string
     {
-        return StoragePath::publicUrl($this->preview_image_path) ?: $this->full_image_url;
+        return $this->publicStorageUrlIfExists($this->preview_image_path) ?: $this->full_image_url;
+    }
+
+    private function publicStorageUrlIfExists(?string $path): ?string
+    {
+        $normalized = StoragePath::normalize($path);
+
+        if (! $normalized) {
+            return null;
+        }
+
+        return Storage::disk('public')->exists($normalized)
+            ? StoragePath::publicUrl($normalized)
+            : null;
     }
 
     /**
@@ -206,6 +217,7 @@ class EventTemplate extends Model
 
     /**
      * Pola masowo przypisywalne
+     *
      * @var array<int, string>
      */
     protected $fillable = [
@@ -433,7 +445,7 @@ class EventTemplate extends Model
     {
         $this->loadMissing('eventTypes');
 
-        if (!$this->relationLoaded('eventTypes') || $this->eventTypes === null) {
+        if (! $this->relationLoaded('eventTypes') || $this->eventTypes === null) {
             return false;
         }
 
@@ -444,6 +456,7 @@ class EventTemplate extends Model
 
         return $this->eventTypes->contains(function ($type) use ($foreignNames) {
             $name = Str::lower($type->name ?? '');
+
             return in_array($name, $foreignNames, true);
         });
     }
@@ -459,8 +472,8 @@ class EventTemplate extends Model
         try {
             // Clone main template
             $clone = $this->replicate();
-            $clone->name = $newName ?: $this->name . ' (Copy)';
-            $clone->slug = $this->slug . '-copy-' . time();
+            $clone->name = $newName ?: $this->name.' (Copy)';
+            $clone->slug = $this->slug.'-copy-'.time();
             $clone->save();
 
             // Clone starting places availability
@@ -477,6 +490,7 @@ class EventTemplate extends Model
             // ... add similar cloning for other relations ...
 
             DB::commit();
+
             return $clone;
         } catch (\Exception $e) {
             DB::rollback();
@@ -512,7 +526,7 @@ class EventTemplate extends Model
     {
         $effectiveStartPlaceId = $startPlaceId
             ?: (request()->cookie('start_place_id') ? (int) request()->cookie('start_place_id') : null)
-            ?: (isset($GLOBALS['current_start_place_id']) ? (int)$GLOBALS['current_start_place_id'] : null);
+            ?: (isset($GLOBALS['current_start_place_id']) ? (int) $GLOBALS['current_start_place_id'] : null);
 
         // Jeśli mamy jawny startPlaceId (z parametru lub cookie/global), użyj helpera.
         if ($effectiveStartPlaceId) {
@@ -525,8 +539,9 @@ class EventTemplate extends Model
             $regionSlug = Region::slugForLinks(null);
         }
 
-        $dayLength = ($this->duration_days ?? 0) . '-dniowe';
+        $dayLength = ($this->duration_days ?? 0).'-dniowe';
         $slug = $this->slug ?: Str::slug($this->name);
+
         return route('package.pretty', compact('regionSlug', 'dayLength', 'slug') + ['id' => $this->id]);
     }
 }

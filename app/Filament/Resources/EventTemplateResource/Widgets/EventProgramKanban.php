@@ -2,15 +2,18 @@
 
 namespace App\Filament\Resources\EventTemplateResource\Widgets;
 
-use Filament\Widgets\Widget;
 use App\Models\EventTemplate;
 use App\Models\EventTemplateProgramPoint;
+use Filament\Widgets\Widget;
 
 class EventProgramKanban extends Widget
 {
     protected static string $view = 'filament.resources.event-template-resource.widgets.event-program-kanban';
+
     public ?EventTemplate $record = null;
+
     public array $columns = [];
+
     public array $allProgramPoints = [];
 
     public function mount(): void
@@ -29,7 +32,9 @@ class EventProgramKanban extends Widget
     protected function getColumns(): array
     {
         $columns = [];
-        if (!$this->record) return $columns;
+        if (! $this->record) {
+            return $columns;
+        }
         $days = $this->record->duration_days ?? 1;
         for ($i = 1; $i <= $days; $i++) {
             $columns[$i] = [
@@ -45,6 +50,7 @@ class EventProgramKanban extends Widget
                 $columns[$day]['points'][] = $point;
             }
         }
+
         return $columns;
     }
 

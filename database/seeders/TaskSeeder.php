@@ -2,10 +2,10 @@
 
 namespace Database\Seeders;
 
-use Illuminate\Database\Seeder;
 use App\Models\Task;
 use App\Models\TaskStatus;
 use App\Models\User;
+use Illuminate\Database\Seeder;
 
 class TaskSeeder extends Seeder
 {
@@ -13,8 +13,8 @@ class TaskSeeder extends Seeder
     {
         $user = User::first();
         $status = TaskStatus::first();
-        
-        if (!$user || !$status) {
+
+        if (! $user || ! $status) {
             return; // Nie można utworzyć zadań bez użytkowników i statusów
         }
 

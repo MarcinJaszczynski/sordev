@@ -3,11 +3,11 @@
 namespace App\Filament\Resources\DocumentResource\RelationManagers;
 
 use Filament\Forms;
+use Filament\Forms\Components\FileUpload;
 use Filament\Forms\Form;
 use Filament\Resources\RelationManagers\RelationManager;
 use Filament\Tables;
 use Filament\Tables\Table;
-use Filament\Forms\Components\FileUpload;
 use Illuminate\Support\Facades\Storage;
 
 class AttachmentsRelationManager extends RelationManager
@@ -34,7 +34,6 @@ class AttachmentsRelationManager extends RelationManager
                     try {
                         $disk = Storage::disk('public');
                         /** @var \Illuminate\Filesystem\FilesystemAdapter $disk */
-
                         $size = $disk->exists($file) ? $disk->size($file) : 0;
                         $type = $disk->exists($file) ? $disk->mimeType($file) : null;
                     } catch (\Throwable $e) {
@@ -46,7 +45,7 @@ class AttachmentsRelationManager extends RelationManager
                         'name' => basename($file),
                         'size' => $size,
                         'type' => $type,
-                        'url' => '/storage/' . ltrim($file, '/'),
+                        'url' => '/storage/'.ltrim($file, '/'),
                     ];
                 })
                 ->required(),

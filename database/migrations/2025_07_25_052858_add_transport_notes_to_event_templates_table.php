@@ -21,8 +21,12 @@ return new class extends Migration
      */
     public function down(): void
     {
-        Schema::table('event_templates', function (Blueprint $table) {
-            $table->dropColumn('transport_notes');
-        });
+        if (Schema::hasTable('event_templates')) {
+            Schema::table('event_templates', function (Blueprint $table) {
+                try {
+                    $table->dropColumn('transport_notes');
+                } catch (\Throwable $e) {}
+            });
+        }
     }
 };

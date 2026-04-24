@@ -8,7 +8,7 @@ use PHPUnit\Framework\TestCase;
 class PriceRoundingServiceTest extends TestCase
 {
     /** @dataProvider plnProvider */
-    public function testPlnRounding($input, $expected)
+    public function test_pln_rounding($input, $expected)
     {
         $this->assertSame($expected, PriceRoundingService::roundPerPerson($input, 'PLN'));
     }
@@ -31,7 +31,7 @@ class PriceRoundingServiceTest extends TestCase
     }
 
     /** @dataProvider foreignProvider */
-    public function testForeignRounding($input, $expected)
+    public function test_foreign_rounding($input, $expected)
     {
         $this->assertSame($expected, PriceRoundingService::roundPerPerson($input, 'EUR'));
     }

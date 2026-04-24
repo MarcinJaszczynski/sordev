@@ -9,27 +9,33 @@ use App\Models\User;
 use App\Services\NotificationService;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Log;
-use Livewire\Component;
 use Livewire\Attributes\On;
+use Livewire\Component;
 
 class ChatInterface extends Component
 {
     public ?int $selectedConversationId = null;
+
     public string $newMessage = '';
+
     public string $newConversationTitle = '';
+
     public array $selectedUsers = [];
+
     public bool $showNewConversationModal = false;
+
     public string $searchTerm = '';
+
     public string $userSearch = '';
 
     public function mount(?int $conversationId = null)
     {
         Log::info('ChatInterface mount - START', [
-            'conversationId' => $conversationId, 
+            'conversationId' => $conversationId,
             'class' => static::class,
-            'methods' => get_class_methods($this)
+            'methods' => get_class_methods($this),
         ]);
-        
+
         $this->selectedConversationId = $conversationId;
         $this->newMessage = '';
         $this->newConversationTitle = '';
@@ -42,7 +48,7 @@ class ChatInterface extends Component
     public function selectConversation(int $conversationId)
     {
         $this->selectedConversationId = $conversationId;
-        
+
         // Oznacz konwersację jako przeczytaną
         $conversation = Conversation::find($conversationId);
         if ($conversation) {
@@ -51,7 +57,7 @@ class ChatInterface extends Component
             NotificationService::clearCacheForUser(Auth::id());
             $this->dispatch('refresh-notifications');
         }
-        
+
         $this->dispatch('conversation-selected', $conversationId);
     }
 
@@ -65,20 +71,23 @@ class ChatInterface extends Component
             'newMessage.max' => 'Wiadomość nie może być dłuższa niż 2000 znaków.',
         ]);
 
-        if (!$this->selectedConversationId) {
+        if (! $this->selectedConversationId) {
             session()->flash('error', 'Nie wybrano konwersacji.');
+
             return;
         }
 
         $conversation = Conversation::find($this->selectedConversationId);
-        if (!$conversation) {
+        if (! $conversation) {
             session()->flash('error', 'Konwersacja nie została znaleziona.');
+
             return;
         }
 
         // Sprawdź czy użytkownik jest uczestnikiem konwersacji
-        if (!$conversation->participants()->where('user_id', Auth::id())->exists()) {
+        if (! $conversation->participants()->where('user_id', Auth::id())->exists()) {
             session()->flash('error', 'Nie masz uprawnień do pisania w tej konwersacji.');
+
             return;
         }
 
@@ -101,31 +110,31 @@ class ChatInterface extends Component
             $this->newMessage = '';
             $this->dispatch('message-sent');
             $this->dispatch('refresh-notifications');
-            
+
             // Przewiń do dołu po wysłaniu wiadomości
             $this->dispatch('scroll-to-bottom');
-            
+
         } catch (\Exception $e) {
             session()->flash('error', 'Wystąpił błąd podczas wysyłania wiadomości.');
-            Log::error('Chat message send error: ' . $e->getMessage());
+            Log::error('Chat message send error: '.$e->getMessage());
         }
     }
 
     public function startNewConversation()
     {
-        Log::info('startNewConversation called by user: ' . Auth::id());
+        Log::info('startNewConversation called by user: '.Auth::id());
         $this->showNewConversationModal = true;
         $this->newConversationTitle = '';
         $this->selectedUsers = [];
         $this->userSearch = '';
-        Log::info('Modal should be shown now, showNewConversationModal = ' . ($this->showNewConversationModal ? 'true' : 'false'));
+        Log::info('Modal should be shown now, showNewConversationModal = '.($this->showNewConversationModal ? 'true' : 'false'));
     }
 
     public function createConversation()
     {
         Log::info('createConversation called', [
             'title' => $this->newConversationTitle,
-            'selectedUsers' => $this->selectedUsers
+            'selectedUsers' => $this->selectedUsers,
         ]);
 
         $this->validate([
@@ -179,26 +188,26 @@ class ChatInterface extends Component
             $this->newConversationTitle = '';
             $this->selectedUsers = [];
             $this->userSearch = '';
-            
+
             $this->dispatch('conversation-created', $conversation->id);
             $this->dispatch('refresh-notifications');
 
             session()->flash('message', 'Rozmowa została utworzona pomyślnie.');
             Log::info('Conversation creation completed successfully');
-            
+
         } catch (\Exception $e) {
-            Log::error('Error creating conversation: ' . $e->getMessage(), [
-                'trace' => $e->getTraceAsString()
+            Log::error('Error creating conversation: '.$e->getMessage(), [
+                'trace' => $e->getTraceAsString(),
             ]);
-            session()->flash('error', 'Wystąpił błąd podczas tworzenia rozmowy: ' . $e->getMessage());
+            session()->flash('error', 'Wystąpił błąd podczas tworzenia rozmowy: '.$e->getMessage());
         }
     }
 
     public function getConversationsProperty()
     {
         return Conversation::whereHas('participants', function ($query) {
-                $query->where('user_id', Auth::id());
-            })
+            $query->where('user_id', Auth::id());
+        })
             ->with(['participants', 'lastMessage.user'])
             ->orderByDesc('last_message_at')
             ->orderByDesc('created_at')
@@ -208,7 +217,7 @@ class ChatInterface extends Component
     public function getFilteredConversationsProperty()
     {
         $user = Auth::user();
-        if (!$user) {
+        if (! $user) {
             return collect();
         }
 
@@ -220,15 +229,16 @@ class ChatInterface extends Component
 
     public function getSelectedConversationProperty()
     {
-        if (!$this->selectedConversationId) {
+        if (! $this->selectedConversationId) {
             return null;
         }
+
         return Conversation::with('participants')->find($this->selectedConversationId);
     }
 
     public function getMessagesProperty()
     {
-        if (!$this->selectedConversationId) {
+        if (! $this->selectedConversationId) {
             return collect();
         }
 
@@ -244,8 +254,9 @@ class ChatInterface extends Component
             ->where('status', 'active')
             ->orderBy('name')
             ->get();
-            
-        Log::info('Available users count: ' . $users->count());
+
+        Log::info('Available users count: '.$users->count());
+
         return $users;
     }
 
@@ -255,6 +266,7 @@ class ChatInterface extends Component
             return $this->availableUsers;
         }
         $needle = mb_strtolower($this->userSearch);
+
         return $this->availableUsers->filter(function ($user) use ($needle) {
             return mb_stripos(mb_strtolower($user->name), $needle) !== false;
         });

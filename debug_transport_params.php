@@ -1,4 +1,5 @@
 <?php
+
 use App\Models\EventTemplate;
 
 require __DIR__.'/vendor/autoload.php';
@@ -8,7 +9,7 @@ $app->make(Illuminate\Contracts\Console\Kernel::class)->bootstrap();
 $eventTemplateId = 10;
 $template = EventTemplate::with('bus')->find($eventTemplateId);
 
-if (!$template) {
+if (! $template) {
     echo "Brak szablonu!\n";
     exit(1);
 }

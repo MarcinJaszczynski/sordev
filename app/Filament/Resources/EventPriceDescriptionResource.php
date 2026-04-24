@@ -7,17 +7,23 @@ use App\Models\EventPriceDescription;
 use Filament\Forms;
 use Filament\Forms\Form;
 use Filament\Resources\Resource;
-use Filament\Tables\Table;
 use Filament\Tables;
+use Filament\Tables\Table;
 
 class EventPriceDescriptionResource extends Resource
 {
     protected static ?string $model = EventPriceDescription::class;
+
     protected static ?string $navigationIcon = 'heroicon-o-currency-euro';
+
     protected static ?string $navigationGroup = 'Ustawienia';
+
     protected static ?string $label = 'Opis ceny imprezy';
+
     protected static ?string $pluralLabel = 'Opisy cen imprez';
+
     protected static ?int $navigationSort = 120;
+
     public static function shouldRegisterNavigation(): bool
     {
         return true;

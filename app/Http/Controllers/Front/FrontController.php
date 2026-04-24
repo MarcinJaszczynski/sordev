@@ -3,23 +3,23 @@
 namespace App\Http\Controllers\Front;
 
 use App\Http\Controllers\Controller;
-use Illuminate\Http\Request;
-use Illuminate\Support\Facades\Log;
-use Illuminate\Support\Facades\Mail;
-use Illuminate\Support\Facades\Cookie;
-use Illuminate\Support\Facades\DB;
-use Illuminate\Support\Facades\Cache;
-use Illuminate\Support\Collection;
-use Illuminate\Support\Facades\Http;
+use App\Models\BlogPost;
+use App\Models\Currency;
 use App\Models\EventTemplate;
 use App\Models\EventTemplatePricePerPerson;
 use App\Models\EventTemplateStartingPlaceAvailability;
-use App\Models\Currency;
-use App\Models\Place;
 use App\Models\EventType;
+use App\Models\Place;
 use App\Models\Tag;
 use App\Models\TransportType;
-use App\Models\BlogPost;
+use Illuminate\Http\Request;
+use Illuminate\Support\Collection;
+use Illuminate\Support\Facades\Cache;
+use Illuminate\Support\Facades\Cookie;
+use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Http;
+use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Facades\Mail;
 use PhpOffice\PhpWord\Element\Section;
 use PhpOffice\PhpWord\IOFactory;
 use PhpOffice\PhpWord\PhpWord;
@@ -63,6 +63,7 @@ class FrontController extends Controller
             'Ż' => 'Z',
             'Ź' => 'Z',
         ];
+
         return strtr($string, $diacritics);
     }
 
@@ -101,6 +102,7 @@ class FrontController extends Controller
                         Log::debug('[compareNamesLocaleAware] Collator', ['a' => $aNorm, 'b' => $bNorm, 'res' => $res]);
                     }
                 }
+
                 return $res;
             }
         }
@@ -120,6 +122,7 @@ class FrontController extends Controller
         $name = preg_replace('/^[^\p{L}\p{N}]+/u', '', $name) ?? $name;
         // Redukcja wielu spacji
         $name = preg_replace('/\s+/u', ' ', $name) ?? $name;
+
         return mb_strtolower($name);
     }
 
@@ -189,6 +192,7 @@ class FrontController extends Controller
         // Rozróżnij ź i ż, ustawiając ź przed ż
         $expr = "REPLACE($expr, 'ź', 'z~1')";
         $expr = "REPLACE($expr, 'ż', 'z~2')";
+
         return $expr;
     }
 
@@ -216,7 +220,7 @@ class FrontController extends Controller
 
     private function resolveStartPlaceIdFromSlug(?string $regionSlug): ?int
     {
-        if (!$regionSlug || $regionSlug === 'region') {
+        if (! $regionSlug || $regionSlug === 'region') {
             return null;
         }
 
@@ -303,11 +307,11 @@ class FrontController extends Controller
         // Base query for posts listing
         $postsQuery = BlogPost::published();
 
-        if (!empty($search)) {
+        if (! empty($search)) {
             $postsQuery->where(function ($q) use ($search) {
                 $q->where('title', 'like', "%{$search}%")
-                  ->orWhere('excerpt', 'like', "%{$search}%")
-                  ->orWhere('content', 'like', "%{$search}%");
+                    ->orWhere('excerpt', 'like', "%{$search}%")
+                    ->orWhere('content', 'like', "%{$search}%");
             });
         } else {
             // Featured posts (max 3) only when not searching
@@ -366,16 +370,18 @@ class FrontController extends Controller
 
         return view('front.blog-post', compact('blogPost', 'previousPost', 'nextPost'));
     }
+
     public function directorypackages(Request $request)
     {
         $directoryRequiresToken = $request->boolean('requires_turnstile');
-        if (!$directoryRequiresToken && $request->filled('cf-turnstile-response')) {
+        if (! $directoryRequiresToken && $request->filled('cf-turnstile-response')) {
             $directoryRequiresToken = true;
         }
 
         $directoryTurnstileOk = $this->verifyTurnstileToken($request, 'directory_filter', $directoryRequiresToken);
-        if ($directoryRequiresToken && !$directoryTurnstileOk) {
+        if ($directoryRequiresToken && ! $directoryTurnstileOk) {
             $regionSlug = $request->route('regionSlug') ?? 'region';
+
             return redirect()->route('directory-packages', ['regionSlug' => $regionSlug])->with('error', 'Nie udało się zweryfikować zabezpieczenia. Spróbuj ponownie.');
         }
 
@@ -401,16 +407,16 @@ class FrontController extends Controller
             });
             if ($place) {
                 $currentStartPlaceId = $place->id;
-                Cookie::queue('start_place_id', (string)$currentStartPlaceId, 60 * 24 * 365);
+                Cookie::queue('start_place_id', (string) $currentStartPlaceId, 60 * 24 * 365);
             }
         }
-        if (!$currentStartPlaceId) {
+        if (! $currentStartPlaceId) {
             $currentStartPlaceId = $request->get('start_place_id');
         }
-        if (!$currentStartPlaceId) {
+        if (! $currentStartPlaceId) {
             $currentStartPlaceId = $request->cookie('start_place_id');
         }
-        if ($currentStartPlaceId && !$startPlaces->where('id', (int)$currentStartPlaceId)->first()) {
+        if ($currentStartPlaceId && ! $startPlaces->where('id', (int) $currentStartPlaceId)->first()) {
             $currentStartPlaceId = null; // invalid -> reset
         }
 
@@ -438,23 +444,23 @@ class FrontController extends Controller
                     $min = $this->resolveMinPlnFromPrices($all, $currentStartPlaceId, null, null);
                 }
                 if ($min !== null) {
-                    $eventTemplate->computed_price = (float)$min;
-                    $eventTemplate->price = (float)$min;
+                    $eventTemplate->computed_price = (float) $min;
+                    $eventTemplate->price = (float) $min;
                 }
                 // Set relation to candidate prices (local if start place provided, otherwise all >0)
                 if ($currentStartPlaceId) {
-                    $candidate = $all->filter(fn($p) => $p->price_per_person > 0 && (int)$p->start_place_id === (int)$currentStartPlaceId)->values();
+                    $candidate = $all->filter(fn ($p) => $p->price_per_person > 0 && (int) $p->start_place_id === (int) $currentStartPlaceId)->values();
                 } else {
-                    $candidate = $all->filter(fn($p) => $p->price_per_person > 0)->values();
+                    $candidate = $all->filter(fn ($p) => $p->price_per_person > 0)->values();
                 }
                 $eventTemplate->setRelation('pricesPerPerson', $candidate);
                 // Diagnostic logging for specific template id (57)
-                if (config('app.debug') && isset($eventTemplate->id) && (int)$eventTemplate->id === 57) {
+                if (config('app.debug') && isset($eventTemplate->id) && (int) $eventTemplate->id === 57) {
                     try {
                         Log::debug('mapEventTemplate(): price_diag', [
                             'event_template_id' => $eventTemplate->id,
                             'current_start_place_id' => $currentStartPlaceId,
-                            'candidate_prices' => $candidate->map(fn($p) => [$p->id, $p->start_place_id, $p->event_template_qty_id, $p->price_per_person, $p->currency?->code ?? null])->values(),
+                            'candidate_prices' => $candidate->map(fn ($p) => [$p->id, $p->start_place_id, $p->event_template_qty_id, $p->price_per_person, $p->currency?->code ?? null])->values(),
                             'computed_price' => $eventTemplate->computed_price,
                         ]);
                     } catch (\Throwable $e) {
@@ -467,38 +473,40 @@ class FrontController extends Controller
             $eventTemplate->region_id = null;
             $eventTemplate->length = (object) [
                 'id' => $eventTemplate->duration_days,
-                'name' => $eventTemplate->duration_days == 1 ? '1 dzień' : $eventTemplate->duration_days . ' dni'
+                'name' => $eventTemplate->duration_days == 1 ? '1 dzień' : $eventTemplate->duration_days.' dni',
             ];
             $eventTemplate->transport = (object) [
                 'id' => null,
-                'name' => 'Nie określono'
+                'name' => 'Nie określono',
             ];
+
             return $eventTemplate;
         };
 
         // Helper closure to fetch templates filtered by selected start_place availability (if chosen)
-        $fetchByDuration = function ($operator, $value, $limit) use ($mapEventTemplate, $request, $currentStartPlaceId) {
+        $fetchByDuration = function ($operator, $value, $limit) use ($mapEventTemplate, $request) {
             $q = \App\Models\EventTemplate::query()
                 ->where('is_active', true)
-                ->when($operator === '>=', fn($qq) => $qq->where('duration_days', '>=', $value), fn($qq) => $qq->where('duration_days', $value))
+                ->when($operator === '>=', fn ($qq) => $qq->where('duration_days', '>=', $value), fn ($qq) => $qq->where('duration_days', $value))
                 ->orderByDesc('id') // deterministic-ish newest first
                 ->with([
                     'startingPlaceAvailabilities',
                     'pricesPerPerson.eventTemplateQty',
                     'pricesPerPerson.currency',
-                    'pricesPerPerson.startPlace'
+                    'pricesPerPerson.startPlace',
                 ]);
             $startPlaceId = $request->get('start_place_id') ?: $request->cookie('start_place_id');
             if ($startPlaceId) {
                 // Wymagaj NAJNOWSZEJ dostępności = true (MAX(id) dla danego start_place_id)
                 $q->whereRaw(
                     "EXISTS (\n                        SELECT 1 FROM event_template_starting_place_availability a\n                        WHERE a.event_template_id = event_templates.id\n                          AND a.start_place_id = ?\n                          AND a.available = 1\n                          AND a.id = (\n                            SELECT MAX(id) FROM event_template_starting_place_availability\n                            WHERE event_template_id = event_templates.id AND start_place_id = ?\n                          )\n                    )",
-                    [(int)$startPlaceId, (int)$startPlaceId]
+                    [(int) $startPlaceId, (int) $startPlaceId]
                 )->whereHas('pricesPerPerson', function ($pq) use ($startPlaceId) {
-                    $pq->where('start_place_id', (int)$startPlaceId)
+                    $pq->where('start_place_id', (int) $startPlaceId)
                         ->where('price_per_person', '>', 0);
                 });
             }
+
             return $q->take($limit)->get()->map($mapEventTemplate);
         };
 
@@ -529,9 +537,9 @@ class FrontController extends Controller
             ->orderBy('duration_days', 'asc')
             ->get()
             ->map(function ($template) {
-                return (object)[
+                return (object) [
                     'id' => $template->duration_days,
-                    'name' => $template->duration_days == 1 ? '1 dzień' : $template->duration_days . ' dni'
+                    'name' => $template->duration_days == 1 ? '1 dzień' : $template->duration_days.' dni',
                 ];
             });
 
@@ -542,12 +550,12 @@ class FrontController extends Controller
                 'startingPlaceAvailabilities',
                 'pricesPerPerson.eventTemplateQty',
                 'pricesPerPerson.currency',
-                'pricesPerPerson.startPlace'
+                'pricesPerPerson.startPlace',
             ]);
         if ($form_name) {
             $search = $this->removeDiacritics(mb_strtolower($form_name));
             $query->where(function ($q) use ($search) {
-                $q->whereRaw("LOWER(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(name, 'ą', 'a'), 'ć', 'c'), 'ę', 'e'), 'ł', 'l'), 'ń', 'n'), 'ó', 'o'), 'ś', 's'), 'ż', 'z'), 'ź', 'z')) LIKE ?", ['%' . $search . '%']);
+                $q->whereRaw("LOWER(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(name, 'ą', 'a'), 'ć', 'c'), 'ę', 'e'), 'ł', 'l'), 'ń', 'n'), 'ó', 'o'), 'ś', 's'), 'ż', 'z'), 'ź', 'z')) LIKE ?", ['%'.$search.'%']);
             });
         }
         if ($form_min_price) {
@@ -578,9 +586,9 @@ class FrontController extends Controller
         if ($currentStartPlaceId) {
             $query->whereRaw(
                 "EXISTS (\n                    SELECT 1 FROM event_template_starting_place_availability a\n                    WHERE a.event_template_id = event_templates.id\n                      AND a.start_place_id = ?\n                      AND a.available = 1\n                      AND a.id = (\n                        SELECT MAX(id) FROM event_template_starting_place_availability\n                        WHERE event_template_id = event_templates.id AND start_place_id = ?\n                      )\n                )",
-                [(int)$currentStartPlaceId, (int)$currentStartPlaceId]
+                [(int) $currentStartPlaceId, (int) $currentStartPlaceId]
             )->whereHas('pricesPerPerson', function ($pq) use ($currentStartPlaceId) {
-                $pq->where('start_place_id', (int)$currentStartPlaceId)->where('price_per_person', '>', 0);
+                $pq->where('start_place_id', (int) $currentStartPlaceId)->where('price_per_person', '>', 0);
             });
         }
 
@@ -592,10 +600,10 @@ class FrontController extends Controller
             $sortKey = $this->buildPolishSortKeySql('name');
             $query->orderByRaw("$sortKey DESC, LOWER(name) DESC");
         } elseif ($sort_by === 'price_asc' || $sort_by === 'price_desc') {
-            $sp = $currentStartPlaceId ? (int)$currentStartPlaceId : null;
+            $sp = $currentStartPlaceId ? (int) $currentStartPlaceId : null;
             $plnCond = "(UPPER(c.symbol)='PLN' OR UPPER(c.name) LIKE '%ZŁOT%')";
-            $spWhere = $sp !== null ? " AND pp.start_place_id = $sp" : "";
-            $spWhere2 = $sp !== null ? " AND pp2.start_place_id = $sp" : "";
+            $spWhere = $sp !== null ? " AND pp.start_place_id = $sp" : '';
+            $spWhere2 = $sp !== null ? " AND pp2.start_place_id = $sp" : '';
             $primary = "SELECT MIN( (CAST(((pp.price_per_person + 4) / 5) AS INTEGER)) * 5 )
                                                 FROM event_template_price_per_person pp
                                                 JOIN currencies c ON c.id = pp.currency_id
@@ -641,9 +649,9 @@ class FrontController extends Controller
         if (config('app.debug') && $currentStartPlaceId) {
             try {
                 Log::debug('directorypackages(): strict local filter applied', [
-                    'start_place_id' => (int)$currentStartPlaceId,
+                    'start_place_id' => (int) $currentStartPlaceId,
                     'total_after_transform' => $packages->getCollection()->count(),
-                    'with_price' => $packages->getCollection()->filter(fn($p) => $p->computed_price !== null)->count(),
+                    'with_price' => $packages->getCollection()->filter(fn ($p) => $p->computed_price !== null)->count(),
                 ]);
             } catch (\Throwable $e) {
             }
@@ -713,6 +721,7 @@ class FrontController extends Controller
             'lengthButtonUrl'
         ));
     }
+
     public function home(Request $request)
     {
         // Lista dostępnych miejsc startowych (jak w packages())
@@ -727,7 +736,7 @@ class FrontController extends Controller
             });
             if ($place) {
                 $start_place_id = $place->id;
-                Cookie::queue('start_place_id', (string)$start_place_id, 60 * 24 * 365);
+                Cookie::queue('start_place_id', (string) $start_place_id, 60 * 24 * 365);
                 // diagnostyka: który Place został dopasowany przez regionSlug
                 try {
                     Log::info("home: regionSlug={$regionSlug}, matched_place_id={$place->id}, name={$place->name}");
@@ -735,23 +744,23 @@ class FrontController extends Controller
                 }
             }
         }
-        if (!$start_place_id) {
+        if (! $start_place_id) {
             $start_place_id = $request->get('start_place_id');
         }
-        if (!$start_place_id) {
+        if (! $start_place_id) {
             $start_place_id = $request->cookie('start_place_id');
         }
         // Walidacja: jeśli wybrane id nie jest na liście dostępnych – ignoruj
-        if ($start_place_id && !$startPlaces->where('id', (int)$start_place_id)->first()) {
+        if ($start_place_id && ! $startPlaces->where('id', (int) $start_place_id)->first()) {
             $start_place_id = null;
         }
 
         $durations = [
-            (object)['id' => 1, 'name' => '1 dzień'],
-            (object)['id' => 2, 'name' => '2 dni'],
-            (object)['id' => 3, 'name' => '3 dni'],
-            (object)['id' => 5, 'name' => '5 dni'],
-            (object)['id' => 7, 'name' => '7 dni'],
+            (object) ['id' => 1, 'name' => '1 dzień'],
+            (object) ['id' => 2, 'name' => '2 dni'],
+            (object) ['id' => 3, 'name' => '3 dni'],
+            (object) ['id' => 5, 'name' => '5 dni'],
+            (object) ['id' => 7, 'name' => '7 dni'],
         ];
 
         // Pobierz (max 12) aktywnych EventTemplates, opcjonalnie przefiltrowanych po dostępności dla start_place_id
@@ -774,24 +783,25 @@ class FrontController extends Controller
                 $eventTemplate->featured_photo = $eventTemplate->featured_image ? basename($eventTemplate->featured_image) : 'default.png';
                 $eventTemplate->length = (object) [
                     'id' => $eventTemplate->duration_days,
-                    'name' => $eventTemplate->duration_days == 1 ? '1 dzień' : $eventTemplate->duration_days . ' dni'
+                    'name' => $eventTemplate->duration_days == 1 ? '1 dzień' : $eventTemplate->duration_days.' dni',
                 ];
                 if ($eventTemplate->relationLoaded('pricesPerPerson')) {
                     $all = $eventTemplate->pricesPerPerson;
                     // Prefer local prices for selected start place; otherwise any >0
                     $candidate = $start_place_id
-                        ? $all->filter(fn($p) => $p->price_per_person > 0 && (int)$p->start_place_id === (int)$start_place_id)
-                        : $all->filter(fn($p) => $p->price_per_person > 0);
+                        ? $all->filter(fn ($p) => $p->price_per_person > 0 && (int) $p->start_place_id === (int) $start_place_id)
+                        : $all->filter(fn ($p) => $p->price_per_person > 0);
                     // Prefer group 40–55 like on listings
                     $min = $this->resolveMinPlnFromPrices($all, $start_place_id, 40, 55);
                     if ($min === null) {
                         $min = $this->resolveMinPlnFromPrices($all, $start_place_id, null, null);
                     }
-                    $eventTemplate->computed_price = $min !== null ? (float)$min : null;
+                    $eventTemplate->computed_price = $min !== null ? (float) $min : null;
                     $eventTemplate->setRelation('pricesPerPerson', $candidate->values());
                 } else {
                     $eventTemplate->computed_price = null;
                 }
+
                 return $eventTemplate;
             });
         $random_chunks = $random->chunk(4);
@@ -829,13 +839,14 @@ class FrontController extends Controller
     public function packages(Request $request)
     {
         $requiresToken = $request->boolean('requires_turnstile');
-        if (!$requiresToken && $request->filled('cf-turnstile-response')) {
+        if (! $requiresToken && $request->filled('cf-turnstile-response')) {
             $requiresToken = true;
         }
 
         $turnstileOk = $this->verifyTurnstileToken($request, 'packages_filter', $requiresToken);
-        if ($requiresToken && !$turnstileOk) {
+        if ($requiresToken && ! $turnstileOk) {
             $regionSlug = $request->route('regionSlug') ?? 'region';
+
             return redirect()->route('packages', ['regionSlug' => $regionSlug])->with('error', 'Nie udało się zweryfikować zabezpieczenia. Spróbuj ponownie.');
         }
 
@@ -864,29 +875,29 @@ class FrontController extends Controller
                 $start_place_id = $place->id;
             }
         }
-        if (!$start_place_id) {
+        if (! $start_place_id) {
             $paramId = request('start_place_id');
             if ($paramId) {
                 // Prefer canonical Place when possible, but accept param if there are availability rows
                 $p = Place::find($paramId);
                 if (($p && $p->starting_place) || \App\Models\EventTemplateStartingPlaceAvailability::where('start_place_id', $paramId)->exists()) {
-                    $start_place_id = (int)$paramId;
+                    $start_place_id = (int) $paramId;
                 }
             }
         }
-        if (!$start_place_id) {
+        if (! $start_place_id) {
             $cookieId = request()->cookie('start_place_id');
             if ($cookieId && ($p = Place::find($cookieId)) && $p->starting_place) {
-                $start_place_id = (int)$cookieId;
+                $start_place_id = (int) $cookieId;
             }
         }
         if ($start_place_id) {
-            Cookie::queue('start_place_id', (string)$start_place_id, 60 * 24 * 365);
+            Cookie::queue('start_place_id', (string) $start_place_id, 60 * 24 * 365);
         }
         // Diagnostyka: jeśli włączony debug – zaloguj rozstrzygnięty start_place_id
         if (config('app.debug')) {
             try {
-                Log::debug('packages(): resolved start_place_id=' . var_export($start_place_id, true));
+                Log::debug('packages(): resolved start_place_id='.var_export($start_place_id, true));
             } catch (\Throwable $e) {
             }
         }
@@ -898,7 +909,9 @@ class FrontController extends Controller
             $tag = $this->getCachedTags()->first(function ($t) use ($tagSlug) {
                 return str()->slug($t->name) === $tagSlug;
             });
-            if ($tag) $tagId = $tag->id;
+            if ($tag) {
+                $tagId = $tag->id;
+            }
         }
 
         // Pobierz unikalne start_place_id z event_template_starting_place_availability
@@ -908,7 +921,7 @@ class FrontController extends Controller
         $usedDefaultWarszawa = false;
 
         // Jeśli nie ma wybranego start_place_id w URL lub jest pusty, sprawdź cookie
-        if (!$start_place_id || !$startPlaces->where('id', $start_place_id)->first()) {
+        if (! $start_place_id || ! $startPlaces->where('id', $start_place_id)->first()) {
             $warszawaPlace = $startPlaces->firstWhere('name', 'Warszawa');
             if ($warszawaPlace) {
                 $start_place_id = $warszawaPlace->id;
@@ -929,12 +942,6 @@ class FrontController extends Controller
                 $current_region_slug = str()->slug($placeName);
             }
         }
-
-
-
-
-
-
 
         $eventTemplate = EventTemplate::where('is_active', true)
             ->with([
@@ -962,7 +969,7 @@ class FrontController extends Controller
                     $q->where('event_types.id', $event_type_id);
                 });
             })
-            ->when(!empty($transportTypeIds), function ($query) use ($transportTypeIds) {
+            ->when(! empty($transportTypeIds), function ($query) use ($transportTypeIds) {
                 $query->whereHas('transportTypes', function ($q) use ($transportTypeIds) {
                     $q->whereIn('transport_types.id', $transportTypeIds);
                 });
@@ -975,18 +982,19 @@ class FrontController extends Controller
             ->when($request->filled('tags'), function ($query) use ($request) {
                 // Multi-tag filter (logged-in enhancement): comma-separated names or slugs
                 $raw = (array) $request->input('tags');
-                $joined = is_array($raw) ? implode(',', $raw) : (string)$raw;
+                $joined = is_array($raw) ? implode(',', $raw) : (string) $raw;
                 $parts = collect(explode(',', $joined))
-                    ->map(fn($s) => trim((string)$s))
+                    ->map(fn ($s) => trim((string) $s))
                     ->filter();
                 if ($parts->isNotEmpty()) {
                     $ids = $this->getCachedTags()->filter(function ($t) use ($parts) {
                         $slug = str()->slug($t->name);
+
                         return $parts->contains(function ($p) use ($t, $slug) {
                             return str()->slug($p) === $slug || mb_strtolower($p) === mb_strtolower($t->name);
                         });
                     })->pluck('id')->values()->all();
-                    if (!empty($ids)) {
+                    if (! empty($ids)) {
                         // Require ALL selected tags (AND semantics): add a whereHas per tag id
                         foreach ($ids as $tid) {
                             $query->whereHas('tags', function ($q) use ($tid) {
@@ -999,7 +1007,7 @@ class FrontController extends Controller
                     }
                 }
             })
-            ->when(!$tagId && $tagSlug, function ($query) {
+            ->when(! $tagId && $tagSlug, function ($query) {
                 // tag slug provided but not found -> return empty
                 $query->whereRaw('0=1');
             })
@@ -1009,9 +1017,9 @@ class FrontController extends Controller
                 $tagExpr = $this->buildDiacriticsFreeSql('tags.name');
 
                 $query->where(function ($qq) use ($term, $nameExpr, $tagExpr) {
-                    $qq->whereRaw("$nameExpr LIKE ?", ['%' . $term . '%'])
+                    $qq->whereRaw("$nameExpr LIKE ?", ['%'.$term.'%'])
                         ->orWhereHas('tags', function ($tq) use ($term, $tagExpr) {
-                            $tq->whereRaw("$tagExpr LIKE ?", ['%' . $term . '%']);
+                            $tq->whereRaw("$tagExpr LIKE ?", ['%'.$term.'%']);
                         });
                 });
             });
@@ -1039,10 +1047,10 @@ class FrontController extends Controller
             //  - preferuj qty 40..55 (PRIMARY), fallback do dowolnej qty (FALLBACK)
             //  - PLN (code/symbol/name)
             //  - lokalna cena dla wybranego start_place_id (jeśli podano), w przeciwnym razie dowolna
-            $sp = $start_place_id ? (int)$start_place_id : null;
+            $sp = $start_place_id ? (int) $start_place_id : null;
             $plnCond = "(UPPER(c.symbol)='PLN' OR UPPER(c.name) LIKE '%ZŁOT%')";
-            $spWhere = $sp !== null ? " AND pp.start_place_id = $sp" : "";
-            $spWhere2 = $sp !== null ? " AND pp2.start_place_id = $sp" : "";
+            $spWhere = $sp !== null ? " AND pp.start_place_id = $sp" : '';
+            $spWhere2 = $sp !== null ? " AND pp2.start_place_id = $sp" : '';
 
             $primary = "SELECT MIN( (CAST(((pp.price_per_person + 4) / 5) AS INTEGER)) * 5 )
                                                 FROM event_template_price_per_person pp
@@ -1109,12 +1117,12 @@ class FrontController extends Controller
             if ($minPln === null) {
                 $minPln = $this->resolveMinPlnFromPrices($all, $start_place_id, null, null);
             }
-            $item->computed_price = $minPln !== null ? (float)$minPln : null;
+            $item->computed_price = $minPln !== null ? (float) $minPln : null;
             // keep relation to candidate prices (local only if start place present)
             if ($start_place_id) {
-                $candidate = $all->filter(fn($p) => $p->price_per_person > 0 && (int)$p->start_place_id === (int)$start_place_id)->values();
+                $candidate = $all->filter(fn ($p) => $p->price_per_person > 0 && (int) $p->start_place_id === (int) $start_place_id)->values();
             } else {
-                $candidate = $all->filter(fn($p) => $p->price_per_person > 0)->values();
+                $candidate = $all->filter(fn ($p) => $p->price_per_person > 0)->values();
             }
             $item->setRelation('pricesPerPerson', $candidate);
 
@@ -1123,13 +1131,14 @@ class FrontController extends Controller
                     Log::debug('packages(): price_diag_simple', [
                         'event_template_id' => $item->id,
                         'requested_start_place_id' => $start_place_id,
-                        'local_mode' => (bool)$start_place_id,
-                        'candidate_prices' => $candidate->map(fn($p) => [$p->id, $p->start_place_id, $p->event_template_qty_id, $p->price_per_person])->values(),
+                        'local_mode' => (bool) $start_place_id,
+                        'candidate_prices' => $candidate->map(fn ($p) => [$p->id, $p->start_place_id, $p->event_template_qty_id, $p->price_per_person])->values(),
                         'computed_price' => $item->computed_price,
                     ]);
                 } catch (\Throwable $e) {
                 }
             }
+
             return $item;
         });
         // Defensive: if start_place_id was provided make sure we didn't accidentally keep templates
@@ -1139,7 +1148,7 @@ class FrontController extends Controller
             $collection = $collection->filter(function ($item) use ($start_place_id, &$removed) {
                 // Lokalna cena: istnieje któraś zapisana cena z tym start_place_id
                 $hasLocalPrice = $item->pricesPerPerson && $item->pricesPerPerson->first(function ($p) use ($start_place_id) {
-                    return (int)$p->start_place_id === (int)$start_place_id;
+                    return (int) $p->start_place_id === (int) $start_place_id;
                 });
                 // Dostępność: uwzględniamy jedynie najnowszy wpis availability dla danego miejsca
                 $latestAv = null;
@@ -1152,7 +1161,10 @@ class FrontController extends Controller
                 }
                 $hasAvailability = $latestAv && $latestAv->available;
                 $ok = $hasLocalPrice && $hasAvailability;
-                if (!$ok) $removed[] = $item->id ?? null;
+                if (! $ok) {
+                    $removed[] = $item->id ?? null;
+                }
+
                 return $ok;
             })->values();
             if (config('app.debug')) {
@@ -1167,21 +1179,23 @@ class FrontController extends Controller
         // Teraz, gdy computed_price jest ustawione, zastosuj sortowanie zgodnie z sort_by.
         if ($sort_by === 'duration_asc') {
             $sorted = $eventTemplate->getCollection()->sort(function ($a, $b) {
-                $ad = (int)($a->duration_days ?? 0);
-                $bd = (int)($b->duration_days ?? 0);
+                $ad = (int) ($a->duration_days ?? 0);
+                $bd = (int) ($b->duration_days ?? 0);
                 if ($ad === $bd) {
                     return $this->compareNamesLocaleAware($a->name, $b->name);
                 }
+
                 return $ad <=> $bd;
             })->values();
             $eventTemplate->setCollection($sorted);
         } elseif ($sort_by === 'duration_desc') {
             $sorted = $eventTemplate->getCollection()->sort(function ($a, $b) {
-                $ad = (int)($a->duration_days ?? 0);
-                $bd = (int)($b->duration_days ?? 0);
+                $ad = (int) ($a->duration_days ?? 0);
+                $bd = (int) ($b->duration_days ?? 0);
                 if ($ad === $bd) {
                     return $this->compareNamesLocaleAware($a->name, $b->name);
                 }
+
                 return $bd <=> $ad;
             })->values();
             $eventTemplate->setCollection($sorted);
@@ -1215,6 +1229,7 @@ class FrontController extends Controller
                 'requestedQty' => request('qty') ? (int) request('qty') : null,
                 'start_place_id' => $start_place_id ?? null,
             ])->render();
+
             return response()->json([
                 'html' => $html,
                 'next_page' => $eventTemplate->currentPage() < $eventTemplate->lastPage() ? $eventTemplate->currentPage() + 1 : null,
@@ -1261,7 +1276,7 @@ class FrontController extends Controller
         $qtyRequested = null;
 
         // Fallback dla start_place_id: route slug -> cookie -> domyślnie Warszawa
-        if (!$start_place_id) {
+        if (! $start_place_id) {
             $regionSlug = $request->route('regionSlug');
             if ($regionSlug && $regionSlug !== 'region') {
                 $place = $this->getCachedStartPlaces()->first(function ($pl) use ($regionSlug) {
@@ -1272,18 +1287,20 @@ class FrontController extends Controller
                 }
             }
         }
-        if (!$start_place_id) {
+        if (! $start_place_id) {
             $cookieId = $request->cookie('start_place_id');
             if ($cookieId) {
                 $p = Place::find($cookieId);
                 if (($p && $p->starting_place) || \App\Models\EventTemplateStartingPlaceAvailability::where('start_place_id', $cookieId)->exists()) {
-                    $start_place_id = (int)$cookieId;
+                    $start_place_id = (int) $cookieId;
                 }
             }
         }
-        if (!$start_place_id) {
+        if (! $start_place_id) {
             $warszawa = Place::where('starting_place', true)->where('name', 'Warszawa')->first();
-            if ($warszawa) $start_place_id = $warszawa->id;
+            if ($warszawa) {
+                $start_place_id = $warszawa->id;
+            }
         }
 
         $eventTemplate = EventTemplate::where('is_active', true)
@@ -1312,7 +1329,7 @@ class FrontController extends Controller
                     $q->where('event_types.id', $event_type_id);
                 });
             })
-            ->when(!empty($transportTypeIds), function ($query) use ($transportTypeIds) {
+            ->when(! empty($transportTypeIds), function ($query) use ($transportTypeIds) {
                 $query->whereHas('transportTypes', function ($q) use ($transportTypeIds) {
                     $q->whereIn('transport_types.id', $transportTypeIds);
                 });
@@ -1327,8 +1344,10 @@ class FrontController extends Controller
                 $nameMatch = strpos($name, $search) !== false;
                 $tagMatch = $item->tags && $item->tags->contains(function ($tag) use ($search) {
                     $tagName = $this->removeDiacritics(mb_strtolower($tag->name));
+
                     return strpos($tagName, $search) !== false;
                 });
+
                 return $nameMatch || $tagMatch;
             })->values();
         }
@@ -1348,26 +1367,27 @@ class FrontController extends Controller
             if ($minPln === null) {
                 $minPln = $this->resolveMinPlnFromPrices($all, $start_place_id, null, null);
             }
-            $item->computed_price = $minPln !== null ? (float)$minPln : null;
+            $item->computed_price = $minPln !== null ? (float) $minPln : null;
             // keep relation to candidate prices (local only if start place present)
             if ($start_place_id) {
-                $candidate = $all->filter(fn($p) => $p->price_per_person > 0 && (int)$p->start_place_id === (int)$start_place_id)->values();
+                $candidate = $all->filter(fn ($p) => $p->price_per_person > 0 && (int) $p->start_place_id === (int) $start_place_id)->values();
             } else {
-                $candidate = $all->filter(fn($p) => $p->price_per_person > 0)->values();
+                $candidate = $all->filter(fn ($p) => $p->price_per_person > 0)->values();
             }
             $item->setRelation('pricesPerPerson', $candidate);
 
-            if (config('app.debug') && isset($item->id) && (int)$item->id === 57) {
+            if (config('app.debug') && isset($item->id) && (int) $item->id === 57) {
                 try {
                     Log::debug('packagesPartial(): price_diag', [
                         'event_template_id' => $item->id,
                         'start_place_id' => $start_place_id,
-                        'candidate_prices' => $candidate->map(fn($p) => [$p->id, $p->start_place_id, $p->event_template_qty_id, $p->price_per_person, $p->currency?->code ?? null])->values(),
+                        'candidate_prices' => $candidate->map(fn ($p) => [$p->id, $p->start_place_id, $p->event_template_qty_id, $p->price_per_person, $p->currency?->code ?? null])->values(),
                         'computed_price' => $item->computed_price,
                     ]);
                 } catch (\Throwable $e) {
                 }
             }
+
             return $item;
         });
 
@@ -1376,19 +1396,20 @@ class FrontController extends Controller
             // Po zmianach query powinno już gwarantować lokalną cenę + availability, ale pozostawiamy zabezpieczenie.
             $eventTemplate = $eventTemplate->filter(function ($item) use ($start_place_id) {
                 $hasLocalPrice = $item->pricesPerPerson && $item->pricesPerPerson->first(function ($p) use ($start_place_id) {
-                    return (int)$p->start_place_id === (int)$start_place_id;
+                    return (int) $p->start_place_id === (int) $start_place_id;
                 });
                 $hasAvailability = $item->startingPlaceAvailabilities && $item->startingPlaceAvailabilities->first(function ($av) use ($start_place_id, $item) {
-                    return (int)$av->start_place_id === (int)$start_place_id
-                        && (int)$av->end_place_id === (int)$item->start_place_id
+                    return (int) $av->start_place_id === (int) $start_place_id
+                        && (int) $av->end_place_id === (int) $item->start_place_id
                         && $av->available;
                 });
+
                 return $hasLocalPrice && $hasAvailability;
             })->values();
         }
         if (config('app.debug') && $start_place_id) {
             try {
-                Log::debug('packagesPartial(): strict local filter applied', ['start_place_id' => (int)$start_place_id, 'count' => $eventTemplate->count()]);
+                Log::debug('packagesPartial(): strict local filter applied', ['start_place_id' => (int) $start_place_id, 'count' => $eventTemplate->count()]);
             } catch (\Throwable $e) {
             }
         }
@@ -1410,32 +1431,36 @@ class FrontController extends Controller
         // Sorting
         if ($sort_by === 'duration_asc') {
             $eventTemplate = $eventTemplate->sort(function ($a, $b) {
-                $ad = (int)($a->duration_days ?? 0);
-                $bd = (int)($b->duration_days ?? 0);
+                $ad = (int) ($a->duration_days ?? 0);
+                $bd = (int) ($b->duration_days ?? 0);
                 if ($ad === $bd) {
                     return $this->compareNamesLocaleAware($a->name, $b->name);
                 }
+
                 return $ad <=> $bd;
             })->values();
         } elseif ($sort_by === 'duration_desc') {
             $eventTemplate = $eventTemplate->sort(function ($a, $b) {
-                $ad = (int)($a->duration_days ?? 0);
-                $bd = (int)($b->duration_days ?? 0);
+                $ad = (int) ($a->duration_days ?? 0);
+                $bd = (int) ($b->duration_days ?? 0);
                 if ($ad === $bd) {
                     return $this->compareNamesLocaleAware($a->name, $b->name);
                 }
+
                 return $bd <=> $ad;
             })->values();
         } elseif ($sort_by === 'price_asc') {
             $eventTemplate = $eventTemplate->sort(function ($a, $b) {
-                $aPrice = is_numeric($a->computed_price) ? (float)$a->computed_price : INF;
-                $bPrice = is_numeric($b->computed_price) ? (float)$b->computed_price : INF;
+                $aPrice = is_numeric($a->computed_price) ? (float) $a->computed_price : INF;
+                $bPrice = is_numeric($b->computed_price) ? (float) $b->computed_price : INF;
+
                 return $aPrice <=> $bPrice;
             })->values();
         } elseif ($sort_by === 'price_desc') {
             $eventTemplate = $eventTemplate->sort(function ($a, $b) {
-                $aPrice = is_numeric($a->computed_price) ? (float)$a->computed_price : -INF;
-                $bPrice = is_numeric($b->computed_price) ? (float)$b->computed_price : -INF;
+                $aPrice = is_numeric($a->computed_price) ? (float) $a->computed_price : -INF;
+                $bPrice = is_numeric($b->computed_price) ? (float) $b->computed_price : -INF;
+
                 return $bPrice <=> $aPrice;
             })->values();
         } elseif ($sort_by === 'name_asc') {
@@ -1467,7 +1492,8 @@ class FrontController extends Controller
             ->firstOrFail();
         // Determine start place only from cookie now (no query param kept)
         $startPlaceId = request()->cookie('start_place_id');
-        return redirect()->to($eventTemplate->prettyUrl($startPlaceId ? (int)$startPlaceId : null), 301);
+
+        return redirect()->to($eventTemplate->prettyUrl($startPlaceId ? (int) $startPlaceId : null), 301);
     }
 
     public function packagePretty($regionSlug, $dayLength, $id, $slug)
@@ -1484,10 +1510,10 @@ class FrontController extends Controller
 
         // Optionally, redirect if regionSlug does not match canonical slug for selected place
         $expectedRegion = $startPlaceId ? str()->slug(optional(Place::find($startPlaceId))->name) : 'region';
-        $expectedDay = ($eventTemplate->duration_days ?? 0) . '-dniowe';
+        $expectedDay = ($eventTemplate->duration_days ?? 0).'-dniowe';
         $expectedSlug = $eventTemplate->slug;
         if ($regionSlug !== $expectedRegion || $dayLength !== $expectedDay || $slug !== $expectedSlug) {
-            return redirect()->to($eventTemplate->prettyUrl($startPlaceId ? (int)$startPlaceId : null), 301);
+            return redirect()->to($eventTemplate->prettyUrl($startPlaceId ? (int) $startPlaceId : null), 301);
         }
 
         if ($startPlaceId && ! $this->hasStrictLocalAvailabilityForTemplate($eventTemplate, (int) $startPlaceId)) {
@@ -1516,13 +1542,13 @@ class FrontController extends Controller
 
         // Zgrupowana, jedna cena na qty (najnowsza) — używana do niektórych wyliczeń
         $groupedPrices = $allPricesForStart->groupBy('event_template_qty_id')
-            ->map(fn($group) => $group->first())
+            ->map(fn ($group) => $group->first())
             ->values();
         // Tymczasowe logowanie diagnostyczne
         try {
-            Log::info("packagePretty: event_template_id={$eventTemplate->id}, resolved_start_place_id=" . ($startPlaceId ?? 'null') . ", prices_found=" . $allPricesForStart->count());
+            Log::info("packagePretty: event_template_id={$eventTemplate->id}, resolved_start_place_id=".($startPlaceId ?? 'null').', prices_found='.$allPricesForStart->count());
             $ids = $allPricesForStart->pluck('start_place_id')->unique()->values()->toArray();
-            Log::info('packagePretty: start_place_ids_in_prices=' . json_encode($ids));
+            Log::info('packagePretty: start_place_ids_in_prices='.json_encode($ids));
         } catch (\Throwable $e) {
             // ignore logging failures
         }
@@ -1535,7 +1561,7 @@ class FrontController extends Controller
         try {
             // packagePretty: keep full behavior (no qty restriction)
             $computed = $this->resolveMinPlnFromPrices($allPricesForStart, $startPlaceId);
-            $eventTemplate->computed_price = $computed !== null ? (float)$computed : null;
+            $eventTemplate->computed_price = $computed !== null ? (float) $computed : null;
         } catch (\Throwable $e) {
             $eventTemplate->computed_price = null;
         }
@@ -1593,7 +1619,7 @@ class FrontController extends Controller
             'cf-turnstile-response' => ['nullable', 'string', 'max:2048'],
         ]);
 
-        if (!$this->verifyTurnstileToken($request, 'word_offer_download')) {
+        if (! $this->verifyTurnstileToken($request, 'word_offer_download')) {
             return back()->withErrors([
                 'turnstile' => 'Nie udało się potwierdzić zabezpieczenia. Spróbuj ponownie.',
             ], 'wordOffer');
@@ -1615,7 +1641,7 @@ class FrontController extends Controller
         $startPlaceId = $this->resolveStartPlaceIdFromSlug($regionSlug);
 
         $expectedRegionSlug = $startPlaceId ? (string) str(optional(Place::find($startPlaceId))->name)->slug() : 'region';
-        $expectedDayLength = ($eventTemplate->duration_days ?? 0) . '-dniowe';
+        $expectedDayLength = ($eventTemplate->duration_days ?? 0).'-dniowe';
         $expectedSlug = $eventTemplate->slug;
 
         if ($regionSlug !== $expectedRegionSlug || $dayLength !== $expectedDayLength || $slug !== $expectedSlug) {
@@ -1638,7 +1664,7 @@ class FrontController extends Controller
         $program = $this->extractProgramForWord($eventTemplate);
         $startPlaceName = $startPlaceId ? optional(Place::find($startPlaceId))->name : 'Warszawa';
 
-        if (!$startPlaceName) {
+        if (! $startPlaceName) {
             $startPlaceName = 'Warszawa';
         }
 
@@ -1661,7 +1687,7 @@ class FrontController extends Controller
             Settings::setZipClass(Settings::ZIPARCHIVE);
         }
 
-        $phpWord = new PhpWord();
+        $phpWord = new PhpWord;
         $phpWord->setDefaultFontName('Calibri Light');
         $phpWord->setDefaultFontSize(12);
 
@@ -1678,7 +1704,7 @@ class FrontController extends Controller
         $docSubtitle = $this->sanitizeWordText($eventTemplate->subtitle ?? '');
         $titleDisplay = $docTitle !== '' ? $docTitle : 'Oferta';
         $daysDisplay = ($eventTemplate->duration_days ?? null)
-            ? $this->sanitizeWordText((string) $eventTemplate->duration_days) . ' dni'
+            ? $this->sanitizeWordText((string) $eventTemplate->duration_days).' dni'
             : '—';
         $startPlaceDisplay = $this->sanitizeWordText($startPlaceName) ?: '—';
 
@@ -1718,7 +1744,7 @@ class FrontController extends Controller
         ]);
         foreach ($coverDetails as $label => $value) {
             $row = $coverTable->addRow();
-            $row->addCell(3500)->addText($label . ':', ['color' => '0070C0', 'bold' => true]);
+            $row->addCell(3500)->addText($label.':', ['color' => '0070C0', 'bold' => true]);
             $row->addCell(5500)->addText($value, ['bold' => true]);
         }
 
@@ -1736,15 +1762,15 @@ class FrontController extends Controller
         }
 
         $section->addTextBreak(1);
-        $section->addText('Wyjazd z: ' . $startPlaceDisplay);
-        $section->addText('Liczba dni: ' . $daysDisplay);
+        $section->addText('Wyjazd z: '.$startPlaceDisplay);
+        $section->addText('Liczba dni: '.$daysDisplay);
 
         $section->addTextBreak(1);
         $section->addText('Dane zamawiającego', ['bold' => true, 'size' => 14, 'color' => '0070C0']);
-        $section->addText('Nazwa grupy: ' . ($orgName !== '' ? $orgName : '—'));
-        $section->addText('Opiekun / nauczyciel: ' . ($contactPerson !== '' ? $contactPerson : '—'));
-        $section->addText('Telefon: ' . ($contactPhone !== '' ? $contactPhone : '—'));
-        $section->addText('Email: ' . ($contactEmail !== '' ? $contactEmail : '—'));
+        $section->addText('Nazwa grupy: '.($orgName !== '' ? $orgName : '—'));
+        $section->addText('Opiekun / nauczyciel: '.($contactPerson !== '' ? $contactPerson : '—'));
+        $section->addText('Telefon: '.($contactPhone !== '' ? $contactPhone : '—'));
+        $section->addText('Email: '.($contactEmail !== '' ? $contactEmail : '—'));
 
         $section->addTextBreak(1);
         $section->addText('Dane biura podróży', ['bold' => true, 'size' => 14, 'color' => '0070C0']);
@@ -1764,7 +1790,7 @@ class FrontController extends Controller
             }
         }
 
-        if (!empty($program)) {
+        if (! empty($program)) {
             $section->addTextBreak(1);
             $section->addText('Program wycieczki', ['bold' => true, 'size' => 14, 'color' => '0070C0']);
 
@@ -1777,18 +1803,18 @@ class FrontController extends Controller
                     $titleStyle = $point['bold'] ? ['bold' => true] : null;
                     $listRun->addText($this->sanitizeWordText($point['title']), $titleStyle);
 
-                    if (!empty($point['description'])) {
+                    if (! empty($point['description'])) {
                         // separator between title and description (plain text, no inline styles)
                         $listRun->addText(' – ');
                         $listRun->addText($point['description']);
                     }
 
-                    if (!empty($point['children'])) {
+                    if (! empty($point['children'])) {
                         foreach ($point['children'] as $child) {
                             $childRun = $section->addListItemRun(1);
                             $childTitleStyle = $child['bold'] ? ['bold' => true] : null;
                             $childRun->addText($this->sanitizeWordText($child['title']), $childTitleStyle);
-                            if (!empty($child['description'])) {
+                            if (! empty($child['description'])) {
                                 $childRun->addText(' – ');
                                 $childRun->addText($child['description']);
                             }
@@ -1798,7 +1824,7 @@ class FrontController extends Controller
             }
         }
 
-        if (!empty($priceRanges)) {
+        if (! empty($priceRanges)) {
             $section->addTextBreak(1);
             $section->addText('Cennik (PLN – aktualne miejsce wyjazdu)', ['bold' => true, 'size' => 14, 'color' => 'C00000']);
 
@@ -1816,10 +1842,10 @@ class FrontController extends Controller
 
             foreach ($priceRanges as $range) {
                 $row = $table->addRow();
-                $label = $range['from'] === $range['to'] ? $range['from'] . ' osób' : $range['from'] . '–' . $range['to'] . ' osób';
+                $label = $range['from'] === $range['to'] ? $range['from'].' osób' : $range['from'].'–'.$range['to'].' osób';
                 $row->addCell(2000)->addText($label);
-                $row->addCell(2000)->addText(number_format($range['price'], 0, ',', ' ') . ' zł');
-                $row->addCell(3000)->addText(!empty($range['other']) ? implode(', ', $range['other']) : '');
+                $row->addCell(2000)->addText(number_format($range['price'], 0, ',', ' ').' zł');
+                $row->addCell(3000)->addText(! empty($range['other']) ? implode(', ', $range['other']) : '');
             }
         } else {
             $section->addTextBreak(1);
@@ -1829,7 +1855,7 @@ class FrontController extends Controller
         $section->addTextBreak(1);
         $section->addText('W cenie', ['bold' => true, 'size' => 14, 'color' => '0070C0']);
 
-        if (!empty($priceDescriptionHtml)) {
+        if (! empty($priceDescriptionHtml)) {
             $this->appendHtmlSnippetToSection($section, $priceDescriptionHtml);
         } else {
             $section->addText($this->sanitizeWordText('Cena zawiera:'), ['bold' => true]);
@@ -1893,18 +1919,18 @@ class FrontController extends Controller
         $section->addText($this->sanitizeWordText('W przypadku pytań lub chęci uzyskania oferty dla innej liczby uczestników napisz do nas na adres rafa@bprafa.pl lub skorzystaj z formularza kontaktowego na stronie wycieczki.'));
 
         $section->addTextBreak(2);
-        $section->addText('Dokument wygenerowany: ' . now()->format('Y-m-d H:i'), ['size' => 9, 'color' => '777777']);
+        $section->addText('Dokument wygenerowany: '.now()->format('Y-m-d H:i'), ['size' => 9, 'color' => '777777']);
 
         $sluggedName = (string) str($eventTemplate->name ?? 'oferta')->slug();
         $sluggedPlace = (string) str($startPlaceName ?? 'region')->slug();
-        $fileName = $sluggedName . '-' . $sluggedPlace . '-' . now()->format('Ymd-His') . '.docx';
+        $fileName = $sluggedName.'-'.$sluggedPlace.'-'.now()->format('Ymd-His').'.docx';
 
         $tempDir = storage_path('app/tmp');
-        if (!is_dir($tempDir)) {
+        if (! is_dir($tempDir)) {
             @mkdir($tempDir, 0775, true);
         }
 
-        $filePath = $tempDir . DIRECTORY_SEPARATOR . $fileName;
+        $filePath = $tempDir.DIRECTORY_SEPARATOR.$fileName;
 
         $writer = IOFactory::createWriter($phpWord, 'Word2007');
         $writer->save($filePath);
@@ -1926,47 +1952,58 @@ class FrontController extends Controller
      *  - Group by event_template_qty_id and for each group pick the latest record (max id)
      *  - Return the minimal price_per_person among those latest-per-qty records, or null if none
      *
-     * @param Collection $prices
-     * @param int|null $startPlaceId
-     * @param int|null $qtyMin  inclusive minimal qty to consider (optional)
-     * @param int|null $qtyMax  inclusive maximal qty to consider (optional)
-     * @return float|null
+     * @param  int|null  $startPlaceId
+     * @param  int|null  $qtyMin  inclusive minimal qty to consider (optional)
+     * @param  int|null  $qtyMax  inclusive maximal qty to consider (optional)
      */
     private function resolveMinPlnFromPrices(Collection $prices, $startPlaceId = null, ?int $qtyMin = null, ?int $qtyMax = null): ?float
     {
         // detect PLN by currency relation (schema may not have code; rely on symbol/name)
         $isPln = function ($cur) {
-            if (!$cur) return false;
+            if (! $cur) {
+                return false;
+            }
             $code = strtoupper(trim($cur->code ?? ''));
             $symbol = strtoupper(trim($cur->symbol ?? ''));
             $name = strtoupper(trim($cur->name ?? ''));
+
             return $code === 'PLN' || $symbol === 'PLN' || str_contains($name, 'ZŁOT');
         };
 
         if ($startPlaceId) {
-            $candidate = $prices->filter(fn($p) => $p->price_per_person > 0 && (int)$p->start_place_id === (int)$startPlaceId);
+            $candidate = $prices->filter(fn ($p) => $p->price_per_person > 0 && (int) $p->start_place_id === (int) $startPlaceId);
         } else {
-            $candidate = $prices->filter(fn($p) => $p->price_per_person > 0);
+            $candidate = $prices->filter(fn ($p) => $p->price_per_person > 0);
         }
 
         // If qty range provided, prefer prices whose qty variant fits into that range
-        if (!is_null($qtyMin) || !is_null($qtyMax)) {
+        if (! is_null($qtyMin) || ! is_null($qtyMax)) {
             $candidate = $candidate->filter(function ($p) use ($qtyMin, $qtyMax) {
-                if (!isset($p->eventTemplateQty) || !isset($p->eventTemplateQty->qty)) return false;
-                $qty = (int)$p->eventTemplateQty->qty;
-                if (!is_null($qtyMin) && $qty < $qtyMin) return false;
-                if (!is_null($qtyMax) && $qty > $qtyMax) return false;
+                if (! isset($p->eventTemplateQty) || ! isset($p->eventTemplateQty->qty)) {
+                    return false;
+                }
+                $qty = (int) $p->eventTemplateQty->qty;
+                if (! is_null($qtyMin) && $qty < $qtyMin) {
+                    return false;
+                }
+                if (! is_null($qtyMax) && $qty > $qtyMax) {
+                    return false;
+                }
+
                 return true;
             })->values();
         }
 
         $latestPlnPerQty = $candidate
-            ->filter(fn($p) => isset($p->currency) && $isPln($p->currency))
+            ->filter(fn ($p) => isset($p->currency) && $isPln($p->currency))
             ->groupBy('event_template_qty_id')
-            ->map(fn($g) => $g->sortByDesc('id')->first())
+            ->map(fn ($g) => $g->sortByDesc('id')->first())
             ->values();
 
-        if ($latestPlnPerQty->count() === 0) return null;
+        if ($latestPlnPerQty->count() === 0) {
+            return null;
+        }
+
         return $latestPlnPerQty->min('price_per_person');
     }
 
@@ -1974,14 +2011,14 @@ class FrontController extends Controller
     {
         $filterByPlace = function ($price) use ($startPlaceId) {
             if ($startPlaceId) {
-                return (int)($price->start_place_id ?? 0) === (int)$startPlaceId;
+                return (int) ($price->start_place_id ?? 0) === (int) $startPlaceId;
             }
 
             return $price->start_place_id === null;
         };
 
         $validForPlace = $prices
-            ->filter(fn($p) => $p->price_per_person > 0)
+            ->filter(fn ($p) => $p->price_per_person > 0)
             ->filter($filterByPlace); // już kolekcja tylko dla wskazanego miejsca
 
         if ($validForPlace->isEmpty()) {
@@ -1990,7 +2027,7 @@ class FrontController extends Controller
 
         $isPln = function ($price) {
             $currency = $price->currency ?? null;
-            if (!$currency) {
+            if (! $currency) {
                 return false;
             }
 
@@ -2009,9 +2046,9 @@ class FrontController extends Controller
 
         $latestPlnPerQty = $plnPrices
             ->groupBy('event_template_qty_id')
-            ->map(fn($group) => $group->sortByDesc('id')->first())
-            ->filter(fn($price) => optional($price->eventTemplateQty)->qty)
-            ->sortBy(fn($price) => (int)optional($price->eventTemplateQty)->qty)
+            ->map(fn ($group) => $group->sortByDesc('id')->first())
+            ->filter(fn ($price) => optional($price->eventTemplateQty)->qty)
+            ->sortBy(fn ($price) => (int) optional($price->eventTemplateQty)->qty)
             ->values();
 
         if ($latestPlnPerQty->isEmpty()) {
@@ -2019,7 +2056,7 @@ class FrontController extends Controller
         }
 
         $qtyKeys = $latestPlnPerQty
-            ->map(fn($price) => (int)optional($price->eventTemplateQty)->qty)
+            ->map(fn ($price) => (int) optional($price->eventTemplateQty)->qty)
             ->unique()
             ->sort()
             ->values()
@@ -2030,27 +2067,27 @@ class FrontController extends Controller
 
         foreach ($qtyKeys as $index => $qty) {
             $price = $latestPlnPerQty->first(function ($candidate) use ($qty) {
-                return (int)optional($candidate->eventTemplateQty)->qty === (int)$qty;
+                return (int) optional($candidate->eventTemplateQty)->qty === (int) $qty;
             });
 
-            if (!$price) {
+            if (! $price) {
                 continue;
             }
 
             $nextQty = $qtyKeys[$index + 1] ?? null;
-            $rangeEnd = $nextQty ? max($qty, (int)$nextQty - 1) : 55;
+            $rangeEnd = $nextQty ? max($qty, (int) $nextQty - 1) : 55;
 
             $otherLabels = [];
             $qtyId = optional($price->eventTemplateQty)->id;
             if ($qtyId) {
                 $others = $allForPlace
                     ->where('event_template_qty_id', $qtyId)
-                    ->filter(fn($candidate) => !$isPln($candidate));
+                    ->filter(fn ($candidate) => ! $isPln($candidate));
 
                 if ($others->isNotEmpty()) {
                     $grouped = $others->groupBy(function ($candidate) {
                         $currency = $candidate->currency ?? null;
-                        if (!$currency) {
+                        if (! $currency) {
                             return 'OTHER';
                         }
 
@@ -2061,8 +2098,8 @@ class FrontController extends Controller
                     });
 
                     $orderedKeys = $grouped->keys()->sort(function ($a, $b) {
-                        $a = (string)$a;
-                        $b = (string)$b;
+                        $a = (string) $a;
+                        $b = (string) $b;
                         if ($a === $b) {
                             return 0;
                         }
@@ -2072,18 +2109,19 @@ class FrontController extends Controller
                         if ($b === 'EUR') {
                             return 1;
                         }
+
                         return strcmp($a, $b);
                     });
 
                     foreach ($orderedKeys as $currencyKey) {
                         $group = $grouped->get($currencyKey);
-                        if (!$group) {
+                        if (! $group) {
                             continue;
                         }
 
                         $min = $group->min('price_per_person');
                         if ($min && $min > 0) {
-                            $amount = (int)ceil($min);
+                            $amount = (int) ceil($min);
                             $otherLabels[] = "+ {$amount} {$currencyKey}";
                         }
                     }
@@ -2091,9 +2129,9 @@ class FrontController extends Controller
             }
 
             $ranges[] = [
-                'from' => (int)$qty,
-                'to' => (int)$rangeEnd,
-                'price' => (int)ceil(((float)$price->price_per_person) / 5) * 5,
+                'from' => (int) $qty,
+                'to' => (int) $rangeEnd,
+                'price' => (int) ceil(((float) $price->price_per_person) / 5) * 5,
                 'other' => $otherLabels,
             ];
         }
@@ -2104,31 +2142,31 @@ class FrontController extends Controller
     private function extractProgramForWord(EventTemplate $eventTemplate): array
     {
         $program = [];
-        $duration = (int)($eventTemplate->duration_days ?? 0);
+        $duration = (int) ($eventTemplate->duration_days ?? 0);
         $points = $eventTemplate->programPoints ?? collect();
 
         $filterPoint = function ($point) {
             $pivot = $point->pivot ?? null;
-            if (!$pivot) {
+            if (! $pivot) {
                 return false;
             }
 
             $include = $pivot->include_in_program ?? false;
             $active = $pivot->active ?? true;
 
-            return (bool)$include && (bool)$active;
+            return (bool) $include && (bool) $active;
         };
 
         for ($day = 1; $day <= max($duration, 0); $day++) {
             $dayPoints = $points
-                ->filter(fn($point) => (int)($point->pivot->day ?? 0) === $day)
+                ->filter(fn ($point) => (int) ($point->pivot->day ?? 0) === $day)
                 ->filter($filterPoint)
-                ->sortBy(fn($point) => $point->pivot->order ?? $point->pivot->order_number ?? 0)
+                ->sortBy(fn ($point) => $point->pivot->order ?? $point->pivot->order_number ?? 0)
                 ->map(function ($point) use ($eventTemplate) {
                     $title = preg_replace('/\s*-?\s*\d+:\d+h?.*$/', '', strip_tags($point->name ?? ''));
                     $pivot = $point->pivot ?? null;
-                    $bold = (bool)($pivot->show_title_style ?? true);
-                    $descriptionAllowed = (bool)($pivot->show_description ?? true);
+                    $bold = (bool) ($pivot->show_title_style ?? true);
+                    $descriptionAllowed = (bool) ($pivot->show_description ?? true);
                     $description = $descriptionAllowed ? $this->sanitizeWordText(strip_tags($point->description ?? '')) : '';
                     $descriptionHtml = $descriptionAllowed ? $this->sanitizeHtmlPreservingInline($point->description ?? '') : '';
                     $title = $this->sanitizeWordText($title);
@@ -2136,26 +2174,27 @@ class FrontController extends Controller
                     $children = collect($point->children ?? [])
                         ->filter(function ($child) use ($eventTemplate) {
                             $prop = $child->childPropertiesForTemplate($eventTemplate->id)->first();
-                            if (!$prop) {
+                            if (! $prop) {
                                 return false;
                             }
 
                             $pivot = $prop->pivot ?? null;
-                            if (!$pivot) {
+                            if (! $pivot) {
                                 return false;
                             }
 
-                            return (bool)($pivot->include_in_program ?? false) && (bool)($pivot->active ?? true);
+                            return (bool) ($pivot->include_in_program ?? false) && (bool) ($pivot->active ?? true);
                         })
                         ->sortBy(function ($child) use ($eventTemplate) {
                             $prop = $child->childPropertiesForTemplate($eventTemplate->id)->first();
+
                             return $prop->pivot->order ?? $prop->pivot->order_number ?? 0;
                         })
                         ->map(function ($child) use ($eventTemplate) {
                             $prop = $child->childPropertiesForTemplate($eventTemplate->id)->first();
                             $title = preg_replace('/\s*-?\s*\d+:\d+h?.*$/', '', strip_tags($child->name ?? ''));
-                            $bold = (bool)($prop->pivot->show_title_style ?? true);
-                            $descriptionAllowed = (bool)($prop->pivot->show_description ?? true);
+                            $bold = (bool) ($prop->pivot->show_title_style ?? true);
+                            $descriptionAllowed = (bool) ($prop->pivot->show_description ?? true);
                             $description = $descriptionAllowed ? $this->sanitizeWordText(strip_tags($child->description ?? '')) : '';
                             $descriptionHtml = $descriptionAllowed ? $this->sanitizeHtmlPreservingInline($child->description ?? '') : '';
                             $title = $this->sanitizeWordText($title);
@@ -2179,7 +2218,7 @@ class FrontController extends Controller
                 ->values()
                 ->all();
 
-            if (!empty($dayPoints)) {
+            if (! empty($dayPoints)) {
                 $program[] = [
                     'label' => "Dzień {$day}",
                     'points' => $dayPoints,
@@ -2190,14 +2229,14 @@ class FrontController extends Controller
         // Fakultatywny dzień (duration + 1)
         $facultativeDay = $duration + 1;
         $facultativePoints = $points
-            ->filter(fn($point) => (int)($point->pivot->day ?? 0) === $facultativeDay)
+            ->filter(fn ($point) => (int) ($point->pivot->day ?? 0) === $facultativeDay)
             ->filter($filterPoint)
-            ->sortBy(fn($point) => $point->pivot->order ?? $point->pivot->order_number ?? 0)
+            ->sortBy(fn ($point) => $point->pivot->order ?? $point->pivot->order_number ?? 0)
             ->map(function ($point) {
                 $title = preg_replace('/\s*-?\s*\d+:\d+h?.*$/', '', strip_tags($point->name ?? ''));
                 $pivot = $point->pivot ?? null;
-                $bold = (bool)($pivot->show_title_style ?? true);
-                $descriptionAllowed = (bool)($pivot->show_description ?? true);
+                $bold = (bool) ($pivot->show_title_style ?? true);
+                $descriptionAllowed = (bool) ($pivot->show_description ?? true);
                 $description = $descriptionAllowed ? $this->sanitizeWordText(strip_tags($point->description ?? '')) : '';
                 $title = $this->sanitizeWordText($title);
 
@@ -2211,7 +2250,7 @@ class FrontController extends Controller
             ->values()
             ->all();
 
-        if (!empty($facultativePoints)) {
+        if (! empty($facultativePoints)) {
             $program[] = [
                 'label' => 'Fakultatywnie proponujemy',
                 'points' => $facultativePoints,
@@ -2318,13 +2357,14 @@ class FrontController extends Controller
             return '';
         }
 
-        $text = (string)$text;
+        $text = (string) $text;
         if ($text === '') {
             return '';
         }
 
         $text = str_replace(["\r\n", "\r"], "\n", $text);
         $text = preg_replace('/[\x00-\x08\x0B\x0C\x0E-\x1F\x7F]/u', '', $text) ?? $text;
+
         return trim($text);
     }
 
@@ -2342,6 +2382,7 @@ class FrontController extends Controller
         $clean = strip_tags($html, $allowed);
         // Normalize tags: map <strong> -> <b>, <em> -> <i>
         $clean = str_ireplace(['<strong>', '</strong>', '<em>', '</em>'], ['<b>', '</b>', '<i>', '</i>'], $clean);
+
         return trim($clean);
     }
 
@@ -2349,13 +2390,13 @@ class FrontController extends Controller
      * Append a small HTML fragment (with only <b>, <i>, <u>) into a TextRun or ListItemRun container
      * preserving inline styles by calling addText for each fragment.
      *
-     * @param \PhpOffice\PhpWord\Element\TextRun|\PhpOffice\PhpWord\Element\ListItemRun $container
-     * @param string $html
-     * @return void
+     * @param  \PhpOffice\PhpWord\Element\TextRun|\PhpOffice\PhpWord\Element\ListItemRun  $container
      */
     private function appendInlineHtmlToContainer($container, string $html): void
     {
-        if (trim($html) === '') return;
+        if (trim($html) === '') {
+            return;
+        }
 
         // Break input into tags and text
         $pattern = '/(<b>|<\/b>|<i>|<\/i>|<u>|<\/u>)/i';
@@ -2366,37 +2407,51 @@ class FrontController extends Controller
             $lower = strtolower($part);
             if ($lower === '<b>') {
                 $currentStyle['bold'] = true;
+
                 continue;
             }
             if ($lower === '</b>') {
                 unset($currentStyle['bold']);
+
                 continue;
             }
             if ($lower === '<i>') {
                 $currentStyle['italic'] = true;
+
                 continue;
             }
             if ($lower === '</i>') {
                 unset($currentStyle['italic']);
+
                 continue;
             }
             if ($lower === '<u>') {
                 $currentStyle['underline'] = 'single';
+
                 continue;
             }
             if ($lower === '</u>') {
                 unset($currentStyle['underline']);
+
                 continue;
             }
 
             // plain text chunk
             $text = html_entity_decode(trim($part), ENT_QUOTES | ENT_HTML5, 'UTF-8');
-            if ($text === '') continue;
+            if ($text === '') {
+                continue;
+            }
             // addText accepts style array; map underline bool to PhpWord value
             $style = [];
-            if (!empty($currentStyle['bold'])) $style['bold'] = true;
-            if (!empty($currentStyle['italic'])) $style['italic'] = true;
-            if (!empty($currentStyle['underline'])) $style['underline'] = $currentStyle['underline'];
+            if (! empty($currentStyle['bold'])) {
+                $style['bold'] = true;
+            }
+            if (! empty($currentStyle['italic'])) {
+                $style['italic'] = true;
+            }
+            if (! empty($currentStyle['underline'])) {
+                $style['underline'] = $currentStyle['underline'];
+            }
 
             // PhpWord containers support addText
             try {
@@ -2415,13 +2470,13 @@ class FrontController extends Controller
 
         $secretKey = config('services.turnstile.secret_key');
         $siteKey = config('services.turnstile.site_key');
-        if (!$secretKey || !$siteKey) {
+        if (! $secretKey || ! $siteKey) {
             return true;
         }
 
         $token = $request->input('cf-turnstile-response');
         if (empty($token)) {
-            if (!$requireToken) {
+            if (! $requireToken) {
                 return true;
             }
             Log::notice('Turnstile token missing', [
@@ -2429,6 +2484,7 @@ class FrontController extends Controller
                 'ip' => $request->ip(),
                 'route' => optional($request->route())->getName(),
             ]);
+
             return false;
         }
 
@@ -2442,16 +2498,17 @@ class FrontController extends Controller
                     'sitekey' => $siteKey,
                 ]);
 
-            if (!$response->ok()) {
+            if (! $response->ok()) {
                 Log::warning('Turnstile verification HTTP failure', [
                     'context' => $context,
                     'status' => $response->status(),
                 ]);
+
                 return false;
             }
 
             $payload = $response->json();
-            $success = (bool)($payload['success'] ?? false);
+            $success = (bool) ($payload['success'] ?? false);
 
             $reportedAction = $payload['action'] ?? null;
             if ($reportedAction !== null && $reportedAction !== $context) {
@@ -2459,10 +2516,11 @@ class FrontController extends Controller
                     'context' => $context,
                     'reported_action' => $reportedAction,
                 ]);
+
                 return false;
             }
 
-            if (!$success) {
+            if (! $success) {
                 Log::info('Turnstile verification denied', [
                     'context' => $context,
                     'errors' => $payload['error-codes'] ?? [],
@@ -2475,6 +2533,7 @@ class FrontController extends Controller
                 'context' => $context,
                 'message' => $e->getMessage(),
             ]);
+
             return false;
         }
     }
@@ -2487,12 +2546,14 @@ class FrontController extends Controller
     public function documents()
     {
         $sections = \App\Models\DocumentSection::with(['documents.attachments'])->orderBy('order_number')->get();
+
         return view('front.documents', compact('sections'));
     }
 
     public function document($slug)
     {
         $document = \App\Models\Document::where('slug', $slug)->where('is_published', true)->firstOrFail();
+
         return view('front.document', compact('document'));
     }
 
@@ -2511,7 +2572,7 @@ class FrontController extends Controller
         // Rate-limiting (basic) via cache-based token to complement route throttle
         $ip = $request->ip();
         $ua = substr((string) $request->header('User-Agent'), 0, 191);
-        $cacheKey = 'sendEmail:' . sha1($ip . '|' . $ua . '|' . ($request->input('email') ?? ''));
+        $cacheKey = 'sendEmail:'.sha1($ip.'|'.$ua.'|'.($request->input('email') ?? ''));
         if (cache()->has($cacheKey)) {
             return back()->with('success', 'Dziękujemy! Jeśli przed chwilą już wysłałeś zapytanie, poczekaj chwilę przed kolejną wiadomością.');
         }
@@ -2536,29 +2597,29 @@ class FrontController extends Controller
         ]);
 
         // Honeypot: if filled, silently accept but do nothing
-        if (!empty($data['website'] ?? '')) {
+        if (! empty($data['website'] ?? '')) {
             return back()->with('success', 'Dziękujemy za wiadomość! Skontaktujemy się wkrótce.');
         }
         // Minimal fill time: at least 3s between load and submit
         $okTime = true;
-        if (!empty($data['form_ts'])) {
+        if (! empty($data['form_ts'])) {
             $delta = (int) (microtime(true) * 1000) - (int) $data['form_ts'];
             if ($delta < 3000) {
                 $okTime = false;
             }
         }
-        if (!$okTime) {
+        if (! $okTime) {
             return back()->with('success', 'Dziękujemy za wiadomość! Skontaktujemy się wkrótce.');
         }
 
-        if (!$this->verifyTurnstileToken($request, 'contact_form')) {
+        if (! $this->verifyTurnstileToken($request, 'contact_form')) {
             return back()->with('success', 'Dziękujemy za wiadomość! Skontaktujemy się wkrótce.');
         }
 
         // Basic referer/domain check to reduce cross-origin spam posts (aktywne tylko w produkcji)
         if (app()->environment('production')) {
             $ref = (string) $request->headers->get('referer', '');
-            if (!empty($ref)) {
+            if (! empty($ref)) {
                 try {
                     $host = parse_url($ref, PHP_URL_HOST);
                     $appHost = parse_url(config('app.url') ?: url('/'), PHP_URL_HOST);
@@ -2574,23 +2635,23 @@ class FrontController extends Controller
         $eventName = $data['event_name'] ?? 'Oferta';
         $startPlace = $data['start_place_name'] ?? '';
         // Temat: "Zapytanie ze strony - {nazwa wycieczki} {miejsce wyjazdu}"
-        $subject = "Zapytanie ze strony - {$eventName}" . (strlen(trim($startPlace)) ? " {$startPlace}" : "");
+        $subject = "Zapytanie ze strony - {$eventName}".(strlen(trim($startPlace)) ? " {$startPlace}" : '');
         $eventUrl = $data['event_url'] ?? url('/');
 
         // Build body
         $lines = [];
-        $lines[] = "Nowe zapytanie z formularza na stronie oferty.";
+        $lines[] = 'Nowe zapytanie z formularza na stronie oferty.';
         $lines[] = "Oferta: {$eventName}";
         $lines[] = "Miejsce wyjazdu: {$startPlace}";
         $lines[] = "Link: {$eventUrl}";
-        $lines[] = "";
-        $lines[] = "Dane kontaktowe:";
-        $lines[] = "Imię i nazwisko: " . ($data['name'] ?? '');
-        $lines[] = "Email: " . ($data['email'] ?? '');
-        $lines[] = "Telefon: " . ($data['telephone'] ?? '');
-        $lines[] = "";
-        $lines[] = "Wiadomość:";
-        $lines[] = trim((string)($data['message'] ?? ''));
+        $lines[] = '';
+        $lines[] = 'Dane kontaktowe:';
+        $lines[] = 'Imię i nazwisko: '.($data['name'] ?? '');
+        $lines[] = 'Email: '.($data['email'] ?? '');
+        $lines[] = 'Telefon: '.($data['telephone'] ?? '');
+        $lines[] = '';
+        $lines[] = 'Wiadomość:';
+        $lines[] = trim((string) ($data['message'] ?? ''));
         // Trim overly long lines to avoid header injection-like payloads and huge lines
         $lines = array_map(function ($l) {
             return mb_substr($l, 0, 500);
@@ -2601,7 +2662,7 @@ class FrontController extends Controller
         $configured = config('mail.inquiries_to');
         if (is_string($configured) && strlen(trim($configured)) > 0) {
             $toList = [trim($configured)];
-        } elseif (is_array($configured) && !empty($configured)) {
+        } elseif (is_array($configured) && ! empty($configured)) {
             $toList = $configured;
         } else {
             // Domyślni odbiorcy, jeśli brak konfiguracji: kieruj na skrzynkę firmową
@@ -2613,7 +2674,7 @@ class FrontController extends Controller
             Mail::raw($body, function ($m) use ($toList, $subject, $data) {
                 $m->to($toList)
                     ->subject($subject);
-                if (!empty($data['email'])) {
+                if (! empty($data['email'])) {
                     // Wyślij kopię do nadawcy i ustaw reply-to
                     $m->cc($data['email'], $data['name'] ?? null);
                     $m->replyTo($data['email'], $data['name'] ?? null);
@@ -2621,7 +2682,7 @@ class FrontController extends Controller
             });
         } catch (\Throwable $e) {
             try {
-                Log::error('sendEmail error: ' . $e->getMessage());
+                Log::error('sendEmail error: '.$e->getMessage());
             } catch (\Throwable $ee) {
             }
             // Do not reveal failures to bots; generic success

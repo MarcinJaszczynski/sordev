@@ -3,8 +3,8 @@
 namespace App\Filament\Resources\PaymentTypeResource\Pages;
 
 use App\Filament\Resources\PaymentTypeResource;
-use Filament\Resources\Pages\ListRecords;
 use Filament\Actions;
+use Filament\Resources\Pages\ListRecords;
 
 class ListPaymentTypes extends ListRecords
 {

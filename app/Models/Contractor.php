@@ -6,7 +6,6 @@ use App\Models\Concerns\HasTasks;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\SoftDeletes;
-use App\Models\ContractorType;
 
 /**
  * Model Contractor
@@ -26,10 +25,11 @@ use App\Models\ContractorType;
  */
 class Contractor extends Model
 {
-    use HasFactory, SoftDeletes, HasTasks;
+    use HasFactory, HasTasks, SoftDeletes;
 
     /**
      * Pola masowo przypisywalne
+     *
      * @var array<int, string>
      */
     protected $fillable = [
@@ -56,7 +56,7 @@ class Contractor extends Model
      */
     public function contacts()
     {
-    return $this->belongsToMany(Contact::class, 'contractor_contact');
+        return $this->belongsToMany(Contact::class, 'contractor_contact');
     }
 
     /**

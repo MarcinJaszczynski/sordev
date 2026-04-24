@@ -15,7 +15,7 @@ return new class extends Migration
             $table->foreign('blog_post_id')->references('id')->on('blog_posts')->onDelete('cascade');
             $table->foreign('tag_id')->references('id')->on('tags')->onDelete('cascade');
 
-            $table->primary(['blog_post_id','tag_id']);
+            $table->primary(['blog_post_id', 'tag_id']);
         });
     }
 

@@ -3,14 +3,15 @@
 namespace App\Filament\Resources\EventResource\Pages;
 
 use App\Filament\Resources\EventResource;
-use Filament\Resources\Pages\Page;
 use App\Models\Event;
-use Filament\Actions;
 use App\Services\EventPriceCalculator;
+use Filament\Actions;
+use Filament\Resources\Pages\Page;
 
 class EventCalculation extends Page
 {
     protected static string $resource = EventResource::class;
+
     protected static string $view = 'filament.resources.event-resource.pages.event-calculation';
 
     public Event $record;
@@ -52,15 +53,15 @@ class EventCalculation extends Page
                         ->label('Nazwa snapshotu')
                         ->required()
                         ->maxLength(255)
-                        ->default('Snapshot kalkulacji ' . now()->format('d.m.Y H:i')),
-                    
+                        ->default('Snapshot kalkulacji '.now()->format('d.m.Y H:i')),
+
                     \Filament\Forms\Components\RichEditor::make('description')
                         ->maxLength(500)
                         ->helperText('Opisz powód utworzenia tego snapshotu'),
                 ])
                 ->action(function (array $data) {
                     $this->record->createManualSnapshot($data['name'], $data['description']);
-                    
+
                     \Filament\Notifications\Notification::make()
                         ->title('Snapshot utworzony')
                         ->success()
@@ -72,7 +73,7 @@ class EventCalculation extends Page
                 ->color('primary')
                 ->requiresConfirmation()
                 ->action(function () {
-                    $calculator = new EventPriceCalculator();
+                    $calculator = new EventPriceCalculator;
                     $calculator->calculateForEvent($this->record);
 
                     \Filament\Notifications\Notification::make()
@@ -83,7 +84,7 @@ class EventCalculation extends Page
             Actions\Action::make('edit_prices')
                 ->label('Edytuj ceny')
                 ->icon('heroicon-o-currency-dollar')
-                ->url(fn() => static::getResource()::getUrl('edit', ['record' => $this->record->id]) . '#price-per-person')
+                ->url(fn () => static::getResource()::getUrl('edit', ['record' => $this->record->id]).'#price-per-person')
                 ->color('primary'),
         ];
     }

@@ -1,7 +1,7 @@
 <?php
 
-use App\Models\EventTemplate;
 use App\Filament\Resources\EventTemplateResource\Widgets\EventTemplatePriceTable;
+use App\Models\EventTemplate;
 
 require __DIR__.'/vendor/autoload.php';
 $app = require __DIR__.'/bootstrap/app.php';
@@ -11,7 +11,7 @@ $eventTemplateId = 10; // Twój szablon
 $startPlaceId = 3; // Poznań
 
 $template = EventTemplate::find($eventTemplateId);
-$widget = new EventTemplatePriceTable();
+$widget = new EventTemplatePriceTable;
 $widget->record = $template;
 $widget->startPlaceId = $startPlaceId;
 
@@ -20,9 +20,9 @@ $detailed = $widget->getDetailedCalculations();
 foreach ($detailed as $qty => $data) {
     if (isset($data['PLN'])) {
         echo "Qty: $qty\n";
-        echo "  Suma kosztów (total): " . ($data['PLN']['total'] ?? '-') . "\n";
-        echo "  Suma bez narzutu: " . ($data['PLN']['total_before_markup'] ?? '-') . "\n";
-        echo "  Suma z narzutem, bez podatków: " . ($data['PLN']['total_before_tax'] ?? '-') . "\n";
+        echo '  Suma kosztów (total): '.($data['PLN']['total'] ?? '-')."\n";
+        echo '  Suma bez narzutu: '.($data['PLN']['total_before_markup'] ?? '-')."\n";
+        echo '  Suma z narzutem, bez podatków: '.($data['PLN']['total_before_tax'] ?? '-')."\n";
         // Debug transportu
         $bus = $widget->record->bus;
         $programKm = $widget->record->program_km ?? 0;
@@ -67,7 +67,7 @@ foreach ($detailed as $qty => $data) {
         echo "    Koszt za nadmiarowe km: $extraKmCost\n";
         echo "    Liczba autobusów: $busCount\n";
         echo "    Koszt bazowy: $baseCost\n";
-        echo "    Całkowity koszt transportu: " . ($baseCost + $extraKmCost) * $busCount . "\n";
+        echo '    Całkowity koszt transportu: '.($baseCost + $extraKmCost) * $busCount."\n";
         echo "  Punkty kosztowe:\n";
         foreach (($data['PLN']['points'] ?? []) as $point) {
             echo "    - {$point['name']}: {$point['cost']} PLN\n";

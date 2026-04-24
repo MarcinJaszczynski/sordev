@@ -32,13 +32,13 @@ class EventSettlementParticipantPayment extends Model
     ];
 
     protected $casts = [
-        'due_amount_pln'      => 'decimal:2',
-        'paid_amount_pln'     => 'decimal:2',
+        'due_amount_pln' => 'decimal:2',
+        'paid_amount_pln' => 'decimal:2',
         'discount_amount_pln' => 'decimal:2',
-        'payment_date'        => 'datetime',
-        'attended'            => 'boolean',
-        'reviewed_by'         => 'integer',
-        'reviewed_at'         => 'datetime',
+        'payment_date' => 'datetime',
+        'attended' => 'boolean',
+        'reviewed_by' => 'integer',
+        'reviewed_at' => 'datetime',
     ];
 
     public static array $approvalStatuses = [
@@ -48,18 +48,18 @@ class EventSettlementParticipantPayment extends Model
     ];
 
     public static array $paymentStatuses = [
-        'pending'   => 'Oczekuje',
-        'partial'   => 'Częściowa',
-        'paid'      => 'Opłacona',
-        'overpaid'  => 'Nadpłata',
+        'pending' => 'Oczekuje',
+        'partial' => 'Częściowa',
+        'paid' => 'Opłacona',
+        'overpaid' => 'Nadpłata',
         'cancelled' => 'Anulowana',
     ];
 
     public static array $paymentMethods = [
-        'cash'     => 'Gotówka',
+        'cash' => 'Gotówka',
         'transfer' => 'Przelew',
-        'card'     => 'Karta',
-        'other'    => 'Inny',
+        'card' => 'Karta',
+        'other' => 'Inny',
     ];
 
     // --- Relacje ---
@@ -94,7 +94,7 @@ class EventSettlementParticipantPayment extends Model
             // auto-status
             if ($model->isDirty(['paid_amount_pln', 'due_amount_pln'])) {
                 $paid = (float) $model->paid_amount_pln;
-                $due  = (float) $model->due_amount_pln;
+                $due = (float) $model->due_amount_pln;
                 if ($paid <= 0) {
                     $model->payment_status = 'pending';
                 } elseif ($paid < $due) {
@@ -107,7 +107,7 @@ class EventSettlementParticipantPayment extends Model
             }
         });
 
-        static::saved(fn($m) => $m->settlement?->recalculateTotals());
-        static::deleted(fn($m) => $m->settlement?->recalculateTotals());
+        static::saved(fn ($m) => $m->settlement?->recalculateTotals());
+        static::deleted(fn ($m) => $m->settlement?->recalculateTotals());
     }
 }

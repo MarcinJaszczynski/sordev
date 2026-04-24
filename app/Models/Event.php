@@ -8,11 +8,9 @@ use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Database\Eloquent\Relations\HasOne;
-use App\Models\Contractor;
-use App\Models\Place;
+use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Schema;
-use Illuminate\Support\Collection;
 use Illuminate\Support\Str;
 
 class Event extends Model
@@ -20,12 +18,19 @@ class Event extends Model
     use HasFactory, HasTasks;
 
     public const STATUS_INQUIRY = 'inquiry';
+
     public const STATUS_OFFER = 'offer';
+
     public const STATUS_PROVISIONAL_RESERVATION = 'provisional_reservation';
+
     public const STATUS_CONFIRMED = 'confirmed';
+
     public const STATUS_TO_SETTLE = 'to_settle';
+
     public const STATUS_SETTLED = 'settled';
+
     public const STATUS_PENDING_CANCELLATION = 'pending_cancellation';
+
     public const STATUS_CANCELLED = 'cancelled';
 
     public const LEGACY_STATUS_MIGRATION_MAP = [
@@ -140,14 +145,16 @@ class Event extends Model
     {
 
         static::creating(function ($event) {
-            $event->created_by = Auth::id();
+            if (empty($event->created_by)) {
+                $event->created_by = Auth::id();
+            }
 
             // Generuj unikalny kod imprezy: YY-LOSOWE6
             if (empty($event->code)) {
                 $year = now()->format('y');
                 do {
                     $random = strtoupper(Str::random(6));
-                    $code = $year . '-' . $random;
+                    $code = $year.'-'.$random;
                 } while (self::where('code', $code)->exists());
                 $event->code = $code;
             }
@@ -190,7 +197,7 @@ class Event extends Model
     {
         return $this->belongsTo(Place::class, 'start_place_id');
     }
-    
+
     /**
      * Twórca imprezy
      */
@@ -496,11 +503,11 @@ class Event extends Model
         try {
             $startId = $event->start_place_id ?? null;
             // Weź tylko najczęściej używane qty (10,20,30) lub te z EventTemplateQty
-            $standardQtys = [10,20,30];
+            $standardQtys = [10, 20, 30];
             $qtyIds = \App\Models\EventTemplateQty::whereIn('qty', $standardQtys)->pluck('id')->toArray();
 
             $templatePricesSnapshot = \App\Models\EventTemplatePricePerPerson::where('event_template_id', $template->id)
-                ->where(function($q) use ($startId) {
+                ->where(function ($q) use ($startId) {
                     if ($startId) {
                         $q->where('start_place_id', $startId);
                     } else {
@@ -510,7 +517,7 @@ class Event extends Model
                 ->whereIn('event_template_qty_id', $qtyIds)
                 ->orderBy('event_template_qty_id')
                 ->get()
-                ->map(function($p) {
+                ->map(function ($p) {
                     return [
                         'qty' => $p->eventTemplateQty?->qty ?? null,
                         'price_per_person' => $p->price_per_person,
@@ -525,20 +532,20 @@ class Event extends Model
         }
 
         EventSnapshot::createSnapshot(
-            $event, 
-            'original', 
+            $event,
+            'original',
             'Pierwotny stan imprezy',
-            'Automatycznie utworzony snapshot w momencie tworzenia imprezy na podstawie szablonu: ' . $template->name,
+            'Automatycznie utworzony snapshot w momencie tworzenia imprezy na podstawie szablonu: '.$template->name,
             $templatePricesSnapshot
         );
 
         // Wykonaj wstępną kalkulację per-event aby zapisać event-scoped ceny
         try {
             // Preferuj dokładny engine używany dla szablonów, aby uzyskać zgodność kalkulacji
-            $engine = new \App\Services\EventTemplateCalculationEngine();
+            $engine = new \App\Services\EventTemplateCalculationEngine;
             $detailed = $engine->calculateDetailed($template, $data['start_place_id'] ?? $template->start_place_id ?? null, $data['transfer_km'] ?? null);
 
-            if (!empty($detailed)) {
+            if (! empty($detailed)) {
                 // Usuń ewentualne stare wpisy (bezpieczny przebieg)
                 \App\Models\EventPricePerPerson::where('event_id', $event->id)->delete();
 
@@ -559,13 +566,13 @@ class Event extends Model
                 }
             } else {
                 // fallback to simple per-event calculator
-                $calculator = new \App\Services\EventPriceCalculator();
+                $calculator = new \App\Services\EventPriceCalculator;
                 $calculator->calculateForEvent($event);
             }
         } catch (\Throwable $e) {
             // fallback to simple calculator on any failure
             try {
-                $calculator = new \App\Services\EventPriceCalculator();
+                $calculator = new \App\Services\EventPriceCalculator;
                 $calculator->calculateForEvent($event);
             } catch (\Throwable $e) {
                 // ignore
@@ -695,13 +702,13 @@ class Event extends Model
      */
     private function convertToEventCurrency(float $price, $currency = null): float
     {
-        if (!$currency || $currency->symbol === 'PLN') {
+        if (! $currency || $currency->symbol === 'PLN') {
             return $price;
         }
 
         // Pobierz kurs waluty z tabeli currencies
         $exchangeRate = \App\Models\Currency::where('symbol', $currency->symbol)->first()?->exchange_rate ?? 1;
-        
+
         return $price * $exchangeRate;
     }
 
@@ -724,8 +731,7 @@ class Event extends Model
         ?int $participantCount = null,
         ?int $gratisCount = null,
         ?int $startPlaceId = null
-    ): float
-    {
+    ): float {
         $count = max(1, (int) ($participantCount ?? $this->participant_count ?? 1));
         $startPlace = (int) ($startPlaceId ?? $this->start_place_id ?? 0);
 
@@ -750,11 +756,11 @@ class Event extends Model
             try {
                 $variant = $this->qtyVariants()->orderByRaw('ABS(qty - ?)', [$count])->first();
                 $gratis = max(0, (int) ($gratisCount ?? $variant->gratis ?? 0));
-                $engine = new \App\Services\EventTemplateCalculationEngine();
+                $engine = new \App\Services\EventTemplateCalculationEngine;
                 $result = $engine->calculateDetailedForCustomGroup(
                     $this->eventTemplate, $count, $gratis, $startPlace
                 );
-                if (!empty($result) && isset($result['price_with_tax'])) {
+                if (! empty($result) && isset($result['price_with_tax'])) {
                     return round((float) $result['price_with_tax'], 2);
                 }
             } catch (\Throwable $e) {
@@ -771,10 +777,13 @@ class Event extends Model
         $totalTaxAmount = 0.0;
         if ($this->eventTemplate) {
             foreach ($this->eventTemplate->taxes as $tax) {
-                if (!$tax->is_active) continue;
+                if (! $tax->is_active) {
+                    continue;
+                }
                 $totalTaxAmount += $tax->calculateTaxAmount($baseCost, $markupAmount);
             }
         }
+
         return round($baseCost + $markupAmount + $totalTaxAmount, 2);
     }
 
@@ -805,14 +814,13 @@ class Event extends Model
     }
 
     /**
-    * Pobierz bazowy całkowity koszt imprezy (bez narzutu), spójny z kalkulacją imprezy.
+     * Pobierz bazowy całkowity koszt imprezy (bez narzutu), spójny z kalkulacją imprezy.
      */
     public function resolvedBaseTotalCost(
         ?int $participantCount = null,
         ?int $gratisCount = null,
         ?int $startPlaceId = null
-    ): float
-    {
+    ): float {
         $count = max(1, (int) ($participantCount ?? $this->participant_count ?? 1));
         $startPlace = (int) ($startPlaceId ?? $this->start_place_id ?? 0);
 
@@ -839,7 +847,7 @@ class Event extends Model
 
         if ($this->eventTemplate && $startPlace > 0) {
             try {
-                $engine = new \App\Services\EventTemplateCalculationEngine();
+                $engine = new \App\Services\EventTemplateCalculationEngine;
                 $result = $engine->calculateDetailedForCustomGroup(
                     $this->eventTemplate,
                     $count,
@@ -849,7 +857,7 @@ class Event extends Model
                     false
                 );
 
-                if (!empty($result) && array_key_exists('price_base', $result) && $result['price_base'] !== null) {
+                if (! empty($result) && array_key_exists('price_base', $result) && $result['price_base'] !== null) {
                     return round((float) $result['price_base'], 2);
                 }
             } catch (\Throwable $e) {
@@ -865,6 +873,7 @@ class Event extends Model
             ->get()
             ->sortBy(function ($row) use ($count) {
                 $qty = (int) ($row->eventTemplateQty->qty ?? $row->event_template_qty_id ?? 0);
+
                 return abs($qty - $count);
             });
 
@@ -927,17 +936,17 @@ class Event extends Model
     public function resolvedPricePerPerson(?int $participantCount = null): float
     {
         $count = max(1, (int) ($participantCount ?? $this->participant_count ?? 1));
-        
+
         // Priority 1: Engine calculation with template + gratis
         if ($this->eventTemplate && $this->start_place_id) {
             try {
                 $variant = $this->qtyVariants()
                     ->orderByRaw('ABS(qty - ?)', [$count])
                     ->first();
-                
+
                 $gratis = (int) ($variant->gratis ?? 0);
-                
-                $engine = new \App\Services\EventTemplateCalculationEngine();
+
+                $engine = new \App\Services\EventTemplateCalculationEngine;
                 $result = $engine->calculateDetailedForCustomGroup(
                     $this->eventTemplate,
                     $count,
@@ -946,8 +955,8 @@ class Event extends Model
                     null,
                     false
                 );
-                
-                if (!empty($result) && isset($result['price_per_person'])) {
+
+                if (! empty($result) && isset($result['price_per_person'])) {
                     return round((float) $result['price_per_person'], 2);
                 }
             } catch (\Throwable $e) {
@@ -957,7 +966,7 @@ class Event extends Model
                 );
             }
         }
-        
+
         // Priority 2: EventPricePerPerson table - find closest qty
         // Load pricePerPerson with eventTemplateQty to find closest by qty
         $priceRows = $this->pricePerPerson()
@@ -965,22 +974,23 @@ class Event extends Model
             ->get()
             ->sortBy(function ($row) use ($count) {
                 $qty = (int) ($row->eventTemplateQty->qty ?? $row->event_template_qty_id ?? 0);
+
                 return abs($qty - $count);
             });
-        
+
         if ($priceRows->isNotEmpty()) {
             $bestMatch = $priceRows->first();
             if ((float) $bestMatch->price_per_person > 0) {
                 return round((float) $bestMatch->price_per_person, 2);
             }
         }
-        
+
         // Priority 3: Fallback to total_cost / count
         $totalCost = (float) ($this->total_cost ?? 0);
         if ($totalCost > 0) {
             return round($totalCost / $count, 2);
         }
-        
+
         return 0.0;
     }
 
@@ -1018,24 +1028,24 @@ class Event extends Model
         $labels = self::getStatusOptions();
         $oldStatusLabel = $labels[$oldStatus] ?? $oldStatus;
         $newStatusLabel = $labels[$newStatus] ?? $newStatus;
-        
+
         // Utwórz snapshot przed zmianą statusu (dla ważnych statusów)
         if (in_array($newStatus, self::getSnapshotTriggerStatuses(), true)) {
             EventSnapshot::createSnapshot(
                 $this,
                 'status_change',
                 "Snapshot przed zmianą na '{$newStatusLabel}'",
-                "Snapshot utworzony przed zmianą statusu z '{$oldStatusLabel}' na '{$newStatusLabel}'" . ($reason ? ". Powód: {$reason}" : '')
+                "Snapshot utworzony przed zmianą statusu z '{$oldStatusLabel}' na '{$newStatusLabel}'".($reason ? ". Powód: {$reason}" : '')
             );
         }
-        
+
         $this->update(['status' => $newStatus]);
-        
+
         $description = "Zmieniono status z '{$oldStatusLabel}' na '{$newStatusLabel}'";
         if ($reason) {
             $description .= ". Powód: {$reason}";
         }
-        
+
         $this->logHistory('status_changed', 'status', $oldStatus, $newStatus, $description);
     }
 
@@ -1047,7 +1057,7 @@ class Event extends Model
         return EventSnapshot::createSnapshot(
             $this,
             'manual',
-            $name ?? 'Snapshot ręczny ' . now()->format('d.m.Y H:i'),
+            $name ?? 'Snapshot ręczny '.now()->format('d.m.Y H:i'),
             $description ?? 'Ręcznie utworzony snapshot'
         );
     }
@@ -1058,12 +1068,13 @@ class Event extends Model
     public function restoreToOriginal(): bool
     {
         $originalSnapshot = $this->originalSnapshot;
-        
-        if (!$originalSnapshot) {
+
+        if (! $originalSnapshot) {
             return false;
         }
-        
+
         $originalSnapshot->restoreToEvent();
+
         return true;
     }
 
@@ -1073,11 +1084,11 @@ class Event extends Model
     public function compareWithOriginal(): ?array
     {
         $originalSnapshot = $this->originalSnapshot;
-        
-        if (!$originalSnapshot) {
+
+        if (! $originalSnapshot) {
             return null;
         }
-        
+
         return $originalSnapshot->compareWithCurrent();
     }
 
@@ -1140,7 +1151,7 @@ class Event extends Model
         $agreements = $source
             ->filter(function (EventAgreement $agreement): bool {
                 return $agreement->agreement_type === EventAgreement::TYPE_INDIVIDUAL
-                    && !in_array($agreement->status, ['template', 'cancelled'], true);
+                    && ! in_array($agreement->status, ['template', 'cancelled'], true);
             })
             ->values();
 
@@ -1152,7 +1163,7 @@ class Event extends Model
 
                 return [
                     'agreement' => $agreement,
-                    'agreement_number' => $agreement->agreement_number ?: ('UM-' . $agreement->id),
+                    'agreement_number' => $agreement->agreement_number ?: ('UM-'.$agreement->id),
                     'participant_name' => $agreement->participant_name ?: '—',
                     'payer_name' => $agreement->signer_name ?: $agreement->customer_name ?: '—',
                     'payer_email' => $agreement->signer_email ?: $agreement->customer_email ?: '—',

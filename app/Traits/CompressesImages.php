@@ -3,9 +3,8 @@
 namespace App\Traits;
 
 use App\Services\ImageCompressionService;
-use Illuminate\Http\UploadedFile;
-use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Facades\Storage;
 use Livewire\Features\SupportFileUploads\TemporaryUploadedFile;
 
 trait CompressesImages
@@ -20,7 +19,7 @@ trait CompressesImages
         }
         $this->compressUploadedImages();
     }
-    
+
     public function afterSave(): void
     {
         if (method_exists(parent::class, 'afterSave')) {
@@ -28,49 +27,50 @@ trait CompressesImages
         }
         $this->compressUploadedImages();
     }
-    
+
     /**
      * Kompresuje obrazy w polach FileUpload
      */
     protected function compressUploadedImages(): void
     {
         $record = $this->getRecord();
-        
-        if (!$record) {
+
+        if (! $record) {
             return;
         }
-        
+
         // Znajdź pola z obrazami
         $imageFields = $this->getImageFields();
-        
+
         foreach ($imageFields as $field) {
             $this->compressImagesInField($record, $field);
         }
     }
-    
+
     /**
      * Kompresuje obrazy w konkretnym polu
      */
     protected function compressImagesInField($record, string $fieldName): void
     {
         $value = $record->getAttribute($fieldName);
-        
+
         if (empty($value)) {
             return;
         }
-        
+
         // Obsługa pojedynczego pliku
         if (is_string($value)) {
             $this->compressImageFile($record, $fieldName, $value);
+
             return;
         }
-        
+
         // Obsługa tablicy plików (galeria)
         if (is_array($value)) {
             // Jeśli w tablicy są jakiekolwiek nie-stringi, nie nadpisuj pola (zostaw oryginał)
             $allStrings = true;
             foreach ($value as $file) {
-                if (!is_string($file)) {
+                if (! is_string($file)) {
                     $allStrings = false;
                     break;
                 }
@@ -85,29 +85,29 @@ trait CompressesImages
             }
         }
     }
-    
+
     /**
      * Kompresuje pojedynczy plik obrazu
      */
     protected function compressImageFile($record, string $fieldName, string $filePath): ?string
     {
         $disk = $this->getImageDisk();
-        
-        if (!Storage::disk($disk)->exists($filePath)) {
+
+        if (! Storage::disk($disk)->exists($filePath)) {
             return null;
         }
-        
+
         try {
             // Sprawdź czy to obraz
             $extension = strtolower(pathinfo($filePath, PATHINFO_EXTENSION));
-            if (!in_array($extension, ['jpg', 'jpeg', 'png', 'gif', 'webp'])) {
+            if (! in_array($extension, ['jpg', 'jpeg', 'png', 'gif', 'webp'])) {
                 return null;
             }
-            
+
             // Utwórz TemporaryUploadedFile z istniejącego pliku
             $fullPath = Storage::disk($disk)->path($filePath);
             $mimeType = mime_content_type($fullPath) ?: 'image/jpeg';
-            
+
             // Kompresuj obraz
             $tempFile = new \Illuminate\Http\UploadedFile(
                 $fullPath,
@@ -116,33 +116,34 @@ trait CompressesImages
                 null,
                 true
             );
-            
+
             $result = ImageCompressionService::compressAndStore(
                 $tempFile,
                 $disk,
                 dirname($filePath)
             );
-            
+
             // Usuń oryginalny plik jeśli kompresja się udała
             if ($result['compression_ratio'] > 5) { // Tylko jeśli oszczędność > 5%
                 Storage::disk($disk)->delete($filePath);
+
                 return $result['original'];
             }
-            
+
             return $filePath;
-            
+
         } catch (\Exception $e) {
             // W przypadku błędu, zachowaj oryginalny plik
             Log::error('Image compression failed', [
                 'field' => $fieldName,
                 'file' => $filePath,
-                'error' => $e->getMessage()
+                'error' => $e->getMessage(),
             ]);
-            
+
             return null;
         }
     }
-    
+
     /**
      * Zwraca pola z obrazami do kompresji
      */
@@ -159,7 +160,7 @@ trait CompressesImages
             'attachments',
         ];
     }
-    
+
     /**
      * Zwraca dysk do przechowywania obrazów
      */

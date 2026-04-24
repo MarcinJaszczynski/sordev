@@ -65,27 +65,27 @@ class BlogPost extends Model
     protected static function booted()
     {
         static::creating(function ($post) {
-            if (empty($post->slug) && !empty($post->title)) {
+            if (empty($post->slug) && ! empty($post->title)) {
                 $post->slug = Str::slug($post->title);
             }
         });
 
         static::updating(function ($post) {
-            if (empty($post->slug) && !empty($post->title)) {
+            if (empty($post->slug) && ! empty($post->title)) {
                 $post->slug = Str::slug($post->title);
             }
         });
 
         static::saving(function ($post) {
             $publishedAt = null;
-            if (!empty($post->published_at)) {
+            if (! empty($post->published_at)) {
                 $publishedAt = $post->published_at instanceof Carbon
                     ? $post->published_at
                     : Carbon::parse($post->published_at);
             }
 
             if ($post->is_published) {
-                if (!$publishedAt || $publishedAt->isFuture()) {
+                if (! $publishedAt || $publishedAt->isFuture()) {
                     $post->published_at = now();
                     $publishedAt = $post->published_at instanceof Carbon
                         ? $post->published_at

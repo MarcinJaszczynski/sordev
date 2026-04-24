@@ -121,7 +121,6 @@
     .fi-section,
     .fi-section-content,
     .fi-section-content-ctn,
-    .fi-modal-window,
     .fi-fo-component-ctn,
     .fi-wi,
     .fi-tabs,
@@ -133,15 +132,21 @@
         max-width: 100%;
     }
 
+    /* Modal window must NOT get max-width:100% — Filament controls its width via props (max-w-2xl etc.) */
+    .fi-modal-window {
+        min-width: 0;
+    }
+
     .fi-main {
         font-size: var(--admin-body-size);
         line-height: var(--admin-line-height);
-        overflow-x: hidden;
+        /* overflow-x intentionally omitted: hiding it blocks child table scrollbars */
     }
 
     .fi-page,
     .fi-page-content {
-        overflow-x: hidden;
+        /* keep child horizontal scrollers and popovers visible */
+        overflow-x: visible;
     }
 
     .fi-page-content,
@@ -265,6 +270,68 @@
         }
     }
 
+    .fi-topbar,
+    .fi-topbar nav,
+    .fi-topbar nav > div,
+    .fi-topbar .fi-topbar-end,
+    .fi-topbar .fi-topbar-item-ctn {
+        min-width: 0;
+    }
+
+    .fi-topbar .custom-topbar-notifications {
+        flex: 1 1 auto;
+        min-width: 0;
+        max-width: 100%;
+    }
+
+    .fi-topbar .custom-topbar-notifications .topbar-notifications-items {
+        min-width: 0;
+        overflow-x: auto;
+        overflow-y: visible;
+        -webkit-overflow-scrolling: touch;
+    }
+
+    .fi-topbar .custom-topbar-notifications .topbar-notifications-items > .relative,
+    .fi-topbar .custom-topbar-notifications .topbar-notifications-items > .flex {
+        flex: 0 0 auto;
+    }
+
+    .fi-tabs {
+        margin-inline: 0 !important;
+        width: 100%;
+        justify-content: flex-start;
+        flex-wrap: nowrap;
+        overflow-x: auto;
+        overflow-y: hidden;
+        -webkit-overflow-scrolling: touch;
+        scrollbar-width: thin;
+    }
+
+    .fi-tabs .fi-tabs-item {
+        flex: 0 0 auto;
+    }
+
+    @media (max-width: 1024px) {
+        .fi-topbar .custom-topbar-notifications .topbar-notifications-items {
+            max-height: min(68vh, 34rem);
+            padding-bottom: 0.25rem;
+        }
+
+        .fi-tabs {
+            padding-inline: 0.35rem;
+            gap: 0.15rem;
+        }
+
+        .fi-tabs .fi-tabs-item {
+            padding-inline: 0.65rem;
+            padding-block: 0.45rem;
+        }
+
+        .fi-tabs .fi-tabs-item-label {
+            font-size: 0.84rem;
+        }
+    }
+
     .fi-ta-content,
     .fi-ta-table-ctn,
     .fi-ta-ctn,
@@ -272,7 +339,7 @@
     .mkh-kanban-board,
     .f-kanban-root {
         overflow-x: auto;
-        overflow-y: hidden;
+        overflow-y: visible; /* hidden blocked dropdowns/tooltips inside table cells */
         -webkit-overflow-scrolling: touch;
     }
 
@@ -434,5 +501,20 @@
         .f-kanban-column {
             min-width: min(17rem, 88vw);
         }
+    }
+
+    /* -----------------------------------------------------------------------
+       Modal z-index: Filament uses z-40 (= 40). Our sidebar uses z-100.
+       Raise modal backdrop and its sibling container above everything.
+       Confirmed selectors from vendor/filament/support/.../modal/index.blade.php:
+         .fi-modal-close-overlay  = semitransparent backdrop (z-40)
+         .fi-modal-close-overlay + div = fixed container holding the modal window (z-40)
+    ----------------------------------------------------------------------- */
+    .fi-modal-close-overlay {
+        z-index: 1500 !important;
+    }
+
+    .fi-modal-close-overlay + div {
+        z-index: 1501 !important;
     }
 </style>

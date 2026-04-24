@@ -18,7 +18,7 @@ class PriceDisplay
      */
     public static function collectVariants(EventTemplate $template, ?int $startPlaceId = null): array
     {
-        if (!method_exists($template, 'pricesPerPerson')) {
+        if (! method_exists($template, 'pricesPerPerson')) {
             return static::fallbackOrEmpty($template, $startPlaceId);
         }
 
@@ -39,7 +39,7 @@ class PriceDisplay
         }
 
         if ($startPlaceId !== null) {
-            $filtered = $validPrices->filter(fn($row) => (int) $row->start_place_id === (int) $startPlaceId);
+            $filtered = $validPrices->filter(fn ($row) => (int) $row->start_place_id === (int) $startPlaceId);
             if ($filtered->isEmpty()) {
                 $filtered = $validPrices->whereNull('start_place_id');
             }
@@ -70,13 +70,15 @@ class PriceDisplay
             $extras = $group
                 ->filter(function ($row) {
                     $currency = $row->currency;
-                    if (!$currency) {
+                    if (! $currency) {
                         return false;
                     }
-                    return !static::isPlnCurrency($currency);
+
+                    return ! static::isPlnCurrency($currency);
                 })
                 ->map(function ($row) {
                     $currency = $row->currency;
+
                     return [
                         'code' => static::currencyLabel($currency),
                         'value' => round((float) $row->price_per_person, 2),
@@ -85,7 +87,7 @@ class PriceDisplay
                 })
                 ->values();
 
-            if (!$allowExtras) {
+            if (! $allowExtras) {
                 $extras = collect();
             }
 
@@ -134,9 +136,10 @@ class PriceDisplay
     {
         return $group->first(function ($row) {
             $currency = $row->currency;
-            if (!$currency) {
+            if (! $currency) {
                 return false;
             }
+
             return static::isPlnCurrency($currency);
         });
     }
@@ -154,6 +157,7 @@ class PriceDisplay
         }
 
         $name = strtolower((string) ($currency->name ?? ''));
+
         return str_contains($name, 'złot');
     }
 
@@ -176,11 +180,11 @@ class PriceDisplay
         $parts = collect();
 
         if ($plnRounded !== null) {
-            $parts->push(static::formatNumber($plnRounded, true) . ' PLN');
+            $parts->push(static::formatNumber($plnRounded, true).' PLN');
         }
 
         foreach ($extras as $extra) {
-            $parts->push(static::formatNumber($extra['value']) . ' ' . $extra['code']);
+            $parts->push(static::formatNumber($extra['value']).' '.$extra['code']);
         }
 
         return $parts->implode(' + ');
@@ -202,7 +206,7 @@ class PriceDisplay
     protected static function buildRanges(Collection $variants): Collection
     {
         $sorted = $variants
-            ->filter(fn($variant) => $variant['qty_value'] !== null)
+            ->filter(fn ($variant) => $variant['qty_value'] !== null)
             ->sortBy('qty_value')
             ->values();
 
@@ -222,7 +226,7 @@ class PriceDisplay
             }
 
             $display = $variant['display'];
-            if (!empty($display)) {
+            if (! empty($display)) {
                 $ranges[] = [
                     'from' => $start,
                     'to' => $end,
@@ -238,6 +242,7 @@ class PriceDisplay
     protected static function fallbackOrEmpty(EventTemplate $template, ?int $startPlaceId): array
     {
         $engineResult = static::collectUsingEngine($template, $startPlaceId);
+
         return $engineResult ?? static::emptyResult();
     }
 
@@ -253,7 +258,7 @@ class PriceDisplay
     protected static function collectUsingEngine(EventTemplate $template, ?int $startPlaceId): ?array
     {
         $templateId = $template->id ?? spl_object_id($template);
-        $cacheKey = $templateId . ':' . ($startPlaceId ?? 'null');
+        $cacheKey = $templateId.':'.($startPlaceId ?? 'null');
 
         if (array_key_exists($cacheKey, static::$engineCache)) {
             return static::$engineCache[$cacheKey] ?: null;
@@ -269,11 +274,13 @@ class PriceDisplay
                 'message' => $e->getMessage(),
             ]);
             static::$engineCache[$cacheKey] = null;
+
             return null;
         }
 
         if (empty($data)) {
             static::$engineCache[$cacheKey] = null;
+
             return null;
         }
 
@@ -316,7 +323,7 @@ class PriceDisplay
                         continue;
                     }
 
-                    if (!array_key_exists($code, $currencyCache)) {
+                    if (! array_key_exists($code, $currencyCache)) {
                         $currencyCache[$code] = Currency::where('symbol', $code)
                             ->orWhere('code', $code)
                             ->first();

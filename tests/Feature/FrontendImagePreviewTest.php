@@ -17,9 +17,14 @@ it('prefers preview image path for template lists', function () {
 });
 
 it('renders preview urls in the frontend package list partial', function () {
+    Storage::fake('public');
+
     $template = EventTemplate::factory()->create([
         'featured_image' => 'event-templates/listing.jpg',
     ]);
+
+    Storage::disk('public')->put('event-templates/listing.jpg', 'fake-image');
+    Storage::disk('public')->put('event-templates/thumbs/listing.jpg', 'fake-thumb');
 
     $html = view('front.partials.packages-items', [
         'eventTemplate' => collect([$template]),
@@ -27,6 +32,19 @@ it('renders preview urls in the frontend package list partial', function () {
     ])->render();
 
     expect($html)->toContain('/storage/event-templates/thumbs/listing.jpg');
+});
+
+it('falls back to full image url when preview file is missing', function () {
+    Storage::fake('public');
+
+    $template = EventTemplate::factory()->create([
+        'featured_image' => 'event-templates/listing.jpg',
+    ]);
+
+    Storage::disk('public')->put('event-templates/listing.jpg', 'fake-image');
+
+    expect($template->preview_image_url)->toBe('/storage/event-templates/listing.jpg');
+    expect($template->full_image_url)->toBe('/storage/event-templates/listing.jpg');
 });
 
 it('generates missing previews for existing public images', function () {

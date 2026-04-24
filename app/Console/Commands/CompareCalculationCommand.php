@@ -2,15 +2,16 @@
 
 namespace App\Console\Commands;
 
-use Illuminate\Console\Command;
 use App\Models\EventTemplate;
 use App\Models\EventTemplatePricePerPerson;
 use App\Services\EventTemplateCalculationEngine;
 use App\Services\UnifiedPriceCalculator;
+use Illuminate\Console\Command;
 
 class CompareCalculationCommand extends Command
 {
     protected $signature = 'eventtemplate:compare-calc {templateId} {startPlaceId?} {--unified}';
+
     protected $description = 'Compare stored prices with calculation engine for given event template and optional start place';
 
     public function handle()
@@ -20,15 +21,16 @@ class CompareCalculationCommand extends Command
 
         // allow comparing soft-deleted templates as well
         $template = EventTemplate::withTrashed()->find($templateId);
-        if (!$template) {
+        if (! $template) {
             $this->error("EventTemplate id={$templateId} not found");
+
             return 1;
         }
 
         $useUnified = $this->option('unified');
         if ($useUnified) {
-            $upc = new UnifiedPriceCalculator();
-            $calcUnified = $upc->calculate($template, $startPlaceId ? (int)$startPlaceId : null, false);
+            $upc = new UnifiedPriceCalculator;
+            $calcUnified = $upc->calculate($template, $startPlaceId ? (int) $startPlaceId : null, false);
             // Przekształć strukturę unified (currencies) do uproszczonego porównania (tylko PLN)
             $calc = [];
             foreach ($calcUnified as $qty => $data) {
@@ -44,11 +46,11 @@ class CompareCalculationCommand extends Command
                 }
             }
         } else {
-            $engine = new EventTemplateCalculationEngine();
-            $calc = $engine->calculateDetailed($template, $startPlaceId ? (int)$startPlaceId : null);
+            $engine = new EventTemplateCalculationEngine;
+            $calc = $engine->calculateDetailed($template, $startPlaceId ? (int) $startPlaceId : null);
         }
 
-        $this->info("Calculated variants: " . implode(', ', array_keys($calc)));
+        $this->info('Calculated variants: '.implode(', ', array_keys($calc)));
 
         foreach ($calc as $qty => $data) {
             $this->line("Qty={$qty}: calc.price_per_person={$data['price_per_person']}, base={$data['price_base']}, markup={$data['markup_amount']}, tax={$data['tax_amount']}, transport={$data['transport_cost']}");
@@ -57,7 +59,7 @@ class CompareCalculationCommand extends Command
                 ->whereHas('eventTemplateQty', function ($q) use ($qty) {
                     $q->where('qty', $qty);
                 })
-                ->when($startPlaceId, fn($q) => $q->where('start_place_id', (int)$startPlaceId), fn($q) => $q->whereNull('start_place_id'))
+                ->when($startPlaceId, fn ($q) => $q->where('start_place_id', (int) $startPlaceId), fn ($q) => $q->whereNull('start_place_id'))
                 ->first();
 
             if ($stored) {
@@ -70,6 +72,7 @@ class CompareCalculationCommand extends Command
         }
 
         $this->info('Done');
+
         return 0;
     }
 }

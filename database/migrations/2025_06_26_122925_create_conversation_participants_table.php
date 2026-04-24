@@ -18,7 +18,7 @@ return new class extends Migration
             $table->timestamp('joined_at')->useCurrent();
             $table->timestamp('last_read_at')->nullable();
             $table->timestamps();
-            
+
             $table->unique(['conversation_id', 'user_id']);
         });
     }

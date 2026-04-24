@@ -22,6 +22,7 @@ class EditConversation extends EditRecord
     {
         // Załaduj uczestników dla formularza
         $data['participants'] = $this->record->participants->pluck('id')->toArray();
+
         return $data;
     }
 
@@ -36,7 +37,7 @@ class EditConversation extends EditRecord
 
         // Przygotuj listę uczestników - zawsze uwzględnij twórcę
         $allParticipants = collect($participants);
-        if (!$allParticipants->contains($record->created_by)) {
+        if (! $allParticipants->contains($record->created_by)) {
             $allParticipants->push($record->created_by);
         }
 
@@ -44,14 +45,14 @@ class EditConversation extends EditRecord
         $participantsData = [];
         foreach ($allParticipants->unique() as $userId) {
             $participantsData[$userId] = [
-                'joined_at' => $record->participants()->where('user_id', $userId)->exists() 
-                    ? $record->participants()->where('user_id', $userId)->first()->pivot->joined_at 
+                'joined_at' => $record->participants()->where('user_id', $userId)->exists()
+                    ? $record->participants()->where('user_id', $userId)->first()->pivot->joined_at
                     : now(),
                 'created_at' => now(),
                 'updated_at' => now(),
             ];
         }
-        
+
         $record->participants()->sync($participantsData);
 
         return $record;

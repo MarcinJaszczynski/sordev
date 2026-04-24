@@ -3,20 +3,24 @@
 namespace App\Livewire;
 
 use App\Models\EventTemplateProgramPoint;
+use Illuminate\Auth\AuthenticationException;
+use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
-use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\RateLimiter;
 use Illuminate\Validation\ValidationException;
-use Illuminate\Auth\AuthenticationException;
 use Livewire\Component;
 
 class ProgramPointChildrenEditor extends Component
 {
     public EventTemplateProgramPoint $programPoint;
+
     public $children = [];
+
     public $showModal = false;
+
     public $editChild = null;
+
     public $modalData = [
         'id' => null,
         'child_program_point_id' => '',
@@ -25,14 +29,23 @@ class ProgramPointChildrenEditor extends Component
 
     // Nowe właściwości dla lepszego wyszukiwania
     public $searchTerm = '';
+
     public $selectedTags = [];
+
     public $selectedCurrency = '';
+
     public $minPrice = '';
+
     public $maxPrice = '';
+
     public $minDuration = '';
+
     public $maxDuration = '';
+
     public $convertToPln = '';
+
     public $availablePoints = [];
+
     public $filteredPoints = [];
 
     protected function rules()
@@ -63,7 +76,7 @@ class ProgramPointChildrenEditor extends Component
      */
     protected function checkPermissions(): void
     {
-        if (!Auth::check()) {
+        if (! Auth::check()) {
             $this->logSecurityEvent('unauthorized_access_attempt', 'User not authenticated');
             throw new AuthenticationException('Nieautoryzowany dostęp');
         }
@@ -78,12 +91,12 @@ class ProgramPointChildrenEditor extends Component
      */
     protected function checkRateLimit(string $action): void
     {
-        $key = 'program_children_editor:' . Auth::id() . ':' . $action;
+        $key = 'program_children_editor:'.Auth::id().':'.$action;
 
         if (RateLimiter::tooManyAttempts($key, 10)) { // 10 attempts per minute
             $this->logSecurityEvent('rate_limit_exceeded', "Action: $action");
             throw ValidationException::withMessages([
-                'general' => 'Zbyt wiele żądań. Spróbuj ponownie za chwilę.'
+                'general' => 'Zbyt wiele żądań. Spróbuj ponownie za chwilę.',
             ]);
         }
 
@@ -105,6 +118,7 @@ class ProgramPointChildrenEditor extends Component
             'timestamp' => now(),
         ]);
     }
+
     public function mount(EventTemplateProgramPoint $programPoint)
     {
         // Security checks
@@ -124,6 +138,7 @@ class ProgramPointChildrenEditor extends Component
             'filteredPoints_count' => count($this->filteredPoints),
         ]);
     }
+
     public function loadAvailablePoints()
     {
         // Pobierz tylko ID dzieci bez ładowania całych modeli
@@ -137,7 +152,7 @@ class ProgramPointChildrenEditor extends Component
             ->whereNotIn('id', $childIds)
             ->orderBy('name');
 
-        if (!empty($this->searchTerm)) {
+        if (! empty($this->searchTerm)) {
             $searchTerm = trim(strip_tags($this->searchTerm));
             $query->where(function ($q) use ($searchTerm) {
                 $q->where('name', 'like', "%$searchTerm%")
@@ -148,20 +163,20 @@ class ProgramPointChildrenEditor extends Component
                     });
             });
         }
-        if (!empty($this->minPrice)) {
-            $query->where('unit_price', '>=', (float)$this->minPrice);
+        if (! empty($this->minPrice)) {
+            $query->where('unit_price', '>=', (float) $this->minPrice);
         }
-        if (!empty($this->maxPrice)) {
-            $query->where('unit_price', '<=', (float)$this->maxPrice);
+        if (! empty($this->maxPrice)) {
+            $query->where('unit_price', '<=', (float) $this->maxPrice);
         }
-        if (!empty($this->minDuration)) {
-            $query->whereRaw('(duration_hours * 60 + duration_minutes) >= ?', [(int)$this->minDuration]);
+        if (! empty($this->minDuration)) {
+            $query->whereRaw('(duration_hours * 60 + duration_minutes) >= ?', [(int) $this->minDuration]);
         }
-        if (!empty($this->maxDuration)) {
-            $query->whereRaw('(duration_hours * 60 + duration_minutes) <= ?', [(int)$this->maxDuration]);
+        if (! empty($this->maxDuration)) {
+            $query->whereRaw('(duration_hours * 60 + duration_minutes) <= ?', [(int) $this->maxDuration]);
         }
         if ($this->convertToPln !== '') {
-            $query->where('convert_to_pln', (bool)$this->convertToPln);
+            $query->where('convert_to_pln', (bool) $this->convertToPln);
         }
         $points = $query->get(); // Brak limitu - pobierz wszystkie pasujące rekordy
 
@@ -194,17 +209,18 @@ class ProgramPointChildrenEditor extends Component
 
         $this->applyFilters();
     }
+
     public function applyFilters()
     {
         Log::info('ProgramPointChildrenEditor::applyFilters() called', [
             'searchTerm' => $this->searchTerm,
-            'availablePoints_count' => count($this->availablePoints)
+            'availablePoints_count' => count($this->availablePoints),
         ]);
 
         $filtered = collect($this->availablePoints);
 
         // Enhanced filtering with XSS protection
-        if (!empty($this->searchTerm)) {
+        if (! empty($this->searchTerm)) {
             $searchTerm = trim(strip_tags($this->searchTerm)); // Remove HTML tags
             $searchTerm = htmlspecialchars($searchTerm, ENT_QUOTES, 'UTF-8'); // Escape special chars
 
@@ -215,12 +231,12 @@ class ProgramPointChildrenEditor extends Component
                 }
 
                 // Search in description
-                if (!empty($point['description']) && stripos($point['description'], $searchTerm) !== false) {
+                if (! empty($point['description']) && stripos($point['description'], $searchTerm) !== false) {
                     return true;
                 }
 
                 // Search in tags
-                if (!empty($point['tags'])) {
+                if (! empty($point['tags'])) {
                     foreach ($point['tags'] as $tag) {
                         if (stripos($tag['name'], $searchTerm) !== false) {
                             return true;
@@ -229,59 +245,63 @@ class ProgramPointChildrenEditor extends Component
                 }
 
                 // Search in office notes
-                if (!empty($point['office_notes']) && stripos($point['office_notes'], $searchTerm) !== false) {
+                if (! empty($point['office_notes']) && stripos($point['office_notes'], $searchTerm) !== false) {
                     return true;
                 }
+
                 return false;
             });
         }
 
         // Filter by tags with validation
-        if (!empty($this->selectedTags) && is_array($this->selectedTags)) {
+        if (! empty($this->selectedTags) && is_array($this->selectedTags)) {
             $filtered = $filtered->filter(function ($point) {
                 $pointTagNames = collect($point['tags'])->pluck('name')->toArray();
-                return !empty(array_intersect($this->selectedTags, $pointTagNames));
+
+                return ! empty(array_intersect($this->selectedTags, $pointTagNames));
             });
         }
 
         // Filtruj po walucie
-        if (!empty($this->selectedCurrency)) {
+        if (! empty($this->selectedCurrency)) {
             $filtered = $filtered->filter(function ($point) {
-                return $point['currency']['symbol'] ?? '' === $this->selectedCurrency;
+                return $point['currency']['symbol'] ?? $this->selectedCurrency === '';
             });
         }
 
         // Filtruj po cenie
-        if (!empty($this->minPrice)) {
+        if (! empty($this->minPrice)) {
             $filtered = $filtered->filter(function ($point) {
-                return ($point['unit_price'] ?? 0) >= (float)$this->minPrice;
+                return ($point['unit_price'] ?? 0) >= (float) $this->minPrice;
             });
         }
-        if (!empty($this->maxPrice)) {
+        if (! empty($this->maxPrice)) {
             $filtered = $filtered->filter(function ($point) {
-                return ($point['unit_price'] ?? 0) <= (float)$this->maxPrice;
+                return ($point['unit_price'] ?? 0) <= (float) $this->maxPrice;
             });
         }
 
         // Filtruj po czasie trwania (w minutach)
-        if (!empty($this->minDuration)) {
+        if (! empty($this->minDuration)) {
             $filtered = $filtered->filter(function ($point) {
                 $totalMinutes = ($point['duration_hours'] ?? 0) * 60 + ($point['duration_minutes'] ?? 0);
-                return $totalMinutes >= (int)$this->minDuration;
+
+                return $totalMinutes >= (int) $this->minDuration;
             });
         }
 
-        if (!empty($this->maxDuration)) {
+        if (! empty($this->maxDuration)) {
             $filtered = $filtered->filter(function ($point) {
                 $totalMinutes = ($point['duration_hours'] ?? 0) * 60 + ($point['duration_minutes'] ?? 0);
-                return $totalMinutes <= (int)$this->maxDuration;
+
+                return $totalMinutes <= (int) $this->maxDuration;
             });
         }
 
         // Filtruj po convert_to_pln
         if ($this->convertToPln !== '') {
             $filtered = $filtered->filter(function ($point) {
-                return (bool)($point['convert_to_pln'] ?? false) === (bool)$this->convertToPln;
+                return (bool) ($point['convert_to_pln'] ?? false) === (bool) $this->convertToPln;
             });
         }
 
@@ -289,7 +309,7 @@ class ProgramPointChildrenEditor extends Component
 
         Log::info('ProgramPointChildrenEditor::applyFilters() completed', [
             'filteredPoints_count' => count($this->filteredPoints),
-            'searchTerm' => $this->searchTerm
+            'searchTerm' => $this->searchTerm,
         ]);
     }
 
@@ -297,7 +317,7 @@ class ProgramPointChildrenEditor extends Component
     public function updatedSearchTerm()
     {
         // truncate to max 100 characters to satisfy validation expectations
-        if (!empty($this->searchTerm) && mb_strlen($this->searchTerm) > 100) {
+        if (! empty($this->searchTerm) && mb_strlen($this->searchTerm) > 100) {
             $this->searchTerm = mb_substr($this->searchTerm, 0, 100);
         }
         $this->applyFilters();
@@ -350,6 +370,7 @@ class ProgramPointChildrenEditor extends Component
         $this->convertToPln = '';
         $this->applyFilters();
     }
+
     public function loadChildren()
     {
         $children = $this->programPoint->children()
@@ -440,7 +461,7 @@ class ProgramPointChildrenEditor extends Component
 
                 // Security: Check if child point exists and user has access
                 $childPoint = EventTemplateProgramPoint::find($childId);
-                if (!$childPoint) {
+                if (! $childPoint) {
                     $this->logSecurityEvent('invalid_child_point_access', "Child ID: $childId");
                     throw ValidationException::withMessages([
                         'modalData.child_program_point_id' => 'Wybrany punkt programu nie istnieje.',
@@ -497,7 +518,7 @@ class ProgramPointChildrenEditor extends Component
             throw $e;
         } catch (\Exception $e) {
             $this->logSecurityEvent('save_child_error', $e->getMessage());
-            Log::error("Błąd dodawania podpunktu: " . $e->getMessage(), [
+            Log::error('Błąd dodawania podpunktu: '.$e->getMessage(), [
                 'user_id' => Auth::id(),
                 'parent_id' => $this->programPoint->id,
                 'stack_trace' => $e->getTraceAsString(),
@@ -527,7 +548,7 @@ class ProgramPointChildrenEditor extends Component
                     ->where('child_id', $childId)
                     ->first();
 
-                if (!$existingRelation) {
+                if (! $existingRelation) {
                     $this->logSecurityEvent('unauthorized_delete_attempt', "Parent: {$this->programPoint->id}, Child: $childId");
                     throw new \InvalidArgumentException('Nie można usunąć podpunktu - brak uprawnień lub element nie istnieje.');
                 }
@@ -558,7 +579,7 @@ class ProgramPointChildrenEditor extends Component
             throw $e;
         } catch (\Exception $e) {
             $this->logSecurityEvent('delete_child_error', $e->getMessage());
-            Log::error("Błąd usuwania podpunktu: " . $e->getMessage(), [
+            Log::error('Błąd usuwania podpunktu: '.$e->getMessage(), [
                 'user_id' => Auth::id(),
                 'parent_id' => $this->programPoint->id,
                 'child_id' => $childId,
@@ -577,7 +598,7 @@ class ProgramPointChildrenEditor extends Component
         try {
             DB::transaction(function () use ($list) {
                 // Security: Validate input
-                if (!is_array($list)) {
+                if (! is_array($list)) {
                     $this->logSecurityEvent('invalid_order_list', 'List is not an array');
                     throw new \InvalidArgumentException('Nieprawidłowa lista kolejności.');
                 }
@@ -624,7 +645,7 @@ class ProgramPointChildrenEditor extends Component
             $this->dispatch('notify', ['type' => 'success', 'message' => 'Kolejność podpunktów zaktualizowana.']);
         } catch (\Exception $e) {
             $this->logSecurityEvent('update_order_error', $e->getMessage());
-            Log::error("Błąd aktualizacji kolejności podpunktów: " . $e->getMessage(), [
+            Log::error('Błąd aktualizacji kolejności podpunktów: '.$e->getMessage(), [
                 'user_id' => Auth::id(),
                 'parent_id' => $this->programPoint->id,
                 'stack_trace' => $e->getTraceAsString(),
@@ -648,7 +669,7 @@ class ProgramPointChildrenEditor extends Component
         Log::info('ProgramPointChildrenEditor::render() called', [
             'availablePoints_count' => count($this->availablePoints),
             'filteredPoints_count' => count($this->filteredPoints),
-            'searchTerm' => $this->searchTerm
+            'searchTerm' => $this->searchTerm,
         ]);
 
         return view('livewire.program-point-children-editor-simple', [

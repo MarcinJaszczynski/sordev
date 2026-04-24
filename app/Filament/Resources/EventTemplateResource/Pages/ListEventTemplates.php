@@ -7,11 +7,11 @@ use App\Models\EventTemplate;
 use Filament\Actions;
 use Filament\Actions\Action;
 use Filament\Resources\Pages\ListRecords;
-use Illuminate\Support\Facades\Auth;
 use Filament\Tables\Actions\Action as TableAction;
 use Filament\Tables\Actions\BulkAction;
 use Filament\Tables\Actions\BulkActionGroup;
 use Illuminate\Support\Collection;
+use Illuminate\Support\Facades\Auth;
 
 class ListEventTemplates extends ListRecords
 {
@@ -24,7 +24,7 @@ class ListEventTemplates extends ListRecords
         ];
     }
 
-    public function getHeaderWidgetsColumns(): int | array
+    public function getHeaderWidgetsColumns(): int|array
     {
         return 1;
     }
@@ -55,11 +55,14 @@ class ListEventTemplates extends ListRecords
                             'currency_id' => $group->currency_id,
                             'start_place_id' => $group->start_place_id,
                         ])->orderByDesc('id')->get();
-                        for ($i = 1; $i < $records->count(); $i++) { $records[$i]->delete(); $removed++; }
+                        for ($i = 1; $i < $records->count(); $i++) {
+                            $records[$i]->delete();
+                            $removed++;
+                        }
                     }
                     \Filament\Notifications\Notification::make()
                         ->title('Deduplikacja zakończona')
-                        ->body('Usunięto rekordów: ' . $removed)
+                        ->body('Usunięto rekordów: '.$removed)
                         ->success()
                         ->send();
                 }),
@@ -88,7 +91,7 @@ class ListEventTemplates extends ListRecords
     {
         return [
             TableAction::make('edit')
-                ->url(fn($record) => static::getResource()::getUrl('edit', ['record' => $record->id])),
+                ->url(fn ($record) => static::getResource()::getUrl('edit', ['record' => $record->id])),
             TableAction::make('delete'),
             TableAction::make('clone')
                 ->label('Klonuj')
@@ -102,13 +105,13 @@ class ListEventTemplates extends ListRecords
                         'hotelDays',
                         'startingPlaceAvailabilities',
                         'taxes',
-                        'pricesPerPerson' // zamiast qtyVariants
+                        'pricesPerPerson', // zamiast qtyVariants
                     ]);
 
                     $clone = EventTemplate::create([
-                        'name' => $record->name . ' (copy)',
+                        'name' => $record->name.' (copy)',
                         'subtitle' => $record->subtitle,
-                        'slug' => $record->slug . '-copy-' . uniqid(),
+                        'slug' => $record->slug.'-copy-'.uniqid(),
                         'duration_days' => $record->duration_days,
                         'is_active' => $record->is_active,
                         'featured_image' => $record->featured_image,
@@ -224,12 +227,13 @@ class ListEventTemplates extends ListRecords
                     ->icon('heroicon-o-calculator')
                     ->requiresConfirmation()
                     ->action(function (Collection $records): void {
-                        $ids = $records->pluck('id')->map(fn($id) => (int) $id)->values()->all();
+                        $ids = $records->pluck('id')->map(fn ($id) => (int) $id)->values()->all();
                         if (count($ids) === 0) {
                             \Filament\Notifications\Notification::make()
                                 ->title('Nie wybrano żadnych szablonów')
                                 ->warning()
                                 ->send();
+
                             return;
                         }
 
@@ -242,6 +246,7 @@ class ListEventTemplates extends ListRecords
                                 ->body('Nie można zlecić przeliczenia bez zalogowanego użytkownika.')
                                 ->danger()
                                 ->send();
+
                             return;
                         }
 
@@ -253,7 +258,7 @@ class ListEventTemplates extends ListRecords
 
                         \Filament\Notifications\Notification::make()
                             ->title('Przeliczanie cen zlecone')
-                            ->body('Szablony: ' . count($ids) . ', paczki: ' . count($chunks) . '. Zadania wykonają się w tle.')
+                            ->body('Szablony: '.count($ids).', paczki: '.count($chunks).'. Zadania wykonają się w tle.')
                             ->success()
                             ->send();
                     }),
@@ -262,12 +267,13 @@ class ListEventTemplates extends ListRecords
                     ->icon('heroicon-o-refresh')
                     ->requiresConfirmation()
                     ->action(function (Collection $records): void {
-                        $ids = $records->pluck('id')->map(fn($id) => (int) $id)->values()->all();
+                        $ids = $records->pluck('id')->map(fn ($id) => (int) $id)->values()->all();
                         if (count($ids) === 0) {
                             \Filament\Notifications\Notification::make()
                                 ->title('Nie wybrano żadnych szablonów')
                                 ->warning()
                                 ->send();
+
                             return;
                         }
 
@@ -278,6 +284,7 @@ class ListEventTemplates extends ListRecords
                                 ->body('Nie można zlecić przeliczenia bez zalogowanego użytkownika.')
                                 ->danger()
                                 ->send();
+
                             return;
                         }
 
@@ -291,7 +298,7 @@ class ListEventTemplates extends ListRecords
 
                         \Filament\Notifications\Notification::make()
                             ->title('Wymuszone przeliczanie zlecone')
-                            ->body('Szablony: ' . count($ids) . ', paczki: ' . count($chunks) . '. Zadania wykonają się w tle.')
+                            ->body('Szablony: '.count($ids).', paczki: '.count($chunks).'. Zadania wykonają się w tle.')
                             ->success()
                             ->send();
                     }),

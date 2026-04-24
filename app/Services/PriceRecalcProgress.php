@@ -29,7 +29,9 @@ class PriceRecalcProgress
     {
         $key = self::key($userId);
         $data = Cache::get($key, null);
-        if (!is_array($data)) return;
+        if (! is_array($data)) {
+            return;
+        }
         $data['processed'] = ($data['processed'] ?? 0) + $by;
         Cache::put($key, $data, 86400);
     }
@@ -38,7 +40,9 @@ class PriceRecalcProgress
     {
         $key = self::key($userId);
         $data = Cache::get($key, null);
-        if (!is_array($data)) return;
+        if (! is_array($data)) {
+            return;
+        }
         $data['errors'] = ($data['errors'] ?? 0) + $by;
         Cache::put($key, $data, 86400);
     }
@@ -47,7 +51,9 @@ class PriceRecalcProgress
     {
         $key = self::key($userId);
         $data = Cache::get($key, null);
-        if (!is_array($data)) return;
+        if (! is_array($data)) {
+            return;
+        }
         $data['finished'] = true;
         $data['finished_at'] = time();
         Cache::put($key, $data, 86400);

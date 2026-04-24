@@ -4,7 +4,6 @@ namespace App\Imports;
 
 use Maatwebsite\Excel\Concerns\ToModel;
 use Maatwebsite\Excel\Concerns\WithHeadingRow;
-use Illuminate\Support\Facades\Schema;
 
 class GenericImport implements ToModel, WithHeadingRow
 {
@@ -20,7 +19,7 @@ class GenericImport implements ToModel, WithHeadingRow
         // Pomijaj wiersz, jeśli wartości są identyczne jak klucze (przykładowy wiersz z eksportu)
         $isExample = true;
         foreach ($row as $key => $value) {
-            if ((string)$value !== (string)$key) {
+            if ((string) $value !== (string) $key) {
                 $isExample = false;
                 break;
             }
@@ -44,11 +43,11 @@ class GenericImport implements ToModel, WithHeadingRow
             'people_count',
             'unit_price',
             'group_size',
-            'price_per_person'
+            'price_per_person',
         ];
 
         foreach ($numericFields as $field) {
-            if (!isset($row[$field]) || $row[$field] === '' || $row[$field] === '?') {
+            if (! isset($row[$field]) || $row[$field] === '' || $row[$field] === '?') {
                 $row[$field] = 0;
             }
         }
@@ -59,11 +58,11 @@ class GenericImport implements ToModel, WithHeadingRow
             'markup_id',
             'event_template_id',
             'created_by',
-            'assigned_to'
+            'assigned_to',
         ];
 
         foreach ($foreignKeyFields as $field) {
-            if (!isset($row[$field]) || $row[$field] === '' || $row[$field] === '?' || $row[$field] === '0') {
+            if (! isset($row[$field]) || $row[$field] === '' || $row[$field] === '?' || $row[$field] === '0') {
                 $row[$field] = null;
             }
         }
@@ -74,11 +73,11 @@ class GenericImport implements ToModel, WithHeadingRow
             'client_phone',
             'notes',
             'description',
-            'currency'
+            'currency',
         ];
 
         foreach ($textFields as $field) {
-            if (!isset($row[$field]) || $row[$field] === '?') {
+            if (! isset($row[$field]) || $row[$field] === '?') {
                 $row[$field] = '';
             }
         }

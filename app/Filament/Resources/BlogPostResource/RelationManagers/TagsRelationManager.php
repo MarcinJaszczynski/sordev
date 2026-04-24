@@ -2,12 +2,12 @@
 
 namespace App\Filament\Resources\BlogPostResource\RelationManagers;
 
-use Filament\Resources\RelationManagers\RelationManager;
-use Filament\Resources\Forms\Components\TextInput;
-use Filament\Resources\Tables\Columns\TextColumn;
-use Filament\Resources\Tables\Actions\DetachAction;
-use Filament\Resources\Tables\Actions\AttachAction;
 use Filament\Forms\Form;
+use Filament\Resources\Forms\Components\TextInput;
+use Filament\Resources\RelationManagers\RelationManager;
+use Filament\Resources\Tables\Actions\AttachAction;
+use Filament\Resources\Tables\Actions\DetachAction;
+use Filament\Resources\Tables\Columns\TextColumn;
 use Filament\Tables\Table;
 
 class TagsRelationManager extends RelationManager

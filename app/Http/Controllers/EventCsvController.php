@@ -20,6 +20,7 @@ class EventCsvController extends Controller
             'file' => 'required|file|mimes:csv,txt',
         ]);
         Excel::import(new EventsImport, $request->file('file'));
+
         return back()->with('success', 'Import zakończony!');
     }
 }

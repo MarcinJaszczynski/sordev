@@ -8,11 +8,11 @@ return new class extends Migration
 {
     public function up(): void
     {
-        if (!Schema::hasTable('event_snapshots')) {
+        if (! Schema::hasTable('event_snapshots')) {
             return;
         }
 
-        if (!Schema::hasColumn('event_snapshots', 'template_prices_snapshot')) {
+        if (! Schema::hasColumn('event_snapshots', 'template_prices_snapshot')) {
             Schema::table('event_snapshots', function (Blueprint $table) {
                 $table->json('template_prices_snapshot')->nullable()->after('currency_rates');
             });
@@ -21,7 +21,7 @@ return new class extends Migration
 
     public function down(): void
     {
-        if (!Schema::hasTable('event_snapshots')) {
+        if (! Schema::hasTable('event_snapshots')) {
             return;
         }
 

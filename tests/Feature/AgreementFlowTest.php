@@ -416,7 +416,7 @@ class AgreementFlowTest extends TestCase
 
         $template = EventTemplate::factory()->create([
             'name' => 'Wycieczka testowa',
-            'slug' => 'wycieczka-testowa-' . uniqid(),
+            'slug' => 'wycieczka-testowa-'.uniqid(),
             'duration_days' => 2,
         ]);
 
@@ -430,7 +430,7 @@ class AgreementFlowTest extends TestCase
             'end_date' => now()->addDay()->toDateString(),
             'participant_count' => 20,
             'total_cost' => 1000,
-            'status' => 'draft',
+            'status' => 'inquiry', // allowed value
         ]);
 
         $contractTemplate = ContractTemplate::create([
@@ -465,7 +465,7 @@ class AgreementFlowTest extends TestCase
         $this->actingAs($user);
 
         $template = EventTemplate::factory()->create();
-        
+
         $event = Event::create([
             'event_template_id' => $template->id,
             'name' => 'Impreza testowa',
@@ -476,7 +476,7 @@ class AgreementFlowTest extends TestCase
             'end_date' => now()->addDay()->toDateString(),
             'participant_count' => 3,
             'total_cost' => 1500.00,
-            'status' => 'active',
+            'status' => 'confirmed', // allowed value
         ]);
 
         $contractTemplate = ContractTemplate::create([
@@ -500,7 +500,7 @@ class AgreementFlowTest extends TestCase
             'participant_count' => 1,
             'amount_due' => 500.00,
             'currency' => 'PLN',
-            'status' => 'template',
+            'status' => 'template', // allowed value
             'payment_status' => 'pending',
             'created_by' => $user->id,
             'meta' => ['is_individual_template' => true, 'expected_participants' => 3],
@@ -561,7 +561,7 @@ class AgreementFlowTest extends TestCase
             'end_date' => now()->addDay()->toDateString(),
             'participant_count' => 2,
             'total_cost' => 2000.00,
-            'status' => 'active',
+            'status' => 'confirmed', // allowed value
         ]);
 
         $contractTemplate = ContractTemplate::create([
@@ -584,7 +584,7 @@ class AgreementFlowTest extends TestCase
             'participant_count' => 1,
             'amount_due' => 1000.00,
             'currency' => 'PLN',
-            'status' => 'template',
+            'status' => 'template', // allowed value
             'payment_status' => 'pending',
             'created_by' => $user->id,
             'attachments' => [
@@ -683,7 +683,7 @@ class AgreementFlowTest extends TestCase
             'amount_due' => 900.00,
             'amount_paid' => 0.00,
             'currency' => 'PLN',
-            'status' => 'template',
+            'status' => 'template', // allowed value
             'payment_status' => 'pending',
             'created_by' => $agreement->created_by,
         ]);
@@ -724,7 +724,7 @@ class AgreementFlowTest extends TestCase
 
         $response->assertOk();
         $response->assertHeader('content-disposition');
-        $this->assertStringContainsString('event-' . $agreement->event_id . '-individual-agreements-report.csv', (string) $response->headers->get('content-disposition'));
+        $this->assertStringContainsString('event-'.$agreement->event_id.'-individual-agreements-report.csv', (string) $response->headers->get('content-disposition'));
     }
 
     public function test_event_offer_word_can_be_generated_from_dashboard(): void

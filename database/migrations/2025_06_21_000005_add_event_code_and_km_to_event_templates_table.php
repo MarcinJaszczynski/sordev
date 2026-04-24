@@ -8,17 +8,32 @@ return new class extends Migration
 {
     public function up(): void
     {
-        Schema::table('event_templates', function (Blueprint $table) {
-            $table->integer('transfer_km')->nullable()->after('event_code');
-            $table->integer('program_km')->nullable()->after('transfer_km');
-        });
+        if (! Schema::hasColumn('event_templates', 'transfer_km')) {
+            Schema::table('event_templates', function (Blueprint $table) {
+                $table->integer('transfer_km')->nullable();
+            });
+        }
+
+        if (! Schema::hasColumn('event_templates', 'program_km')) {
+            Schema::table('event_templates', function (Blueprint $table) {
+                $table->integer('program_km')->nullable()->after('transfer_km');
+            });
+        }
     }
 
     public function down(): void
     {
-        Schema::table('event_templates', function (Blueprint $table) {
-            $table->dropColumn(['event_code', 'transfer_km', 'program_km']);
-        });
+        if (Schema::hasColumn('event_templates', 'program_km')) {
+            Schema::table('event_templates', function (Blueprint $table) {
+                $table->dropColumn('program_km');
+            });
+        }
+
+        if (Schema::hasColumn('event_templates', 'transfer_km')) {
+            Schema::table('event_templates', function (Blueprint $table) {
+                $table->dropColumn('transfer_km');
+            });
+        }
     }
 };
 

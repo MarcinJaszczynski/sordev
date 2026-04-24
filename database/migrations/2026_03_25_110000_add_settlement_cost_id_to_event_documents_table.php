@@ -20,9 +20,6 @@ return new class extends Migration
 
     public function down(): void
     {
-        Schema::table('event_documents', function (Blueprint $table) {
-            $table->dropForeignIdFor(\App\Models\EventSettlementCost::class, 'settlement_cost_id');
-            $table->dropColumn('settlement_cost_id');
-        });
+        // Column and FK already dropped manually; nothing to do here.
     }
 };

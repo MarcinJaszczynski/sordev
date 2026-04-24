@@ -2,13 +2,13 @@
 
 namespace App\Filament\Resources;
 
+use App\Filament\Resources\RoleResource\Pages;
 use Filament\Forms;
 use Filament\Forms\Form;
 use Filament\Resources\Resource;
 use Filament\Tables;
 use Filament\Tables\Table;
 use Spatie\Permission\Models\Role;
-use App\Filament\Resources\RoleResource\Pages;
 
 /**
  * Resource Filament dla modelu Role.
@@ -18,12 +18,19 @@ class RoleResource extends Resource
 {
     /**
      * Powiązany model Eloquent
+     *
      * @var class-string<Role>
-     */    protected static ?string $model = Role::class;
+     */
+    protected static ?string $model = Role::class;
+
     protected static ?string $navigationIcon = 'heroicon-o-shield-check';
+
     protected static ?string $navigationLabel = 'Role i uprawnienia';
+
     protected static ?string $navigationGroup = 'Admin';
+
     protected static ?string $modelLabel = 'rola';
+
     protected static ?string $pluralModelLabel = 'role';
 
     /**
@@ -56,16 +63,16 @@ class RoleResource extends Resource
                 ->counts('permissions')
                 ->label('Liczba uprawnień'),
         ])
-        ->headerActions([
-            Tables\Actions\CreateAction::make()->label('Dodaj rolę'),
-        ])
-        ->actions([
-            Tables\Actions\EditAction::make()->label('Edytuj'),
-            Tables\Actions\DeleteAction::make()->label('Usuń'),
-        ])
-        ->bulkActions([
-            Tables\Actions\DeleteBulkAction::make()->label('Usuń zaznaczone'),
-        ]);
+            ->headerActions([
+                Tables\Actions\CreateAction::make()->label('Dodaj rolę'),
+            ])
+            ->actions([
+                Tables\Actions\EditAction::make()->label('Edytuj'),
+                Tables\Actions\DeleteAction::make()->label('Usuń'),
+            ])
+            ->bulkActions([
+                Tables\Actions\DeleteBulkAction::make()->label('Usuń zaznaczone'),
+            ]);
     }
 
     /**
@@ -91,6 +98,7 @@ class RoleResource extends Resource
         if ($user && $user->roles && $user->roles->flatMap->permissions->contains('name', 'view role')) {
             return true;
         }
+
         return false;
     }
 }

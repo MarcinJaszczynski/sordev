@@ -7,13 +7,17 @@ use App\Models\Markup;
 use Filament\Forms;
 use Filament\Forms\Form;
 use Filament\Resources\Resource;
-use Filament\Tables\Table;
 use Filament\Tables;
+use Filament\Tables\Table;
 
 class MarkupResource extends Resource
-{    protected static ?string $model = Markup::class;
+{
+    protected static ?string $model = Markup::class;
+
     protected static ?string $navigationIcon = 'heroicon-o-plus-circle';
+
     protected static ?string $navigationLabel = 'Narzuty';
+
     protected static ?string $navigationGroup = 'Ustawienia kalkulacji';
 
     public static function form(Form $form): Form

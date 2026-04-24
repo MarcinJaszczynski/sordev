@@ -2,29 +2,28 @@
 
 namespace App\Providers\Filament;
 
+use App\Filament\Pages\ImportExportPanel;
 use BezhanSalleh\FilamentShield\FilamentShieldPlugin;
 use Filament\Http\Middleware\Authenticate;
 use Filament\Http\Middleware\AuthenticateSession;
 use Filament\Http\Middleware\DisableBladeIconComponents;
 use Filament\Http\Middleware\DispatchServingFilamentEvent;
-use App\Filament\Pages\ImportExportPanel;
+use Filament\Infolists\Components\TextEntry;
+use Filament\Navigation\NavigationGroup;
 use Filament\Panel;
 use Filament\PanelProvider;
-use Filament\Infolists\Components\TextEntry;
-use Filament\Tables\Table as FilamentTable;
-use Filament\Tables\Columns\TextColumn;
 use Filament\Support\Colors\Color;
 use Filament\Support\Enums\MaxWidth;
-use Filament\Widgets;
-use Filament\Navigation\NavigationGroup;
+use Filament\Tables\Columns\TextColumn;
+use Filament\Tables\Table as FilamentTable;
 use Filament\View\PanelsRenderHook;
-use Illuminate\Support\Facades\Blade;
-use Illuminate\Support\Facades\Auth;
+use Filament\Widgets;
 use Illuminate\Cookie\Middleware\AddQueuedCookiesToResponse;
 use Illuminate\Cookie\Middleware\EncryptCookies;
 use Illuminate\Foundation\Http\Middleware\VerifyCsrfToken;
 use Illuminate\Routing\Middleware\SubstituteBindings;
 use Illuminate\Session\Middleware\StartSession;
+use Illuminate\Support\Facades\Auth;
 use Illuminate\View\Middleware\ShareErrorsFromSession;
 
 class AdminPanelProvider extends PanelProvider
@@ -136,7 +135,7 @@ class AdminPanelProvider extends PanelProvider
 
                 $shouldRenderAsHtml = static function (string $field) use ($richTextFieldNames): bool {
                     foreach ($richTextFieldNames as $name) {
-                        if ($field === $name || str_ends_with($field, '.' . $name)) {
+                        if ($field === $name || str_ends_with($field, '.'.$name)) {
                             return true;
                         }
                     }
@@ -172,13 +171,13 @@ class AdminPanelProvider extends PanelProvider
                 PanelsRenderHook::TOPBAR_END,
                 function (): string {
                     $user = Auth::user();
-                    if (!$user) {
+                    if (! $user) {
                         return '';
                     }
 
                     $notificationData = \App\Services\NotificationService::getTopbarDataForUser($user->id);
                     $counts = $notificationData['counts'];
-                    
+
                     return view('filament.components.topbar-notifications', [
                         'newTasksCount' => $counts['tasks'],
                         'unreadMessagesCount' => $counts['messages'],

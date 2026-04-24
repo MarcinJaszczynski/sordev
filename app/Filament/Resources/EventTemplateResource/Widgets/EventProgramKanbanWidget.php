@@ -2,14 +2,15 @@
 
 namespace App\Filament\Resources\EventTemplateResource\Widgets;
 
-use Filament\Widgets\Widget;
 use App\Models\EventTemplate;
-use Illuminate\Contracts\View\View;
+use Filament\Widgets\Widget;
 
 class EventProgramKanbanWidget extends Widget
 {
     public ?EventTemplate $eventTemplate = null;
+
     protected static string $view = 'filament.resources.event-template-resource.widgets.event-program-kanban-widget';
+
     protected static ?string $maxWidth = 'full';
 
     public function mount(EventTemplate $eventTemplate)
@@ -31,6 +32,7 @@ class EventProgramKanbanWidget extends Widget
                     ->get(),
             ];
         }
+
         return [
             'columns' => $columns,
             'eventTemplate' => $this->eventTemplate,

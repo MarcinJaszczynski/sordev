@@ -9,7 +9,6 @@ use Filament\Forms\Form;
 use Filament\Resources\Resource;
 use Filament\Tables;
 use Filament\Tables\Table;
-use Illuminate\Database\Eloquent\Builder;
 
 /**
  * Resource Filament dla modelu Contact.
@@ -19,15 +18,20 @@ class ContactResource extends Resource
 {
     /**
      * Powiązany model Eloquent
+     *
      * @var class-string<Contact>
      */
     protected static ?string $model = Contact::class;
 
     // Ikona i etykiety nawigacji w panelu
     protected static ?string $navigationIcon = 'heroicon-o-user';
+
     protected static ?string $navigationLabel = 'Kontakty';
+
     protected static ?string $navigationGroup = 'Kontakty';
+
     protected static ?string $modelLabel = 'kontakt';
+
     protected static ?string $pluralModelLabel = 'kontakty';
 
     /**
@@ -133,6 +137,7 @@ class ContactResource extends Resource
         if ($user && $user->roles && $user->roles->flatMap->permissions->contains('name', 'view contact')) {
             return true;
         }
+
         return false;
     }
 }

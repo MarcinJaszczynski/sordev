@@ -23,10 +23,10 @@ class CurrencyRateSnapshot extends Model
     ];
 
     protected $casts = [
-        'rate'          => 'decimal:4',
+        'rate' => 'decimal:4',
         'purchase_rate' => 'decimal:4',
-        'sale_rate'     => 'decimal:4',
-        'rate_date'     => 'date',
+        'sale_rate' => 'decimal:4',
+        'rate_date' => 'date',
     ];
 
     public function currency(): BelongsTo

@@ -1,4 +1,5 @@
 <?php
+
 use Illuminate\Database\Migrations\Migration;
 use Illuminate\Database\Schema\Blueprint;
 use Illuminate\Support\Facades\Schema;
@@ -9,14 +10,14 @@ return new class extends Migration
     {
         Schema::table('event_templates', function (Blueprint $table) {
             $table->string('seo_title')->nullable();
-            $table->string('seo_description', 350)->nullable();
-            $table->string('seo_keywords')->nullable();
+            $table->text('seo_description')->nullable();
+            $table->text('seo_keywords')->nullable();
             $table->string('seo_canonical')->nullable();
             $table->string('seo_og_title')->nullable();
-            $table->string('seo_og_description', 350)->nullable();
+            $table->text('seo_og_description')->nullable();
             $table->string('seo_og_image')->nullable();
             $table->string('seo_twitter_title')->nullable();
-            $table->string('seo_twitter_description', 350)->nullable();
+            $table->text('seo_twitter_description')->nullable();
             $table->string('seo_twitter_image')->nullable();
             $table->json('seo_schema')->nullable();
         });

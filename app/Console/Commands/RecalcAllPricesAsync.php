@@ -8,6 +8,7 @@ use Illuminate\Console\Command;
 class RecalcAllPricesAsync extends Command
 {
     protected $signature = 'prices:recalc-all-async {--user=1}';
+
     protected $description = 'Wyślij w tło: przelicz ceny dla wszystkich szablonów (deduplikacja na końcu)';
 
     public function handle(): int
@@ -15,6 +16,7 @@ class RecalcAllPricesAsync extends Command
         $userId = (int) $this->option('user');
         RecalculateAllEventTemplatePricesJob::dispatch($userId);
         $this->info('Zadanie przeliczania cen dodane do kolejki.');
+
         return 0;
     }
 }

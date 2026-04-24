@@ -26,6 +26,7 @@ class Contact extends Model
 
     /**
      * Pola masowo przypisywalne
+     *
      * @var array<int, string>
      */
     protected $fillable = [
@@ -41,6 +42,6 @@ class Contact extends Model
      */
     public function contractors()
     {
-    return $this->belongsToMany(Contractor::class, 'contractor_contact');
+        return $this->belongsToMany(Contractor::class, 'contractor_contact');
     }
 }

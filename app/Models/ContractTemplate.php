@@ -21,6 +21,7 @@ class ContractTemplate extends Model
 
     /**
      * Pola masowo przypisywalne
+     *
      * @var array<int, string>
      */
     protected $fillable = [

@@ -4,7 +4,8 @@ use Illuminate\Database\Migrations\Migration;
 use Illuminate\Database\Schema\Blueprint;
 use Illuminate\Support\Facades\Schema;
 
-return new class extends Migration {
+return new class extends Migration
+{
     public function up(): void
     {
         Schema::table('event_price_descriptions', function (Blueprint $table) {
@@ -14,7 +15,7 @@ return new class extends Migration {
                 $table->dropColumn('event_id');
             }
             // Dodaj name jeśli nie istnieje
-            if (!Schema::hasColumn('event_price_descriptions', 'name')) {
+            if (! Schema::hasColumn('event_price_descriptions', 'name')) {
                 $table->string('name')->after('id');
             }
         });

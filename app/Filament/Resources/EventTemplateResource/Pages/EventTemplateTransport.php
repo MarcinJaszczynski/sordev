@@ -1,21 +1,20 @@
 <?php
 
 namespace App\Filament\Resources\EventTemplateResource\Pages;
+
 use App\Filament\Resources\EventTemplateResource;
-use Filament\Resources\Pages\Page;
-use App\Models\EventTemplate;
 use App\Models\Bus;
-use App\Models\TransportType;
+use App\Models\EventTemplate;
 use Filament\Actions;
+use Filament\Forms\Components\Section;
 use Filament\Forms\Components\Select;
 use Filament\Forms\Components\TextInput;
-use Filament\Forms\Components\Textarea;
-use Filament\Forms\Components\Section;
-use Filament\Forms\Form;
 use Filament\Forms\Concerns\InteractsWithForms;
 use Filament\Forms\Contracts\HasForms;
-use Illuminate\Support\Facades\Log;
+use Filament\Forms\Form;
+use Filament\Resources\Pages\Page;
 use Illuminate\Support\Facades\Auth;
+use Illuminate\Support\Facades\Log;
 
 class EventTemplateTransport extends Page implements HasForms
 {
@@ -23,7 +22,9 @@ class EventTemplateTransport extends Page implements HasForms
 
     public function toggleAvailability($eventTemplateId, $startPlaceId, $endPlaceId, $available)
     {
-        if (!$startPlaceId || !$endPlaceId) return;
+        if (! $startPlaceId || ! $endPlaceId) {
+            return;
+        }
 
         $availability = \App\Models\EventTemplateStartingPlaceAvailability::updateOrCreate([
             'event_template_id' => $eventTemplateId,
@@ -35,11 +36,11 @@ class EventTemplateTransport extends Page implements HasForms
 
         // Przelicz ponownie ceny tylko dla tego miejsca startowego (nie globalnie)
         try {
-            $calculator = new \App\Services\UnifiedPriceCalculator();
+            $calculator = new \App\Services\UnifiedPriceCalculator;
             // Kalkuluj i zapisz tylko dla pojedynczego startPlaceId
             $calculator->calculateAndPersist($this->record, $startPlaceId, false);
 
-            \Illuminate\Support\Facades\Log::info('Prices recalculated for start_place ' . $startPlaceId . ' after availability change for event template: ' . $this->record->id);
+            \Illuminate\Support\Facades\Log::info('Prices recalculated for start_place '.$startPlaceId.' after availability change for event template: '.$this->record->id);
 
             // Powiadomienie o przeliczeniu cen
             \Filament\Notifications\Notification::make()
@@ -49,7 +50,7 @@ class EventTemplateTransport extends Page implements HasForms
                 ->send();
         } catch (\Throwable $e) {
             report($e);
-            \Illuminate\Support\Facades\Log::error('Failed to recalculate prices after availability change for event template ' . $this->record->id . ': ' . $e->getMessage());
+            \Illuminate\Support\Facades\Log::error('Failed to recalculate prices after availability change for event template '.$this->record->id.': '.$e->getMessage());
 
             // Powiadomienie o błędzie
             \Filament\Notifications\Notification::make()
@@ -64,7 +65,9 @@ class EventTemplateTransport extends Page implements HasForms
 
     public function updateAvailabilityNote($eventTemplateId, $startPlaceId, $endPlaceId, $note)
     {
-        if (!$startPlaceId || !$endPlaceId) return;
+        if (! $startPlaceId || ! $endPlaceId) {
+            return;
+        }
 
         \App\Models\EventTemplateStartingPlaceAvailability::updateOrCreate([
             'event_template_id' => $eventTemplateId,
@@ -74,6 +77,7 @@ class EventTemplateTransport extends Page implements HasForms
             'note' => $note,
         ]);
     }
+
     public function getViewData(): array
     {
         $startPlaceId = $this->record->start_place_id;
@@ -139,7 +143,7 @@ class EventTemplateTransport extends Page implements HasForms
         $startingPlaces = \App\Models\Place::where('starting_place', true)->get();
 
         // Debug: sprawdź jakie miejsca startowe mamy
-        \Illuminate\Support\Facades\Log::info("Getting prices data for template {$this->record->id}, found " . $startingPlaces->count() . " starting places");
+        \Illuminate\Support\Facades\Log::info("Getting prices data for template {$this->record->id}, found ".$startingPlaces->count().' starting places');
 
         // Znajdź wszystkie polskie waluty (może być duplikatów)
         $polishCurrencyIds = \App\Models\Currency::where(function ($q) {
@@ -150,7 +154,7 @@ class EventTemplateTransport extends Page implements HasForms
                 ->orWhere('code', '=', 'PLN');
         })->pluck('id')->toArray();
 
-        \Illuminate\Support\Facades\Log::info("Found PLN currency IDs: " . json_encode($polishCurrencyIds));
+        \Illuminate\Support\Facades\Log::info('Found PLN currency IDs: '.json_encode($polishCurrencyIds));
 
         foreach ($startingPlaces as $place) {
             // Pobierz wszystkie ceny w polskich walutach dla tego miejsca
@@ -165,12 +169,14 @@ class EventTemplateTransport extends Page implements HasForms
             // Grupuj po qty i wybierz tylko najnowszy rekord dla każdej ilości osób
             $pricesData[$place->id] = $allPrices->groupBy('event_template_qty_id')->map(function ($pricesForQty) {
                 $latest = $pricesForQty->first();
+
                 return [
                     'qty' => $latest->eventTemplateQty->qty ?? 0,
                     'price_per_person' => $latest->price_per_person,
                 ];
             })->values()->toArray();
         }
+
         return $pricesData;
     }
 
@@ -194,7 +200,7 @@ class EventTemplateTransport extends Page implements HasForms
             ->get();
 
         // Loguj znalezione waluty z danymi
-        \Illuminate\Support\Facades\Log::info("Polish currencies with price data: " . $polishCurrenciesWithData->pluck('name', 'id')->toJson());
+        \Illuminate\Support\Facades\Log::info('Polish currencies with price data: '.$polishCurrenciesWithData->pluck('name', 'id')->toJson());
 
         // Jeśli są waluty z danymi, zwróć pierwszą
         if ($polishCurrenciesWithData->isNotEmpty()) {
@@ -212,16 +218,19 @@ class EventTemplateTransport extends Page implements HasForms
             ->orderBy('id')
             ->first();
 
-        \Illuminate\Support\Facades\Log::warning("No Polish currency with data found, using fallback: " . ($fallbackCurrency ? $fallbackCurrency->name : 'NONE'));
+        \Illuminate\Support\Facades\Log::warning('No Polish currency with data found, using fallback: '.($fallbackCurrency ? $fallbackCurrency->name : 'NONE'));
 
         return $fallbackCurrency;
     }
+
     use InteractsWithForms;
 
     protected static string $resource = EventTemplateResource::class;
+
     protected static string $view = 'filament.resources.event-template-resource.pages.event-template-transport';
 
     public EventTemplate $record;
+
     public ?array $data = [];
 
     public function mount($record): void
@@ -239,7 +248,7 @@ class EventTemplateTransport extends Page implements HasForms
         if ($pricesCount === 0) {
             // USUNIĘTO: Automatyczne przeliczanie cen starym kalkulatorem
             // Teraz ceny są przeliczane przez getDetailedCalculations() w widgetach
-            Log::info('No prices found for event template: ' . $this->record->id . ' - prices will be calculated on demand');
+            Log::info('No prices found for event template: '.$this->record->id.' - prices will be calculated on demand');
         }
 
         $this->form->fill([
@@ -257,12 +266,12 @@ class EventTemplateTransport extends Page implements HasForms
             Actions\Action::make('back')
                 ->label('Wróć do edycji')
                 ->icon('heroicon-o-arrow-left')
-                ->url(fn() => static::getResource()::getUrl('edit', ['record' => $this->record->id]))
+                ->url(fn () => static::getResource()::getUrl('edit', ['record' => $this->record->id]))
                 ->color('gray'),
             Actions\Action::make('edit-program')
                 ->label('Edytuj program')
                 ->icon('heroicon-o-bars-3')
-                ->url(fn() => static::getResource()::getUrl('edit-program', ['record' => $this->record->id]))
+                ->url(fn () => static::getResource()::getUrl('edit-program', ['record' => $this->record->id]))
                 ->color('primary'),
             Actions\Action::make('calculate-distances')
                 ->label('Przelicz odległości')
@@ -297,6 +306,7 @@ class EventTemplateTransport extends Page implements HasForms
                 ->body('Nie można zlecić przeliczenia bez zalogowanego użytkownika.')
                 ->danger()
                 ->send();
+
             return;
         }
 
@@ -328,11 +338,12 @@ class EventTemplateTransport extends Page implements HasForms
         $startPlaceId = $this->record->start_place_id;
         $endPlaceId = $this->record->end_place_id;
 
-        if (!$startPlaceId || !$endPlaceId) {
+        if (! $startPlaceId || ! $endPlaceId) {
             \Filament\Notifications\Notification::make()
                 ->title('Brak miejsc początkowego lub końcowego!')
                 ->danger()
                 ->send();
+
             return;
         }
 
@@ -351,13 +362,15 @@ class EventTemplateTransport extends Page implements HasForms
 
         // 1. Od miejsc startowych TYLKO do miejsca początkowego szablonu (tam)
         foreach ($startingPlaces as $from) {
-            if ($from->id === $startPlaceId) continue; // Pomiń jeśli to to samo miejsce
+            if ($from->id === $startPlaceId) {
+                continue;
+            } // Pomiń jeśli to to samo miejsce
 
             $existing = \App\Models\PlaceDistance::where('from_place_id', $from->id)
                 ->where('to_place_id', $startPlaceId)
                 ->first();
 
-            if (!$existing || !$existing->distance_km) {
+            if (! $existing || ! $existing->distance_km) {
                 $toPlace = \App\Models\Place::find($startPlaceId);
                 if ($toPlace) {
                     $missingPairs[] = ['from' => $from, 'to' => $toPlace, 'type' => 'tam'];
@@ -369,13 +382,15 @@ class EventTemplateTransport extends Page implements HasForms
         $endPlace = \App\Models\Place::find($endPlaceId);
         if ($endPlace) {
             foreach ($startingPlaces as $to) {
-                if ($endPlace->id === $to->id) continue; // Pomiń jeśli to to samo miejsce
+                if ($endPlace->id === $to->id) {
+                    continue;
+                } // Pomiń jeśli to to samo miejsce
 
                 $existing = \App\Models\PlaceDistance::where('from_place_id', $endPlace->id)
                     ->where('to_place_id', $to->id)
                     ->first();
 
-                if (!$existing || !$existing->distance_km) {
+                if (! $existing || ! $existing->distance_km) {
                     $missingPairs[] = ['from' => $endPlace, 'to' => $to, 'type' => 'powrót'];
                 }
             }
@@ -408,6 +423,7 @@ class EventTemplateTransport extends Page implements HasForms
 
                 if ($existing && $existing->distance_km) {
                     $skipped++;
+
                     continue;
                 }
 
@@ -426,7 +442,7 @@ class EventTemplateTransport extends Page implements HasForms
                     $errorPairs[] = [
                         'from' => $from->name,
                         'to' => $to->name,
-                        'error' => 'brak wyniku API'
+                        'error' => 'brak wyniku API',
                     ];
                 }
 
@@ -440,7 +456,7 @@ class EventTemplateTransport extends Page implements HasForms
                 $errorPairs[] = [
                     'from' => $from->name,
                     'to' => $to->name,
-                    'error' => $e->getMessage()
+                    'error' => $e->getMessage(),
                 ];
                 $processedCount++;
             }
@@ -451,11 +467,13 @@ class EventTemplateTransport extends Page implements HasForms
 
         // 1. Od miejsc startowych TYLKO do miejsca początkowego szablonu (tam)
         foreach ($startingPlaces as $from) {
-            if ($from->id === $startPlaceId) continue;
+            if ($from->id === $startPlaceId) {
+                continue;
+            }
             $existing = \App\Models\PlaceDistance::where('from_place_id', $from->id)
                 ->where('to_place_id', $startPlaceId)
                 ->first();
-            if (!$existing || !$existing->distance_km) {
+            if (! $existing || ! $existing->distance_km) {
                 $stillMissing++;
             }
         }
@@ -464,11 +482,13 @@ class EventTemplateTransport extends Page implements HasForms
         $endPlace = \App\Models\Place::find($endPlaceId);
         if ($endPlace) {
             foreach ($startingPlaces as $to) {
-                if ($endPlace->id === $to->id) continue;
+                if ($endPlace->id === $to->id) {
+                    continue;
+                }
                 $existing = \App\Models\PlaceDistance::where('from_place_id', $endPlace->id)
                     ->where('to_place_id', $to->id)
                     ->first();
-                if (!$existing || !$existing->distance_km) {
+                if (! $existing || ! $existing->distance_km) {
                     $stillMissing++;
                 }
             }
@@ -478,12 +498,22 @@ class EventTemplateTransport extends Page implements HasForms
         $timeoutReached = $executionTime >= $maxExecutionTime;
 
         // Przygotuj komunikat
-        $message = $timeoutReached ? "Batch ukończony (limit czasu)" : "Przeliczono kompletnie!";
-        if ($updated > 0) $message .= " Zapisano: {$updated} odległości.";
-        if ($skipped > 0) $message .= " Pominięto: {$skipped} (już istniały).";
-        if (count($errorPairs) > 0) $message .= " Błędy: " . count($errorPairs) . ".";
-        if ($stillMissing > 0) $message .= " Pozostało: {$stillMissing}.";
-        if ($timeoutReached) $message .= " Kliknij ponownie aby kontynuować.";
+        $message = $timeoutReached ? 'Batch ukończony (limit czasu)' : 'Przeliczono kompletnie!';
+        if ($updated > 0) {
+            $message .= " Zapisano: {$updated} odległości.";
+        }
+        if ($skipped > 0) {
+            $message .= " Pominięto: {$skipped} (już istniały).";
+        }
+        if (count($errorPairs) > 0) {
+            $message .= ' Błędy: '.count($errorPairs).'.';
+        }
+        if ($stillMissing > 0) {
+            $message .= " Pozostało: {$stillMissing}.";
+        }
+        if ($timeoutReached) {
+            $message .= ' Kliknij ponownie aby kontynuować.';
+        }
 
         \Filament\Notifications\Notification::make()
             ->title($message)
@@ -496,7 +526,7 @@ class EventTemplateTransport extends Page implements HasForms
                 'batch_size' => $maxPairsPerBatch,
                 'execution_time' => $executionTime,
                 'timeout_reached' => $timeoutReached,
-                'success_rate' => $processedCount > 0 ? round(($updated / $processedCount) * 100, 1) : 0
+                'success_rate' => $processedCount > 0 ? round(($updated / $processedCount) * 100, 1) : 0,
             ]))
             ->success()
             ->send();
@@ -510,7 +540,7 @@ class EventTemplateTransport extends Page implements HasForms
             \Illuminate\Support\Facades\Log::info("Deleted all existing prices for template {$this->record->id}");
 
             // Przelicz ponownie
-            (new \App\Services\UnifiedPriceCalculator())->recalculateForTemplate($this->record);
+            (new \App\Services\UnifiedPriceCalculator)->recalculateForTemplate($this->record);
 
             // Sprawdź rezultaty
             $totalPrices = \App\Models\EventTemplatePricePerPerson::where('event_template_id', $this->record->id)->count();
@@ -527,7 +557,7 @@ class EventTemplateTransport extends Page implements HasForms
         } catch (\Exception $e) {
             \Filament\Notifications\Notification::make()
                 ->title('Błąd wymuszenia cen!')
-                ->body('Błąd: ' . $e->getMessage())
+                ->body('Błąd: '.$e->getMessage())
                 ->danger()
                 ->send();
         }
@@ -560,25 +590,25 @@ class EventTemplateTransport extends Page implements HasForms
             $message = "WYKRYTE DUPLIKATY WALUT:\n\n";
 
             if (count($polishCurrencies) > 1) {
-                $message .= "🔴 POLSKIE ZŁOTE (" . count($polishCurrencies) . "):\n";
+                $message .= '🔴 POLSKIE ZŁOTE ('.count($polishCurrencies)."):\n";
                 foreach ($polishCurrencies as $curr) {
-                    $message .= "- " . $curr . "\n";
+                    $message .= '- '.$curr."\n";
                 }
                 $message .= "\n";
             }
 
             if (count($euroCurrencies) > 1) {
-                $message .= "🔴 EURO (" . count($euroCurrencies) . "):\n";
+                $message .= '🔴 EURO ('.count($euroCurrencies)."):\n";
                 foreach ($euroCurrencies as $curr) {
-                    $message .= "- " . $curr . "\n";
+                    $message .= '- '.$curr."\n";
                 }
                 $message .= "\n";
             }
 
             if (count($usdCurrencies) > 1) {
-                $message .= "🔴 DOLARY (" . count($usdCurrencies) . "):\n";
+                $message .= '🔴 DOLARY ('.count($usdCurrencies)."):\n";
                 foreach ($usdCurrencies as $curr) {
-                    $message .= "- " . $curr . "\n";
+                    $message .= '- '.$curr."\n";
                 }
                 $message .= "\n";
             }
@@ -597,7 +627,7 @@ class EventTemplateTransport extends Page implements HasForms
         } catch (\Exception $e) {
             \Filament\Notifications\Notification::make()
                 ->title('Błąd analizy walut!')
-                ->body('Błąd: ' . $e->getMessage())
+                ->body('Błąd: '.$e->getMessage())
                 ->danger()
                 ->send();
         }
@@ -605,8 +635,10 @@ class EventTemplateTransport extends Page implements HasForms
 
     protected function fetchDistanceWithTimeout($from, $to, $apiKey, $timeout = 5)
     {
-        if (!$from->latitude || !$from->longitude || !$to->latitude || !$to->longitude) return null;
-        $url = 'https://api.openrouteservice.org/v2/directions/driving-car?api_key=' . $apiKey . '&start=' . $from->longitude . ',' . $from->latitude . '&end=' . $to->longitude . ',' . $to->latitude;
+        if (! $from->latitude || ! $from->longitude || ! $to->latitude || ! $to->longitude) {
+            return null;
+        }
+        $url = 'https://api.openrouteservice.org/v2/directions/driving-car?api_key='.$apiKey.'&start='.$from->longitude.','.$from->latitude.'&end='.$to->longitude.','.$to->latitude;
         try {
             $ctx = stream_context_create(['http' => ['timeout' => $timeout]]);
             $response = file_get_contents($url, false, $ctx);
@@ -617,6 +649,7 @@ class EventTemplateTransport extends Page implements HasForms
         } catch (\Exception $e) {
             return null;
         }
+
         return null;
     }
 
@@ -642,21 +675,21 @@ class EventTemplateTransport extends Page implements HasForms
 
                         Select::make('start_place_id')
                             ->label('Miejsce początkowe')
-                            ->options(fn() => \App\Models\Place::orderBy('name')->pluck('name', 'id')->toArray())
+                            ->options(fn () => \App\Models\Place::orderBy('name')->pluck('name', 'id')->toArray())
                             ->searchable()
                             ->nullable()
                             ->placeholder('Wybierz miejsce początkowe'),
 
                         Select::make('end_place_id')
                             ->label('Miejsce końcowe')
-                            ->options(fn() => \App\Models\Place::orderBy('name')->pluck('name', 'id')->toArray())
+                            ->options(fn () => \App\Models\Place::orderBy('name')->pluck('name', 'id')->toArray())
                             ->searchable()
                             ->nullable()
                             ->placeholder('Wybierz miejsce końcowe'),
 
                         \Filament\Forms\Components\RichEditor::make('transport_notes')
                             ->toolbarButtons([
-                                'bold', 'italic', 'underline', 'strike', 'link', 'bulletList', 'orderedList', 'blockquote', 'codeBlock', 'h2', 'h3', 'color', 'highlight', 'undo', 'redo'
+                                'bold', 'italic', 'underline', 'strike', 'link', 'bulletList', 'orderedList', 'blockquote', 'codeBlock', 'h2', 'h3', 'color', 'highlight', 'undo', 'redo',
                             ])
                             ->columnSpanFull(),
                     ])
@@ -678,8 +711,8 @@ class EventTemplateTransport extends Page implements HasForms
 
         // Przelicz ponownie ceny po aktualizacji danych transportowych
         try {
-            (new \App\Services\UnifiedPriceCalculator())->recalculateForTemplate($this->record);
-            \Illuminate\Support\Facades\Log::info('Prices recalculated after transport update for event template: ' . $this->record->id);
+            (new \App\Services\UnifiedPriceCalculator)->recalculateForTemplate($this->record);
+            \Illuminate\Support\Facades\Log::info('Prices recalculated after transport update for event template: '.$this->record->id);
 
             // Sprawdź czy zostały zapisane ceny z transportem
             $pricesWithTransport = \App\Models\EventTemplatePricePerPerson::where('event_template_id', $this->record->id)
@@ -687,7 +720,7 @@ class EventTemplateTransport extends Page implements HasForms
                 ->where('transport_cost', '>', 0)
                 ->count();
 
-            \Illuminate\Support\Facades\Log::info('Prices with transport cost found: ' . $pricesWithTransport);
+            \Illuminate\Support\Facades\Log::info('Prices with transport cost found: '.$pricesWithTransport);
 
             // Powiadomienie o przeliczeniu cen
             \Filament\Notifications\Notification::make()
@@ -696,12 +729,12 @@ class EventTemplateTransport extends Page implements HasForms
                 ->success()
                 ->send();
         } catch (\Exception $e) {
-            \Illuminate\Support\Facades\Log::error('Failed to recalculate prices after transport update for event template ' . $this->record->id . ': ' . $e->getMessage());
+            \Illuminate\Support\Facades\Log::error('Failed to recalculate prices after transport update for event template '.$this->record->id.': '.$e->getMessage());
 
             // Powiadomienie o błędzie
             \Filament\Notifications\Notification::make()
                 ->title('Błąd przeliczania cen!')
-                ->body('Wystąpił błąd podczas automatycznego przeliczania cen: ' . $e->getMessage())
+                ->body('Wystąpił błąd podczas automatycznego przeliczania cen: '.$e->getMessage())
                 ->danger()
                 ->send();
         }
@@ -728,6 +761,6 @@ class EventTemplateTransport extends Page implements HasForms
 
     public function getTitle(): string
     {
-        return 'Transport - ' . $this->record->name;
+        return 'Transport - '.$this->record->name;
     }
 }

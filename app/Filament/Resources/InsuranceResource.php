@@ -3,7 +3,6 @@
 namespace App\Filament\Resources;
 
 use App\Filament\Resources\InsuranceResource\Pages;
-use App\Filament\Resources\InsuranceResource\RelationManagers;
 use App\Models\Insurance;
 use Filament\Forms;
 use Filament\Forms\Form;
@@ -18,9 +17,13 @@ class InsuranceResource extends Resource
     protected static ?string $model = Insurance::class;
 
     protected static ?string $navigationIcon = 'heroicon-o-shield-check';
+
     protected static ?string $navigationLabel = 'Ubezpieczenia';
+
     protected static ?string $navigationGroup = 'Ustawienia ogólne';
+
     protected static ?string $modelLabel = 'Ubezpieczenie';
+
     protected static ?string $pluralModelLabel = 'Ubezpieczenia';
 
     public static function form(Form $form): Form
@@ -139,6 +142,7 @@ class InsuranceResource extends Resource
         if ($user && $user->roles && $user->roles->flatMap->permissions->contains('name', 'view insurance')) {
             return true;
         }
+
         return false;
     }
 
@@ -151,6 +155,7 @@ class InsuranceResource extends Resource
         if ($user && $user->roles && $user->roles->flatMap->permissions->contains('name', 'create insurance')) {
             return true;
         }
+
         return false;
     }
 
@@ -163,6 +168,7 @@ class InsuranceResource extends Resource
         if ($user && $user->roles && $user->roles->flatMap->permissions->contains('name', 'edit insurance')) {
             return true;
         }
+
         return false;
     }
 
@@ -175,6 +181,7 @@ class InsuranceResource extends Resource
         if ($user && $user->roles && $user->roles->flatMap->permissions->contains('name', 'delete insurance')) {
             return true;
         }
+
         return false;
     }
 

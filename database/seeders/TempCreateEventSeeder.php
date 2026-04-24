@@ -10,7 +10,8 @@ class TempCreateEventSeeder extends Seeder
     {
         $t = \App\Models\EventTemplate::first();
         if (! $t) {
-            $this->command->info("NO_TEMPLATE");
+            $this->command->info('NO_TEMPLATE');
+
             return;
         }
 
@@ -23,13 +24,14 @@ class TempCreateEventSeeder extends Seeder
                 'participant_count' => 17,
             ]);
         } catch (\Exception $ex) {
-            $this->command->error('EXCEPTION: ' . $ex->getMessage());
+            $this->command->error('EXCEPTION: '.$ex->getMessage());
             $this->command->error($ex->getTraceAsString());
+
             return;
         }
 
         $count = \App\Models\EventProgramPoint::where('event_id', $e->id)->count();
-        $this->command->info('EVENT_ID:' . $e->id);
-        $this->command->info('PPP:' . $count);
+        $this->command->info('EVENT_ID:'.$e->id);
+        $this->command->info('PPP:'.$count);
     }
 }

@@ -16,10 +16,18 @@ return new class extends Migration
 
     public function down(): void
     {
-        Schema::table('event_templates', function (Blueprint $table) {
-            $table->dropForeign(['start_place_id']);
-            $table->dropForeign(['end_place_id']);
-            $table->dropColumn(['start_place_id', 'end_place_id']);
-        });
+        if (Schema::hasTable('event_templates')) {
+            Schema::table('event_templates', function (Blueprint $table) {
+                try {
+                    $table->dropForeign(['start_place_id']);
+                } catch (\Throwable $e) {}
+                try {
+                    $table->dropForeign(['end_place_id']);
+                } catch (\Throwable $e) {}
+                try {
+                    $table->dropColumn(['start_place_id', 'end_place_id']);
+                } catch (\Throwable $e) {}
+            });
+        }
     }
 };

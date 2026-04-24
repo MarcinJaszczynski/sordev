@@ -10,6 +10,7 @@ use Illuminate\Support\Facades\DB;
 class PriceSummary extends Command
 {
     protected $signature = 'prices:summary';
+
     protected $description = 'Pokaż podsumowanie cen: liczba szablonów, rekordów cen i ewentualne duplikaty.';
 
     public function handle(): int
@@ -24,9 +25,9 @@ class PriceSummary extends Command
                 ->having('count', '>', 1)
                 ->count();
 
-            $this->info('Szablony: ' . $templates);
-            $this->info('Rekordy cen: ' . $prices);
-            $this->info('Grupy duplikatów: ' . $dupeGroups);
+            $this->info('Szablony: '.$templates);
+            $this->info('Rekordy cen: '.$prices);
+            $this->info('Grupy duplikatów: '.$dupeGroups);
 
             // Dodatkowo: rozkład po walutach
             $byCurrency = DB::table('event_template_price_per_person')
@@ -34,11 +35,13 @@ class PriceSummary extends Command
                 ->groupBy('currency_id')
                 ->get();
             foreach ($byCurrency as $row) {
-                $this->line('  - currency_id ' . $row->currency_id . ': ' . $row->cnt);
+                $this->line('  - currency_id '.$row->currency_id.': '.$row->cnt);
             }
+
             return 0;
         } catch (\Throwable $e) {
-            $this->error('Błąd: ' . $e->getMessage());
+            $this->error('Błąd: '.$e->getMessage());
+
             return 1;
         }
     }

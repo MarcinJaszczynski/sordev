@@ -37,6 +37,7 @@ class ReservationsSyncAudit extends Command
 
         if ($rows->isEmpty()) {
             $this->info('Brak rezerwacji do analizy.');
+
             return self::SUCCESS;
         }
 
@@ -80,11 +81,11 @@ class ReservationsSyncAudit extends Command
         }
 
         $this->newLine();
-        $this->info('Przeanalizowane: ' . $rows->count());
-        $this->info('Wykryte niespójności: ' . $issues);
+        $this->info('Przeanalizowane: '.$rows->count());
+        $this->info('Wykryte niespójności: '.$issues);
 
         if ($fix) {
-            $this->info('Naprawione rekordy: ' . $fixed);
+            $this->info('Naprawione rekordy: '.$fixed);
         } else {
             $this->line('Uruchom z --fix, aby naprawić wykryte rekordy.');
         }

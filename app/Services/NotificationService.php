@@ -2,7 +2,6 @@
 
 namespace App\Services;
 
-use App\Models\Conversation;
 use App\Models\Event;
 use App\Models\Task;
 use App\Models\TaskComment;
@@ -31,7 +30,7 @@ class NotificationService
 
     private static function buildEventIndexUrlWithStatus(string $status): string
     {
-        return route('filament.admin.resources.events.index') . '?tableFilters[status][value]=' . urlencode($status);
+        return route('filament.admin.resources.events.index').'?tableFilters[status][value]='.urlencode($status);
     }
 
     private static function formatEventNotification(Event $event, string $type, string $fallbackLabel): array
@@ -48,8 +47,8 @@ class NotificationService
         return [
             'type' => $type,
             'id' => (int) $event->id,
-            'title' => Str::limit($event->name ?? ('Impreza #' . $event->id), 60),
-            'meta' => ($event->status_label ?: $fallbackLabel) . ' | Start: ' . $startDate,
+            'title' => Str::limit($event->name ?? ('Impreza #'.$event->id), 60),
+            'meta' => ($event->status_label ?: $fallbackLabel).' | Start: '.$startDate,
             'time' => optional($event->updated_at)->diffForHumans() ?? 'teraz',
             'url' => $url,
             'at' => optional($event->updated_at)?->timestamp ?? now()->timestamp,
@@ -150,7 +149,7 @@ class NotificationService
                     $conversationNotifications[] = [
                         'type' => 'message',
                         'title' => $conversation->getDisplayName($user),
-                        'meta' => $unreadCount . ' nieprzeczytanych wiadomosci',
+                        'meta' => $unreadCount.' nieprzeczytanych wiadomosci',
                         'time' => optional($conversation->last_message_at)->diffForHumans() ?? 'teraz',
                         'url' => route('filament.admin.pages.chat'),
                         'at' => optional($conversation->last_message_at)?->timestamp ?? now()->timestamp,
@@ -173,7 +172,7 @@ class NotificationService
                     return [
                         'type' => 'task',
                         'title' => Str::limit($task->title, 60),
-                        'meta' => 'Termin: ' . $due . ' | Status: ' . ($task->status->name ?? 'brak'),
+                        'meta' => 'Termin: '.$due.' | Status: '.($task->status->name ?? 'brak'),
                         'time' => optional($task->updated_at)->diffForHumans() ?? 'teraz',
                         'url' => route('filament.admin.resources.tasks.edit', ['record' => $task->id]),
                         'at' => optional($task->updated_at)?->timestamp ?? now()->timestamp,
@@ -206,7 +205,7 @@ class NotificationService
                 ->all();
 
             $commentNotifications = TaskComment::query()
-                ->where('author_id', '!=', $user->id)
+                ->where('user_id', '!=', $user->id)
                 ->where('created_at', '>', now()->subDays(14))
                 ->whereHas('task', function ($query) use ($user) {
                     $query->where('assignee_id', $user->id)
@@ -217,12 +216,12 @@ class NotificationService
                 ->limit(6)
                 ->get()
                 ->map(function (TaskComment $comment): array {
-                    $taskTitle = Str::limit($comment->task?->title ?? ('Zadanie #' . $comment->task_id), 40);
+                    $taskTitle = Str::limit($comment->task?->title ?? ('Zadanie #'.$comment->task_id), 40);
 
                     return [
                         'type' => 'comment',
-                        'title' => 'Nowy komentarz: ' . $taskTitle,
-                        'meta' => ($comment->author?->name ?? 'Użytkownik') . ': ' . Str::limit($comment->content ?? '', 70),
+                        'title' => 'Nowy komentarz: '.$taskTitle,
+                        'meta' => ($comment->author?->name ?? 'Użytkownik').': '.Str::limit($comment->content ?? '', 70),
                         'time' => optional($comment->created_at)->diffForHumans() ?? 'teraz',
                         'url' => $comment->task_id
                             ? route('filament.admin.resources.tasks.edit', ['record' => $comment->task_id])
@@ -333,7 +332,7 @@ class NotificationService
             ];
         });
     }
-    
+
     /**
      * Czyści cache powiadomień dla użytkownika
      */
@@ -341,7 +340,7 @@ class NotificationService
     {
         Cache::forget("user_notifications_{$userId}");
     }
-    
+
     /**
      * Oznacza wiadomości jako przeczytane dla użytkownika w konwersacji
      */
@@ -350,9 +349,9 @@ class NotificationService
         $user = User::find($userId);
         if ($user) {
             $user->conversations()->updateExistingPivot($conversationId, [
-                'last_read_at' => now()
+                'last_read_at' => now(),
             ]);
-            
+
             self::clearCacheForUser($userId);
         }
     }

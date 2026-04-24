@@ -3,7 +3,6 @@
 namespace App\Filament\Components;
 
 use App\Services\NotificationService;
-use Filament\View\PanelsRenderHook;
 use Illuminate\Contracts\View\View;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\View\Component;
@@ -14,7 +13,7 @@ class TopbarNotifications extends Component
     {
         $user = Auth::user();
 
-        if (!$user) {
+        if (! $user) {
             $data = [
                 'newTasksCount' => 0,
                 'unreadMessagesCount' => 0,

@@ -38,8 +38,8 @@ class Conversation extends Model
     public function participants(): BelongsToMany
     {
         return $this->belongsToMany(User::class, 'conversation_participants')
-                    ->withPivot(['joined_at', 'last_read_at'])
-                    ->withTimestamps();
+            ->withPivot(['joined_at', 'last_read_at'])
+            ->withTimestamps();
     }
 
     /**
@@ -64,15 +64,15 @@ class Conversation extends Model
     public function unreadCount(User $user): int
     {
         $participant = $this->participants()->where('user_id', $user->id)->first();
-        
-        if (!$participant || !$participant->pivot->last_read_at) {
+
+        if (! $participant || ! $participant->pivot->last_read_at) {
             return $this->messages()->count();
         }
 
         return $this->messages()
-                    ->where('created_at', '>', $participant->pivot->last_read_at)
-                    ->where('user_id', '!=', $user->id)
-                    ->count();
+            ->where('created_at', '>', $participant->pivot->last_read_at)
+            ->where('user_id', '!=', $user->id)
+            ->count();
     }
 
     /**
@@ -81,9 +81,9 @@ class Conversation extends Model
     public function markAsRead(User $user): void
     {
         $this->participants()
-             ->updateExistingPivot($user->id, [
-                 'last_read_at' => now()
-             ]);
+            ->updateExistingPivot($user->id, [
+                'last_read_at' => now(),
+            ]);
     }
 
     /**
@@ -105,12 +105,12 @@ class Conversation extends Model
 
         // Dla rozmów prywatnych: title (nazwa drugiego użytkownika)
         $otherParticipant = $this->participants()
-                                 ->where('user_id', '!=', $user->id)
-                                 ->first();
+            ->where('user_id', '!=', $user->id)
+            ->first();
 
         $participantName = $otherParticipant?->name ?? 'Nieznany użytkownik';
-        
+
         // Title jest teraz zawsze wymagany, więc zawsze go wyświetlamy
-        return ($this->title ?? 'Rozmowa prywatna') . ' (' . $participantName . ')';
+        return ($this->title ?? 'Rozmowa prywatna').' ('.$participantName.')';
     }
 }

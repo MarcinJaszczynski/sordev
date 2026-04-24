@@ -8,7 +8,7 @@ use Illuminate\Database\Eloquent\Relations\HasMany;
 
 class Document extends Model
 {
-    protected $fillable = ['document_section_id','title','slug','excerpt','content','order_number','is_published'];
+    protected $fillable = ['document_section_id', 'title', 'slug', 'excerpt', 'content', 'order_number', 'is_published'];
 
     public function section(): BelongsTo
     {

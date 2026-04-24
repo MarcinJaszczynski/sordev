@@ -4,28 +4,31 @@ namespace App\Filament\Resources;
 
 use App\Filament\Resources\EventSettlementResource\Pages;
 use App\Filament\Resources\EventSettlementResource\RelationManagers;
-use App\Models\EventSettlement;
-use App\Models\EventSettlementCost;
 use App\Models\Event;
+use App\Models\EventSettlement;
 use App\Models\User;
 use Filament\Forms;
 use Filament\Forms\Form;
+use Filament\Infolists;
+use Filament\Infolists\Infolist;
 use Filament\Resources\Resource;
 use Filament\Tables;
 use Filament\Tables\Table;
-use Filament\Infolists;
-use Filament\Infolists\Infolist;
-use Illuminate\Database\Eloquent\Builder;
 
 class EventSettlementResource extends Resource
 {
     protected static ?string $model = EventSettlement::class;
 
     protected static ?string $navigationIcon = 'heroicon-o-calculator';
+
     protected static ?string $navigationLabel = 'Rozliczenia imprez';
+
     protected static ?string $navigationGroup = 'Finanse';
+
     protected static ?int $navigationSort = 10;
+
     protected static ?string $modelLabel = 'Rozliczenie';
+
     protected static ?string $pluralModelLabel = 'Rozliczenia imprez';
 
     public static function form(Form $form): Form
@@ -36,18 +39,18 @@ class EventSettlementResource extends Resource
                 ->schema([
                     Forms\Components\Select::make('event_id')
                         ->label('Impreza')
-                        ->options(fn() => Event::orderByDesc('start_date')
+                        ->options(fn () => Event::orderByDesc('start_date')
                             ->limit(200)
                             ->get()
-                            ->mapWithKeys(fn($e) => [
-                                $e->id => "[{$e->id}] {$e->name} ({$e->start_date?->format('d.m.Y')})"
+                            ->mapWithKeys(fn ($e) => [
+                                $e->id => "[{$e->id}] {$e->name} ({$e->start_date?->format('d.m.Y')})",
                             ])
                         )
                         ->searchable()
                         ->required()
                         ->columnSpanFull()
                         ->reactive()
-                        ->afterStateUpdated(fn($state, Forms\Set $set) => static::fillEventDefaults($state, $set)),
+                        ->afterStateUpdated(fn ($state, Forms\Set $set) => static::fillEventDefaults($state, $set)),
 
                     Forms\Components\Select::make('status')
                         ->label('Status')
@@ -57,7 +60,7 @@ class EventSettlementResource extends Resource
 
                     Forms\Components\Select::make('pilot_id')
                         ->label('Pilot')
-                        ->options(fn() => User::orderBy('name')->pluck('name', 'id'))
+                        ->options(fn () => User::orderBy('name')->pluck('name', 'id'))
                         ->searchable()
                         ->nullable(),
 
@@ -125,9 +128,13 @@ class EventSettlementResource extends Resource
 
     protected static function fillEventDefaults($eventId, Forms\Set $set): void
     {
-        if (!$eventId) return;
+        if (! $eventId) {
+            return;
+        }
         $event = Event::with('programPoints')->find($eventId);
-        if (!$event) return;
+        if (! $event) {
+            return;
+        }
         // Jeśli pilot jest przypisany do imprezy
         if ($event->assigned_to) {
             $set('pilot_id', $event->assigned_to);
@@ -147,16 +154,16 @@ class EventSettlementResource extends Resource
                     ->label('Impreza')
                     ->searchable()
                     ->wrap()
-                    ->url(fn($record) => $record->event_id ? EventResource::getUrl('edit', ['record' => $record->event_id]) : null)
-                    ->description(fn($record) => $record->event?->start_date?->format('d.m.Y')),
+                    ->url(fn ($record) => $record->event_id ? EventResource::getUrl('edit', ['record' => $record->event_id]) : null)
+                    ->description(fn ($record) => $record->event?->start_date?->format('d.m.Y')),
 
                 Tables\Columns\BadgeColumn::make('status')
                     ->label('Status')
-                    ->formatStateUsing(fn($state) => EventSettlement::$statuses[$state] ?? $state)
+                    ->formatStateUsing(fn ($state) => EventSettlement::$statuses[$state] ?? $state)
                     ->colors([
-                        'gray'    => 'draft',
+                        'gray' => 'draft',
                         'warning' => 'active',
-                        'info'    => 'pilot_settled',
+                        'info' => 'pilot_settled',
                         'success' => 'closed',
                     ]),
 
@@ -172,9 +179,9 @@ class EventSettlementResource extends Resource
 
                 Tables\Columns\TextColumn::make('cost_diff')
                     ->label('Różnica')
-                    ->state(fn($record) => $record->actual_cost_pln - $record->planned_cost_pln)
+                    ->state(fn ($record) => $record->actual_cost_pln - $record->planned_cost_pln)
                     ->money('PLN')
-                    ->color(fn($state) => $state > 0 ? 'danger' : ($state < 0 ? 'success' : 'gray')),
+                    ->color(fn ($state) => $state > 0 ? 'danger' : ($state < 0 ? 'success' : 'gray')),
 
                 Tables\Columns\TextColumn::make('participant_paid_pln')
                     ->label('Wpłacono')
@@ -182,9 +189,9 @@ class EventSettlementResource extends Resource
 
                 Tables\Columns\TextColumn::make('participant_balance')
                     ->label('Saldo uczestników')
-                    ->state(fn($record) => (float) $record->participant_paid_pln - (float) $record->participant_due_pln)
+                    ->state(fn ($record) => (float) $record->participant_paid_pln - (float) $record->participant_due_pln)
                     ->money('PLN')
-                    ->color(fn($state) => $state >= 0 ? 'success' : 'danger'),
+                    ->color(fn ($state) => $state >= 0 ? 'success' : 'danger'),
 
                 Tables\Columns\TextColumn::make('pilot.name')
                     ->label('Pilot')
@@ -204,7 +211,7 @@ class EventSettlementResource extends Resource
 
                 Tables\Filters\SelectFilter::make('pilot_id')
                     ->label('Pilot')
-                    ->options(fn() => User::orderBy('name')->pluck('name', 'id'))
+                    ->options(fn () => User::orderBy('name')->pluck('name', 'id'))
                     ->searchable(),
             ])
             ->actions([
@@ -212,7 +219,7 @@ class EventSettlementResource extends Resource
                     ->label('Impreza')
                     ->icon('heroicon-o-arrow-top-right-on-square')
                     ->color('gray')
-                    ->url(fn($record) => $record->event_id ? EventResource::getUrl('edit', ['record' => $record->event_id]) : null)
+                    ->url(fn ($record) => $record->event_id ? EventResource::getUrl('edit', ['record' => $record->event_id]) : null)
                     ->openUrlInNewTab(),
 
                 Tables\Actions\Action::make('import')
@@ -226,7 +233,7 @@ class EventSettlementResource extends Resource
                         $record->importFromEvent();
                         $record->refresh();
                     })
-                    ->visible(fn($record) => $record->status === 'draft'),
+                    ->visible(fn ($record) => $record->status === 'draft'),
 
                 Tables\Actions\Action::make('recalc_pilot')
                     ->label('Oblicz gotówkę pilota')
@@ -276,24 +283,24 @@ class EventSettlementResource extends Resource
 
                     Infolists\Components\TextEntry::make('cost_diff')
                         ->label('Różnica kosztów')
-                        ->state(fn($record) => $record->actual_cost_pln - $record->planned_cost_pln)
+                        ->state(fn ($record) => $record->actual_cost_pln - $record->planned_cost_pln)
                         ->money('PLN')
-                        ->color(fn($state) => $state > 0 ? 'danger' : ($state < 0 ? 'success' : 'gray')),
+                        ->color(fn ($state) => $state > 0 ? 'danger' : ($state < 0 ? 'success' : 'gray')),
 
                     Infolists\Components\TextEntry::make('participant_balance')
                         ->label('Saldo uczestników')
-                        ->state(fn($record) => $record->participant_paid_pln - $record->participant_due_pln)
+                        ->state(fn ($record) => $record->participant_paid_pln - $record->participant_due_pln)
                         ->money('PLN')
-                        ->color(fn($state) => $state >= 0 ? 'success' : 'danger'),
+                        ->color(fn ($state) => $state >= 0 ? 'success' : 'danger'),
 
                     Infolists\Components\TextEntry::make('pilot_expenses_planned')
                         ->label('Wydatki pilota – plan')
-                        ->state(fn($record) => round((float) $record->costs()->where('paid_by', 'pilot')->whereNotIn('payment_status', ['cancelled'])->sum('planned_amount_pln'), 2))
+                        ->state(fn ($record) => round((float) $record->costs()->where('paid_by', 'pilot')->whereNotIn('payment_status', ['cancelled'])->sum('planned_amount_pln'), 2))
                         ->money('PLN'),
 
                     Infolists\Components\TextEntry::make('pilot_expenses_calculated')
                         ->label('Wydatki pilota – gotówka')
-                        ->state(fn($record) => round((float) $record->pilotCashPreparations()->sum('pln_equivalent'), 2))
+                        ->state(fn ($record) => round((float) $record->pilotCashPreparations()->sum('pln_equivalent'), 2))
                         ->money('PLN'),
                 ]),
         ]);
@@ -312,9 +319,9 @@ class EventSettlementResource extends Resource
     public static function getPages(): array
     {
         return [
-            'index'  => Pages\ListEventSettlements::route('/'),
+            'index' => Pages\ListEventSettlements::route('/'),
             'create' => Pages\CreateEventSettlement::route('/create'),
-            'edit'   => Pages\EditEventSettlement::route('/{record}/edit'),
+            'edit' => Pages\EditEventSettlement::route('/{record}/edit'),
         ];
     }
 }

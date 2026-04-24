@@ -3,22 +3,23 @@
 namespace App\Filament\Resources;
 
 use App\Filament\Resources\TransportTypeResource\Pages;
-use App\Filament\Resources\TransportTypeResource\RelationManagers;
 use App\Models\TransportType;
 use Filament\Forms;
 use Filament\Forms\Form;
 use Filament\Resources\Resource;
 use Filament\Tables;
 use Filament\Tables\Table;
-use Illuminate\Database\Eloquent\Builder;
-use Illuminate\Database\Eloquent\SoftDeletingScope;
 
 class TransportTypeResource extends Resource
 {
     protected static ?string $model = TransportType::class;
+
     protected static ?string $navigationIcon = 'heroicon-o-truck';
+
     protected static ?string $navigationLabel = 'Rodzaj transportu';
+
     protected static ?string $navigationGroup = 'Szablony imprez';
+
     protected static ?int $navigationSort = 50;
 
     public static function form(Form $form): Form

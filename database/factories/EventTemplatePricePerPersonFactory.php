@@ -2,8 +2,8 @@
 
 namespace Database\Factories;
 
-use Illuminate\Database\Eloquent\Factories\Factory;
 use App\Models\EventTemplatePricePerPerson;
+use Illuminate\Database\Eloquent\Factories\Factory;
 
 /**
  * @extends \Illuminate\Database\Eloquent\Factories\Factory<\App\Models\EventTemplatePricePerPerson>
@@ -41,7 +41,7 @@ class EventTemplatePricePerPersonFactory extends Factory
      */
     public function price(float $price): static
     {
-        return $this->state(fn(array $attributes) => [
+        return $this->state(fn (array $attributes) => [
             'price_per_person' => $price,
         ]);
     }
@@ -51,7 +51,7 @@ class EventTemplatePricePerPersonFactory extends Factory
      */
     public function local(int $startPlaceId): static
     {
-        return $this->state(fn(array $attributes) => [
+        return $this->state(fn (array $attributes) => [
             'start_place_id' => $startPlaceId,
         ]);
     }
@@ -61,7 +61,7 @@ class EventTemplatePricePerPersonFactory extends Factory
      */
     public function global(): static
     {
-        return $this->state(fn(array $attributes) => [
+        return $this->state(fn (array $attributes) => [
             'start_place_id' => null,
         ]);
     }

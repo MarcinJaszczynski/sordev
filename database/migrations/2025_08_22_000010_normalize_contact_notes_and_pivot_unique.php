@@ -2,8 +2,8 @@
 
 use Illuminate\Database\Migrations\Migration;
 use Illuminate\Database\Schema\Blueprint;
-use Illuminate\Support\Facades\Schema;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Schema;
 
 return new class extends Migration
 {
@@ -12,11 +12,11 @@ return new class extends Migration
         // Normalize notes: if 'note' exists and 'notes' does not, rename
         if (Schema::hasTable('contacts')) {
             $cols = Schema::getColumnListing('contacts');
-            if (in_array('note', $cols, true) && !in_array('notes', $cols, true)) {
+            if (in_array('note', $cols, true) && ! in_array('notes', $cols, true)) {
                 Schema::table('contacts', function (Blueprint $table) {
                     $table->renameColumn('note', 'notes');
                 });
-            } elseif (!in_array('notes', $cols, true) && !in_array('note', $cols, true)) {
+            } elseif (! in_array('notes', $cols, true) && ! in_array('note', $cols, true)) {
                 // neither exists - create notes
                 Schema::table('contacts', function (Blueprint $table) {
                     $table->text('notes')->nullable();
@@ -35,7 +35,7 @@ return new class extends Migration
                 }
             }
 
-            if (!$hasUnique) {
+            if (! $hasUnique) {
                 Schema::table('contractor_contact', function (Blueprint $table) {
                     $table->unique(['contractor_id', 'contact_id'], 'contractor_contact_unique');
                 });
@@ -47,7 +47,7 @@ return new class extends Migration
     {
         if (Schema::hasTable('contacts')) {
             $cols = Schema::getColumnListing('contacts');
-            if (in_array('notes', $cols, true) && !in_array('note', $cols, true)) {
+            if (in_array('notes', $cols, true) && ! in_array('note', $cols, true)) {
                 Schema::table('contacts', function (Blueprint $table) {
                     $table->renameColumn('notes', 'note');
                 });

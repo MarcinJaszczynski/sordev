@@ -3,9 +3,9 @@
 namespace App\Filament\Resources\EventTemplateProgramPointResource\Pages;
 
 use App\Filament\Resources\EventTemplateProgramPointResource;
+use Filament\Actions\Action;
 use Filament\Resources\Pages\ListRecords;
 use Filament\Tables\Actions\Action as TableAction;
-use Filament\Actions\Action;
 
 class ListEventTemplateProgramPoints extends ListRecords
 {
@@ -36,13 +36,14 @@ class ListEventTemplateProgramPoints extends ListRecords
                 ->icon('heroicon-o-document-duplicate')
                 ->action(function ($record) {
                     $clone = $record->replicate();
-                    $clone->name = $record->name . ' (kopia)';
+                    $clone->name = $record->name.' (kopia)';
                     $clone->push();
                     // Klonuj tagi
                     $clone->tags()->sync($record->tags->pluck('id')->toArray());
                     // Klonuj relacje parents/children
                     $clone->parents()->sync($record->parents->pluck('id')->toArray());
                     $clone->children()->sync($record->children->pluck('id')->toArray());
+
                     return redirect()->to(static::getResource()::getUrl('edit', ['record' => $clone->id]));
                 }),
         ];

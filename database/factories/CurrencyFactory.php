@@ -2,8 +2,8 @@
 
 namespace Database\Factories;
 
-use Illuminate\Database\Eloquent\Factories\Factory;
 use App\Models\Currency;
+use Illuminate\Database\Eloquent\Factories\Factory;
 
 /**
  * @extends \Illuminate\Database\Eloquent\Factories\Factory<\App\Models\Currency>
@@ -20,7 +20,7 @@ class CurrencyFactory extends Factory
     public function definition(): array
     {
         return [
-            'name' => $this->faker->word() . ' Currency',
+            'name' => $this->faker->word().' Currency',
             'symbol' => strtoupper($this->faker->lexify('???')),
             'exchange_rate' => $this->faker->randomFloat(2, 0.1, 10),
         ];
@@ -31,7 +31,7 @@ class CurrencyFactory extends Factory
      */
     public function pln(): static
     {
-        return $this->state(fn(array $attributes) => [
+        return $this->state(fn (array $attributes) => [
             'name' => 'Polski Złoty',
             'symbol' => 'PLN',
             'exchange_rate' => 1.0,
@@ -43,7 +43,7 @@ class CurrencyFactory extends Factory
      */
     public function eur(): static
     {
-        return $this->state(fn(array $attributes) => [
+        return $this->state(fn (array $attributes) => [
             'name' => 'Euro',
             'symbol' => 'EUR',
             'exchange_rate' => 4.5,

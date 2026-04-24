@@ -32,7 +32,7 @@ class ContractorContractorTypeSeeder extends Seeder
                             // Skip parenthesized column list or other non-data parentheses: first value must be numeric
                             $firstRaw = trim($parts[0]);
                             $firstClean = trim($firstRaw, "'\" `");
-                            if (!preg_match('/^-?\d+$/', $firstClean)) {
+                            if (! preg_match('/^-?\d+$/', $firstClean)) {
                                 continue;
                             }
 
@@ -43,6 +43,7 @@ class ContractorContractorTypeSeeder extends Seeder
                                 }
                                 // strip surrounding quotes
                                 $v = trim($v, "'\" ");
+
                                 return $v === '' ? null : $v;
                             };
 
@@ -68,16 +69,16 @@ class ContractorContractorTypeSeeder extends Seeder
         // Fallback sample if dump not available or parsing failed
         if (empty($mappings)) {
             $mappings = [
-                ['id'=>1,'contractor_id'=>1,'contractor_type_id'=>6,'created_at'=>null,'updated_at'=>null],
-                ['id'=>2,'contractor_id'=>2,'contractor_type_id'=>1,'created_at'=>null,'updated_at'=>null],
-                ['id'=>3,'contractor_id'=>2,'contractor_type_id'=>2,'created_at'=>null,'updated_at'=>null],
-                ['id'=>4,'contractor_id'=>2,'contractor_type_id'=>3,'created_at'=>null,'updated_at'=>null],
+                ['id' => 1, 'contractor_id' => 1, 'contractor_type_id' => 6, 'created_at' => null, 'updated_at' => null],
+                ['id' => 2, 'contractor_id' => 2, 'contractor_type_id' => 1, 'created_at' => null, 'updated_at' => null],
+                ['id' => 3, 'contractor_id' => 2, 'contractor_type_id' => 2, 'created_at' => null, 'updated_at' => null],
+                ['id' => 4, 'contractor_id' => 2, 'contractor_type_id' => 3, 'created_at' => null, 'updated_at' => null],
             ];
         }
 
         // Filter mappings to those that reference existing contractors and contractor_types
-        $contractorIds = array_values(array_unique(array_map(fn($m) => $m['contractor_id'] ?? null, $mappings)));
-        $typeIds = array_values(array_unique(array_map(fn($m) => $m['contractor_type_id'] ?? null, $mappings)));
+        $contractorIds = array_values(array_unique(array_map(fn ($m) => $m['contractor_id'] ?? null, $mappings)));
+        $typeIds = array_values(array_unique(array_map(fn ($m) => $m['contractor_type_id'] ?? null, $mappings)));
 
         $existingContractorIds = DB::table('contractors')->whereIn('id', $contractorIds)->pluck('id')->toArray();
         $existingTypeIds = DB::table('contractor_types')->whereIn('id', $typeIds)->pluck('id')->toArray();
@@ -90,6 +91,7 @@ class ContractorContractorTypeSeeder extends Seeder
         if (empty($filtered)) {
             // nothing to insert (likely because contractors or types not seeded yet)
             info('ContractorContractorTypeSeeder: no matching mappings found for existing contractors or types.');
+
             return;
         }
 

@@ -2,8 +2,8 @@
 
 namespace App\Models;
 
-use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
+use Illuminate\Database\Eloquent\Model;
 
 /**
  * Model EventTemplateQty
@@ -17,8 +17,10 @@ use Illuminate\Database\Eloquent\Factories\HasFactory;
 class EventTemplateQty extends Model
 {
     use HasFactory;
+
     /**
      * Pola masowo przypisywalne
+     *
      * @var array<int, string>
      */
     protected $fillable = [

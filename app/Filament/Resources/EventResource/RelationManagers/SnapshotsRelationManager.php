@@ -13,7 +13,9 @@ use Illuminate\Database\Eloquent\Builder;
 class SnapshotsRelationManager extends RelationManager
 {
     protected static string $relationship = 'snapshots';
+
     protected static ?string $title = 'Snapshoty / Wersje imprezy';
+
     protected static ?string $recordTitleAttribute = 'name';
 
     public function form(Form $form): Form
@@ -24,7 +26,7 @@ class SnapshotsRelationManager extends RelationManager
                     ->label('Nazwa snapshotu')
                     ->required()
                     ->maxLength(255),
-                
+
                 Forms\Components\RichEditor::make('description')
                     ->maxLength(500),
             ]);
@@ -39,7 +41,7 @@ class SnapshotsRelationManager extends RelationManager
                     ->label('Data utworzenia')
                     ->dateTime('d.m.Y H:i:s')
                     ->sortable(),
-                
+
                 Tables\Columns\BadgeColumn::make('type')
                     ->label('Typ')
                     ->formatStateUsing(fn (EventSnapshot $record) => $record->readable_type)
@@ -48,13 +50,13 @@ class SnapshotsRelationManager extends RelationManager
                         'success' => 'manual',
                         'warning' => 'status_change',
                     ]),
-                
+
                 Tables\Columns\TextColumn::make('name')
                     ->label('Nazwa')
                     ->searchable()
                     ->sortable()
                     ->weight('medium'),
-                
+
                 Tables\Columns\TextColumn::make('description')
                     ->label('Opis')
                     ->html(false)
@@ -64,25 +66,27 @@ class SnapshotsRelationManager extends RelationManager
                         if (strlen($state) <= 50) {
                             return null;
                         }
+
                         return $state;
                     }),
-                
+
                 Tables\Columns\TextColumn::make('total_cost_snapshot')
                     ->label('Koszt całkowity')
                     ->money('PLN')
                     ->sortable()
                     ->alignEnd(),
-                
+
                 Tables\Columns\TextColumn::make('creator.name')
                     ->label('Utworzył')
                     ->searchable()
                     ->sortable(),
-                
+
                 Tables\Columns\TextColumn::make('calculations')
                     ->label('Punkty programu')
                     ->formatStateUsing(function ($state) {
                         $pointsCount = $state['points_count'] ?? 0;
                         $activeCount = $state['active_points_count'] ?? 0;
+
                         return "{$activeCount}/{$pointsCount} aktywnych";
                     })
                     ->alignCenter(),
@@ -95,7 +99,7 @@ class SnapshotsRelationManager extends RelationManager
                         'manual' => 'Ręczny',
                         'status_change' => 'Zmiana statusu',
                     ]),
-                
+
                 Tables\Filters\Filter::make('snapshot_date')
                     ->label('Data utworzenia')
                     ->form([
@@ -126,8 +130,8 @@ class SnapshotsRelationManager extends RelationManager
                             ->label('Nazwa snapshotu')
                             ->required()
                             ->maxLength(255)
-                            ->default('Snapshot ręczny ' . now()->format('d.m.Y H:i')),
-                        
+                            ->default('Snapshot ręczny '.now()->format('d.m.Y H:i')),
+
                         Forms\Components\RichEditor::make('description')
                             ->maxLength(500)
                             ->helperText('Opisz powód utworzenia tego snapshotu'),
@@ -145,7 +149,7 @@ class SnapshotsRelationManager extends RelationManager
                         return view('filament.modals.snapshot-details', ['snapshot' => $record]);
                     })
                     ->modalWidth('7xl'),
-                
+
                 Tables\Actions\Action::make('compare_with_current')
                     ->label('Porównaj z obecnym')
                     ->icon('heroicon-o-scale')
@@ -153,13 +157,14 @@ class SnapshotsRelationManager extends RelationManager
                     ->modalHeading('Porównanie z obecnym stanem')
                     ->modalContent(function (EventSnapshot $record) {
                         $comparison = $record->compareWithCurrent();
+
                         return view('filament.modals.snapshot-comparison', [
                             'snapshot' => $record,
                             'comparison' => $comparison,
                         ]);
                     })
                     ->modalWidth('7xl'),
-                
+
                 Tables\Actions\Action::make('restore')
                     ->label('Przywróć')
                     ->icon('heroicon-o-arrow-uturn-left')
@@ -174,7 +179,7 @@ class SnapshotsRelationManager extends RelationManager
                         $record->restoreToEvent();
                     })
                     ->visible(fn (EventSnapshot $record) => $this->getOwnerRecord()->canBeEdited()),
-                
+
                 Tables\Actions\DeleteAction::make()
                     ->visible(fn (EventSnapshot $record) => $record->type !== 'original'), // Nie można usunąć pierwotnego snapshotu
             ])

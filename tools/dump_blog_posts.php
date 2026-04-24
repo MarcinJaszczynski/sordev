@@ -1,12 +1,13 @@
 <?php
-$dbFile = __DIR__ . '/../database/database.sqlite';
-if (!file_exists($dbFile)) {
+
+$dbFile = __DIR__.'/../database/database.sqlite';
+if (! file_exists($dbFile)) {
     fwrite(STDERR, "Database file not found: $dbFile\n");
     exit(1);
 }
-$pdo = new PDO('sqlite:' . $dbFile);
+$pdo = new PDO('sqlite:'.$dbFile);
 $pdo->setAttribute(PDO::ATTR_ERRMODE, PDO::ERRMODE_EXCEPTION);
-$stmt = $pdo->query("SELECT id, title, slug, status, published_at, created_at FROM blog_posts ORDER BY id DESC");
+$stmt = $pdo->query('SELECT id, title, slug, status, published_at, created_at FROM blog_posts ORDER BY id DESC');
 $rows = $stmt->fetchAll(PDO::FETCH_ASSOC);
 if (empty($rows)) {
     echo "No blog posts found.\n";

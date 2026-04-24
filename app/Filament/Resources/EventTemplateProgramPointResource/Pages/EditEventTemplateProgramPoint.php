@@ -11,8 +11,9 @@ use Filament\Resources\Pages\EditRecord;
 class EditEventTemplateProgramPoint extends EditRecord
 {
     use CompressesImages;
-    
+
     protected static string $resource = EventTemplateProgramPointResource::class;
+
     protected static string $view = 'filament.resources.event-template-program-point-resource.pages.edit-event-template-program-point';
 
     public function getTitle(): string
@@ -40,7 +41,7 @@ class EditEventTemplateProgramPoint extends EditRecord
     {
         $original = $this->record;
         $clone = $original->replicate();
-        $clone->name = $original->name . ' (Kopia)';
+        $clone->name = $original->name.' (Kopia)';
         $clone->push();
         // Klonuj relacje tags
         $clone->tags()->sync($original->tags->pluck('id')->toArray());

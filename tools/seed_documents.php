@@ -1,13 +1,14 @@
 <?php
-require __DIR__ . '/../vendor/autoload.php';
 
-$app = require_once __DIR__ . '/../bootstrap/app.php';
+require __DIR__.'/../vendor/autoload.php';
+
+$app = require_once __DIR__.'/../bootstrap/app.php';
 $kernel = $app->make(Illuminate\Contracts\Console\Kernel::class);
 $kernel->bootstrap();
 
-use App\Models\DocumentSection;
 use App\Models\Document;
 use App\Models\DocumentAttachment;
+use App\Models\DocumentSection;
 
 DocumentSection::truncate();
 Document::truncate();

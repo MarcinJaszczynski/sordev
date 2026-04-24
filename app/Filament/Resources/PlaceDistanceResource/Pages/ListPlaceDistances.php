@@ -3,15 +3,15 @@
 namespace App\Filament\Resources\PlaceDistanceResource\Pages;
 
 use App\Filament\Resources\PlaceDistanceResource;
-use Filament\Resources\Pages\ListRecords;
-use Filament\Notifications\Notification;
+use App\Models\Place;
+use App\Models\PlaceDistance;
+use App\Services\PlaceDistanceGenerator;
 use Filament\Forms\Components\TextInput;
+use Filament\Notifications\Notification;
+use Filament\Resources\Pages\ListRecords;
 use Filament\Tables\Actions\BulkAction;
 use Filament\Tables\Actions\BulkActionGroup;
 use Illuminate\Support\Collection;
-use App\Models\PlaceDistance;
-use App\Models\Place;
-use App\Services\PlaceDistanceGenerator;
 
 class ListPlaceDistances extends ListRecords
 {
@@ -60,8 +60,8 @@ class ListPlaceDistances extends ListRecords
         // NOTE: Avoid pluck()->whereIn() here - SQLite has a low bind parameter limit and will throw
         // "too many SQL variables" for large datasets.
         $query = PlaceDistance::query()
-            ->whereHas('fromPlace', fn($q) => $q->where('starting_place', false))
-            ->whereHas('toPlace', fn($q) => $q->where('starting_place', false));
+            ->whereHas('fromPlace', fn ($q) => $q->where('starting_place', false))
+            ->whereHas('toPlace', fn ($q) => $q->where('starting_place', false));
 
         try {
             $count = (clone $query)->count();
@@ -88,10 +88,10 @@ class ListPlaceDistances extends ListRecords
                         $apiKey = config('services.openrouteservice.key') ?: '5b3ce3597851110001cf62489885073b636a44e3ac9774af529a3c40';
                         $updated = 0;
                         foreach ($records as $pd) {
-                            if (!$pd instanceof PlaceDistance) {
+                            if (! $pd instanceof PlaceDistance) {
                                 $pd = PlaceDistance::find($pd);
                             }
-                            if (!$pd || $pd->distance_km) {
+                            if (! $pd || $pd->distance_km) {
                                 continue;
                             }
                             $distance = $this->fetchDistance($pd->fromPlace, $pd->toPlace, $apiKey);
@@ -114,10 +114,10 @@ class ListPlaceDistances extends ListRecords
                         $apiKey = config('services.openrouteservice.key') ?: '5b3ce3597851110001cf62489885073b636a44e3ac9774af529a3c40';
                         $updated = 0;
                         foreach ($records as $pd) {
-                            if (!$pd instanceof PlaceDistance) {
+                            if (! $pd instanceof PlaceDistance) {
                                 $pd = PlaceDistance::find($pd);
                             }
-                            if (!$pd) {
+                            if (! $pd) {
                                 continue;
                             }
                             $distance = $this->fetchDistance($pd->fromPlace, $pd->toPlace, $apiKey);
@@ -146,10 +146,10 @@ class ListPlaceDistances extends ListRecords
                         $val = $data['distance_km'] ?? null;
                         $count = 0;
                         foreach ($records as $pd) {
-                            if (!$pd instanceof PlaceDistance) {
+                            if (! $pd instanceof PlaceDistance) {
                                 $pd = PlaceDistance::find($pd);
                             }
-                            if (!$pd) {
+                            if (! $pd) {
                                 continue;
                             }
                             $pd->update([
@@ -170,15 +170,19 @@ class ListPlaceDistances extends ListRecords
         $places = \App\Models\Place::all();
         foreach ($places as $from) {
             foreach ($places as $to) {
-                if ($from->id === $to->id) continue;
+                if ($from->id === $to->id) {
+                    continue;
+                }
 
                 // NEW RULE: compute only for pairs where at least one side is a starting place
-                if (!$from->starting_place && !$to->starting_place) {
+                if (! $from->starting_place && ! $to->starting_place) {
                     continue;
                 }
 
                 $existing = \App\Models\PlaceDistance::where('from_place_id', $from->id)->where('to_place_id', $to->id)->first();
-                if ($existing && $existing->distance_km) continue;
+                if ($existing && $existing->distance_km) {
+                    continue;
+                }
                 $distance = $this->fetchDistance($from, $to, $apiKey);
                 if ($distance !== null) {
                     \App\Models\PlaceDistance::updateOrCreate([
@@ -199,8 +203,10 @@ class ListPlaceDistances extends ListRecords
 
     protected function fetchDistance($from, $to, $apiKey)
     {
-        if (!$from->latitude || !$from->longitude || !$to->latitude || !$to->longitude) return null;
-        $url = 'https://api.openrouteservice.org/v2/directions/driving-car?api_key=' . $apiKey . '&start=' . $from->longitude . ',' . $from->latitude . '&end=' . $to->longitude . ',' . $to->latitude;
+        if (! $from->latitude || ! $from->longitude || ! $to->latitude || ! $to->longitude) {
+            return null;
+        }
+        $url = 'https://api.openrouteservice.org/v2/directions/driving-car?api_key='.$apiKey.'&start='.$from->longitude.','.$from->latitude.'&end='.$to->longitude.','.$to->latitude;
         try {
             $response = file_get_contents($url);
             $data = json_decode($response, true);
@@ -210,6 +216,7 @@ class ListPlaceDistances extends ListRecords
         } catch (\Exception $e) {
             return null;
         }
+
         return null;
     }
 }

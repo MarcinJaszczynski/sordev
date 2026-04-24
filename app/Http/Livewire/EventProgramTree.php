@@ -2,14 +2,15 @@
 
 namespace App\Http\Livewire;
 
-use Livewire\Component;
 use App\Models\EventTemplate;
 use App\Models\EventTemplateProgramPoint;
 use Illuminate\Support\Facades\DB;
+use Livewire\Component;
 
 class EventProgramTree extends Component
 {
     public EventTemplate $eventTemplate;
+
     public $pointsByDay = [];
 
     protected $listeners = ['updateOrder', 'togglePivotProperty'];
@@ -17,10 +18,12 @@ class EventProgramTree extends Component
     public function togglePivotProperty($pivotId, $property)
     {
         $allowed = ['include_in_program', 'include_in_calculation', 'active'];
-        if (!in_array($property, $allowed)) return;
+        if (! in_array($property, $allowed)) {
+            return;
+        }
         $pivot = DB::table('event_template_event_template_program_point')->where('id', $pivotId)->first();
         if ($pivot) {
-            $newValue = !$pivot->$property;
+            $newValue = ! $pivot->$property;
             DB::table('event_template_event_template_program_point')
                 ->where('id', $pivotId)
                 ->update([$property => $newValue]);
@@ -69,16 +72,16 @@ class EventProgramTree extends Component
         foreach ($rows as $row) {
             $point = EventTemplateProgramPoint::find($row->event_template_program_point_id);
             $items[] = [
-                'pivot_id'   => $row->id,
-                'parent_id'  => $row->parent_id,
-                'day'        => $row->day,
-                'order'      => $row->order,
-                'name'       => $point->name,
-                'description'=> $point->description,
+                'pivot_id' => $row->id,
+                'parent_id' => $row->parent_id,
+                'day' => $row->day,
+                'order' => $row->order,
+                'name' => $point->name,
+                'description' => $point->description,
                 'include_in_program' => $row->include_in_program,
                 'include_in_calculation' => $row->include_in_calculation,
                 'active' => $row->active,
-                'children'   => [],
+                'children' => [],
             ];
         }
 
@@ -86,7 +89,7 @@ class EventProgramTree extends Component
         $grouped = [];
         foreach ($items as $item) {
             $day = $item['day'];
-            if (!isset($grouped[$day])) {
+            if (! isset($grouped[$day])) {
                 $grouped[$day] = [];
             }
             $grouped[$day][$item['pivot_id']] = $item;
@@ -103,7 +106,7 @@ class EventProgramTree extends Component
                 }
             }
             // sortuj końcową listę po order
-            usort($tree, fn($a, $b) => $a['order'] <=> $b['order']);
+            usort($tree, fn ($a, $b) => $a['order'] <=> $b['order']);
             $grouped[$day] = $tree;
         }
 
@@ -116,8 +119,8 @@ class EventProgramTree extends Component
             ->where('id', $pivotId)
             ->update([
                 'parent_id' => $parentPivotId,
-                'day'       => $day,
-                'order'     => $order,
+                'day' => $day,
+                'order' => $order,
             ]);
 
         $this->loadPoints();
@@ -141,10 +144,14 @@ class EventProgramTree extends Component
         $daysGrouped = [];
         foreach ($this->eventTemplate->dayInsurances as $dayInsurance) {
             $insurance = $dayInsurance->insurance;
-            if (! $insurance || ! $insurance->insurance_enabled) continue;
+            if (! $insurance || ! $insurance->insurance_enabled) {
+                continue;
+            }
 
             $day = $dayInsurance->day;
-            if (! isset($daysGrouped[$day])) $daysGrouped[$day] = 0.0;
+            if (! isset($daysGrouped[$day])) {
+                $daysGrouped[$day] = 0.0;
+            }
 
             // Dodajemy zawsze price_per_person — to pozwala uwzględnić wszystkie pozycje
             // przypisane do danego dnia.

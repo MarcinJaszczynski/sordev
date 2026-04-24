@@ -2,16 +2,18 @@
 
 namespace App\Http\Livewire;
 
-use Livewire\Component;
 use App\Models\Event;
 use App\Models\EventProgramPoint;
-use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Log;
+use Livewire\Component;
 
 class EventProgramDnD extends Component
 {
     public $eventId;
+
     public $points = [];
+
     protected $listeners = ['saveOrderFromDnDPayload' => 'saveOrder'];
 
     public function mount($eventId)
@@ -23,8 +25,9 @@ class EventProgramDnD extends Component
     public function loadPoints()
     {
         $event = Event::find($this->eventId);
-        if (!$event) {
+        if (! $event) {
             $this->points = [];
+
             return;
         }
 
@@ -53,10 +56,12 @@ class EventProgramDnD extends Component
             DB::transaction(function () use ($payload) {
                 foreach ($payload as $item) {
                     $id = $item['id'] ?? null;
-                    if (!$id) continue;
+                    if (! $id) {
+                        continue;
+                    }
                     $newDay = $item['day'] ?? null;
                     $newOrder = $item['order'] ?? null;
-                    $newParent = array_key_exists('parent_id', $item) ? ($item['parent_id'] !== '' ? (int)$item['parent_id'] : null) : null;
+                    $newParent = array_key_exists('parent_id', $item) ? ($item['parent_id'] !== '' ? (int) $item['parent_id'] : null) : null;
 
                     EventProgramPoint::where('id', $id)->update([
                         'day' => $newDay,
@@ -69,7 +74,7 @@ class EventProgramDnD extends Component
             $this->loadPoints();
             $this->dispatch('toast', type: 'success', message: 'Kolejność zapisana');
         } catch (\Throwable $e) {
-            Log::error('Błąd zapisu kolejności DnD: ' . $e->getMessage());
+            Log::error('Błąd zapisu kolejności DnD: '.$e->getMessage());
             $this->dispatch('toast', type: 'error', message: 'Błąd zapisu kolejności');
         }
     }
@@ -77,7 +82,9 @@ class EventProgramDnD extends Component
     public function moveUp($id)
     {
         $point = EventProgramPoint::find($id);
-        if (!$point || $point->event_id != $this->eventId) return;
+        if (! $point || $point->event_id != $this->eventId) {
+            return;
+        }
 
         $sibling = EventProgramPoint::where('event_id', $this->eventId)
             ->where('day', $point->day)
@@ -99,7 +106,9 @@ class EventProgramDnD extends Component
     public function moveDown($id)
     {
         $point = EventProgramPoint::find($id);
-        if (!$point || $point->event_id != $this->eventId) return;
+        if (! $point || $point->event_id != $this->eventId) {
+            return;
+        }
 
         $sibling = EventProgramPoint::where('event_id', $this->eventId)
             ->where('day', $point->day)
@@ -121,7 +130,9 @@ class EventProgramDnD extends Component
     public function setDay($id, $day)
     {
         $point = EventProgramPoint::find($id);
-        if (!$point || $point->event_id != $this->eventId) return;
+        if (! $point || $point->event_id != $this->eventId) {
+            return;
+        }
         $day = intval($day);
         $point->day = $day;
         // set order to end of that day

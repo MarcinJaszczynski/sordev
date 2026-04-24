@@ -2,12 +2,9 @@
 
 namespace Database\Seeders;
 
-use Illuminate\Database\Console\Seeds\WithoutModelEvents;
-use Illuminate\Database\Seeder;
-use App\Models\EventTemplate;
-use App\Models\Tag;
 use App\Models\EventTemplateProgramPoint;
-use Illuminate\Support\Str;
+use App\Models\Tag;
+use Illuminate\Database\Seeder;
 
 class EventTemplateSeeder extends Seeder
 {
@@ -64,7 +61,7 @@ class EventTemplateSeeder extends Seeder
             // Dodaj tagi
             if ($template['slug'] === 'jednodniowa-impreza-integracyjna') {
                 $eventTemplate->tags()->attach([$integrationTag->id, $workshopTag->id, $dinnerTag->id]);
-                
+
                 // Dodaj punkty programu
                 $eventTemplate->programPoints()->attach($workshopPoint->id, [
                     'day' => 1,
@@ -74,7 +71,7 @@ class EventTemplateSeeder extends Seeder
                     'include_in_calculation' => true,
                     'active' => true,
                 ]);
-                
+
                 $eventTemplate->programPoints()->attach($dinnerPoint->id, [
                     'day' => 1,
                     'order' => 2,
@@ -85,7 +82,7 @@ class EventTemplateSeeder extends Seeder
                 ]);
             } elseif ($template['slug'] === 'weekend-integracyjny') {
                 $eventTemplate->tags()->attach([$integrationTag->id, $companyTag->id, $workshopTag->id]);
-                
+
                 // Dodaj punkty programu
                 $eventTemplate->programPoints()->attach($teamBuildingPoint->id, [
                     'day' => 1,
@@ -95,7 +92,7 @@ class EventTemplateSeeder extends Seeder
                     'include_in_calculation' => true,
                     'active' => true,
                 ]);
-                
+
                 $eventTemplate->programPoints()->attach($cookingPoint->id, [
                     'day' => 1,
                     'order' => 2,
@@ -104,7 +101,7 @@ class EventTemplateSeeder extends Seeder
                     'include_in_calculation' => true,
                     'active' => true,
                 ]);
-                
+
                 $eventTemplate->programPoints()->attach($dinnerPoint->id, [
                     'day' => 1,
                     'order' => 3,
@@ -115,7 +112,7 @@ class EventTemplateSeeder extends Seeder
                 ]);
             } elseif ($template['slug'] === 'wieczor-firmowy') {
                 $eventTemplate->tags()->attach([$companyTag->id, $dinnerTag->id]);
-                
+
                 // Dodaj punkty programu
                 $eventTemplate->programPoints()->attach($dinnerPoint->id, [
                     'day' => 1,

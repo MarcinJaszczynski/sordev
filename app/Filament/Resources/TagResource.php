@@ -2,9 +2,9 @@
 
 namespace App\Filament\Resources;
 
-use App\Filament\Resources\TagResource\Pages;
 use App\Enums\Status;
 use App\Enums\Visibility;
+use App\Filament\Resources\TagResource\Pages;
 use App\Models\Tag;
 use Filament\Forms;
 use Filament\Forms\Form;
@@ -20,13 +20,19 @@ class TagResource extends Resource
 {
     /**
      * Powiązany model Eloquent
+     *
      * @var class-string<Tag>
      */
     protected static ?string $model = Tag::class;
+
     protected static ?string $navigationIcon = 'heroicon-o-tag';
+
     protected static ?string $navigationLabel = 'Tagi';
+
     protected static ?string $navigationGroup = 'Ustawienia ogólne';
+
     protected static ?string $modelLabel = 'tag';
+
     protected static ?string $pluralModelLabel = 'tagi';
 
     /**
@@ -94,6 +100,7 @@ class TagResource extends Resource
                         if (strlen($state) <= 50) {
                             return null;
                         }
+
                         return $state;
                     })
                     ->toggleable(),
@@ -169,9 +176,9 @@ class TagResource extends Resource
                     ->icon('heroicon-o-document-duplicate')
                     ->action(function (Tag $record) {
                         $newTag = $record->replicate();
-                        $newTag->name = $record->name . ' (kopia)';
+                        $newTag->name = $record->name.' (kopia)';
                         $newTag->save();
-                        
+
                         return redirect()->to(TagResource::getUrl('edit', ['record' => $newTag]));
                     })
                     ->requiresConfirmation()

@@ -7,6 +7,7 @@ use Illuminate\Console\Command;
 class DumpEventPrices extends Command
 {
     protected $signature = 'debug:dump-event-prices {eventId}';
+
     protected $description = 'Dump event_price_per_person rows for an event';
 
     public function handle()
@@ -15,6 +16,7 @@ class DumpEventPrices extends Command
         $rows = \App\Models\EventPricePerPerson::where('event_id', $id)->get();
         if ($rows->isEmpty()) {
             $this->info('No rows');
+
             return 0;
         }
 

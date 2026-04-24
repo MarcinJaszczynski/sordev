@@ -22,7 +22,7 @@ class EventOfferWordController extends Controller
             'pricePerPerson.currency',
         ]);
 
-        $phpWord = new PhpWord();
+        $phpWord = new PhpWord;
         $phpWord->getSettings()->setThemeFontLang(
             (new Language('pl-PL'))->setLangId(1045)
         );
@@ -43,9 +43,9 @@ class EventOfferWordController extends Controller
         $this->addHeading($section, (string) ($event->name ?: 'Impreza'), 16, '111111');
 
         $section->addTextBreak(1);
-        $section->addText('Miejsce wyjazdu: ' . ($event->startPlace?->name ?: 'do ustalenia'));
-        $section->addText('Termin: ' . ($event->start_date ? $event->start_date->format('d.m.Y') : '—') . ' - ' . ($event->end_date ? $event->end_date->format('d.m.Y') : '—'));
-        $section->addText('Przewidywana liczba uczestników: ' . ((int) ($event->participant_count ?? 0) > 0 ? $event->participant_count : 'do ustalenia'));
+        $section->addText('Miejsce wyjazdu: '.($event->startPlace?->name ?: 'do ustalenia'));
+        $section->addText('Termin: '.($event->start_date ? $event->start_date->format('d.m.Y') : '—').' - '.($event->end_date ? $event->end_date->format('d.m.Y') : '—'));
+        $section->addText('Przewidywana liczba uczestników: '.((int) ($event->participant_count ?? 0) > 0 ? $event->participant_count : 'do ustalenia'));
 
         $section->addTextBreak(1);
         $this->addHeading($section, 'Opis', 14, '0070C0');
@@ -69,12 +69,12 @@ class EventOfferWordController extends Controller
         } else {
             $byDay = $programPoints->groupBy(fn ($point) => (int) ($point->day ?? 1))->sortKeys();
             foreach ($byDay as $day => $points) {
-                $section->addText('Dzień ' . $day, ['bold' => true, 'color' => '0070C0']);
+                $section->addText('Dzień '.$day, ['bold' => true, 'color' => '0070C0']);
                 foreach ($points as $point) {
                     $line = trim((string) $point->name);
                     $desc = trim((string) ($point->description ?? ''));
                     if ($desc !== '') {
-                        $line .= ' - ' . $this->stripHtmlToSentence($desc);
+                        $line .= ' - '.$this->stripHtmlToSentence($desc);
                     }
                     $section->addListItem($line, 0, null, ['listType' => \PhpOffice\PhpWord\Style\ListItem::TYPE_BULLET_FILLED]);
                 }
@@ -89,14 +89,14 @@ class EventOfferWordController extends Controller
         if (empty($priceRanges)) {
             $price = $event->resolvedPricePerPerson(max(1, (int) ($event->participant_count ?? 1)));
             if ($price > 0) {
-                $section->addText(number_format($price, 0, ',', ' ') . ' PLN za osobę (cena orientacyjna dla aktualnej imprezy).', ['bold' => true]);
+                $section->addText(number_format($price, 0, ',', ' ').' PLN za osobę (cena orientacyjna dla aktualnej imprezy).', ['bold' => true]);
             } else {
                 $section->addText('Cennik zostanie przedstawiony po doprecyzowaniu liczby uczestników.');
             }
         } else {
             foreach ($priceRanges as $row) {
-                $section->addText(number_format((float) $row['price'], 0, ',', ' ') . ' PLN', ['bold' => true, 'size' => 13]);
-                $section->addText('za osobę dla grupy ' . $row['label']);
+                $section->addText(number_format((float) $row['price'], 0, ',', ' ').' PLN', ['bold' => true, 'size' => 13]);
+                $section->addText('za osobę dla grupy '.$row['label']);
                 $section->addTextBreak(1);
             }
         }
@@ -142,13 +142,13 @@ class EventOfferWordController extends Controller
         }
 
         $section->addTextBreak(1);
-        $section->addText('Dokument wygenerowany: ' . $generatedAt->format('d.m.Y H:i'), ['size' => 9, 'color' => '777777']);
+        $section->addText('Dokument wygenerowany: '.$generatedAt->format('d.m.Y H:i'), ['size' => 9, 'color' => '777777']);
 
-        $fileName = 'oferta-imprezy-' . $event->id . '-' . $generatedAt->format('Ymd-His') . '.docx';
-        $relativePath = 'event-offers/' . $fileName;
+        $fileName = 'oferta-imprezy-'.$event->id.'-'.$generatedAt->format('Ymd-His').'.docx';
+        $relativePath = 'event-offers/'.$fileName;
         $absolutePath = Storage::disk('public')->path($relativePath);
 
-        if (!is_dir(dirname($absolutePath))) {
+        if (! is_dir(dirname($absolutePath))) {
             @mkdir(dirname($absolutePath), 0775, true);
         }
 
@@ -157,7 +157,7 @@ class EventOfferWordController extends Controller
         $disk = Storage::disk('public');
         EventDocument::create([
             'event_id' => $event->id,
-            'name' => 'Oferta imprezy - ' . ($event->name ?: ('Event #' . $event->id)),
+            'name' => 'Oferta imprezy - '.($event->name ?: ('Event #'.$event->id)),
             'notes' => 'Oferta wygenerowana automatycznie z dashboardu.',
             'file_path' => $relativePath,
             'original_filename' => $fileName,
@@ -212,7 +212,7 @@ class EventOfferWordController extends Controller
             ['alignment' => 'center']
         );
         $footer->addText(
-            'Data wygenerowania: ' . $generatedAt->format('d.m.Y H:i'),
+            'Data wygenerowania: '.$generatedAt->format('d.m.Y H:i'),
             ['size' => 9, 'color' => '666666'],
             ['alignment' => 'left']
         );
@@ -269,6 +269,7 @@ class EventOfferWordController extends Controller
         $pricesByQty = $rows
             ->mapWithKeys(function ($row) {
                 $qty = (int) ($row->eventTemplateQty->qty ?? 0);
+
                 return $qty > 0 ? [$qty => (float) $row->price_per_person] : [];
             });
 
@@ -298,7 +299,7 @@ class EventOfferWordController extends Controller
             }
 
             $ranges[] = [
-                'label' => (string) $qty . ' osób',
+                'label' => (string) $qty.' osób',
                 'price' => (int) ceil($price / 5) * 5,
             ];
         }

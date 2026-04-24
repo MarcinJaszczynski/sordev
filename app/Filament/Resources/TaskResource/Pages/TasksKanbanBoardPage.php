@@ -29,6 +29,7 @@ use Filament\Forms\Components\TextInput;
 use Filament\Forms\Components\Textarea;
 use Filament\Resources\Pages\Page;
 use Illuminate\Support\Arr;
+use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Validation\Rule;
@@ -78,6 +79,7 @@ class TasksKanbanBoardPage extends Page implements HasForms
     public $quickTaskDescription = '';
     public $quickTaskPriority = 'medium';
     public $quickTaskAssigneeId = null;
+    public $quickTaskDueDate = null;
     public $quickTaskableType = null;
     public $quickTaskableId = null;
 
@@ -433,7 +435,7 @@ class TasksKanbanBoardPage extends Page implements HasForms
             ->send();
     }
 
-    public function openQuickAddModal($statusId)
+    public function openQuickAddModal($statusId = null, $selectedDate = null)
     {
         $this->quickAddStatusId = $statusId ?: Task::getDefaultStatusId();
         $this->reset([
@@ -441,9 +443,26 @@ class TasksKanbanBoardPage extends Page implements HasForms
             'quickTaskDescription',
             'quickTaskPriority',
             'quickTaskAssigneeId',
+            'quickTaskDueDate',
             'quickTaskableType',
             'quickTaskableId',
         ]);
+        $this->quickTaskPriority = 'medium';
+
+        if (filled($selectedDate)) {
+            try {
+                $selectedDateTime = Carbon::parse($selectedDate);
+
+                if (mb_strlen((string) $selectedDate) <= 10) {
+                    $selectedDateTime->setTime(9, 0);
+                }
+
+                $this->quickTaskDueDate = $selectedDateTime->format('Y-m-d\TH:i');
+            } catch (\Throwable $exception) {
+                $this->quickTaskDueDate = null;
+            }
+        }
+
         $this->showingQuickAdd = true;
         
         $this->dispatch('open-modal', id: 'quick-add-modal');
@@ -456,6 +475,7 @@ class TasksKanbanBoardPage extends Page implements HasForms
             'quickTaskDescription' => 'nullable|string',
             'quickTaskPriority' => 'required|in:low,medium,high',
             'quickTaskAssigneeId' => 'nullable|exists:users,id',
+            'quickTaskDueDate' => 'nullable|date',
             'quickTaskableType' => ['nullable', Rule::in(Task::getSupportedTaskableTypes())],
             'quickTaskableId' => 'nullable|integer|required_with:quickTaskableType',
         ]);
@@ -467,6 +487,7 @@ class TasksKanbanBoardPage extends Page implements HasForms
             'status_id' => $this->quickAddStatusId ?: Task::getDefaultStatusId(),
             'author_id' => Auth::id(),
             'assignee_id' => $this->quickTaskAssigneeId,
+            'due_date' => $this->quickTaskDueDate,
             'taskable_type' => $this->quickTaskableType,
             'taskable_id' => $this->quickTaskableId,
             'order' => Task::where('status_id', $this->quickAddStatusId ?: Task::getDefaultStatusId())->max('order') + 1,

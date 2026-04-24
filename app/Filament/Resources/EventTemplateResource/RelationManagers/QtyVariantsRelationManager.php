@@ -2,7 +2,6 @@
 
 namespace App\Filament\Resources\EventTemplateResource\RelationManagers;
 
-use App\Models\EventTemplateQty;
 use Filament\Forms;
 use Filament\Resources\RelationManagers\RelationManager;
 use Filament\Tables;
@@ -10,11 +9,16 @@ use Filament\Tables;
 class QtyVariantsRelationManager extends RelationManager
 {
     protected static string $relationship = 'qtyVariants';
+
     protected static ?string $recordTitleAttribute = 'qty';
+
     // Polskie tłumaczenia dla menu, nagłówków, komunikatów, przycisków
     protected static ?string $label = 'Wariant ilości uczestników';
+
     protected static ?string $pluralLabel = 'Warianty ilości uczestników';
+
     protected static ?string $navigationLabel = 'Warianty ilości uczestników';
+
     protected static ?string $navigationGroup = 'Ustawienia';
 
     public static function getTitle(\Illuminate\Database\Eloquent\Model $ownerRecord, string $pageClass): string
@@ -61,18 +65,18 @@ class QtyVariantsRelationManager extends RelationManager
                 ->label('Ilość uczestników')
                 ->sortable(),
         ])
-        ->headerActions([
-            Tables\Actions\CreateAction::make()
-                ->label('Dodaj wariant'),
-        ])
-        ->actions([
-            Tables\Actions\EditAction::make()->label('Edytuj'),
-            Tables\Actions\DeleteAction::make()->label('Usuń'),
-        ])
-        ->bulkActions([
-            Tables\Actions\DeleteBulkAction::make()->label('Usuń zaznaczone'),
-        ])
-        ->emptyStateHeading('Brak wariantów ilości uczestników')
-        ->emptyStateDescription('Dodaj pierwszy wariant, aby rozpocząć kalkulacje dla różnych grup.');
+            ->headerActions([
+                Tables\Actions\CreateAction::make()
+                    ->label('Dodaj wariant'),
+            ])
+            ->actions([
+                Tables\Actions\EditAction::make()->label('Edytuj'),
+                Tables\Actions\DeleteAction::make()->label('Usuń'),
+            ])
+            ->bulkActions([
+                Tables\Actions\DeleteBulkAction::make()->label('Usuń zaznaczone'),
+            ])
+            ->emptyStateHeading('Brak wariantów ilości uczestników')
+            ->emptyStateDescription('Dodaj pierwszy wariant, aby rozpocząć kalkulacje dla różnych grup.');
     }
 }

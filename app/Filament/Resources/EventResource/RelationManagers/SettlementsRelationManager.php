@@ -14,7 +14,9 @@ use Filament\Tables\Table;
 class SettlementsRelationManager extends RelationManager
 {
     protected static string $relationship = 'settlements';
+
     protected static ?string $title = 'Rozliczenia';
+
     protected static ?string $recordTitleAttribute = 'id';
 
     public function form(Form $form): Form
@@ -28,7 +30,7 @@ class SettlementsRelationManager extends RelationManager
 
             Forms\Components\Select::make('pilot_id')
                 ->label('Pilot')
-                ->options(fn() => \App\Models\User::orderBy('name')->pluck('name', 'id'))
+                ->options(fn () => \App\Models\User::orderBy('name')->pluck('name', 'id'))
                 ->searchable()
                 ->nullable(),
 
@@ -47,11 +49,11 @@ class SettlementsRelationManager extends RelationManager
 
                 Tables\Columns\BadgeColumn::make('status')
                     ->label('Status')
-                    ->formatStateUsing(fn($state) => EventSettlement::$statuses[$state] ?? $state)
+                    ->formatStateUsing(fn ($state) => EventSettlement::$statuses[$state] ?? $state)
                     ->colors([
-                        'gray'    => 'draft',
+                        'gray' => 'draft',
                         'warning' => 'active',
-                        'info'    => 'pilot_settled',
+                        'info' => 'pilot_settled',
                         'success' => 'closed',
                     ]),
 
@@ -76,6 +78,7 @@ class SettlementsRelationManager extends RelationManager
                     ->label('Nowe rozliczenie')
                     ->mutateFormDataUsing(function (array $data) {
                         $data['created_by'] = auth()->id();
+
                         return $data;
                     }),
             ])
@@ -89,12 +92,12 @@ class SettlementsRelationManager extends RelationManager
                         $record->importFromEvent();
                         Notification::make()->success()->title('Zaimportowano koszty')->send();
                     })
-                    ->visible(fn($record) => $record->status === 'draft'),
+                    ->visible(fn ($record) => $record->status === 'draft'),
 
                 Tables\Actions\Action::make('open')
                     ->label('Otwórz')
                     ->icon('heroicon-o-arrow-top-right-on-square')
-                    ->url(fn($record) => EventSettlementResource::getUrl('edit', ['record' => $record])),
+                    ->url(fn ($record) => EventSettlementResource::getUrl('edit', ['record' => $record])),
 
                 Tables\Actions\DeleteAction::make(),
             ]);

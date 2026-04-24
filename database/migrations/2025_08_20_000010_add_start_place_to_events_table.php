@@ -11,11 +11,11 @@ return new class extends Migration
      */
     public function up(): void
     {
-        if (!Schema::hasTable('events')) {
+        if (! Schema::hasTable('events')) {
             return;
         }
 
-        if (!Schema::hasColumn('events', 'start_place_id')) {
+        if (! Schema::hasColumn('events', 'start_place_id')) {
             Schema::table('events', function (Blueprint $table) {
                 $table->unsignedBigInteger('start_place_id')->nullable()->after('bus_id');
             });
@@ -27,19 +27,17 @@ return new class extends Migration
      */
     public function down(): void
     {
-        if (!Schema::hasTable('events')) {
+        if (! Schema::hasTable('events')) {
             return;
         }
 
         if (Schema::hasColumn('events', 'start_place_id')) {
             Schema::table('events', function (Blueprint $table) {
-                // dropForeign may fail on SQLite if not present; guard by suppressing exceptions
                 try {
-                    $table->dropForeign(['start_place_id']);
+                    $table->dropColumn('start_place_id');
                 } catch (\Throwable $e) {
-                    // ignore
+                    // ignore if column does not exist
                 }
-                $table->dropColumn('start_place_id');
             });
         }
     }

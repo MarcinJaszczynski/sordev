@@ -2,8 +2,8 @@
 
 namespace Database\Factories;
 
-use App\Models\EventTemplateStartingPlaceAvailability;
 use App\Models\EventTemplate;
+use App\Models\EventTemplateStartingPlaceAvailability;
 use App\Models\Place;
 use Illuminate\Database\Eloquent\Factories\Factory;
 

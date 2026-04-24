@@ -2,13 +2,12 @@
 
 namespace Tests\Unit\Security;
 
-use Tests\TestCase;
 use App\Livewire\ProgramPointChildrenEditor;
 use App\Models\EventTemplateProgramPoint;
 use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
-use Illuminate\Support\Facades\Auth;
 use Livewire\Livewire;
+use Tests\TestCase;
 
 class ProgramPointChildrenEditorSecurityTest extends TestCase
 {
@@ -19,7 +18,7 @@ class ProgramPointChildrenEditorSecurityTest extends TestCase
     protected function setUp(): void
     {
         parent::setUp();
-        
+
         // Create test user
         $this->user = User::factory()->create();
     }
@@ -46,12 +45,12 @@ class ProgramPointChildrenEditorSecurityTest extends TestCase
     public function authorized_user_can_access_component()
     {
         $this->actingAs($this->user);
-        
+
         $programPoint = EventTemplateProgramPoint::factory()->create();
 
         $component = Livewire::test(ProgramPointChildrenEditor::class, ['programPoint' => $programPoint])
             ->assertStatus(200);
-            
+
         $this->assertTrue(true); // Component loaded successfully
     }
 
@@ -59,7 +58,7 @@ class ProgramPointChildrenEditorSecurityTest extends TestCase
     public function search_term_is_limited_to_100_characters()
     {
         $this->actingAs($this->user);
-        
+
         $programPoint = EventTemplateProgramPoint::factory()->create();
         $longSearchTerm = str_repeat('a', 150); // 150 characters
 
@@ -75,7 +74,7 @@ class ProgramPointChildrenEditorSecurityTest extends TestCase
     public function invalid_child_id_is_rejected_on_save()
     {
         $this->actingAs($this->user);
-        
+
         $programPoint = EventTemplateProgramPoint::factory()->create();
 
         $component = Livewire::test(ProgramPointChildrenEditor::class, ['programPoint' => $programPoint])
@@ -88,7 +87,7 @@ class ProgramPointChildrenEditorSecurityTest extends TestCase
     public function circular_reference_is_prevented()
     {
         $this->actingAs($this->user);
-        
+
         $programPoint = EventTemplateProgramPoint::factory()->create();
 
         $component = Livewire::test(ProgramPointChildrenEditor::class, ['programPoint' => $programPoint])
@@ -101,7 +100,7 @@ class ProgramPointChildrenEditorSecurityTest extends TestCase
     public function only_positive_integers_accepted_for_delete()
     {
         $this->actingAs($this->user);
-        
+
         $programPoint = EventTemplateProgramPoint::factory()->create();
 
         $this->expectException(\InvalidArgumentException::class);

@@ -8,6 +8,7 @@ use Illuminate\Support\Facades\DB;
 class RemoveDuplicateEventTemplatePrices extends Command
 {
     protected $signature = 'event-templates:remove-duplicate-prices';
+
     protected $description = 'Usuwa duplikaty z event_template_price_per_person, zostawiając najnowszy rekord dla każdej kombinacji';
 
     public function handle()
@@ -23,6 +24,7 @@ class RemoveDuplicateEventTemplatePrices extends Command
             ->delete();
 
         $this->info("Usunięto $deleted duplikatów z tabeli $table.");
+
         return 0;
     }
 }

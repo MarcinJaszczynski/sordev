@@ -13,9 +13,13 @@ use Filament\Tables\Table;
 class MediaResource extends Resource
 {
     protected static ?string $model = Media::class;
+
     protected static ?string $navigationIcon = 'heroicon-o-photo';
+
     protected static ?string $navigationGroup = 'Biblioteka mediów';
+
     protected static ?string $navigationLabel = 'Media';
+
     protected static ?int $navigationSort = 60;
 
     public static function form(Form $form): Form
@@ -34,7 +38,7 @@ class MediaResource extends Resource
             ->columns([
                 Tables\Columns\ImageColumn::make('path')
                     ->label('Podgląd')
-                    ->disk(fn($record) => $record->disk)
+                    ->disk(fn ($record) => $record->disk)
                     ->height(64)
                     ->width(64),
                 Tables\Columns\TextColumn::make('filename')
@@ -46,20 +50,20 @@ class MediaResource extends Resource
                     'public' => 'public',
                 ]),
                 Tables\Filters\SelectFilter::make('extension')->label('Typ')->options([
-                    'jpg' => 'jpg','jpeg' => 'jpeg','png' => 'png','webp' => 'webp','gif' => 'gif',
+                    'jpg' => 'jpg', 'jpeg' => 'jpeg', 'png' => 'png', 'webp' => 'webp', 'gif' => 'gif',
                 ]),
             ])
             ->actions([
                 Tables\Actions\EditAction::make(),
                 Tables\Actions\Action::make('open')
                     ->label('Otwórz')
-                    ->url(fn($record) => $record->url())
+                    ->url(fn ($record) => $record->url())
                     ->openUrlInNewTab(),
             ])
             ->bulkActions([
                 Tables\Actions\DeleteBulkAction::make(),
             ])
-            ->defaultSort('created_at','desc');
+            ->defaultSort('created_at', 'desc');
     }
 
     public static function getPages(): array

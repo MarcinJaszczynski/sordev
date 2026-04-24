@@ -19,16 +19,22 @@ class EventTemplateQtyResource extends Resource
 {
     /**
      * Powiązany model Eloquent
+     *
      * @var class-string<EventTemplateQty>
      */
     protected static ?string $model = EventTemplateQty::class;
 
     // Ikona i etykiety nawigacji w panelu
     protected static ?string $navigationIcon = 'heroicon-o-user-group';
+
     protected static ?string $navigationGroup = 'Szablony imprez';
+
     protected static ?string $navigationLabel = 'Warianty ilości';
+
     protected static ?int $navigationSort = 30;
+
     protected static ?string $modelLabel = 'wariant ilości uczestników';
+
     protected static ?string $pluralModelLabel = 'warianty ilości uczestników';
 
     /**
@@ -43,7 +49,7 @@ class EventTemplateQtyResource extends Resource
             Forms\Components\TextInput::make('gratis')
                 ->label('Gratis (opieka)')
                 ->numeric()
-                ->default(fn($record) => $record?->gratis ?? null)
+                ->default(fn ($record) => $record?->gratis ?? null)
                 ->helperText('Domyślnie: zaokrąglone w górę qty/15')
                 ->required(),
             Forms\Components\TextInput::make('staff')
@@ -79,13 +85,13 @@ class EventTemplateQtyResource extends Resource
                 ->sortable(),
         ])
         // Brak filtrów z koszem, bo model nie ma SoftDeletes
-        ->actions([
-            Tables\Actions\EditAction::make(),
-            Tables\Actions\DeleteAction::make(),
-        ])
-        ->bulkActions([
-            Tables\Actions\DeleteBulkAction::make(),
-        ]);
+            ->actions([
+                Tables\Actions\EditAction::make(),
+                Tables\Actions\DeleteAction::make(),
+            ])
+            ->bulkActions([
+                Tables\Actions\DeleteBulkAction::make(),
+            ]);
     }
 
     /**
@@ -127,6 +133,7 @@ class EventTemplateQtyResource extends Resource
         if ($user && $user->roles && $user->roles->flatMap->permissions->contains('name', 'view event_template_qty')) {
             return true;
         }
+
         return false;
     }
 }

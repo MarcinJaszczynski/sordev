@@ -101,7 +101,7 @@ class EventDocument extends Model
 
     public function getFileSizeFormattedAttribute(): string
     {
-        if (!$this->file_size) {
+        if (! $this->file_size) {
             return '';
         }
         $units = ['B', 'KB', 'MB', 'GB'];
@@ -111,7 +111,8 @@ class EventDocument extends Model
             $size /= 1024;
             $i++;
         }
-        return round($size, 1) . ' ' . $units[$i];
+
+        return round($size, 1).' '.$units[$i];
     }
 
     public function setFilePathAttribute(?string $value): void
@@ -125,8 +126,8 @@ class EventDocument extends Model
     }
 
     public static array $pdfTargetLabels = [
-        'attach_to_pilot_pdf'  => 'Pakiet pilota',
-        'attach_to_hotel_pdf'  => 'Pakiet hotelu',
+        'attach_to_pilot_pdf' => 'Pakiet pilota',
+        'attach_to_hotel_pdf' => 'Pakiet hotelu',
         'attach_to_driver_pdf' => 'Pakiet kierowcy',
         'attach_to_folder_pdf' => 'Pakiet teczki',
     ];

@@ -5,22 +5,27 @@ namespace App\Filament\Resources\TaskResource\Pages;
 use App\Filament\Resources\TaskResource;
 use App\Models\Task;
 use App\Models\TaskStatus;
+use Filament\Actions\Action;
+use Filament\Notifications\Notification;
 use Filament\Resources\Pages\Page;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Log;
-use Filament\Actions\Action;
 use Livewire\Attributes\Computed;
-use Filament\Notifications\Notification;
 
 class KanbanTasks extends Page
 {
     protected static string $resource = TaskResource::class;
+
     protected static string $view = 'filament.resources.task-resource.pages.kanban-tasks';
+
     protected static ?string $slug = '/kanban';
+
     protected static ?string $title = 'Kanban - Zarządzanie zadaniami';
 
     public $filterBy = '';
+
     public $priorityFilter = '';
+
     public $searchTerm = '';
 
     protected function getHeaderActions(): array
@@ -40,7 +45,7 @@ class KanbanTasks extends Page
                 ->label('Statystyki')
                 ->icon('heroicon-m-chart-bar')
                 ->color('info')
-                ->action(fn() => $this->showStats()),
+                ->action(fn () => $this->showStats()),
         ];
     }
 
@@ -69,8 +74,8 @@ class KanbanTasks extends Page
 
         if ($this->searchTerm) {
             $query->where(function ($q) {
-                $q->where('title', 'like', '%' . $this->searchTerm . '%')
-                    ->orWhere('description', 'like', '%' . $this->searchTerm . '%');
+                $q->where('title', 'like', '%'.$this->searchTerm.'%')
+                    ->orWhere('description', 'like', '%'.$this->searchTerm.'%');
             });
         }
 
@@ -89,8 +94,9 @@ class KanbanTasks extends Page
             $task = Task::findOrFail($taskId);
 
             // Security check - can user modify this task?
-            if (!$this->canModifyTask($task)) {
+            if (! $this->canModifyTask($task)) {
                 $this->addError('task', 'Nie masz uprawnień do modyfikacji tego zadania.');
+
                 return;
             }
 
@@ -109,7 +115,7 @@ class KanbanTasks extends Page
                 $newStatus = TaskStatus::find($statusId);
 
                 // You could add audit logging here
-                Log::info("Task {$task->id} moved from {$oldStatus?->name} to {$newStatus?->name} by user " . Auth::id());
+                Log::info("Task {$task->id} moved from {$oldStatus?->name} to {$newStatus?->name} by user ".Auth::id());
             }
 
             Notification::make()
@@ -117,7 +123,7 @@ class KanbanTasks extends Page
                 ->success()
                 ->send();
         } catch (\Exception $e) {
-            Log::error('Error updating task status: ' . $e->getMessage());
+            Log::error('Error updating task status: '.$e->getMessage());
 
             Notification::make()
                 ->title('Błąd podczas aktualizacji zadania')
@@ -131,14 +137,14 @@ class KanbanTasks extends Page
         try {
             $task = Task::findOrFail($taskId);
 
-            if (!$this->canModifyTask($task)) {
+            if (! $this->canModifyTask($task)) {
                 return;
             }
 
             $task->order = $order;
             $task->save();
         } catch (\Exception $e) {
-            Log::error('Error updating task order: ' . $e->getMessage());
+            Log::error('Error updating task order: '.$e->getMessage());
         }
     }
 
@@ -147,11 +153,12 @@ class KanbanTasks extends Page
         try {
             $task = Task::findOrFail($taskId);
 
-            if (!$this->canDeleteTask($task)) {
+            if (! $this->canDeleteTask($task)) {
                 Notification::make()
                     ->title('Nie masz uprawnień do usunięcia tego zadania')
                     ->danger()
                     ->send();
+
                 return;
             }
 
@@ -162,7 +169,7 @@ class KanbanTasks extends Page
                 ->success()
                 ->send();
         } catch (\Exception $e) {
-            Log::error('Error deleting task: ' . $e->getMessage());
+            Log::error('Error deleting task: '.$e->getMessage());
 
             Notification::make()
                 ->title('Błąd podczas usuwania zadania')
@@ -186,7 +193,7 @@ class KanbanTasks extends Page
         $stats = [
             'total_tasks' => $this->tasks()->count(),
             'my_tasks' => $this->tasks()->where('assignee_id', Auth::id())->count(),
-            'overdue_tasks' => $this->tasks()->filter(fn($task) => $task->due_date && $task->due_date->isPast())->count(),
+            'overdue_tasks' => $this->tasks()->filter(fn ($task) => $task->due_date && $task->due_date->isPast())->count(),
             'high_priority' => $this->tasks()->where('priority', 'high')->count(),
         ];
 
@@ -232,9 +239,9 @@ class KanbanTasks extends Page
             'currentUser' => Auth::user(),
             'taskStats' => [
                 'total' => $this->tasks()->count(),
-                'overdue' => $this->tasks()->filter(fn($task) => $task->due_date && $task->due_date->isPast())->count(),
+                'overdue' => $this->tasks()->filter(fn ($task) => $task->due_date && $task->due_date->isPast())->count(),
                 'high_priority' => $this->tasks()->where('priority', 'high')->count(),
-            ]
+            ],
         ];
     }
 }

@@ -2,10 +2,10 @@
 
 namespace App\Exports;
 
+use Illuminate\Support\Facades\Schema;
 use Maatwebsite\Excel\Concerns\FromCollection;
 use Maatwebsite\Excel\Concerns\WithHeadings;
 use Maatwebsite\Excel\Concerns\WithMapping;
-use Illuminate\Support\Facades\Schema;
 
 class GenericExport implements FromCollection, WithHeadings, WithMapping
 {
@@ -25,6 +25,7 @@ class GenericExport implements FromCollection, WithHeadings, WithMapping
             $exampleRow[$field] = $field;
         }
         $collection = collect([$exampleRow]);
+
         return $collection->concat(($this->modelClass)::all());
     }
 
@@ -33,7 +34,7 @@ class GenericExport implements FromCollection, WithHeadings, WithMapping
         // Preferuj fillable, potem wszystkie kolumny
         $model = ($this->modelClass)::getModel();
         $fillable = $model->getFillable();
-        if (!empty($fillable)) {
+        if (! empty($fillable)) {
             return $fillable;
         }
         // Jeśli fillable puste, pobierz wszystkie kolumny z bazy
@@ -41,6 +42,7 @@ class GenericExport implements FromCollection, WithHeadings, WithMapping
             $table = $model->getTable();
             try {
                 $columns = Schema::getColumnListing($table);
+
                 return $columns;
             } catch (\Throwable $e) {
                 // fallback
@@ -51,6 +53,7 @@ class GenericExport implements FromCollection, WithHeadings, WithMapping
         if ($first) {
             return array_keys($first->getAttributes());
         }
+
         return [];
     }
 
@@ -61,6 +64,7 @@ class GenericExport implements FromCollection, WithHeadings, WithMapping
         foreach ($fields as $field) {
             $result[] = $row[$field] ?? '';
         }
+
         return $result;
     }
 }

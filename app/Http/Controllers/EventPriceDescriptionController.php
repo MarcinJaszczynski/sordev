@@ -10,6 +10,7 @@ class EventPriceDescriptionController extends Controller
     public function show($eventId)
     {
         $desc = EventPriceDescription::where('event_id', $eventId)->first();
+
         return view('event-price-description', [
             'description' => $desc ? $desc->description : '<p>Brak opisu.</p>',
         ]);
@@ -18,6 +19,7 @@ class EventPriceDescriptionController extends Controller
     public function edit($eventId)
     {
         $desc = EventPriceDescription::firstOrNew(['event_id' => $eventId]);
+
         return view('event-price-description-edit', [
             'description' => $desc->description,
             'eventId' => $eventId,
@@ -33,6 +35,7 @@ class EventPriceDescriptionController extends Controller
             ['event_id' => $eventId],
             ['description' => $request->input('description')]
         );
+
         return redirect()->route('event.price-description.show', $eventId);
     }
 }

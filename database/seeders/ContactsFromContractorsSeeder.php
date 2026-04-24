@@ -4,7 +4,6 @@ namespace Database\Seeders;
 
 use Illuminate\Database\Seeder;
 use Illuminate\Support\Facades\DB;
-use Illuminate\Support\Str;
 use Illuminate\Support\Facades\Schema;
 
 class ContactsFromContractorsSeeder extends Seeder
@@ -50,7 +49,7 @@ SQL
             $first = $c->firstname ?: null;
             $last = $c->surname ?: null;
             // try to extract from name if missing
-            if (empty($first) && !empty($c->name)) {
+            if (empty($first) && ! empty($c->name)) {
                 $parts = preg_split('/\s+/', trim($c->name));
                 if (count($parts) === 1) {
                     $first = $parts[0];
@@ -70,9 +69,9 @@ SQL
 
             // try to reuse existing contact
             $query = DB::table('contacts');
-            if (!empty($email)) {
+            if (! empty($email)) {
                 $query->where('email', $email);
-            } elseif (!empty($phone)) {
+            } elseif (! empty($phone)) {
                 $query->where('phone', $phone);
             } else {
                 $query->where('first_name', $first)->where('last_name', $last);
@@ -98,21 +97,23 @@ SQL
                 $contactId = $existing->id;
 
                 // append types to existing contact note/notes if available
-                if (!empty($typesList)) {
+                if (! empty($typesList)) {
                     // detect note column name
                     $pragma = DB::select("PRAGMA table_info('contacts')");
-                    $existingCols = array_map(function ($r) { return $r->name; }, $pragma);
+                    $existingCols = array_map(function ($r) {
+                        return $r->name;
+                    }, $pragma);
                     $noteCol = in_array('notes', $existingCols, true) ? 'notes' : (in_array('note', $existingCols, true) ? 'note' : null);
                     if ($noteCol) {
                         $current = DB::table('contacts')->where('id', $contactId)->value($noteCol);
                         $typesStr = implode(', ', $typesList);
-                        $new = trim((string)$current);
+                        $new = trim((string) $current);
                         if ($new === '') {
                             $new = "import z poprzedniej wersji; typy: $typesStr";
                         } else {
                             // avoid duplicating
                             if (strpos($new, $typesStr) === false) {
-                                $new = $new . "; typy: $typesStr";
+                                $new = $new."; typy: $typesStr";
                             }
                         }
                         DB::table('contacts')->where('id', $contactId)->update([$noteCol => $new]);
@@ -163,10 +164,10 @@ SQL
                     }
                 }
 
-                if (!empty($typesList)) {
+                if (! empty($typesList)) {
                     $typesStr = implode(', ', $typesList);
                     if (isset($contactData['note'])) {
-                        $contactData['note'] = trim($contactData['note']) . "; typy: $typesStr";
+                        $contactData['note'] = trim($contactData['note'])."; typy: $typesStr";
                     } else {
                         // if note column not present but 'note' was in allData then it was removed; try to add if column exists
                         if (in_array('note', $existingCols, true)) {
@@ -176,10 +177,10 @@ SQL
                 }
 
                 // fallback: ensure created_at/updated_at if possible
-                if (!isset($contactData['created_at']) && in_array('created_at', $existingCols, true)) {
+                if (! isset($contactData['created_at']) && in_array('created_at', $existingCols, true)) {
                     $contactData['created_at'] = $now;
                 }
-                if (!isset($contactData['updated_at']) && in_array('updated_at', $existingCols, true)) {
+                if (! isset($contactData['updated_at']) && in_array('updated_at', $existingCols, true)) {
                     $contactData['updated_at'] = $now;
                 }
 
@@ -197,6 +198,6 @@ SQL
             $linked++;
         }
 
-    echo "Contacts created: $created, linked: $linked\n";
+        echo "Contacts created: $created, linked: $linked\n";
     }
 }

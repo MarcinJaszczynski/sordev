@@ -2,46 +2,66 @@
 
 namespace App\Livewire;
 
-use Livewire\Component;
-use Livewire\WithFileUploads;
 use App\Models\EventTemplateProgramPoint;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
+use Livewire\Component;
+use Livewire\WithFileUploads;
 
 class EventTemplateProgramPointTreeExpandable extends Component
 {
     use WithFileUploads;
+
     public $tree;
+
     public $expanded;
+
     public $showModal = false;
+
     public $modalParentId = null;
+
     public $modalName = '';
 
     // Pola do modala
     public $modalDescription = '';
+
     public $modalOfficeNotes = '';
+
     public $modalPilotNotes = '';
+
     public $modalTags = [];
+
     public $modalDurationHours = 1;
+
     public $modalDurationMinutes = 0;
+
     public $modalUnitPrice = 0;
+
     public $modalGroupSize = 1;
+
     public $modalCurrencyId = '';
+
     public $modalConvertToPln = false;
+
     public $modalFeaturedImage;
+
     public $modalGalleryImages = [];
 
     public $editMode = false;
+
     public $editPointId = null;
 
     // Wyszukiwanie na żywo
     public $modalSearchTerm = '';
+
     public $modalExistingResults = [];
+
     public $modalSelectedExisting = null;
 
     public function render()
     {
         Log::info('EventTemplateProgramPointTreeExpandable::render() called');
+
         return view('livewire.event-template-program-point-tree-expandable', [
             'tree' => $this->tree,
             'expanded' => $this->expanded,
@@ -52,11 +72,11 @@ class EventTemplateProgramPointTreeExpandable extends Component
     {
         Log::info('EventTemplateProgramPointTreeExpandable::mount() called');
         $this->tree = $this->buildTree();
-        Log::info('Tree built with ' . count($this->tree) . ' root items');
-        if (!is_array($this->tree)) {
+        Log::info('Tree built with '.count($this->tree).' root items');
+        if (! is_array($this->tree)) {
             $this->tree = [];
         }
-        if (!is_array($this->expanded)) {
+        if (! is_array($this->expanded)) {
             $this->expanded = [];
         }
     }
@@ -89,7 +109,7 @@ class EventTemplateProgramPointTreeExpandable extends Component
                 ->delete();
         }
         // Następnie dodaj nowe powiązania z nowym parentem i kolejnością
-        if (!is_null($parentId)) {
+        if (! is_null($parentId)) {
             foreach ($orderedIds as $index => $id) {
                 DB::table('event_template_program_point_parent')
                     ->updateOrInsert(
@@ -114,18 +134,18 @@ class EventTemplateProgramPointTreeExpandable extends Component
      */
     public function updatedModalSearchTerm($value)
     {
-        Log::info('updatedModalSearchTerm called with value: ' . $value);
+        Log::info('updatedModalSearchTerm called with value: '.$value);
 
         // Zwiększ minimalną liczbę znaków do 3 dla lepszej wydajności
         if (strlen($value) >= 3) {
-            Log::info('Calling searchPoints for term: ' . $value);
+            Log::info('Calling searchPoints for term: '.$value);
             $this->searchPoints($value);
         } else {
             Log::info('Clearing search results - term too short');
             $this->modalExistingResults = [];
         }
 
-        Log::info('modalExistingResults count: ' . count($this->modalExistingResults));
+        Log::info('modalExistingResults count: '.count($this->modalExistingResults));
 
         // Explicit refresh dla problemów z DOM morphing
         $this->render();
@@ -136,24 +156,25 @@ class EventTemplateProgramPointTreeExpandable extends Component
      */
     public function searchPoints($term)
     {
-        Log::info('searchPoints called with term: ' . $term);
+        Log::info('searchPoints called with term: '.$term);
 
         if (strlen($term) < 3) {
             $this->modalExistingResults = [];
             Log::info('Search term too short, clearing results');
+
             return;
         }
 
         try {
             // Optymalizacja: najpierw szukaj dokładnych dopasowań, potem częściowe
-            $exactMatches = EventTemplateProgramPoint::where('name', 'like', $term . '%')
+            $exactMatches = EventTemplateProgramPoint::where('name', 'like', $term.'%')
                 ->orderBy('name')
                 ->limit(5)
                 ->get();
 
-            $partialMatches = EventTemplateProgramPoint::where('name', 'like', '%' . $term . '%')
-                ->where('name', 'not like', $term . '%') // Wykluczamy już znalezione dokładne
-                ->orWhere('description', 'like', '%' . $term . '%')
+            $partialMatches = EventTemplateProgramPoint::where('name', 'like', '%'.$term.'%')
+                ->where('name', 'not like', $term.'%') // Wykluczamy już znalezione dokładne
+                ->orWhere('description', 'like', '%'.$term.'%')
                 ->orderBy('name')
                 ->limit(5)
                 ->get();
@@ -164,20 +185,20 @@ class EventTemplateProgramPointTreeExpandable extends Component
                 return [
                     'id' => $point->id,
                     'name' => $point->name,
-                    'description' => $point->description ? substr($point->description, 0, 100) . '...' : '',
+                    'description' => $point->description ? substr($point->description, 0, 100).'...' : '',
                     'duration_hours' => $point->duration_hours,
                     'duration_minutes' => $point->duration_minutes,
                     'unit_price' => $point->unit_price ?? 0,
                 ];
             })->toArray();
 
-            Log::info('Found ' . count($this->modalExistingResults) . ' results for term: ' . $term);
-            Log::info('Results: ' . json_encode($this->modalExistingResults));
+            Log::info('Found '.count($this->modalExistingResults).' results for term: '.$term);
+            Log::info('Results: '.json_encode($this->modalExistingResults));
 
             // Wymuś odświeżenie UI
             $this->dispatch('searchResultsUpdated');
         } catch (\Exception $e) {
-            Log::error('Error in searchPoints: ' . $e->getMessage());
+            Log::error('Error in searchPoints: '.$e->getMessage());
             $this->modalExistingResults = [];
         }
     }
@@ -294,7 +315,7 @@ class EventTemplateProgramPointTreeExpandable extends Component
         if ($this->editMode && $this->editPointId) {
             $point = \App\Models\EventTemplateProgramPoint::findOrFail($this->editPointId);
         } else {
-            $point = new \App\Models\EventTemplateProgramPoint();
+            $point = new \App\Models\EventTemplateProgramPoint;
         }
         $point->name = $this->modalName;
         $point->description = $this->modalDescription;
@@ -319,10 +340,10 @@ class EventTemplateProgramPointTreeExpandable extends Component
         }
         $point->gallery_images = $galleryPaths;
         $point->save();
-        if (!empty($this->modalTags)) {
+        if (! empty($this->modalTags)) {
             $point->tags()->sync($this->modalTags);
         }
-        if (!$this->editMode && $this->modalParentId) {
+        if (! $this->editMode && $this->modalParentId) {
             DB::table('event_template_program_point_parent')->insert([
                 'parent_id' => $this->modalParentId,
                 'child_id' => $point->id,
@@ -356,18 +377,21 @@ class EventTemplateProgramPointTreeExpandable extends Component
         $nodes = $query->orderBy('name')->get();
 
         // Debug: sprawdź ile punktów znaleziono
-        Log::info('BuildTree: parentId=' . ($parentId ?? 'null') . ', found nodes: ' . $nodes->count());
+        Log::info('BuildTree: parentId='.($parentId ?? 'null').', found nodes: '.$nodes->count());
 
         $tree = [];
         foreach ($nodes as $node) {
             // Zapobiegamy zapętleniu
-            if (in_array($node->id, $visited)) continue;
+            if (in_array($node->id, $visited)) {
+                continue;
+            }
             $tree[] = [
                 'id' => $node->id,
                 'name' => $node->name,
                 'children' => $this->buildTree($node->id, array_merge($visited, [$node->id])),
             ];
         }
+
         return $tree;
     }
 }

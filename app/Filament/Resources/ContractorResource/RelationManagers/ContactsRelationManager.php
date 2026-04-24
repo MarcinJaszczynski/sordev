@@ -3,16 +3,16 @@
 namespace App\Filament\Resources\ContractorResource\RelationManagers;
 
 use Filament\Forms;
-use Filament\Forms\Form;
 use Filament\Forms\Components\Select;
+use Filament\Forms\Form;
 use Filament\Resources\RelationManagers\RelationManager;
+use Filament\Support\Services\RelationshipJoiner;
 use Filament\Tables;
 use Filament\Tables\Table;
-use Filament\Support\Services\RelationshipJoiner;
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\Relation;
 use Illuminate\Support\Facades\Schema;
-use Illuminate\Database\Eloquent\Builder;
 
 class ContactsRelationManager extends RelationManager
 {
@@ -29,13 +29,13 @@ class ContactsRelationManager extends RelationManager
             return '';
         }
 
-        return trim((string) ($record->first_name ?? '') . ' ' . ($record->last_name ?? ''));
+        return trim((string) ($record->first_name ?? '').' '.($record->last_name ?? ''));
     }
-    
+
     protected static ?string $title = 'Kontakty';
-    
+
     protected static ?string $modelLabel = 'kontakt';
-    
+
     protected static ?string $pluralModelLabel = 'kontakty';
 
     public function form(Form $form): Form
@@ -202,11 +202,11 @@ class ContactsRelationManager extends RelationManager
 
                             return $results;
                         })
-                        ->multiple(true)
-                        ->helperText('Zaznacz/odznacz wszystkie pozycje dla operacji zbiorczych.');
+                            ->multiple(true)
+                            ->helperText('Zaznacz/odznacz wszystkie pozycje dla operacji zbiorczych.');
 
                         return $select;
-                    })
+                    }),
             ])
             ->actions([
                 Tables\Actions\EditAction::make(),

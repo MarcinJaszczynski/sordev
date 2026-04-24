@@ -1,9 +1,9 @@
 <?php
 
+use App\Models\Media;
 use Illuminate\Foundation\Inspiring;
 use Illuminate\Support\Facades\Artisan;
 use Illuminate\Support\Facades\Storage;
-use App\Models\Media;
 
 Artisan::command('inspire', function () {
     $this->comment(Inspiring::quote());

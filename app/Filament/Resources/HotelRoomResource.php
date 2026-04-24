@@ -11,11 +11,17 @@ use Filament\Tables;
 use Filament\Tables\Table;
 
 class HotelRoomResource extends Resource
-{    protected static ?string $model = HotelRoom::class;
+{
+    protected static ?string $model = HotelRoom::class;
+
     protected static ?string $navigationIcon = 'heroicon-o-home';
+
     protected static ?string $navigationLabel = 'Pokoje hotelowe';
+
     protected static ?string $navigationGroup = 'Ustawienia noclegów';
+
     protected static ?string $modelLabel = 'pokój hotelowy';
+
     protected static ?string $pluralModelLabel = 'pokoje hotelowe';
 
     public static function form(Form $form): Form
@@ -80,13 +86,13 @@ class HotelRoomResource extends Resource
             Tables\Columns\TextColumn::make('currency')->label('Waluta')->sortable(),
             Tables\Columns\IconColumn::make('convert_to_pln')->label('Przeliczaj na złotówki')->boolean(),
         ])
-        ->actions([
-            Tables\Actions\EditAction::make(),
-            Tables\Actions\DeleteAction::make(),
-        ])
-        ->bulkActions([
-            Tables\Actions\DeleteBulkAction::make(),
-        ]);
+            ->actions([
+                Tables\Actions\EditAction::make(),
+                Tables\Actions\DeleteAction::make(),
+            ])
+            ->bulkActions([
+                Tables\Actions\DeleteBulkAction::make(),
+            ]);
     }
 
     public static function getRelations(): array
@@ -113,8 +119,10 @@ class HotelRoomResource extends Resource
         if ($user && $user->roles && $user->roles->flatMap->permissions->contains('name', 'view hotelroom')) {
             return true;
         }
+
         return false;
     }
+
     public static function canView($record): bool
     {
         $user = \App\Models\User::query()->find(\Illuminate\Support\Facades\Auth::id());
@@ -124,8 +132,10 @@ class HotelRoomResource extends Resource
         if ($user && $user->roles && $user->roles->flatMap->permissions->contains('name', 'view hotelroom')) {
             return true;
         }
+
         return false;
     }
+
     public static function canCreate(): bool
     {
         $user = \App\Models\User::query()->find(\Illuminate\Support\Facades\Auth::id());
@@ -135,8 +145,10 @@ class HotelRoomResource extends Resource
         if ($user && $user->roles && $user->roles->flatMap->permissions->contains('name', 'create hotelroom')) {
             return true;
         }
+
         return false;
     }
+
     public static function canEdit($record): bool
     {
         $user = \App\Models\User::query()->find(\Illuminate\Support\Facades\Auth::id());
@@ -146,8 +158,10 @@ class HotelRoomResource extends Resource
         if ($user && $user->roles && $user->roles->flatMap->permissions->contains('name', 'update hotelroom')) {
             return true;
         }
+
         return false;
     }
+
     public static function canDelete($record): bool
     {
         $user = \App\Models\User::query()->find(\Illuminate\Support\Facades\Auth::id());
@@ -157,6 +171,7 @@ class HotelRoomResource extends Resource
         if ($user && $user->roles && $user->roles->flatMap->permissions->contains('name', 'delete hotelroom')) {
             return true;
         }
+
         return false;
     }
 }

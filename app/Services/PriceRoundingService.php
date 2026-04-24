@@ -16,13 +16,18 @@ class PriceRoundingService
      */
     public static function roundPerPerson(?float $raw, string $currencyCode): ?float
     {
-        if ($raw === null) return null;
-        if ($raw <= 0) return 0.0;
+        if ($raw === null) {
+            return null;
+        }
+        if ($raw <= 0) {
+            return 0.0;
+        }
         $upper = strtoupper($currencyCode);
         if ($upper === 'PLN') {
-            return (float)(ceil($raw / 5) * 5);
+            return (float) (ceil($raw / 5) * 5);
         }
+
         // inne waluty: w górę do 10
-        return (float)(ceil($raw / 10) * 10);
+        return (float) (ceil($raw / 10) * 10);
     }
 }

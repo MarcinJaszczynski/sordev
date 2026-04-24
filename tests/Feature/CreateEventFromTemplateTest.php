@@ -2,10 +2,10 @@
 
 namespace Tests\Feature;
 
-use Tests\TestCase;
-use Illuminate\Foundation\Testing\RefreshDatabase;
 use App\Models\EventTemplate;
 use App\Models\Place;
+use Illuminate\Foundation\Testing\RefreshDatabase;
+use Tests\TestCase;
 
 class CreateEventFromTemplateTest extends TestCase
 {
@@ -14,12 +14,12 @@ class CreateEventFromTemplateTest extends TestCase
     public function test_create_event_from_template_saves_template_prices_snapshot()
     {
         // Załóżmy, że fabryki istnieją. Tworzymy place, template i kilka price rows.
-    // Utwórz użytkownika testowego i ustaw jako zalogowany (events.created_by wymaga not null)
-    $user = \App\Models\User::factory()->create();
-    $this->actingAs($user);
+        // Utwórz użytkownika testowego i ustaw jako zalogowany (events.created_by wymaga not null)
+        $user = \App\Models\User::factory()->create();
+        $this->actingAs($user);
 
-    // Brak fabryki Place w repozytorium, tworzymy model bezpośrednio
-    $place = Place::create(['name' => 'Test Place']);
+        // Brak fabryki Place w repozytorium, tworzymy model bezpośrednio
+        $place = Place::create(['name' => 'Test Place']);
         $template = EventTemplate::factory()->create(['name' => 'T1', 'start_place_id' => $place->id]);
 
         // Uruchom tworzenie eventu przez model

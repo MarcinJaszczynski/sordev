@@ -18,15 +18,20 @@ class CurrencyResource extends Resource
 {
     /**
      * Powiązany model Eloquent
+     *
      * @var class-string<Currency>
      */
     protected static ?string $model = Currency::class;
 
     // Ikona i etykiety nawigacji w panelu
     protected static ?string $navigationIcon = 'heroicon-o-currency-dollar';
+
     protected static ?string $navigationLabel = 'Waluty';
+
     protected static ?string $navigationGroup = 'Ustawienia kalkulacji';
+
     protected static ?string $pluralLabel = 'Waluty';
+
     protected static ?string $singularLabel = 'Waluta';
 
     /**
@@ -112,6 +117,7 @@ class CurrencyResource extends Resource
         if ($user && $user->roles && $user->roles->flatMap->permissions->contains('name', 'view currency')) {
             return true;
         }
+
         return false;
     }
 }

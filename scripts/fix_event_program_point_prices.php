@@ -1,4 +1,5 @@
 <?php
+
 // scripts/fix_event_program_point_prices.php
 
 use App\Models\EventProgramPoint;

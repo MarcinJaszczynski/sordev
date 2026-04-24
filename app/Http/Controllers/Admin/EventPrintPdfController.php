@@ -99,7 +99,7 @@ class EventPrintPdfController extends Controller
 
                         return [
                             'id' => (int) $id,
-                            'name' => $room?->name ?? ('Pokój #' . $id),
+                            'name' => $room?->name ?? ('Pokój #'.$id),
                             'people_count' => $room?->people_count,
                         ];
                     })
@@ -156,12 +156,12 @@ class EventPrintPdfController extends Controller
 
         $attachedFiles = $selectedDocuments
             ->flatMap(function ($document) {
-                $docLabel = $document->document_number ?: ('Dokument #' . $document->id);
+                $docLabel = $document->document_number ?: ('Dokument #'.$document->id);
 
                 return collect($document->files ?? [])->map(function ($relativePath) use ($docLabel, $document) {
                     $resolved = $this->resolveStoredFile((string) $relativePath);
 
-                    if (!$resolved) {
+                    if (! $resolved) {
                         return null;
                     }
 
@@ -172,7 +172,7 @@ class EventPrintPdfController extends Controller
                         'relative_path' => $relativePath,
                         'absolute_path' => $resolved['absolute_path'],
                         'base_name' => $resolved['base_name'],
-                        'zip_name' => $docLabel . '/' . $resolved['base_name'],
+                        'zip_name' => $docLabel.'/'.$resolved['base_name'],
                     ];
                 });
             })
@@ -185,17 +185,18 @@ class EventPrintPdfController extends Controller
             ->filter(fn ($doc) => ($doc->approval_status ?? 'pending') === 'approved')
             ->map(function ($doc) {
                 $resolved = $this->resolveStoredFile($doc->file_path);
-                if (!$resolved) {
+                if (! $resolved) {
                     return null;
                 }
+
                 return [
-                    'document_id' => 'ev-' . $doc->id,
+                    'document_id' => 'ev-'.$doc->id,
                     'document_label' => $doc->name,
                     'document_type' => 'Dokument imprezy',
                     'relative_path' => $doc->file_path,
                     'absolute_path' => $resolved['absolute_path'],
                     'base_name' => $resolved['base_name'],
-                    'zip_name' => $doc->name . '/' . $resolved['base_name'],
+                    'zip_name' => $doc->name.'/'.$resolved['base_name'],
                 ];
             })
             ->filter()
@@ -205,7 +206,7 @@ class EventPrintPdfController extends Controller
 
         $selectedDocumentsForView = $selectedDocuments
             ->map(function ($document) use ($attachedFiles) {
-                $docLabel = $document->document_number ?: ('Dokument #' . $document->id);
+                $docLabel = $document->document_number ?: ('Dokument #'.$document->id);
                 $files = $attachedFiles->where('document_id', $document->id)->values();
 
                 return [
@@ -222,11 +223,11 @@ class EventPrintPdfController extends Controller
         // Dodaj dokumenty imprezy do widoku
         foreach ($eventDocumentsAttached as $evDoc) {
             $selectedDocumentsForView->push([
-                'id'          => $evDoc['document_id'],
-                'label'       => $evDoc['document_label'],
-                'type'        => $evDoc['document_type'],
+                'id' => $evDoc['document_id'],
+                'label' => $evDoc['document_label'],
+                'type' => $evDoc['document_type'],
                 'vendor_name' => null,
-                'files'       => collect([$evDoc]),
+                'files' => collect([$evDoc]),
             ]);
         }
 
@@ -267,12 +268,12 @@ class EventPrintPdfController extends Controller
     {
         $normalizedPath = StoragePath::normalize($relativePath);
 
-        if (!$normalizedPath) {
+        if (! $normalizedPath) {
             return null;
         }
 
         foreach (['public', config('filesystems.default')] as $diskName) {
-            if (!$diskName) {
+            if (! $diskName) {
                 continue;
             }
 
@@ -297,18 +298,18 @@ class EventPrintPdfController extends Controller
         if ($zipPath === false) {
             return response($pdfBinary, 200, [
                 'Content-Type' => 'application/pdf',
-                'Content-Disposition' => 'attachment; filename="' . $this->filename($event, $audience) . '"',
+                'Content-Disposition' => 'attachment; filename="'.$this->filename($event, $audience).'"',
             ]);
         }
 
-        $zip = new ZipArchive();
+        $zip = new ZipArchive;
 
         if ($zip->open($zipPath, ZipArchive::OVERWRITE) !== true) {
             @unlink($zipPath);
 
             return response($pdfBinary, 200, [
                 'Content-Type' => 'application/pdf',
-                'Content-Disposition' => 'attachment; filename="' . $this->filename($event, $audience) . '"',
+                'Content-Disposition' => 'attachment; filename="'.$this->filename($event, $audience).'"',
             ]);
         }
 
@@ -318,11 +319,11 @@ class EventPrintPdfController extends Controller
             $absolutePath = $attachment['absolute_path'] ?? null;
             $zipName = $attachment['zip_name'] ?? null;
 
-            if (!$absolutePath || !$zipName || !is_file($absolutePath)) {
+            if (! $absolutePath || ! $zipName || ! is_file($absolutePath)) {
                 continue;
             }
 
-            $zip->addFile($absolutePath, 'zalaczniki/' . $zipName);
+            $zip->addFile($absolutePath, 'zalaczniki/'.$zipName);
         }
 
         $zip->close();
@@ -340,7 +341,7 @@ class EventPrintPdfController extends Controller
             abort(500, 'Nie udało się utworzyć paczki ZIP.');
         }
 
-        $zip = new ZipArchive();
+        $zip = new ZipArchive;
 
         if ($zip->open($zipPath, ZipArchive::OVERWRITE) !== true) {
             @unlink($zipPath);
@@ -353,18 +354,18 @@ class EventPrintPdfController extends Controller
                 ->setPaper('a4')
                 ->output();
 
-            $baseDir = 'pakiet-' . $singleAudience;
-            $zip->addFromString($baseDir . '/' . $this->filename($event, $singleAudience), $pdf);
+            $baseDir = 'pakiet-'.$singleAudience;
+            $zip->addFromString($baseDir.'/'.$this->filename($event, $singleAudience), $pdf);
 
             foreach (collect($data['attachedFiles'] ?? []) as $attachment) {
                 $absolutePath = $attachment['absolute_path'] ?? null;
                 $zipName = $attachment['zip_name'] ?? null;
 
-                if (!$absolutePath || !$zipName || !is_file($absolutePath)) {
+                if (! $absolutePath || ! $zipName || ! is_file($absolutePath)) {
                     continue;
                 }
 
-                $zip->addFile($absolutePath, $baseDir . '/zalaczniki/' . $zipName);
+                $zip->addFile($absolutePath, $baseDir.'/zalaczniki/'.$zipName);
             }
         }
 
@@ -385,7 +386,7 @@ class EventPrintPdfController extends Controller
     {
         $path = public_path(ltrim($relativePath, '/'));
 
-        if (!File::exists($path)) {
+        if (! File::exists($path)) {
             return null;
         }
 
@@ -397,7 +398,7 @@ class EventPrintPdfController extends Controller
             default => 'image/png',
         };
 
-        return 'data:' . $mime . ';base64,' . base64_encode((string) File::get($path));
+        return 'data:'.$mime.';base64,'.base64_encode((string) File::get($path));
     }
 
     private function filename(Event $event, string $audience): string

@@ -1,6 +1,7 @@
 <?php
-$dbPath = __DIR__ . '/../database/database.sqlite';
-$db = new PDO('sqlite:' . $dbPath);
+
+$dbPath = __DIR__.'/../database/database.sqlite';
+$db = new PDO('sqlite:'.$dbPath);
 $sql = <<<'SQL'
 SELECT p.id as point_id, p.name as point_name, p.parent_id,
        piv.id as pivot_id, piv.include_in_calculation, piv.include_in_program, piv.day, piv."order"
@@ -11,7 +12,7 @@ ORDER BY p.id;
 SQL;
 $stmt = $db->query($sql);
 $rows = $stmt->fetchAll(PDO::FETCH_ASSOC);
-if (!$rows) {
+if (! $rows) {
     echo "No children found for parent 104\n";
     exit(0);
 }

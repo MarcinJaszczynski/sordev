@@ -37,12 +37,18 @@ class Media extends Model
 
         $filename = basename((string) $value);
         $extension = pathinfo($filename, PATHINFO_EXTENSION) ?: null;
-        $size = null; $mime = null; $width = null; $height = null;
+        $size = null;
+        $mime = null;
+        $width = null;
+        $height = null;
         if ($full && file_exists($full)) {
             $size = filesize($full) ?: null;
             $mime = function_exists('mime_content_type') ? @mime_content_type($full) : null;
             $dim = @getimagesize($full);
-            if ($dim) { $width = $dim[0] ?? null; $height = $dim[1] ?? null; }
+            if ($dim) {
+                $width = $dim[0] ?? null;
+                $height = $dim[1] ?? null;
+            }
         }
 
         $this->attributes['filename'] = $filename;
@@ -56,12 +62,16 @@ class Media extends Model
     // Accessor URL
     public function getUrlAttribute(): string
     {
-        $base = rtrim((string) config('filesystems.disks.' . ($this->disk ?: 'public') . '.url'), '/');
-        return $base . '/' . ltrim($this->path, '/');
+        $base = rtrim((string) config('filesystems.disks.'.($this->disk ?: 'public').'.url'), '/');
+
+        return $base.'/'.ltrim($this->path, '/');
     }
 
     // Helper
-    public function url(): string { return $this->url; }
+    public function url(): string
+    {
+        return $this->url;
+    }
 
     public function scopeImages($q)
     {

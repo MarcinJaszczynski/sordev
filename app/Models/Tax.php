@@ -24,14 +24,14 @@ class Tax extends Model
 
     /**
      * Oblicza kwotę podatku na podstawie podanych wartości
-     * 
-     * @param float $baseAmount Suma bez narzutu
-     * @param float $markupAmount Narzut
+     *
+     * @param  float  $baseAmount  Suma bez narzutu
+     * @param  float  $markupAmount  Narzut
      * @return float Kwota podatku
      */
     public function calculateTaxAmount(float $baseAmount, float $markupAmount = 0): float
     {
-        if (!$this->is_active) {
+        if (! $this->is_active) {
             return 0;
         }
 
@@ -61,7 +61,7 @@ class Tax extends Model
      */
     public function getFormattedPercentageAttribute(): string
     {
-        return $this->percentage . '%';
+        return $this->percentage.'%';
     }
 
     /**

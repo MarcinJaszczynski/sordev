@@ -2,6 +2,7 @@
 
 namespace App\Livewire;
 
+use App\Filament\Resources\TaskResource;
 use App\Models\EventTemplate;
 use App\Models\EventTemplateProgramPoint;
 use Illuminate\Support\Facades\DB;
@@ -11,9 +12,13 @@ use Livewire\Component;
 class EventProgramTreeEditor extends Component
 {
     public EventTemplate $eventTemplate;
+
     public $programByDays = [];
+
     public $showModal = false;
+
     public $editPoint = null;
+
     public $modalData = [
         'id' => null,
         'program_point_id' => '',
@@ -25,9 +30,11 @@ class EventProgramTreeEditor extends Component
         'include_in_calculation' => true,
         'active' => true,
     ];
+
     public $searchProgramPoint = '';
+
     public bool $searchDropdownOpen = false;
-    
+
     // Prevent re-rendering after drag & drop updates
     public $skipRender = false;
 
@@ -35,7 +42,7 @@ class EventProgramTreeEditor extends Component
     {
         return [
             'modalData.program_point_id' => 'required|exists:event_template_program_points,id',
-            'modalData.day' => 'required|integer|min:1|max:' . ($this->eventTemplate->duration_days + 1),
+            'modalData.day' => 'required|integer|min:1|max:'.($this->eventTemplate->duration_days + 1),
             'modalData.notes' => 'nullable|string',
             'modalData.start_time' => 'nullable|date_format:H:i',
             'modalData.end_time' => 'nullable|date_format:H:i',
@@ -70,7 +77,7 @@ class EventProgramTreeEditor extends Component
 
         $grouped = $programPoints->groupBy('pivot.day');
         $days = [];
-        
+
         // Dodaj dni standardowe
         for ($i = 1; $i <= $this->eventTemplate->duration_days; $i++) {
             $points = $grouped[$i] ?? collect();
@@ -79,6 +86,7 @@ class EventProgramTreeEditor extends Component
                 'points' => $points->map(function ($point) {
                     $children = $point->children->map(function ($child) {
                         $props = $this->getChildProperties($child->id);
+
                         return [
                             'id' => $child->id,
                             'name' => $child->name,
@@ -99,6 +107,7 @@ class EventProgramTreeEditor extends Component
                             'show_description' => $props['show_description'] ?? true,
                         ];
                     })->toArray();
+
                     return [
                         'pivot_id' => $point->pivot->id,
                         'id' => $point->id,
@@ -126,10 +135,10 @@ class EventProgramTreeEditor extends Component
                         'show_description' => $point->pivot->show_description ?? true,
                         'children' => $children,
                     ];
-                })->sortBy('order')->values()->toArray()
+                })->sortBy('order')->values()->toArray(),
             ];
         }
-        
+
         // Dodaj dzień fakultatywny (duration_days + 1)
         $facultativeDay = $this->eventTemplate->duration_days + 1;
         $facultativePoints = $grouped[$facultativeDay] ?? collect();
@@ -138,6 +147,7 @@ class EventProgramTreeEditor extends Component
             'points' => $facultativePoints->map(function ($point) {
                 $children = $point->children->map(function ($child) {
                     $props = $this->getChildProperties($child->id);
+
                     return [
                         'id' => $child->id,
                         'name' => $child->name,
@@ -158,6 +168,7 @@ class EventProgramTreeEditor extends Component
                         'show_description' => $props['show_description'] ?? true,
                     ];
                 })->toArray();
+
                 return [
                     'pivot_id' => $point->pivot->id,
                     'id' => $point->id,
@@ -185,9 +196,9 @@ class EventProgramTreeEditor extends Component
                     'show_description' => $point->pivot->show_description ?? true,
                     'children' => $children,
                 ];
-            })->sortBy('order')->values()->toArray()
+            })->sortBy('order')->values()->toArray(),
         ];
-        
+
         $this->programByDays = $days;
     }
 
@@ -198,8 +209,8 @@ class EventProgramTreeEditor extends Component
                 $searchTerm = trim($this->searchProgramPoint);
 
                 $fragments = collect(preg_split('/[,\s]+/', $searchTerm))
-                    ->map(fn($f) => trim($f))
-                    ->filter(fn($f) => strlen($f) >= 2);
+                    ->map(fn ($f) => trim($f))
+                    ->filter(fn ($f) => strlen($f) >= 2);
 
                 foreach ($fragments as $frag) {
                     $query->where(function ($q) use ($frag) {
@@ -263,9 +274,9 @@ class EventProgramTreeEditor extends Component
                 'notes' => $pointPivot->notes,
                 'start_time' => $pointPivot->start_time ? substr((string) $pointPivot->start_time, 0, 5) : null,
                 'end_time' => $pointPivot->end_time ? substr((string) $pointPivot->end_time, 0, 5) : null,
-                'include_in_program' => (bool)$pointPivot->include_in_program,
-                'include_in_calculation' => (bool)$pointPivot->include_in_calculation,
-                'active' => (bool)$pointPivot->active,
+                'include_in_program' => (bool) $pointPivot->include_in_program,
+                'include_in_calculation' => (bool) $pointPivot->include_in_calculation,
+                'active' => (bool) $pointPivot->active,
             ];
             $this->showModal = true;
         } else {
@@ -303,13 +314,15 @@ class EventProgramTreeEditor extends Component
         $startTime = $this->normalizeTime($this->modalData['start_time'] ?? null);
         $endTime = $this->normalizeTime($this->modalData['end_time'] ?? null);
 
-        if (($startTime && !$endTime) || (!$startTime && $endTime)) {
+        if (($startTime && ! $endTime) || (! $startTime && $endTime)) {
             $this->addError('modalData.end_time', 'Podaj obie godziny: start i koniec.');
+
             return;
         }
 
         if ($startTime && $endTime && strtotime($endTime) <= strtotime($startTime)) {
             $this->addError('modalData.end_time', 'Godzina końca musi być późniejsza niż godzina startu.');
+
             return;
         }
 
@@ -318,7 +331,7 @@ class EventProgramTreeEditor extends Component
 
             if ($this->editPoint) {
                 $pointPivot = DB::table('event_template_event_template_program_point')->where('id', $this->editPoint);
-                if (!$pointPivot->exists()) {
+                if (! $pointPivot->exists()) {
                     throw new \Exception('Nie znaleziono punktu programu do edycji.');
                 }
                 $pointPivot->update([
@@ -358,8 +371,8 @@ class EventProgramTreeEditor extends Component
             $this->dispatch('notify', ['type' => 'success', 'message' => 'Punkt programu zapisany pomyślnie!']);
         } catch (\Exception $e) {
             DB::rollBack();
-            Log::error("Błąd zapisu punktu programu: " . $e->getMessage());
-            $this->dispatch('notify', ['type' => 'error', 'message' => 'Wystąpił błąd podczas zapisu: ' . $e->getMessage()]);
+            Log::error('Błąd zapisu punktu programu: '.$e->getMessage());
+            $this->dispatch('notify', ['type' => 'error', 'message' => 'Wystąpił błąd podczas zapisu: '.$e->getMessage()]);
         }
     }
 
@@ -368,10 +381,11 @@ class EventProgramTreeEditor extends Component
         Log::info("DeletePoint called with pivotId: $pivotId");
         try {
             $pointPivot = DB::table('event_template_event_template_program_point')->where('id', $pivotId)->first();
-            Log::info("Found pointPivot: " . json_encode($pointPivot));
+            Log::info('Found pointPivot: '.json_encode($pointPivot));
 
-            if (!$pointPivot) {
+            if (! $pointPivot) {
                 $this->dispatch('notify', ['type' => 'error', 'message' => 'Nie znaleziono punktu programu do usunięcia.']);
+
                 return;
             }
 
@@ -386,7 +400,7 @@ class EventProgramTreeEditor extends Component
 
             // Usuń punkt programu - bezpośrednio przez SQL
             $deleted = DB::unprepared("DELETE FROM event_template_event_template_program_point WHERE id = $pivotId");
-            Log::info("Direct SQL delete executed");
+            Log::info('Direct SQL delete executed');
 
             // Aktualizuj kolejność pozostałych punktów - bezpośrednio przez SQL
             DB::unprepared("UPDATE event_template_event_template_program_point 
@@ -394,10 +408,10 @@ class EventProgramTreeEditor extends Component
                            WHERE event_template_id = $eventTemplateId 
                            AND day = $dayOfDeletedPoint 
                            AND `order` > $orderOfDeletedPoint");
-            Log::info("Order updated for remaining points");
+            Log::info('Order updated for remaining points');
 
             DB::commit();
-            Log::info("Transaction committed successfully");
+            Log::info('Transaction committed successfully');
 
             // Ponownie włącz foreign keys
             DB::unprepared('PRAGMA foreign_keys = ON');
@@ -408,9 +422,9 @@ class EventProgramTreeEditor extends Component
             DB::rollBack();
             // Ponownie włącz foreign keys nawet w przypadku błędu
             DB::unprepared('PRAGMA foreign_keys = ON');
-            Log::error("Błąd usuwania punktu programu: " . $e->getMessage());
-            Log::error("Stack trace: " . $e->getTraceAsString());
-            $this->dispatch('notify', ['type' => 'error', 'message' => 'Wystąpił błąd podczas usuwania punktu programu: ' . $e->getMessage()]);
+            Log::error('Błąd usuwania punktu programu: '.$e->getMessage());
+            Log::error('Stack trace: '.$e->getTraceAsString());
+            $this->dispatch('notify', ['type' => 'error', 'message' => 'Wystąpił błąd podczas usuwania punktu programu: '.$e->getMessage()]);
         }
     }
 
@@ -430,15 +444,15 @@ class EventProgramTreeEditor extends Component
                 }
             }
             DB::commit();
-            
+
             // Don't reload data immediately after drag & drop to prevent conflicts
             $this->skipRender = true;
-            
+
             $this->dispatch('notify', ['type' => 'success', 'message' => 'Kolejność zaktualizowana.']);
         } catch (\Exception $e) {
             DB::rollBack();
-            Log::error("Błąd aktualizacji kolejności: " . $e->getMessage(), ['trace' => $e->getTraceAsString()]);
-            $this->dispatch('notify', ['type' => 'error', 'message' => 'Błąd aktualizacji kolejności: ' . $e->getMessage()]);
+            Log::error('Błąd aktualizacji kolejności: '.$e->getMessage(), ['trace' => $e->getTraceAsString()]);
+            $this->dispatch('notify', ['type' => 'error', 'message' => 'Błąd aktualizacji kolejności: '.$e->getMessage()]);
         }
     }
 
@@ -476,7 +490,7 @@ class EventProgramTreeEditor extends Component
             }
         } catch (\Exception $e) {
             DB::rollBack();
-            Log::error("Błąd duplikowania punktu programu: " . $e->getMessage());
+            Log::error('Błąd duplikowania punktu programu: '.$e->getMessage());
             $this->dispatch('notify', ['type' => 'error', 'message' => 'Wystąpił błąd podczas duplikowania punktu programu.']);
         }
     }
@@ -484,24 +498,28 @@ class EventProgramTreeEditor extends Component
     public function togglePivotProperty($pivotId, $property)
     {
         $allowed = ['include_in_program', 'include_in_calculation', 'active', 'show_title_style', 'show_description'];
-        if (!in_array($property, $allowed)) return;
+        if (! in_array($property, $allowed)) {
+            return;
+        }
 
         $pivot = DB::table('event_template_event_template_program_point')->where('id', $pivotId)->first();
         if ($pivot) {
-            $newValue = !$pivot->$property;
+            $newValue = ! $pivot->$property;
             DB::table('event_template_event_template_program_point')
                 ->where('id', $pivotId)
                 ->update([$property => $newValue]);
 
             $this->loadProgramByDays();
-            $this->dispatch('program-updated', "Właściwość została zaktualizowana");
+            $this->dispatch('program-updated', 'Właściwość została zaktualizowana');
         }
     }
 
     public function toggleChildPivotProperty($childId, $property)
     {
         $allowed = ['include_in_program', 'include_in_calculation', 'active', 'show_title_style', 'show_description'];
-        if (!in_array($property, $allowed)) return;
+        if (! in_array($property, $allowed)) {
+            return;
+        }
 
         $pivot = DB::table('event_template_program_point_child_pivot')
             ->where('event_template_id', $this->eventTemplate->id)
@@ -509,7 +527,7 @@ class EventProgramTreeEditor extends Component
             ->first();
 
         if ($pivot) {
-            $newValue = !$pivot->$property;
+            $newValue = ! $pivot->$property;
             DB::table('event_template_program_point_child_pivot')
                 ->where('id', $pivot->id)
                 ->update([$property => $newValue]);
@@ -527,7 +545,7 @@ class EventProgramTreeEditor extends Component
             ]);
         }
         $this->loadProgramByDays();
-        $this->dispatch('program-updated', "Właściwość podpunktu została zaktualizowana");
+        $this->dispatch('program-updated', 'Właściwość podpunktu została zaktualizowana');
     }
 
     public function getChildProperties($childId)
@@ -536,12 +554,13 @@ class EventProgramTreeEditor extends Component
             ->where('event_template_id', $this->eventTemplate->id)
             ->where('program_point_child_id', $childId)
             ->first();
+
         return [
-            'include_in_program' => $pivot ? (bool)$pivot->include_in_program : true,
-            'include_in_calculation' => $pivot ? (bool)$pivot->include_in_calculation : true,
-            'active' => $pivot ? (bool)$pivot->active : true,
-            'show_title_style' => $pivot ? (bool)$pivot->show_title_style : true,
-            'show_description' => $pivot ? (bool)$pivot->show_description : true,
+            'include_in_program' => $pivot ? (bool) $pivot->include_in_program : true,
+            'include_in_calculation' => $pivot ? (bool) $pivot->include_in_calculation : true,
+            'active' => $pivot ? (bool) $pivot->active : true,
+            'show_title_style' => $pivot ? (bool) $pivot->show_title_style : true,
+            'show_description' => $pivot ? (bool) $pivot->show_description : true,
         ];
     }
 
@@ -566,6 +585,28 @@ class EventProgramTreeEditor extends Component
         }
         $this->eventTemplate->load('dayInsurances');
         $this->loadProgramByDays();
+    }
+
+    public function getTaskCreateUrlForPoint(int $programPointId): string
+    {
+        return $this->buildTaskCreateUrl($programPointId);
+    }
+
+    public function getTaskCreateUrlForChild(int $childProgramPointId): string
+    {
+        return $this->buildTaskCreateUrl($childProgramPointId);
+    }
+
+    private function buildTaskCreateUrl(int $programPointId): string
+    {
+        if ($programPointId <= 0) {
+            return '#';
+        }
+
+        return TaskResource::getUrl('create', [
+            'taskable_type' => EventTemplateProgramPoint::class,
+            'taskable_id' => $programPointId,
+        ]);
     }
 
     private function normalizeTime($value): ?string

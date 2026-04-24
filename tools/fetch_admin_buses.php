@@ -1,13 +1,15 @@
 <?php
-require __DIR__ . '/../vendor/autoload.php';
-$app = require_once __DIR__ . '/../bootstrap/app.php';
+
+require __DIR__.'/../vendor/autoload.php';
+$app = require_once __DIR__.'/../bootstrap/app.php';
 $kernel = $app->make(Illuminate\Contracts\Console\Kernel::class);
 $kernel->bootstrap();
 
 // login as user
-$user = App\Models\User::where('email','m.jaszczynski@gmail.com')->first();
+$user = App\Models\User::where('email', 'm.jaszczynski@gmail.com')->first();
 if (! $user) {
-    echo "no user\n"; exit(1);
+    echo "no user\n";
+    exit(1);
 }
 Illuminate\Support\Facades\Auth::loginUsingId($user->id);
 
@@ -15,5 +17,5 @@ Illuminate\Support\Facades\Auth::loginUsingId($user->id);
 $request = Illuminate\Http\Request::create('/admin/buses', 'GET');
 $response = app()->handle($request);
 $html = $response->getContent();
-file_put_contents(__DIR__ . '/admin_buses.html', $html);
+file_put_contents(__DIR__.'/admin_buses.html', $html);
 echo "Saved HTML to tools/admin_buses.html\n";

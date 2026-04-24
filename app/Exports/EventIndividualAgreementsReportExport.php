@@ -11,8 +11,7 @@ class EventIndividualAgreementsReportExport implements FromCollection, WithHeadi
 {
     public function __construct(
         protected Event $event,
-    ) {
-    }
+    ) {}
 
     public function collection()
     {

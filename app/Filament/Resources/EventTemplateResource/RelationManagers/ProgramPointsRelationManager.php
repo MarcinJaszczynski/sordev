@@ -4,12 +4,8 @@ namespace App\Filament\Resources\EventTemplateResource\RelationManagers;
 
 use App\Models\EventTemplateProgramPoint;
 use Filament\Forms;
-use Filament\Tables;
 use Filament\Resources\RelationManagers\RelationManager;
-use Filament\Tables\Actions\Action;
-use Filament\Tables\Grouping\Group;
-use Filament\Tables\Columns\TextColumn;
-use Filament\Tables\Columns\BooleanColumn;
+use Filament\Tables;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
@@ -17,7 +13,9 @@ use Illuminate\Support\Facades\Log;
 class ProgramPointsRelationManager extends RelationManager
 {
     protected static string $relationship = 'programPoints';
+
     protected static ?string $title = 'Program imprezy';
+
     protected static ?string $recordTitleAttribute = 'name';
 
     public function table(Tables\Table $table): Tables\Table
@@ -33,9 +31,10 @@ class ProgramPointsRelationManager extends RelationManager
                         static $lastDay = null;
                         $output = '';
                         if ($lastDay !== $state) {
-                            $output = '<b style="display:block;margin-top:8px;">Dzień ' . $state . '</b>';
+                            $output = '<b style="display:block;margin-top:8px;">Dzień '.$state.'</b>';
                             $lastDay = $state;
                         }
+
                         return $output;
                     })
                     ->html()
@@ -51,15 +50,15 @@ class ProgramPointsRelationManager extends RelationManager
                 Tables\Columns\BooleanColumn::make('event_template_event_template_program_point.include_in_program')
                     ->label('W programie')
                     ->sortable(false)
-                    ->formatStateUsing(fn ($state) => (bool)$state),
+                    ->formatStateUsing(fn ($state) => (bool) $state),
                 Tables\Columns\BooleanColumn::make('event_template_event_template_program_point.include_in_calculation')
                     ->label('W kalkulacji')
                     ->sortable(false)
-                    ->formatStateUsing(fn ($state) => (bool)$state),
+                    ->formatStateUsing(fn ($state) => (bool) $state),
                 Tables\Columns\BooleanColumn::make('event_template_event_template_program_point.active')
                     ->label('Aktywny')
                     ->sortable(false)
-                    ->formatStateUsing(fn ($state) => (bool)$state),
+                    ->formatStateUsing(fn ($state) => (bool) $state),
             ])
             ->actions([
                 Tables\Actions\Action::make('duplicate')
@@ -77,23 +76,23 @@ class ProgramPointsRelationManager extends RelationManager
                             ->programPoints()
                             ->wherePivot('day', $currentDay)
                             ->max('event_template_event_template_program_point.order');
-                        
+
                         // Duplikuj punkt z nową kolejnością - jawnie rzuć wartości na bool
                         $attachData = [
                             'day' => $currentDay,
                             'order' => ($maxOrder ?? 0) + 1,
                             'notes' => $record->pivot->notes,
-                            'include_in_program' => (bool)($record->pivot->include_in_program ?? false),
-                            'include_in_calculation' => (bool)($record->pivot->include_in_calculation ?? false),
-                            'active' => (bool)($record->pivot->active ?? false),
+                            'include_in_program' => (bool) ($record->pivot->include_in_program ?? false),
+                            'include_in_calculation' => (bool) ($record->pivot->include_in_calculation ?? false),
+                            'active' => (bool) ($record->pivot->active ?? false),
                         ];
-                        
+
                         Log::debug('DuplicateAction', [
                             'record_id' => $record->id,
                             'raw_pivot' => $record->pivot->getAttributes(),
                             'attach_data' => $attachData,
                         ]);
-                        
+
                         $this->getOwnerRecord()->programPoints()->attach($record->id, $attachData);
                     }),
                 Tables\Actions\Action::make('edit')
@@ -129,9 +128,9 @@ class ProgramPointsRelationManager extends RelationManager
                             'day' => $record->pivot->day,
                             'order' => $record->pivot->order,
                             'notes' => $record->pivot->notes,
-                            'include_in_program' => (bool)($record->pivot->include_in_program ?? false),
-                            'include_in_calculation' => (bool)($record->pivot->include_in_calculation ?? false),
-                            'active' => (bool)($record->pivot->active ?? false),
+                            'include_in_program' => (bool) ($record->pivot->include_in_program ?? false),
+                            'include_in_calculation' => (bool) ($record->pivot->include_in_calculation ?? false),
+                            'active' => (bool) ($record->pivot->active ?? false),
                         ];
                         Log::debug('EditAction mountUsing - loadowanie wartości z pivot', [
                             'pivot_data' => $pivotData,
@@ -145,9 +144,9 @@ class ProgramPointsRelationManager extends RelationManager
                             'day' => $data['day'],
                             'order' => $data['order'],
                             'notes' => $data['notes'] ?? null,
-                            'include_in_program' => (bool)($data['include_in_program'] ?? false),
-                            'include_in_calculation' => (bool)($data['include_in_calculation'] ?? false),
-                            'active' => (bool)($data['active'] ?? false),
+                            'include_in_program' => (bool) ($data['include_in_program'] ?? false),
+                            'include_in_calculation' => (bool) ($data['include_in_calculation'] ?? false),
+                            'active' => (bool) ($data['active'] ?? false),
                         ];
                         Log::debug('EditAction saving', [
                             'form_data' => $data,
@@ -167,14 +166,15 @@ class ProgramPointsRelationManager extends RelationManager
                                 $days = $template->duration_days ?? 1;
                                 $options = [];
                                 for ($i = 1; $i <= $days; $i++) {
-                                    $options[$i] = 'Dzień ' . $i;
+                                    $options[$i] = 'Dzień '.$i;
                                 }
+
                                 return $options;
                             })
                             ->required(),
                     ])
                     ->action(function ($data, $record) {
-                        $this->moveToDay($record, (int)$data['new_day']);
+                        $this->moveToDay($record, (int) $data['new_day']);
                     }),
             ])
             ->headerActions([
@@ -211,27 +211,27 @@ class ProgramPointsRelationManager extends RelationManager
                                 'day' => $data['day'],
                                 'order' => $data['order'],
                                 'notes' => $data['notes'] ?? null,
-                                'include_in_program' => (bool)($data['include_in_program'] ?? false),
-                                'include_in_calculation' => (bool)($data['include_in_calculation'] ?? false),
-                                'active' => (bool)($data['active'] ?? false),
+                                'include_in_program' => (bool) ($data['include_in_program'] ?? false),
+                                'include_in_calculation' => (bool) ($data['include_in_calculation'] ?? false),
+                                'active' => (bool) ($data['active'] ?? false),
                             ];
-                            
+
                             Log::debug('AttachAction', [
                                 'form_data' => $data,
                                 'attach_data' => $attachData,
                             ]);
-                            
+
                             $this->getOwnerRecord()->programPoints()->attach($data['event_template_program_point_id'], $attachData);
-                            
+
                             // Logowanie sukcesu
                             Log::info('Punkt programu dodany pomyślnie', ['data' => $attachData]);
                         } catch (\Exception $e) {
                             // Logowanie błędu
-                            Log::error('Błąd dodawania punktu programu: ' . $e->getMessage(), [
+                            Log::error('Błąd dodawania punktu programu: '.$e->getMessage(), [
                                 'data' => $data,
-                                'trace' => $e->getTraceAsString()
+                                'trace' => $e->getTraceAsString(),
                             ]);
-                            
+
                             // Rzuć wyjątek dalej, aby Filament mógł go obsłużyć
                             throw $e;
                         }
@@ -256,25 +256,25 @@ class ProgramPointsRelationManager extends RelationManager
             ->orderBy('event_template_event_template_program_point.order')
             ->getQuery();
     }
-    
+
     /**
      * Konfiguracja sortowania tabeli - używa pól z tabeli pivot
      */
-    protected function getTableReorderColumn(): string 
+    protected function getTableReorderColumn(): string
     {
         return 'order';
     }
 
     /**
      * Dodatkowa konfiguracja dla sortowania tabeli
-     * 
+     *
      * @return array|null
      */
     protected function getDefaultTableSortColumn(): ?string
     {
         return 'event_template_event_template_program_point.order';
     }
-    
+
     /**
      * Kierunek domyślnego sortowania
      */
@@ -287,14 +287,14 @@ class ProgramPointsRelationManager extends RelationManager
     {
         try {
             \Illuminate\Support\Facades\Log::info('Początek reorderTable EventTemplate', ['order' => $order]);
-            
+
             \Illuminate\Support\Facades\DB::transaction(function () use ($order) {
                 $ownerRecord = $this->getOwnerRecord();
                 $relationship = $this->getRelationship();
                 $pivotTable = $relationship->getTable();
                 $foreignPivotKey = $relationship->getForeignPivotKeyName();
                 $relatedPivotKey = $relationship->getRelatedPivotKeyName();
-                
+
                 // Grupujemy rekordy według dnia przed zmianą kolejności
                 $recordsByDay = [];
                 foreach ($order as $recordId) {
@@ -303,12 +303,12 @@ class ProgramPointsRelationManager extends RelationManager
                         ->where($foreignPivotKey, $ownerRecord->getKey())
                         ->where($relatedPivotKey, $recordId)
                         ->first();
-                    
+
                     if ($currentRecord) {
                         $recordsByDay[$currentRecord->day][] = $recordId;
                     }
                 }
-                
+
                 // Aktualizujemy kolejność w obrębie każdego dnia
                 foreach ($recordsByDay as $day => $recordIds) {
                     foreach ($recordIds as $index => $recordId) {
@@ -316,24 +316,24 @@ class ProgramPointsRelationManager extends RelationManager
                             'day' => $day,
                             'index' => $index,
                             'recordId' => $recordId,
-                            'newOrder' => $index + 1
+                            'newOrder' => $index + 1,
                         ]);
-                        
+
                         $result = \Illuminate\Support\Facades\DB::table($pivotTable)
                             ->where($foreignPivotKey, $ownerRecord->getKey())
                             ->where($relatedPivotKey, $recordId)
                             ->update(['order' => $index + 1]);
-                            
+
                         \Illuminate\Support\Facades\Log::info('Wynik aktualizacji EventTemplate', ['result' => $result]);
                     }
                 }
             });
-            
+
             \Illuminate\Support\Facades\Log::info('Koniec reorderTable EventTemplate - sukces');
         } catch (\Exception $e) {
             // Logowanie błędów
-            \Illuminate\Support\Facades\Log::error('Błąd podczas przestawiania EventTemplate: ' . $e->getMessage(), [
-                'trace' => $e->getTraceAsString()
+            \Illuminate\Support\Facades\Log::error('Błąd podczas przestawiania EventTemplate: '.$e->getMessage(), [
+                'trace' => $e->getTraceAsString(),
             ]);
         }
     }
@@ -341,33 +341,32 @@ class ProgramPointsRelationManager extends RelationManager
     /**
      * Uaktualnij kolejność dla wielu elementów jednocześnie
      *
-     * @param array $orderData Tablica danych w formacie [id => kolejność]
-     * @return void
+     * @param  array  $orderData  Tablica danych w formacie [id => kolejność]
      */
     public function updateBulkOrder(array $orderData): void
     {
         try {
             Log::info('Aktualizacja wielu rekordów', ['orderData' => $orderData]);
-            
+
             DB::transaction(function () use ($orderData) {
                 $ownerRecord = $this->getOwnerRecord();
                 $relationship = $this->getRelationship();
                 $pivotTable = $relationship->getTable();
-                
+
                 foreach ($orderData as $id => $order) {
                     DB::table($pivotTable)
                         ->where('id', $id)
                         ->update(['order' => $order]);
-                    
-                    Log::debug("Zaktualizowano kolejność w RelationManager", [
+
+                    Log::debug('Zaktualizowano kolejność w RelationManager', [
                         'id' => $id,
-                        'order' => $order
+                        'order' => $order,
                     ]);
                 }
             });
         } catch (\Exception $e) {
-            Log::error('Błąd podczas aktualizacji kolejności: ' . $e->getMessage(), [
-                'trace' => $e->getTraceAsString()
+            Log::error('Błąd podczas aktualizacji kolejności: '.$e->getMessage(), [
+                'trace' => $e->getTraceAsString(),
             ]);
         }
     }

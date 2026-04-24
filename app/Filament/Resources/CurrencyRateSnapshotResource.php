@@ -14,11 +14,17 @@ use Filament\Tables\Table;
 class CurrencyRateSnapshotResource extends Resource
 {
     protected static ?string $model = CurrencyRateSnapshot::class;
+
     protected static ?string $navigationIcon = 'heroicon-o-arrow-trending-up';
+
     protected static ?string $navigationLabel = 'Kursy walut';
+
     protected static ?string $navigationGroup = 'Finanse';
+
     protected static ?int $navigationSort = 20;
+
     protected static ?string $modelLabel = 'Kurs waluty';
+
     protected static ?string $pluralModelLabel = 'Kursy walut';
 
     public static function form(Form $form): Form
@@ -27,7 +33,7 @@ class CurrencyRateSnapshotResource extends Resource
             Forms\Components\Section::make()->columns(2)->schema([
                 Forms\Components\Select::make('currency_id')
                     ->label('Waluta')
-                    ->options(fn() => Currency::orderBy('name')->pluck('name', 'id'))
+                    ->options(fn () => Currency::orderBy('name')->pluck('name', 'id'))
                     ->required()
                     ->searchable(),
 
@@ -54,10 +60,10 @@ class CurrencyRateSnapshotResource extends Resource
                 Forms\Components\Select::make('source')
                     ->label('Źródło')
                     ->options([
-                        'NBP'    => 'NBP',
+                        'NBP' => 'NBP',
                         'manual' => 'Ręczny',
-                        'bank'   => 'Bank',
-                        'other'  => 'Inne',
+                        'bank' => 'Bank',
+                        'other' => 'Inne',
                     ])
                     ->default('manual')
                     ->nullable(),
@@ -76,7 +82,7 @@ class CurrencyRateSnapshotResource extends Resource
                     ->label('Waluta')
                     ->sortable()
                     ->searchable()
-                    ->description(fn($r) => $r->currency?->symbol),
+                    ->description(fn ($r) => $r->currency?->symbol),
 
                 Tables\Columns\TextColumn::make('rate_date')
                     ->label('Data')
@@ -110,7 +116,7 @@ class CurrencyRateSnapshotResource extends Resource
             ->filters([
                 Tables\Filters\SelectFilter::make('currency_id')
                     ->label('Waluta')
-                    ->options(fn() => Currency::orderBy('name')->pluck('name', 'id'))
+                    ->options(fn () => Currency::orderBy('name')->pluck('name', 'id'))
                     ->searchable(),
 
                 Tables\Filters\SelectFilter::make('source')
@@ -132,9 +138,9 @@ class CurrencyRateSnapshotResource extends Resource
     public static function getPages(): array
     {
         return [
-            'index'  => Pages\ListCurrencyRateSnapshots::route('/'),
+            'index' => Pages\ListCurrencyRateSnapshots::route('/'),
             'create' => Pages\CreateCurrencyRateSnapshot::route('/create'),
-            'edit'   => Pages\EditCurrencyRateSnapshot::route('/{record}/edit'),
+            'edit' => Pages\EditCurrencyRateSnapshot::route('/{record}/edit'),
         ];
     }
 }

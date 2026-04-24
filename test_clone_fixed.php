@@ -1,8 +1,8 @@
 <?php
 
-require_once __DIR__ . '/vendor/autoload.php';
+require_once __DIR__.'/vendor/autoload.php';
 
-$app = require_once __DIR__ . '/bootstrap/app.php';
+$app = require_once __DIR__.'/bootstrap/app.php';
 $kernel = $app->make(Illuminate\Contracts\Console\Kernel::class);
 $kernel->bootstrap();
 
@@ -22,7 +22,7 @@ echo "=== Test naprawionego klonowania szablonu ===\n";
 // Znajdź szablon o ID 10
 $original = EventTemplate::find(10);
 
-if (!$original) {
+if (! $original) {
     echo "Błąd: Nie znaleziono szablonu o ID 10\n";
     exit(1);
 }
@@ -38,14 +38,14 @@ try {
         'hotelDays',
         'startingPlaceAvailabilities',
         'taxes',
-        'pricesPerPerson'
+        'pricesPerPerson',
     ]);
 
     // Utwórz klon używając create() zamiast replicate()
     $clone = EventTemplate::create([
-        'name' => $original->name . ' (Test Kopia 2)',
+        'name' => $original->name.' (Test Kopia 2)',
         'subtitle' => $original->subtitle,
-        'slug' => $original->slug . '-test-kopia2-' . uniqid(),
+        'slug' => $original->slug.'-test-kopia2-'.uniqid(),
         'duration_days' => $original->duration_days,
         'is_active' => $original->is_active,
         'featured_image' => $original->featured_image,
@@ -101,6 +101,6 @@ try {
     $editUrl = "http://sorbaza_old.test/admin/event-templates/{$clone->id}/edit";
     echo "URL do edycji: {$editUrl}\n";
 } catch (Exception $e) {
-    echo "\n❌ Błąd podczas klonowania: " . $e->getMessage() . "\n";
-    echo "Stack trace:\n" . $e->getTraceAsString() . "\n";
+    echo "\n❌ Błąd podczas klonowania: ".$e->getMessage()."\n";
+    echo "Stack trace:\n".$e->getTraceAsString()."\n";
 }

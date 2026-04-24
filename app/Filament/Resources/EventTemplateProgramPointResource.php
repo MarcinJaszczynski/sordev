@@ -2,23 +2,22 @@
 
 namespace App\Filament\Resources;
 
-use App\Filament\Resources\TaskResource\RelationManagers\TasksRelationManager;
 use App\Filament\Resources\EventTemplateProgramPointResource\Pages;
-use App\Models\EventTemplateProgramPoint;
+use App\Filament\Resources\TaskResource\RelationManagers\TasksRelationManager;
 use App\Models\Currency;
+use App\Models\EventTemplateProgramPoint;
+use App\Models\Media;
 use Filament\Forms;
+use Filament\Forms\Components\Actions\Action as FormAction;
+use Filament\Forms\Components\Actions as FormActions;
+use Filament\Forms\Components\Select;
+use Filament\Forms\Components\View as ViewComponent;
 use Filament\Forms\Form;
-use Filament\Forms\Components\FileUpload;
+use Filament\Forms\Get;
+use Filament\Forms\Set;
 use Filament\Resources\Resource;
 use Filament\Tables;
 use Filament\Tables\Table;
-use App\Models\Media;
-use Filament\Forms\Components\Actions as FormActions;
-use Filament\Forms\Components\Actions\Action as FormAction;
-use Filament\Forms\Get;
-use Filament\Forms\Set;
-use Filament\Forms\Components\Select;
-use Filament\Forms\Components\View as ViewComponent;
 
 /**
  * Resource Filament dla modelu EventTemplateProgramPoint.
@@ -28,14 +27,18 @@ class EventTemplateProgramPointResource extends Resource
 {
     /**
      * Powiązany model Eloquent
+     *
      * @var class-string<EventTemplateProgramPoint>
      */
     protected static ?string $model = EventTemplateProgramPoint::class;
 
     // Ikona i etykiety nawigacji w panelu
     protected static ?string $navigationGroup = 'Szablony imprez';
+
     protected static ?string $navigationIcon = 'heroicon-o-map-pin';
+
     protected static ?string $navigationLabel = 'Punkty programu';
+
     protected static ?int $navigationSort = 20;
 
     /**
@@ -58,7 +61,7 @@ class EventTemplateProgramPointResource extends Resource
                             ->hint('Podaj unikalną i zrozumiałą nazwę punktu programu widoczną dla użytkowników.')
                             ->required()
                             ->columnSpanFull(),
-                        
+
                         Forms\Components\RichEditor::make('description')
                             ->label('Opis punktu programu')
                             ->placeholder('Opisz szczegóły punktu programu, np. przebieg, atrakcje, ważne informacje...')
@@ -66,14 +69,14 @@ class EventTemplateProgramPointResource extends Resource
                             ->toolbarButtons(['bold', 'italic', 'bulletList', 'orderedList', 'link', 'undo', 'redo'])
                             ->nullable()
                             ->columnSpanFull(),
-                        
+
                         Forms\Components\TextInput::make('duration_hours')
                             ->label('Czas trwania (godziny)')
                             ->placeholder('np. 2')
                             ->hint('Podaj liczbę pełnych godzin trwania punktu programu.')
                             ->numeric()
                             ->required(),
-                        
+
                         Forms\Components\TextInput::make('duration_minutes')
                             ->label('Czas trwania (minuty)')
                             ->placeholder('np. 30')
@@ -94,7 +97,7 @@ class EventTemplateProgramPointResource extends Resource
                             ->placeholder('Wpisz uwagi organizacyjne, np. wymagania, kontakty, szczegóły logistyczne...')
                             ->hint('Tylko dla pracowników biura. Nie widoczne dla uczestników.')
                             ->toolbarButtons(['bold', 'italic', 'bulletList', 'orderedList', 'link', 'undo', 'redo']),
-                        
+
                         Forms\Components\RichEditor::make('pilot_notes')
                             ->label('Uwagi dla pilota')
                             ->placeholder('Wskazówki dla pilota/opiekuna grupy, np. na co zwrócić uwagę, co przekazać uczestnikom...')
@@ -121,7 +124,7 @@ class EventTemplateProgramPointResource extends Resource
                             ->acceptedFileTypes(['image/jpeg', 'image/png', 'image/gif', 'image/webp'])
                             ->preserveFilenames()
                             ->nullable()
-                            ->default(fn($record) => is_string($record?->featured_image) ? $record->featured_image : null),
+                            ->default(fn ($record) => is_string($record?->featured_image) ? $record->featured_image : null),
                         FormActions::make([
                             FormAction::make('choose_featured_from_media')
                                 ->label('Wybierz z biblioteki')
@@ -134,11 +137,12 @@ class EventTemplateProgramPointResource extends Resource
                                         ->native(false)
                                         ->options(function () {
                                             $dirs = Media::images()->pluck('path')
-                                                ->map(fn($p) => \Illuminate\Support\Str::before($p, '/'))
-                                                ->filter(fn($d) => !empty($d))
+                                                ->map(fn ($p) => \Illuminate\Support\Str::before($p, '/'))
+                                                ->filter(fn ($d) => ! empty($d))
                                                 ->unique()
                                                 ->sort()
                                                 ->values();
+
                                             return $dirs->combine($dirs)->all();
                                         })
                                         ->placeholder('Wszystkie')
@@ -161,7 +165,7 @@ class EventTemplateProgramPointResource extends Resource
                                             if (is_array($folders) && count($folders)) {
                                                 $query->where(function ($q) use ($folders) {
                                                     foreach ($folders as $f) {
-                                                        $q->orWhere('path', 'like', $f . '/%');
+                                                        $q->orWhere('path', 'like', $f.'/%');
                                                     }
                                                 });
                                             }
@@ -171,12 +175,13 @@ class EventTemplateProgramPointResource extends Resource
                                                 ->skip(max(0, ($page - 1) * $perPage))
                                                 ->take($perPage)
                                                 ->get()
-                                                ->map(fn($m) => [
+                                                ->map(fn ($m) => [
                                                     'id' => $m->id,
                                                     'filename' => $m->filename,
                                                     'url' => $m->url(),
                                                 ])->all();
                                             $selected = $get('media_id') ? [(int) $get('media_id')] : [];
+
                                             return [
                                                 'mode' => 'single',
                                                 'selectId' => 'pp-featured-media-input',
@@ -214,7 +219,7 @@ class EventTemplateProgramPointResource extends Resource
                             ->reorderable()
                             ->maxFiles(10)
                             ->imageEditor()
-                            ->imageEditorAspectRatios(['16:9','4:3','1:1'])
+                            ->imageEditorAspectRatios(['16:9', '4:3', '1:1'])
                             ->panelLayout('grid')
                             ->uploadingMessage('Przesyłanie zdjęć...')
                             ->removeUploadedFileButtonPosition('right')
@@ -222,7 +227,7 @@ class EventTemplateProgramPointResource extends Resource
                             ->uploadProgressIndicatorPosition('left')
                             ->preserveFilenames()
                             ->live()
-                            ->default(fn($record) => $record?->gallery_images ?? []),
+                            ->default(fn ($record) => $record?->gallery_images ?? []),
                         FormActions::make([
                             FormAction::make('choose_gallery_from_media')
                                 ->label('Dodaj z biblioteki')
@@ -235,11 +240,12 @@ class EventTemplateProgramPointResource extends Resource
                                         ->native(false)
                                         ->options(function () {
                                             $dirs = Media::images()->pluck('path')
-                                                ->map(fn($p) => \Illuminate\Support\Str::before($p, '/'))
-                                                ->filter(fn($d) => !empty($d))
+                                                ->map(fn ($p) => \Illuminate\Support\Str::before($p, '/'))
+                                                ->filter(fn ($d) => ! empty($d))
                                                 ->unique()
                                                 ->sort()
                                                 ->values();
+
                                             return $dirs->combine($dirs)->all();
                                         })
                                         ->placeholder('Wszystkie')
@@ -262,7 +268,7 @@ class EventTemplateProgramPointResource extends Resource
                                             if (is_array($folders) && count($folders)) {
                                                 $query->where(function ($q) use ($folders) {
                                                     foreach ($folders as $f) {
-                                                        $q->orWhere('path', 'like', $f . '/%');
+                                                        $q->orWhere('path', 'like', $f.'/%');
                                                     }
                                                 });
                                             }
@@ -272,13 +278,14 @@ class EventTemplateProgramPointResource extends Resource
                                                 ->skip(max(0, ($page - 1) * $perPage))
                                                 ->take($perPage)
                                                 ->get()
-                                                ->map(fn($m) => [
+                                                ->map(fn ($m) => [
                                                     'id' => $m->id,
                                                     'filename' => $m->filename,
                                                     'url' => $m->url(),
                                                 ])->all();
                                             $raw = $get('media_ids');
                                             $selected = is_array($raw) ? array_map('intval', $raw) : (json_decode((string) $raw, true) ?: []);
+
                                             return [
                                                 'mode' => 'multi',
                                                 'selectId' => 'pp-gallery-media-input',
@@ -297,7 +304,9 @@ class EventTemplateProgramPointResource extends Resource
                                     $ids = is_array($raw) ? $raw : (json_decode((string) $raw, true) ?: []);
                                     $paths = Media::whereIn('id', $ids)->pluck('path')->all();
                                     $current = $get('gallery_images') ?? [];
-                                    if (!is_array($current)) { $current = []; }
+                                    if (! is_array($current)) {
+                                        $current = [];
+                                    }
                                     $new = array_values(array_unique(array_merge($current, $paths)));
                                     $set('gallery_images', $new);
                                 })
@@ -317,21 +326,21 @@ class EventTemplateProgramPointResource extends Resource
                             ->hint('Podaj cenę za osobę lub grupę, zgodnie z charakterem punktu.')
                             ->numeric()
                             ->required(),
-                        
+
                         Forms\Components\TextInput::make('group_size')
                             ->label('Wielkość grupy')
                             ->placeholder('np. 20')
                             ->hint('Podaj liczbę osób w grupie. Jeśli nie dotyczy, wpisz 1.')
                             ->numeric()
                             ->default(1),
-                        
+
                         Forms\Components\Select::make('currency_id')
                             ->label('Waluta')
                             ->options(Currency::all()->pluck('name', 'id'))
                             ->searchable()
                             ->hint('Wybierz walutę, w której podana jest cena.')
                             ->required(),
-                        
+
                         Forms\Components\Toggle::make('convert_to_pln')
                             ->label('Przeliczaj na złotówki')
                             ->hint('Jeśli zaznaczone, cena zostanie automatycznie przeliczona na PLN według kursu z dnia.')
@@ -416,8 +425,7 @@ class EventTemplateProgramPointResource extends Resource
                     ->sortable(query: function ($query, string $direction) {
                         return $query->orderByRaw("(duration_hours * 60 + duration_minutes) {$direction}");
                     })
-                    ->formatStateUsing(fn ($record) => 
-                        $record->duration_hours . 'h ' . $record->duration_minutes . 'm'
+                    ->formatStateUsing(fn ($record) => $record->duration_hours.'h '.$record->duration_minutes.'m'
                     )
                     ->toggleable(),
                 Tables\Columns\TextColumn::make('unit_price')
@@ -477,8 +485,8 @@ class EventTemplateProgramPointResource extends Resource
                     ])
                     ->query(function ($query, array $data) {
                         return $query
-                            ->when($data['min_hours'], fn($query, $value) => $query->where('duration_hours', '>=', $value))
-                            ->when($data['max_hours'], fn($query, $value) => $query->where('duration_hours', '<=', $value));
+                            ->when($data['min_hours'], fn ($query, $value) => $query->where('duration_hours', '>=', $value))
+                            ->when($data['max_hours'], fn ($query, $value) => $query->where('duration_hours', '<=', $value));
                     }),
             ])
             ->actions([
@@ -491,7 +499,7 @@ class EventTemplateProgramPointResource extends Resource
                         Forms\Components\TextInput::make('name')
                             ->label('Nazwa kopii')
                             ->required()
-                            ->default(fn($record) => $record->name . ' (kopia)'),
+                            ->default(fn ($record) => $record->name.' (kopia)'),
                     ])
                     ->label('Klonuj')
                     ->beforeReplicaSaved(function ($replica, array $data) {
@@ -526,7 +534,7 @@ class EventTemplateProgramPointResource extends Resource
                         ->icon('heroicon-o-arrow-path')
                         ->action(function ($records) {
                             $records->each(function ($record) {
-                                $record->update(['convert_to_pln' => !$record->convert_to_pln]);
+                                $record->update(['convert_to_pln' => ! $record->convert_to_pln]);
                             });
                         }),
                 ]),
@@ -568,6 +576,7 @@ class EventTemplateProgramPointResource extends Resource
         if ($user && $user->roles && $user->roles->flatMap->permissions->contains('name', 'view eventtemplateprogrampoint')) {
             return true;
         }
+
         return false;
     }
 }

@@ -30,7 +30,10 @@ class EventObserver
         // Przelicz bazowy koszt i odśwież rozliczenie tylko gdy zmieniono pole wpływające na cenę.
         // Wyłączamy total_cost i updated_at z listy istotnych pól, by nie wejść w pętlę:
         // calculateTotalCost() → update(total_cost) → observer::updated() → calculateTotalCost()...
-        if (!empty(array_intersect($changed, self::$costFields))) {
+        $costRelevantChanged = ! empty(array_intersect($changed, self::$costFields));
+        $totalCostManuallyChanged = in_array('total_cost', $changed, true);
+
+        if ($costRelevantChanged && ! $totalCostManuallyChanged) {
             try {
                 $event->calculateTotalCost();
             } catch (\Throwable $e) {
@@ -75,7 +78,9 @@ class EventObserver
             ->map(fn ($id): int => (int) $id)
             ->merge(
                 User::query()
-                    ->role(['super_admin', 'admin'])
+                    ->whereHas('roles', function ($query) {
+                        $query->whereIn('name', ['super_admin', 'admin']);
+                    })
                     ->pluck('id')
                     ->map(fn ($id): int => (int) $id)
             )

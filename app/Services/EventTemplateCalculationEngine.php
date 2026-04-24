@@ -2,11 +2,9 @@
 
 namespace App\Services;
 
+use App\Models\Currency;
 use App\Models\EventTemplate;
 use App\Models\EventTemplateQty;
-use App\Models\EventTemplatePricePerPerson;
-use App\Models\Currency;
-use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\DB;
 
 /**
@@ -24,7 +22,6 @@ class EventTemplateCalculationEngine
 {
     /**
      * Zwraca szczegółowe obliczenia keyed by qty
-     * @return array
      */
     public function calculateDetailed(EventTemplate $template, ?int $startPlaceId = null, ?float $transportKm = null, bool $debug = false, ?iterable $qtyVariantsOverride = null): array
     {
@@ -107,7 +104,7 @@ class EventTemplateCalculationEngine
                     // points/tickets are counted per qty (exclude gratis/staff per request)
                     $cost = $this->calculatePointCost($qty, $groupSize, $unitPrice);
                     $convertToPln = (bool) ($point->convert_to_pln ?? false);
-                    if (!$isForeignTrip) {
+                    if (! $isForeignTrip) {
                         $convertToPln = true;
                     }
 
@@ -115,7 +112,7 @@ class EventTemplateCalculationEngine
                         $plnPoints[] = ['name' => $point->name, 'cost' => $cost];
                         $plnTotal += $cost;
                     } elseif ($convertToPln) {
-                        $plnPoints[] = ['name' => $point->name . ' (przeliczone)', 'cost' => $cost * $exchangeRate];
+                        $plnPoints[] = ['name' => $point->name.' (przeliczone)', 'cost' => $cost * $exchangeRate];
                         $plnTotal += $cost * $exchangeRate;
                     } else {
                         $currenciesPoints[$currencyCode][] = ['name' => $point->name, 'cost' => $cost];
@@ -129,8 +126,12 @@ class EventTemplateCalculationEngine
                     // child's pivot row (if attached to this template)
                     $childIncluded = \App\Services\ProgramPointHelper::filterIncluded(collect([$child]))->isNotEmpty();
 
-                    if (!$childIncluded) continue;
-                    if (!$child->currency) continue;
+                    if (! $childIncluded) {
+                        continue;
+                    }
+                    if (! $child->currency) {
+                        continue;
+                    }
 
                     $childCurrencyCode = $child->currency->symbol;
                     $childExchangeRate = $child->currency->exchange_rate ?? 1;
@@ -138,18 +139,18 @@ class EventTemplateCalculationEngine
                     $childUnitPrice = $child->unit_price ?? 0;
                     $childCost = $this->calculatePointCost($qty, $childGroupSize, $childUnitPrice);
                     $childConvertToPln = (bool) ($child->convert_to_pln ?? false);
-                    if (!$isForeignTrip) {
+                    if (! $isForeignTrip) {
                         $childConvertToPln = true;
                     }
 
                     if ($childCurrencyCode === 'PLN') {
-                        $plnPoints[] = ['name' => '→ ' . $child->name, 'cost' => $childCost];
+                        $plnPoints[] = ['name' => '→ '.$child->name, 'cost' => $childCost];
                         $plnTotal += $childCost;
                     } elseif ($childConvertToPln) {
-                        $plnPoints[] = ['name' => '→ ' . $child->name . ' (przeliczone)', 'cost' => $childCost * $childExchangeRate];
+                        $plnPoints[] = ['name' => '→ '.$child->name.' (przeliczone)', 'cost' => $childCost * $childExchangeRate];
                         $plnTotal += $childCost * $childExchangeRate;
                     } else {
-                        $currenciesPoints[$childCurrencyCode][] = ['name' => '→ ' . $child->name, 'cost' => $childCost];
+                        $currenciesPoints[$childCurrencyCode][] = ['name' => '→ '.$child->name, 'cost' => $childCost];
                         $currenciesTotals[$childCurrencyCode] = ($currenciesTotals[$childCurrencyCode] ?? 0) + $childCost;
                     }
                 }
@@ -203,7 +204,9 @@ class EventTemplateCalculationEngine
                 foreach ($roomGroups as $groupType => $groupData) {
                     $peopleCount = $groupData['count'];
                     $roomIds = $groupData['room_ids'];
-                    if ($peopleCount <= 0) continue;
+                    if ($peopleCount <= 0) {
+                        continue;
+                    }
                     if (empty($roomIds)) {
                         $roomAlloc[] = [
                             'room' => null,
@@ -213,8 +216,9 @@ class EventTemplateCalculationEngine
                             'currency' => null,
                             'group_type' => $groupType,
                             'room_count' => 0,
-                            'warning' => 'Brak przypisanych pokoi dla tej grupy (' . $groupType . ') w noclegu.'
+                            'warning' => 'Brak przypisanych pokoi dla tej grupy ('.$groupType.') w noclegu.',
                         ];
+
                         continue;
                     }
                     $rooms = \App\Models\HotelRoom::whereIn('id', $roomIds)->get();
@@ -232,7 +236,7 @@ class EventTemplateCalculationEngine
 
                     foreach ($rooms as $room) {
                         for ($i = $room->people_count; $i <= $maxCapacity; $i++) {
-                            if ($dp[$i - $room->people_count] + $room->price < $dp[$i]) {
+                            if ($dp[$i] > $dp[$i - $room->people_count] + $room->price) {
                                 $dp[$i] = $dp[$i - $room->people_count] + $room->price;
                                 $choice[$i] = $room->id;
                             }
@@ -258,7 +262,7 @@ class EventTemplateCalculationEngine
                             'currency' => null,
                             'group_type' => $groupType,
                             'room_count' => 0,
-                            'warning' => 'Brak możliwej kombinacji pokoi dla tej grupy (' . $groupType . ') w noclegu.'
+                            'warning' => 'Brak możliwej kombinacji pokoi dla tej grupy ('.$groupType.') w noclegu.',
                         ];
                     } else {
                         // Odtwarzanie wyboru pokoi
@@ -303,7 +307,7 @@ class EventTemplateCalculationEngine
                                 // Waluta i konwersja do PLN jak w punktach programu
                                 $roomCurrency = $room->currency;
                                 $convertFlag = (bool) ($room->convert_to_pln ?? false);
-                                if (!$isForeignTrip) {
+                                if (! $isForeignTrip) {
                                     $convertFlag = true;
                                 }
 
@@ -318,7 +322,9 @@ class EventTemplateCalculationEngine
                                 $roomTypeCount[$room->id]++;
                                 $peopleAssigned += $toAssign;
 
-                                if ($peopleAssigned >= $peopleCount) break 2;
+                                if ($peopleAssigned >= $peopleCount) {
+                                    break 2;
+                                }
                             }
                         }
                     }
@@ -336,7 +342,7 @@ class EventTemplateCalculationEngine
                 // Dodaj do ogólnej sumy kosztów noclegów
                 if ($dayTotalPln > 0) {
                     $plnPoints[] = [
-                        'name' => 'Noclegi - dzień ' . $hotelDay->day,
+                        'name' => 'Noclegi - dzień '.$hotelDay->day,
                         'unit_price' => null,
                         'group_size' => null,
                         'cost' => $dayTotalPln,
@@ -347,7 +353,7 @@ class EventTemplateCalculationEngine
                 }
                 foreach ($dayTotalForeign as $cur => $val) {
                     $currenciesPoints[$cur][] = [
-                        'name' => 'Noclegi - dzień ' . $hotelDay->day,
+                        'name' => 'Noclegi - dzień '.$hotelDay->day,
                         'unit_price' => null,
                         'group_size' => null,
                         'cost' => $val,
@@ -384,7 +390,7 @@ class EventTemplateCalculationEngine
 
                     $busTransportCostTotal = $busTransportCost * $busCount;
 
-                    if ($busCurrency === 'PLN' || !$isForeignTrip) {
+                    if ($busCurrency === 'PLN' || ! $isForeignTrip) {
                         $busCostPln = $busTransportCostTotal;
                         if ($busCurrency !== 'PLN') {
                             $busRate = Currency::where('symbol', $busCurrency)->first()?->exchange_rate ?? 1;
@@ -415,7 +421,9 @@ class EventTemplateCalculationEngine
             $taxes = $template->taxes ?? collect();
             $totalTaxAmount = 0;
             foreach ($taxes as $tax) {
-                if (!$tax->is_active) continue;
+                if (! $tax->is_active) {
+                    continue;
+                }
                 $taxAmount = $tax->calculateTaxAmount($plnTotal, $markupAmount);
                 $totalTaxAmount += $taxAmount;
             }
@@ -426,13 +434,15 @@ class EventTemplateCalculationEngine
             $pricePerPerson = $pricePerPersonRaw;
 
             // Oblicz narzut i podatki dla każdej waluty obcej
-            if (!$isForeignTrip) {
+            if (! $isForeignTrip) {
                 $currenciesTotals = [];
             }
 
             $currenciesWithMarkup = [];
             foreach ($currenciesTotals as $code => $total) {
-                if ($code === 'PLN') continue;
+                if ($code === 'PLN') {
+                    continue;
+                }
 
                 $currency = Currency::where('symbol', $code)->first();
                 $exchangeRate = $currency?->exchange_rate ?? 1;
@@ -475,7 +485,9 @@ class EventTemplateCalculationEngine
 
             // Foreign currencies
             foreach ($currenciesWithMarkup as $code => $data) {
-                if ($code === 'PLN') continue;
+                if ($code === 'PLN') {
+                    continue;
+                }
                 $currenciesStructured[$code] = [
                     'raw' => [
                         'price_base' => $data['total_before_markup'] ?? null,
@@ -522,6 +534,7 @@ class EventTemplateCalculationEngine
         }
 
         ksort($results);
+
         return $results;
     }
 
@@ -543,7 +556,7 @@ class EventTemplateCalculationEngine
 
         $closestVariant = $this->resolveClosestQtyVariant($template, $participantCount, $gratisCount);
 
-        $customVariant = new EventTemplateQty();
+        $customVariant = new EventTemplateQty;
         $customVariant->event_template_id = $template->id;
         $customVariant->qty = $participantCount;
         $customVariant->gratis = $gratisCount;
@@ -570,8 +583,7 @@ class EventTemplateCalculationEngine
         }
 
         return $variants
-            ->sortBy(fn ($row) =>
-                abs(((int) ($row->qty ?? 0)) - $participantCount) +
+            ->sortBy(fn ($row) => abs(((int) ($row->qty ?? 0)) - $participantCount) +
                 abs(((int) ($row->gratis ?? 0)) - $gratisCount)
             )
             ->first();
@@ -590,7 +602,7 @@ class EventTemplateCalculationEngine
                 ->values()
                 ->all();
 
-            if (!empty($qtyIds)) {
+            if (! empty($qtyIds)) {
                 $qtyVariants = EventTemplateQty::whereIn('id', $qtyIds)->get();
             } else {
                 $common = [20, 25, 30, 35, 40];
@@ -606,7 +618,10 @@ class EventTemplateCalculationEngine
 
     private function calculatePointCost($qty, $groupSize, $unitPrice)
     {
-        if ($groupSize <= 0) $groupSize = 1;
+        if ($groupSize <= 0) {
+            $groupSize = 1;
+        }
+
         return ceil($qty / $groupSize) * $unitPrice;
     }
 
@@ -622,6 +637,7 @@ class EventTemplateCalculationEngine
                 $total += $data['total'] * $rate;
             }
         }
+
         return $total;
     }
 
@@ -636,7 +652,7 @@ class EventTemplateCalculationEngine
         }
 
         // If markup_id is set but relation not loaded, try to resolve it
-        if ($percent === null && !empty($template->markup_id)) {
+        if ($percent === null && ! empty($template->markup_id)) {
             $markup = \App\Models\Markup::find($template->markup_id);
             $percent = $markup?->percent;
         }
@@ -659,6 +675,7 @@ class EventTemplateCalculationEngine
     {
         $percent = $this->getMarkupPercentForTemplate($template);
         \Illuminate\Support\Facades\Log::info("[MARKUP] Using markup percent={$percent} for event_template_id={$template->id}");
+
         return $base * ($percent / 100);
     }
 }

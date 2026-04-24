@@ -2,7 +2,6 @@
 
 namespace App\Console\Commands;
 
-use App\Models\Event;
 use App\Models\EventProgramPoint;
 use Carbon\Carbon;
 use Illuminate\Console\Command;
@@ -37,6 +36,7 @@ class NormalizeProgramPointTimes extends Command
 
         if ($points->isEmpty()) {
             $this->warn('Brak punktow do aktualizacji.');
+
             return self::SUCCESS;
         }
 
@@ -47,6 +47,7 @@ class NormalizeProgramPointTimes extends Command
             $offsetMinutes = $this->resolveOffsetMinutes($point, $manualHours);
             if ($offsetMinutes === 0) {
                 $skipped++;
+
                 continue;
             }
 
@@ -58,6 +59,7 @@ class NormalizeProgramPointTimes extends Command
 
             if (! $startChanged && ! $endChanged) {
                 $skipped++;
+
                 continue;
             }
 
@@ -86,9 +88,9 @@ class NormalizeProgramPointTimes extends Command
 
         $this->newLine();
         $this->info('Podsumowanie:');
-        $this->line('  Zmienionych: ' . $changed);
-        $this->line('  Pominietych: ' . $skipped);
-        $this->line('  Tryb: ' . ($dryRun ? 'dry-run' : 'zapis'));
+        $this->line('  Zmienionych: '.$changed);
+        $this->line('  Pominietych: '.$skipped);
+        $this->line('  Tryb: '.($dryRun ? 'dry-run' : 'zapis'));
 
         return self::SUCCESS;
     }

@@ -1,29 +1,29 @@
 <?php
 
-use Illuminate\Support\Facades\Route;
-use Illuminate\Support\Facades\Log;
-use Illuminate\Support\Facades\Auth;
-use App\Models\EventTemplate;
-use App\Http\Controllers\Admin\NotificationController;
 use App\Http\Controllers\Admin\EventIndividualAgreementReportExportController;
 use App\Http\Controllers\Admin\EventOfferWordController;
 use App\Http\Controllers\Admin\EventPrintPdfController;
-use App\Models\Conversation;
+use App\Http\Controllers\Admin\NotificationController;
 use App\Http\Controllers\EventCsvController;
 use App\Http\Controllers\EventPriceDescriptionController;
 use App\Http\Controllers\Front\AgreementFlowController;
-
-// === FRONTEND ROUTES (dodane z mergingSOR) ===
 use App\Http\Controllers\Front\FrontController;
+use App\Models\Conversation;
+use App\Models\EventTemplate;
 use App\Models\Place;
 use App\Support\Region;
+// === FRONTEND ROUTES (dodane z mergingSOR) ===
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Auth;
+use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Facades\Route;
 
 // Redirect old root to canonical region root using cookie (handled by middleware later)
 Route::get('/', function () {
     // Użyj helpera Region, aby domyślnie kierować do Warszawy gdy brak cookie
     $cookieId = request()->cookie('start_place_id');
-    $slug = Region::slugForLinks($cookieId ? (int)$cookieId : null);
+    $slug = Region::slugForLinks($cookieId ? (int) $cookieId : null);
+
     return redirect()->route('home', ['regionSlug' => $slug]);
 });
 
@@ -32,24 +32,26 @@ Route::get('/', function () {
 Route::any('/region/{any?}', function (Request $request, $any = '') {
     $slug = Region::slugForLinks(null);
     $path = trim($any, '/');
-    $new = '/' . $slug . ($path !== '' ? '/' . $path : '');
+    $new = '/'.$slug.($path !== '' ? '/'.$path : '');
     $qs = $request->getQueryString();
     if ($qs) {
-        $new .= '?' . $qs;
+        $new .= '?'.$qs;
     }
+
     return redirect($new, 301);
 })->where('any', '.*');
 
 // Public login helper: keep legacy links working by pointing to Filament login screen
-Route::get('/login', fn() => redirect()->route('filament.admin.auth.login'))->name('login');
+Route::get('/login', fn () => redirect()->route('filament.admin.auth.login'))->name('login');
 
 // Sitemap XML
 Route::get('/sitemap.xml', function () {
     if (file_exists(public_path('sitemap.xml'))) {
         return response()->file(public_path('sitemap.xml'), [
-            'Content-Type' => 'application/xml'
+            'Content-Type' => 'application/xml',
         ]);
     }
+
     return response('Sitemap not found', 404);
 })->name('sitemap');
 
@@ -101,7 +103,7 @@ Route::get('/{regionSlug}/{dayLength}/{id}/{slug}', [FrontController::class, 'pa
         'regionSlug' => '[A-Za-z0-9\-]+', // pozostawiamy region jako ascii slug (pochodzi z Place::name slug)
         'dayLength' => '[0-9]+-dniowe',
         'id' => '[0-9]+',
-        'slug' => '[\pL0-9\-]+' // wymaga trybu unicode w PCRE, Laravel domyślnie używa 'u'
+        'slug' => '[\pL0-9\-]+', // wymaga trybu unicode w PCRE, Laravel domyślnie używa 'u'
     ])
     ->name('package.pretty');
 
@@ -110,34 +112,35 @@ Route::post('/{regionSlug}/{dayLength}/{id}/{slug}/word', [FrontController::clas
         'regionSlug' => '[A-Za-z0-9\-]+',
         'dayLength' => '[0-9]+-dniowe',
         'id' => '[0-9]+',
-        'slug' => '[\pL0-9\-]+'
+        'slug' => '[\pL0-9\-]+',
     ])
     ->middleware('auth')
     ->name('package.pretty.word');
-
 
 // Import/eksport CSV dla Eventów
 Route::get('/events/export-csv', [EventCsvController::class, 'export'])->name('events.export.csv');
 Route::post('/events/import-csv', [EventCsvController::class, 'import'])->name('events.import.csv');
 
 Route::get('/test-log', function () {
-    Log::info('Test route accessed at ' . now());
+    Log::info('Test route accessed at '.now());
+
     return 'Test log written - check storage/logs/laravel.log';
 });
 
 // Local-only: quick email test endpoint
 Route::get('/test-mail', function () {
-    if (!config('app.debug')) {
+    if (! config('app.debug')) {
         abort(404);
     }
     try {
-        \Illuminate\Support\Facades\Mail::raw('Test message from /test-mail at ' . now(), function ($m) {
+        \Illuminate\Support\Facades\Mail::raw('Test message from /test-mail at '.now(), function ($m) {
             $m->to(config('mail.inquiries_to') ?: (app()->environment('production') ? 'rafa@bprafa.pl' : 'm.jasczynski@gmail.com'))
                 ->subject('Postmark/Mailer smoke test');
         });
-        return 'Mail dispatched using mailer: ' . config('mail.default');
+
+        return 'Mail dispatched using mailer: '.config('mail.default');
     } catch (\Throwable $e) {
-        return response('Mail failed: ' . $e->getMessage(), 500);
+        return response('Mail failed: '.$e->getMessage(), 500);
     }
 });
 
@@ -147,12 +150,12 @@ Route::get('/test-drag-drop', function () {
     try {
         // Znajdź pierwszy event template
         $eventTemplate = EventTemplate::first();
-        if (!$eventTemplate) {
+        if (! $eventTemplate) {
             return 'No event template found';
         }
 
         // Utwórz instancję komponentu
-        $kanban = new \App\Filament\Resources\EventTemplateResource\Widgets\EventProgramKanban();
+        $kanban = new \App\Filament\Resources\EventTemplateResource\Widgets\EventProgramKanban;
         $kanban->record = $eventTemplate;
 
         // Sprawdź, czy są jakieś punkty programu
@@ -170,15 +173,16 @@ Route::get('/test-drag-drop', function () {
 
         return 'Test completed - check logs';
     } catch (\Exception $e) {
-        Log::error('Test drag & drop error: ' . $e->getMessage());
-        return 'Error: ' . $e->getMessage();
+        Log::error('Test drag & drop error: '.$e->getMessage());
+
+        return 'Error: '.$e->getMessage();
     }
 });
 
 Route::get('/check-data', function () {
     try {
         $eventTemplate = EventTemplate::first();
-        if (!$eventTemplate) {
+        if (! $eventTemplate) {
             return response()->json(['error' => 'No event template found']);
         }
 
@@ -194,14 +198,14 @@ Route::get('/check-data', function () {
                 'pivot_id' => $point->pivot->id,
                 'name' => $point->name,
                 'day' => $point->pivot->day,
-                'order_number' => $point->pivot->order_number
+                'order_number' => $point->pivot->order_number,
             ];
         });
 
         return response()->json([
             'event_template' => $eventTemplate->name,
             'program_points' => $data,
-            'pivot_records_count' => $pivotRecords->count()
+            'pivot_records_count' => $pivotRecords->count(),
         ]);
     } catch (\Exception $e) {
         return response()->json(['error' => $e->getMessage()]);
@@ -212,7 +216,7 @@ Route::get('/auto-login', function () {
     try {
         // Sprawdź czy użytkownik testowy istnieje
         $user = \App\Models\User::where('email', 'admin@test.com')->first();
-        if (!$user) {
+        if (! $user) {
             return 'User not found. Please run: php artisan make:test-user';
         }
 
@@ -222,7 +226,7 @@ Route::get('/auto-login', function () {
         // Przekieruj do panelu admina
         return redirect('/admin');
     } catch (\Exception $e) {
-        return 'Error: ' . $e->getMessage();
+        return 'Error: '.$e->getMessage();
     }
 });
 
@@ -240,16 +244,17 @@ Route::middleware(['auth', 'web'])->prefix('admin')->group(function () {
     Route::post('/sitemap/generate', function () {
         try {
             \Illuminate\Support\Facades\Artisan::call('sitemap:generate');
+
             return back()->with('success', 'Sitemap wygenerowana pomyślnie!');
         } catch (\Exception $e) {
-            return back()->with('error', 'Błąd: ' . $e->getMessage());
+            return back()->with('error', 'Błąd: '.$e->getMessage());
         }
     })->name('sitemap.generate');
 });
 
 Route::get('/admin/conversations', function () {
     $user = Auth::user();
-    if (!$user) {
+    if (! $user) {
         return redirect('/login');
     }
     // Najpierw nieprzeczytana, potem najnowsza
@@ -258,12 +263,13 @@ Route::get('/admin/conversations', function () {
     })
         ->with(['participants', 'messages'])
         ->get()
-        ->sortByDesc(fn($c) => $c->unreadCount($user))
+        ->sortByDesc(fn ($c) => $c->unreadCount($user))
         ->sortByDesc('last_message_at')
         ->first();
     if ($conversation) {
-        return redirect('/admin/chat?conversation=' . $conversation->id);
+        return redirect('/admin/chat?conversation='.$conversation->id);
     }
+
     return redirect('/admin/chat');
 });
 

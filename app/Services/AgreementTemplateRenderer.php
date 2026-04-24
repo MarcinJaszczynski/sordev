@@ -65,11 +65,11 @@ class AgreementTemplateRenderer
 
         // Backward compatibility: support legacy moustache placeholders.
         foreach ($payload as $key => $value) {
-            if (!is_string($key)) {
+            if (! is_string($key)) {
                 continue;
             }
 
-            $replacements['{{' . $key . '}}'] = (string) ($value ?? '—');
+            $replacements['{{'.$key.'}}'] = (string) ($value ?? '—');
         }
 
         return strtr($content, $replacements);

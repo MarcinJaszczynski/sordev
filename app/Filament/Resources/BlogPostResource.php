@@ -4,21 +4,23 @@ namespace App\Filament\Resources;
 
 use App\Filament\Resources\BlogPostResource\Pages;
 use App\Models\BlogPost;
-use Filament\Resources\Resource;
 use Filament\Forms;
 use Filament\Forms\Form;
-use Filament\Tables\Table;
-use Filament\Tables\Columns\TextColumn;
+use Filament\Resources\Resource;
 use Filament\Tables\Columns\IconColumn;
-use Illuminate\Support\Str;
+use Filament\Tables\Columns\TextColumn;
+use Filament\Tables\Table;
 use Illuminate\Support\Facades\Storage;
+use Illuminate\Support\Str;
 
 class BlogPostResource extends Resource
 {
     protected static ?string $model = BlogPost::class;
 
     protected static ?string $navigationIcon = 'heroicon-o-document-text';
+
     protected static ?string $navigationLabel = 'Blog';
+
     protected static ?int $navigationSort = 5;
 
     public static function form(Form $form): Form
@@ -39,7 +41,7 @@ class BlogPostResource extends Resource
                         }),
                     Forms\Components\TextInput::make('slug')
                         ->required()
-                        ->unique(ignorable: fn($record) => $record),
+                        ->unique(ignorable: fn ($record) => $record),
                     Forms\Components\TextInput::make('excerpt')
                         ->label('Krótki opis')
                         ->maxLength(500),
@@ -51,7 +53,7 @@ class BlogPostResource extends Resource
                         ->label('Treść')
                         ->required()
                         ->toolbarButtons([
-                            'bold', 'italic', 'underline', 'strike', 'link', 'bulletList', 'orderedList', 'blockquote', 'codeBlock', 'h2', 'h3', 'color', 'highlight', 'undo', 'redo'
+                            'bold', 'italic', 'underline', 'strike', 'link', 'bulletList', 'orderedList', 'blockquote', 'codeBlock', 'h2', 'h3', 'color', 'highlight', 'undo', 'redo',
                         ])
                         ->columnSpanFull(),
                 ]),
@@ -77,11 +79,12 @@ class BlogPostResource extends Resource
                                 $size = 0;
                                 $type = null;
                             }
+
                             return [
                                 'name' => basename($file),
                                 'size' => $size,
                                 'type' => $type,
-                                'url' => '/storage/' . ltrim($file, '/'),
+                                'url' => '/storage/'.ltrim($file, '/'),
                             ];
                         })
                         ->nullable(),
@@ -106,11 +109,12 @@ class BlogPostResource extends Resource
                                 $size = 0;
                                 $type = null;
                             }
+
                             return [
                                 'name' => basename($file),
                                 'size' => $size,
                                 'type' => $type,
-                                'url' => '/storage/' . ltrim($file, '/'),
+                                'url' => '/storage/'.ltrim($file, '/'),
                             ];
                         })
                         ->nullable(),
@@ -165,6 +169,7 @@ class BlogPostResource extends Resource
         if ($user && $user->roles && $user->roles->flatMap->permissions->contains('name', 'create blog post')) {
             return true;
         }
+
         return false;
     }
 }

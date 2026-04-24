@@ -2,8 +2,8 @@
 
 namespace Database\Seeders;
 
-use Illuminate\Database\Seeder;
 use App\Models\KategoriaSzablonu;
+use Illuminate\Database\Seeder;
 
 class KategoriaSzablonuSeeder extends Seeder
 {

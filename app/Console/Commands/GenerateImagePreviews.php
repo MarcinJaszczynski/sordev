@@ -23,11 +23,13 @@ class GenerateImagePreviews extends Command
 
         if ($directory === '') {
             $this->error('Podaj katalog do przetworzenia, np. --directory=event-templates');
+
             return self::FAILURE;
         }
 
-        if (!Storage::disk($disk)->exists($directory)) {
+        if (! Storage::disk($disk)->exists($directory)) {
             $this->error("Katalog '{$directory}' nie istnieje na dysku '{$disk}'.");
+
             return self::FAILURE;
         }
 
@@ -37,6 +39,7 @@ class GenerateImagePreviews extends Command
 
         if (empty($results)) {
             $this->warn('Nie znaleziono obrazów do przetworzenia.');
+
             return self::SUCCESS;
         }
 
@@ -47,7 +50,8 @@ class GenerateImagePreviews extends Command
         foreach ($results as $result) {
             if (isset($result['error'])) {
                 $errors++;
-                $this->warn('Błąd: ' . ($result['file'] ?? 'nieznany plik') . ' → ' . $result['error']);
+                $this->warn('Błąd: '.($result['file'] ?? 'nieznany plik').' → '.$result['error']);
+
                 continue;
             }
 
@@ -57,10 +61,11 @@ class GenerateImagePreviews extends Command
 
         $this->newLine();
         $this->info("Przetworzono: {$processed}");
-        $this->line('Zaoszczędzone miejsce: ' . ImageCompressionService::formatBytes($savedBytes));
+        $this->line('Zaoszczędzone miejsce: '.ImageCompressionService::formatBytes($savedBytes));
 
         if ($errors > 0) {
             $this->warn("Błędy: {$errors}");
+
             return self::FAILURE;
         }
 

@@ -2,13 +2,13 @@
 
 namespace App\Filament\Resources;
 
+use App\Filament\Resources\KategoriaSzablonuResource\Pages;
 use App\Models\KategoriaSzablonu;
 use Filament\Forms;
 use Filament\Forms\Form;
 use Filament\Resources\Resource;
 use Filament\Tables;
 use Filament\Tables\Table;
-use App\Filament\Resources\KategoriaSzablonuResource\Pages;
 
 /**
  * Resource Filament dla modelu KategoriaSzablonu.
@@ -18,13 +18,21 @@ class KategoriaSzablonuResource extends Resource
 {
     /**
      * Powiązany model Eloquent
+     *
      * @var class-string<KategoriaSzablonu>
-     */    protected static ?string $model = KategoriaSzablonu::class;
+     */
+    protected static ?string $model = KategoriaSzablonu::class;
+
     protected static ?string $navigationIcon = 'heroicon-o-folder';
+
     protected static ?string $navigationLabel = 'Kategorie szablonów';
+
     protected static ?string $navigationGroup = 'Szablony imprez';
+
     protected static ?int $navigationSort = 45;
+
     protected static ?string $modelLabel = 'kategoria szablonu';
+
     protected static ?string $pluralModelLabel = 'kategorie szablonów';
 
     /**
@@ -39,6 +47,7 @@ class KategoriaSzablonuResource extends Resource
         if ($user && $user->roles && $user->roles->flatMap->permissions->contains('name', 'view kategoria_szablonu')) {
             return true;
         }
+
         return false;
     }
 
@@ -54,6 +63,7 @@ class KategoriaSzablonuResource extends Resource
         if ($user && $user->roles && $user->roles->flatMap->permissions->contains('name', 'create kategoria_szablonu')) {
             return true;
         }
+
         return false;
     }
 
@@ -96,21 +106,21 @@ class KategoriaSzablonuResource extends Resource
             Tables\Columns\TextColumn::make('nazwa')->label('Nazwa')->sortable(),
             Tables\Columns\TextColumn::make('parent.nazwa')->label('Kategoria nadrzędna')->sortable(),
         ])
-        ->defaultSort('nazwa', 'asc')
-        ->filters([
-            Tables\Filters\SelectFilter::make('parent_id')
-                ->label('Kategoria nadrzędna')
-                ->relationship('parent', 'nazwa')
-                ->searchable()
-                ->preload(),
-        ])
-        ->actions([
-            Tables\Actions\EditAction::make()->label('Edytuj'),
-            Tables\Actions\DeleteAction::make()->label('Usuń'),
-        ])
-        ->bulkActions([
-            Tables\Actions\DeleteBulkAction::make()->label('Usuń zaznaczone'),
-        ]);
+            ->defaultSort('nazwa', 'asc')
+            ->filters([
+                Tables\Filters\SelectFilter::make('parent_id')
+                    ->label('Kategoria nadrzędna')
+                    ->relationship('parent', 'nazwa')
+                    ->searchable()
+                    ->preload(),
+            ])
+            ->actions([
+                Tables\Actions\EditAction::make()->label('Edytuj'),
+                Tables\Actions\DeleteAction::make()->label('Usuń'),
+            ])
+            ->bulkActions([
+                Tables\Actions\DeleteBulkAction::make()->label('Usuń zaznaczone'),
+            ]);
     }
 
     /**

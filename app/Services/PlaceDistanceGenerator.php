@@ -61,6 +61,7 @@ class PlaceDistanceGenerator
                 ['from_place_id' => $from->id, 'to_place_id' => $to->id],
                 ['distance_km' => (float) $sym, 'api_source' => 'symmetric_copy']
             );
+
             return;
         }
 
@@ -91,6 +92,7 @@ class PlaceDistanceGenerator
             + cos(deg2rad($lat1)) * cos(deg2rad($lat2))
             * sin($dLon / 2) * sin($dLon / 2);
         $c = 2 * atan2(sqrt($a), sqrt(1 - $a));
+
         return $earthRadius * $c;
     }
 }

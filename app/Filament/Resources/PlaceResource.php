@@ -2,28 +2,32 @@
 
 namespace App\Filament\Resources;
 
+use App\Filament\Resources\PlaceResource\Pages;
 use App\Models\Place;
 use Filament\Forms;
+use Filament\Forms\Components\TagsInput;
+use Filament\Forms\Components\TextInput;
+use Filament\Forms\Components\Toggle;
 use Filament\Forms\Form;
-use Filament\Tables\Table;
 use Filament\Resources\Resource;
 use Filament\Tables;
-use Filament\Tables\Columns\TextColumn;
 use Filament\Tables\Columns\BooleanColumn;
-use Filament\Forms\Components\TextInput;
-use Filament\Forms\Components\Textarea;
-use Filament\Forms\Components\TagsInput;
-use Filament\Forms\Components\Toggle;
-use App\Filament\Resources\PlaceResource\Pages;
+use Filament\Tables\Columns\TextColumn;
+use Filament\Tables\Table;
 
 class PlaceResource extends Resource
 {
     protected static ?string $model = Place::class;
-protected static ?string $navigationIcon = 'heroicon-o-map';
-protected static ?string $navigationLabel = 'Miejsca';
-protected static ?string $navigationGroup = 'Ustawienia ogólne';
-protected static ?string $pluralLabel = 'Miejsca';
-protected static ?string $label = 'Miejsce';
+
+    protected static ?string $navigationIcon = 'heroicon-o-map';
+
+    protected static ?string $navigationLabel = 'Miejsca';
+
+    protected static ?string $navigationGroup = 'Ustawienia ogólne';
+
+    protected static ?string $pluralLabel = 'Miejsca';
+
+    protected static ?string $label = 'Miejsce';
 
     public static function form(Form $form): Form
     {
@@ -96,7 +100,7 @@ protected static ?string $label = 'Miejsce';
             ->columns([
                 TextColumn::make('name')->searchable()->sortable(),
                 TextColumn::make('description')->limit(50),
-                TextColumn::make('tags')->formatStateUsing(fn($state) => is_array($state) ? implode(', ', $state) : $state),
+                TextColumn::make('tags')->formatStateUsing(fn ($state) => is_array($state) ? implode(', ', $state) : $state),
                 BooleanColumn::make('starting_place')->label('Początkowe'),
                 TextColumn::make('latitude')->label('Szerokość')->sortable(),
                 TextColumn::make('longitude')->label('Długość')->sortable(),

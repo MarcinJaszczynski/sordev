@@ -7,6 +7,7 @@ use Illuminate\Support\Facades\Schema;
 return new class extends Migration
 {
     private const LEGACY_TABLE_NAME = 'contract_templates_legacy_fix_20260316';
+
     private const TARGET_TABLE_NAME = 'contract_templates';
 
     public function up(): void
@@ -21,7 +22,7 @@ return new class extends Migration
 
         $affectedTables = DB::select(
             "SELECT name, sql FROM sqlite_master WHERE type = 'table' AND sql LIKE ?",
-            ['%' . self::LEGACY_TABLE_NAME . '%']
+            ['%'.self::LEGACY_TABLE_NAME.'%']
         );
 
         if (empty($affectedTables)) {
@@ -53,7 +54,7 @@ return new class extends Migration
 
     private function rebuildTableWithFixedForeignKey(string $tableName, string $createSql): void
     {
-        $backupTableName = $tableName . '_fk_fix_backup_20260316';
+        $backupTableName = $tableName.'_fk_fix_backup_20260316';
 
         Schema::dropIfExists($backupTableName);
 
@@ -114,8 +115,8 @@ return new class extends Migration
      */
     private function getCommonColumns(string $sourceTableName, string $targetTableName): array
     {
-        $sourceColumns = DB::select('PRAGMA table_info(' . $this->quoteIdentifier($sourceTableName) . ')');
-        $targetColumns = DB::select('PRAGMA table_info(' . $this->quoteIdentifier($targetTableName) . ')');
+        $sourceColumns = DB::select('PRAGMA table_info('.$this->quoteIdentifier($sourceTableName).')');
+        $targetColumns = DB::select('PRAGMA table_info('.$this->quoteIdentifier($targetTableName).')');
 
         $targetColumnNames = [];
 
@@ -142,6 +143,6 @@ return new class extends Migration
 
     private function quoteIdentifier(string $identifier): string
     {
-        return '"' . str_replace('"', '""', $identifier) . '"';
+        return '"'.str_replace('"', '""', $identifier).'"';
     }
 };

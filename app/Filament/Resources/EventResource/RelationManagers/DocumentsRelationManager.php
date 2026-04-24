@@ -14,7 +14,6 @@ use Filament\Tables\Table;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Storage;
-use Illuminate\Support\HtmlString;
 
 class DocumentsRelationManager extends RelationManager
 {
@@ -105,14 +104,14 @@ class DocumentsRelationManager extends RelationManager
                         Forms\Components\CheckboxList::make('pdf_attachment_targets')
                             ->label('Pakiety PDF')
                             ->options([
-                                'attach_to_pilot_pdf'  => '✈ Pakiet pilota',
-                                'attach_to_hotel_pdf'  => '🏨 Pakiet hotelu',
+                                'attach_to_pilot_pdf' => '✈ Pakiet pilota',
+                                'attach_to_hotel_pdf' => '🏨 Pakiet hotelu',
                                 'attach_to_driver_pdf' => '🚌 Pakiet kierowcy',
                                 'attach_to_folder_pdf' => '📁 Pakiet teczki',
                             ])
                             ->columns(2)
                             ->afterStateHydrated(function ($state, $record, $set) {
-                                if (!$record) {
+                                if (! $record) {
                                     return;
                                 }
                                 $targets = [];
@@ -144,25 +143,26 @@ class DocumentsRelationManager extends RelationManager
                 Tables\Columns\TextColumn::make('file_info')
                     ->label('Plik')
                     ->state(function (EventDocument $record): string {
-                        if (!$record->file_path) {
+                        if (! $record->file_path) {
                             return '—';
                         }
                         $name = $record->original_filename ?? basename($record->file_path);
                         $size = $record->file_size_formatted;
-                        return $name . ($size ? " ({$size})" : '');
+
+                        return $name.($size ? " ({$size})" : '');
                     })
                     ->limit(40),
 
                 Tables\Columns\TextColumn::make('settlement_cost_source')
                     ->label('Źródło / pozycja')
                     ->state(function (EventDocument $record): string {
-                        if (!$record->settlement_cost_id) {
+                        if (! $record->settlement_cost_id) {
                             return '—';
                         }
 
                         $cost = EventSettlementCost::find($record->settlement_cost_id);
 
-                        return $cost ? '💰 ' . $cost->name : '—';
+                        return $cost ? '💰 '.$cost->name : '—';
                     })
                     ->limit(40)
                     ->toggleable(isToggledHiddenByDefault: false),

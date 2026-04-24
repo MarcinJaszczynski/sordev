@@ -27,6 +27,7 @@ class EventTemplateProgramPointTree extends Component
                 'children' => $this->buildTree($node->id),
             ];
         }
+
         return $tree;
     }
 

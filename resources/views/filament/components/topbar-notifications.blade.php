@@ -18,7 +18,7 @@
     );
 @endphp
 
-<div class="custom-topbar-notifications flex items-center space-x-3 mr-4" wire:ignore x-data="{
+<div class="custom-topbar-notifications flex items-center lg:items-center" wire:ignore x-data="{
     routes: {
         tasks: @js($taskIndexUrl),
         comments: @js($taskIndexUrl),
@@ -37,6 +37,7 @@
     itemsByType: @js($itemsByType),
     importantItems: @js($notificationItems ?? []),
     openPanel: null,
+    mobileOpen: false,
     fallbackImportantCount() {
         return this.newTasksCount + this.unreadMessagesCount + this.commentsCount + this.newEventsCount + this.confirmedEventsCount + this.pendingCancellationEventsCount;
     },
@@ -84,6 +85,21 @@
     window.addEventListener('refresh-notifications', () => setTimeout(() => refreshNotifications(), 100));
 " @refresh-notifications.window="refreshNotifications()" @click.away="openPanel = null">
 
+    <button
+        type="button"
+        class="inline-flex lg:hidden items-center gap-2 rounded-lg border border-gray-200 bg-white px-3 py-2 text-xs font-semibold text-gray-700 shadow-sm dark:border-gray-700 dark:bg-gray-900 dark:text-gray-200"
+        @click="mobileOpen = !mobileOpen"
+        :aria-expanded="mobileOpen"
+    >
+        <span>Powiadomienia</span>
+        <span class="inline-flex min-w-[1.65rem] items-center justify-center rounded-full bg-amber-600 px-1.5 py-0.5 text-[11px] font-bold text-white" x-text="importantCount > 99 ? '99+' : importantCount"></span>
+    </button>
+
+    <div
+        class="topbar-notifications-items w-full lg:w-auto lg:mr-4"
+        :class="mobileOpen ? 'mt-2 flex flex-wrap items-center gap-2' : 'hidden lg:flex lg:items-center lg:gap-3'"
+    >
+
     <div class="relative" @mouseenter="openPanel = 'tasks'" @mouseleave="closePanel('tasks')">
         <div class="flex items-center gap-2">
             <a href="{{ $taskIndexUrl }}" class="flex items-center space-x-2 p-2 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors group">
@@ -103,7 +119,7 @@
             </button>
         </div>
 
-        <div x-show="openPanel === 'tasks'" x-transition class="absolute right-0 mt-2 w-[28rem] max-w-[90vw] rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 shadow-xl z-[9999]">
+        <div x-show="openPanel === 'tasks'" x-transition class="topbar-notification-panel absolute left-0 right-auto mt-2 w-[28rem] max-w-[calc(100vw-1.5rem)] rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 shadow-xl z-[9999] lg:left-auto lg:right-0 lg:max-w-[90vw]">
             <div class="px-4 py-3 border-b border-gray-200 dark:border-gray-700 text-sm font-semibold text-gray-900 dark:text-white">Ostatnie zadania</div>
             <div class="max-h-96 overflow-y-auto divide-y divide-gray-100 dark:divide-gray-800">
                 <template x-if="itemList('task').length === 0">
@@ -143,7 +159,7 @@
             </button>
         </div>
 
-        <div x-show="openPanel === 'comments'" x-transition class="absolute right-0 mt-2 w-[28rem] max-w-[90vw] rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 shadow-xl z-[9999]">
+        <div x-show="openPanel === 'comments'" x-transition class="topbar-notification-panel absolute left-0 right-auto mt-2 w-[28rem] max-w-[calc(100vw-1.5rem)] rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 shadow-xl z-[9999] lg:left-auto lg:right-0 lg:max-w-[90vw]">
             <div class="px-4 py-3 border-b border-gray-200 dark:border-gray-700 text-sm font-semibold text-gray-900 dark:text-white">Ostatnie komentarze</div>
             <div class="max-h-96 overflow-y-auto divide-y divide-gray-100 dark:divide-gray-800">
                 <template x-if="itemList('comment').length === 0">
@@ -183,7 +199,7 @@
             </button>
         </div>
 
-        <div x-show="openPanel === 'new-events'" x-transition class="absolute right-0 mt-2 w-[28rem] max-w-[90vw] rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 shadow-xl z-[9999]">
+        <div x-show="openPanel === 'new-events'" x-transition class="topbar-notification-panel absolute left-0 right-auto mt-2 w-[28rem] max-w-[calc(100vw-1.5rem)] rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 shadow-xl z-[9999] lg:left-auto lg:right-0 lg:max-w-[90vw]">
             <div class="px-4 py-3 border-b border-gray-200 dark:border-gray-700 text-sm font-semibold text-gray-900 dark:text-white">Nowe imprezy</div>
             <div class="max-h-96 overflow-y-auto divide-y divide-gray-100 dark:divide-gray-800">
                 <template x-if="itemList('new_event').length === 0">
@@ -223,7 +239,7 @@
             </button>
         </div>
 
-        <div x-show="openPanel === 'events'" x-transition class="absolute right-0 mt-2 w-[28rem] max-w-[90vw] rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 shadow-xl z-[9999]">
+        <div x-show="openPanel === 'events'" x-transition class="topbar-notification-panel absolute left-0 right-auto mt-2 w-[28rem] max-w-[calc(100vw-1.5rem)] rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 shadow-xl z-[9999] lg:left-auto lg:right-0 lg:max-w-[90vw]">
             <div class="px-4 py-3 border-b border-gray-200 dark:border-gray-700 text-sm font-semibold text-gray-900 dark:text-white">Potwierdzone imprezy</div>
             <div class="max-h-96 overflow-y-auto divide-y divide-gray-100 dark:divide-gray-800">
                 <template x-if="itemList('event').length === 0">
@@ -263,7 +279,7 @@
             </button>
         </div>
 
-        <div x-show="openPanel === 'pending-cancellation-events'" x-transition class="absolute right-0 mt-2 w-[28rem] max-w-[90vw] rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 shadow-xl z-[9999]">
+        <div x-show="openPanel === 'pending-cancellation-events'" x-transition class="topbar-notification-panel absolute left-0 right-auto mt-2 w-[28rem] max-w-[calc(100vw-1.5rem)] rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 shadow-xl z-[9999] lg:left-auto lg:right-0 lg:max-w-[90vw]">
             <div class="px-4 py-3 border-b border-gray-200 dark:border-gray-700 text-sm font-semibold text-gray-900 dark:text-white">Imprezy do anulacji</div>
             <div class="max-h-96 overflow-y-auto divide-y divide-gray-100 dark:divide-gray-800">
                 <template x-if="itemList('pending_cancellation_event').length === 0">
@@ -303,7 +319,7 @@
             </button>
         </div>
 
-        <div x-show="openPanel === 'messages'" x-transition class="absolute right-0 mt-2 w-[28rem] max-w-[90vw] rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 shadow-xl z-[9999]">
+        <div x-show="openPanel === 'messages'" x-transition class="topbar-notification-panel absolute left-0 right-auto mt-2 w-[28rem] max-w-[calc(100vw-1.5rem)] rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 shadow-xl z-[9999] lg:left-auto lg:right-0 lg:max-w-[90vw]">
             <div class="px-4 py-3 border-b border-gray-200 dark:border-gray-700 text-sm font-semibold text-gray-900 dark:text-white">Ostatnie wiadomosci</div>
             <div class="max-h-96 overflow-y-auto divide-y divide-gray-100 dark:divide-gray-800">
                 <template x-if="itemList('message').length === 0">
@@ -343,7 +359,7 @@
             </button>
         </div>
 
-        <div x-show="openPanel === 'important'" x-transition class="absolute right-0 mt-2 w-[28rem] max-w-[90vw] rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 shadow-xl z-[9999]">
+        <div x-show="openPanel === 'important'" x-transition class="topbar-notification-panel absolute left-0 right-auto mt-2 w-[28rem] max-w-[calc(100vw-1.5rem)] rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 shadow-xl z-[9999] lg:left-auto lg:right-0 lg:max-w-[90vw]">
             <div class="px-4 py-3 border-b border-gray-200 dark:border-gray-700">
                 <div class="text-sm font-semibold text-gray-900 dark:text-white">10 ostatnich zdarzen</div>
                 <div class="mt-1 flex items-center gap-3 text-xs text-gray-500 dark:text-gray-400">
@@ -375,7 +391,7 @@
         </div>
     </div>
 
-    <div class="flex items-center space-x-1 px-3 py-2 border-l border-gray-200 dark:border-gray-700" x-data="{
+    <div class="hidden lg:flex items-center space-x-1 px-3 py-2 border-l border-gray-200 dark:border-gray-700" x-data="{
         fontSize: 18,
         minSize: 16,
         maxSize: 24,
@@ -419,4 +435,5 @@
             <span class="text-sm font-semibold">A+</span>
         </button>
     </div>
+
 </div>

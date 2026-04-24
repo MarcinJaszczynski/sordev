@@ -7,40 +7,48 @@ use App\Models\Task;
 use App\Models\TaskStatus;
 use App\Models\User;
 use Filament\Forms\Components\DateTimePicker;
-use Filament\Forms\Components\MarkdownEditor;
 use Filament\Forms\Components\Select;
 use Filament\Forms\Components\TextInput;
-use Filament\Forms\Components\Textarea;
-use Filament\Support\Enums\MaxWidth;
-use Illuminate\Database\Eloquent\Collection;
+use Filament\Notifications\Notification;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Log;
 use Mokhosh\FilamentKanban\Pages\KanbanBoard;
-use Filament\Notifications\Notification;
 
 class TasksKanbanBoard extends KanbanBoard
 {
     protected static string $resource = TaskResource::class;
+
     protected static string $model = Task::class;
+
     protected static ?string $navigationIcon = 'heroicon-o-squares-2x2';
+
     protected static ?string $navigationLabel = 'Kanban - Zadania';
+
     protected static ?string $title = 'Kanban - Zarządzanie zadaniami';
+
     protected static ?string $slug = '/kanban';
 
     // Właściwości filtrowania
     public $filterBy = '';
+
     public $priorityFilter = '';
+
     public $searchTerm = '';
 
     // Konfiguracja edycji modala
     protected string $editModalTitle = 'Edytuj zadanie';
+
     protected string $editModalWidth = '4xl';
+
     protected string $editModalSaveButtonLabel = 'Zapisz zmiany';
+
     protected string $editModalCancelButtonLabel = 'Anuluj';
+
     protected bool $editModalSlideOver = false;
 
     // Właściwości modelu
     protected static string $recordTitleAttribute = 'title';
+
     protected static string $recordStatusAttribute = 'status_id';
 
     public function mount(): void
@@ -78,8 +86,8 @@ class TasksKanbanBoard extends KanbanBoard
 
         if ($this->searchTerm) {
             $query->where(function ($q) {
-                $q->where('title', 'like', '%' . $this->searchTerm . '%')
-                    ->orWhere('description', 'like', '%' . $this->searchTerm . '%');
+                $q->where('title', 'like', '%'.$this->searchTerm.'%')
+                    ->orWhere('description', 'like', '%'.$this->searchTerm.'%');
             });
         }
 
@@ -130,12 +138,13 @@ class TasksKanbanBoard extends KanbanBoard
             $task = Task::findOrFail($recordId);
 
             // Security check
-            if (!$this->canModifyTask($task)) {
+            if (! $this->canModifyTask($task)) {
                 Notification::make()
                     ->title('Brak uprawnień')
                     ->body('Nie masz uprawnień do edycji tego zadania.')
                     ->danger()
                     ->send();
+
                 return;
             }
 
@@ -147,11 +156,11 @@ class TasksKanbanBoard extends KanbanBoard
                 ->success()
                 ->send();
 
-            Log::info("Task {$task->id} updated by user " . Auth::id(), [
-                'changes' => $data
+            Log::info("Task {$task->id} updated by user ".Auth::id(), [
+                'changes' => $data,
             ]);
         } catch (\Exception $e) {
-            Log::error('Error updating task in Kanban: ' . $e->getMessage());
+            Log::error('Error updating task in Kanban: '.$e->getMessage());
 
             Notification::make()
                 ->title('Błąd podczas aktualizacji')
@@ -166,7 +175,7 @@ class TasksKanbanBoard extends KanbanBoard
         try {
             $task = Task::findOrFail($recordId);
 
-            if (!$this->canModifyTask($task)) {
+            if (! $this->canModifyTask($task)) {
                 return;
             }
 
@@ -184,7 +193,7 @@ class TasksKanbanBoard extends KanbanBoard
                 $oldStatus = TaskStatus::find($oldStatusId);
                 $newStatus = TaskStatus::find($status);
 
-                Log::info("Task {$task->id} moved from {$oldStatus?->name} to {$newStatus?->name} by user " . Auth::id());
+                Log::info("Task {$task->id} moved from {$oldStatus?->name} to {$newStatus?->name} by user ".Auth::id());
 
                 Notification::make()
                     ->title('Status zadania zmieniony')
@@ -193,7 +202,7 @@ class TasksKanbanBoard extends KanbanBoard
                     ->send();
             }
         } catch (\Exception $e) {
-            Log::error('Error changing task status in Kanban: ' . $e->getMessage());
+            Log::error('Error changing task status in Kanban: '.$e->getMessage());
 
             Notification::make()
                 ->title('Błąd podczas przenoszenia')
@@ -208,7 +217,7 @@ class TasksKanbanBoard extends KanbanBoard
         try {
             $task = Task::findOrFail($recordId);
 
-            if (!$this->canModifyTask($task)) {
+            if (! $this->canModifyTask($task)) {
                 return;
             }
 
@@ -217,7 +226,7 @@ class TasksKanbanBoard extends KanbanBoard
                 Task::where('id', $taskId)->update(['order' => $order]);
             }
         } catch (\Exception $e) {
-            Log::error('Error updating task order in Kanban: ' . $e->getMessage());
+            Log::error('Error updating task order in Kanban: '.$e->getMessage());
         }
     }
 
@@ -226,12 +235,13 @@ class TasksKanbanBoard extends KanbanBoard
         try {
             $task = Task::findOrFail($taskId);
 
-            if (!$this->canDeleteTask($task)) {
+            if (! $this->canDeleteTask($task)) {
                 Notification::make()
                     ->title('Brak uprawnień')
                     ->body('Nie masz uprawnień do usunięcia tego zadania.')
                     ->danger()
                     ->send();
+
                 return;
             }
 
@@ -243,9 +253,9 @@ class TasksKanbanBoard extends KanbanBoard
                 ->success()
                 ->send();
 
-            Log::info("Task {$task->id} deleted by user " . Auth::id());
+            Log::info("Task {$task->id} deleted by user ".Auth::id());
         } catch (\Exception $e) {
-            Log::error('Error deleting task in Kanban: ' . $e->getMessage());
+            Log::error('Error deleting task in Kanban: '.$e->getMessage());
 
             Notification::make()
                 ->title('Błąd podczas usuwania')
@@ -311,7 +321,7 @@ class TasksKanbanBoard extends KanbanBoard
                 ->label('Odśwież')
                 ->icon('heroicon-m-arrow-path')
                 ->color('gray')
-                ->action(fn() => $this->refreshBoard()),
+                ->action(fn () => $this->refreshBoard()),
         ];
     }
 }

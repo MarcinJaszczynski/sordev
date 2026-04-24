@@ -1,16 +1,20 @@
 <?php
+
 use Illuminate\Database\Migrations\Migration;
 use Illuminate\Database\Schema\Blueprint;
 use Illuminate\Support\Facades\Schema;
 
-return new class extends Migration {
+return new class extends Migration
+{
     public function up(): void
     {
-        if (!Schema::hasTable('event_template_event_price_description')) {
+        if (! Schema::hasTable('event_template_event_price_description')) {
             Schema::create('event_template_event_price_description', function (Blueprint $table) {
                 $table->id();
-                $table->foreignId('event_template_id')->constrained()->onDelete('cascade');
-                $table->foreignId('event_price_description_id')->nullable()->constrained()->onDelete('set null');
+                $table->foreignId('event_template_id');
+                $table->foreign('event_template_id', 'etepd_et_fk')->references('id')->on('event_templates')->onDelete('cascade');
+                $table->foreignId('event_price_description_id')->nullable();
+                $table->foreign('event_price_description_id', 'etepd_epd_fk')->references('id')->on('event_price_descriptions')->onDelete('set null');
                 $table->timestamps();
             });
         }

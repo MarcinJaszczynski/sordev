@@ -6,15 +6,17 @@ use App\Filament\Resources\TaskResource;
 use App\Models\Task;
 use App\Models\TaskStatus;
 use App\Models\User;
+use Filament\Notifications\Notification;
 use Filament\Widgets\Widget;
 use Illuminate\Database\Eloquent\Builder;
+use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\Auth;
 
 class TaskCalendarWidget extends Widget
 {
     protected static string $view = 'filament.widgets.task-calendar-widget';
 
-    protected int | string | array $columnSpan = 'full';
+    protected int|string|array $columnSpan = 'full';
 
     protected static ?int $sort = -5;
 
@@ -32,6 +34,16 @@ class TaskCalendarWidget extends Widget
 
     public bool $onlyMine = false;
 
+    public string $quickTaskTitle = '';
+
+    public string $quickTaskDescription = '';
+
+    public string $quickTaskPriority = 'medium';
+
+    public string $quickTaskAssigneeId = '';
+
+    public string $quickTaskDueDate = '';
+
     public function resetFilters(): void
     {
         $this->search = '';
@@ -42,6 +54,63 @@ class TaskCalendarWidget extends Widget
         $this->onlyMine = false;
     }
 
+    public function openQuickAddModal(?string $selectedDate = null): void
+    {
+        $this->quickTaskTitle = '';
+        $this->quickTaskDescription = '';
+        $this->quickTaskPriority = 'medium';
+        $this->quickTaskAssigneeId = '';
+        $this->quickTaskDueDate = '';
+
+        if (filled($selectedDate)) {
+            try {
+                $selectedDateTime = Carbon::parse($selectedDate);
+
+                if (mb_strlen($selectedDate) <= 10) {
+                    $selectedDateTime->setTime(9, 0);
+                }
+
+                $this->quickTaskDueDate = $selectedDateTime->format('Y-m-d\\TH:i');
+            } catch (\Throwable $exception) {
+                $this->quickTaskDueDate = '';
+            }
+        }
+
+        $this->dispatch('open-modal', id: 'dashboard-quick-task-modal');
+    }
+
+    public function createQuickTask(): void
+    {
+        $this->validate([
+            'quickTaskTitle' => 'required|string|max:255',
+            'quickTaskDescription' => 'nullable|string',
+            'quickTaskPriority' => 'required|in:low,medium,high',
+            'quickTaskAssigneeId' => 'nullable|exists:users,id',
+            'quickTaskDueDate' => 'nullable|date',
+        ]);
+
+        $defaultStatusId = Task::getDefaultStatusId();
+
+        $task = Task::create([
+            'title' => $this->quickTaskTitle,
+            'description' => $this->quickTaskDescription ?: null,
+            'priority' => $this->quickTaskPriority,
+            'status_id' => $defaultStatusId,
+            'author_id' => Auth::id(),
+            'assignee_id' => $this->quickTaskAssigneeId !== '' ? (int) $this->quickTaskAssigneeId : null,
+            'due_date' => $this->quickTaskDueDate !== '' ? $this->quickTaskDueDate : null,
+            'order' => Task::where('status_id', $defaultStatusId)->max('order') + 1,
+        ]);
+
+        $this->dispatch('close-modal', id: 'dashboard-quick-task-modal');
+
+        Notification::make()
+            ->title('Zadanie utworzone')
+            ->body("Zadanie '{$task->title}' zostało dodane do kalendarza.")
+            ->success()
+            ->send();
+    }
+
     protected function getViewData(): array
     {
         $query = Task::query()
@@ -50,8 +119,8 @@ class TaskCalendarWidget extends Widget
 
         if ($this->search !== '') {
             $query->where(function (Builder $builder): void {
-                $builder->where('title', 'like', '%' . $this->search . '%')
-                    ->orWhere('description', 'like', '%' . $this->search . '%');
+                $builder->where('title', 'like', '%'.$this->search.'%')
+                    ->orWhere('description', 'like', '%'.$this->search.'%');
             });
         }
 
@@ -83,7 +152,7 @@ class TaskCalendarWidget extends Widget
         $calendarEvents = $tasks->map(function (Task $task): array {
             return [
                 'id' => (string) $task->id,
-                'title' => trim($task->title . ' [' . ($task->status?->name ?? 'Brak statusu') . ']'),
+                'title' => trim($task->title.' ['.($task->status?->name ?? 'Brak statusu').']'),
                 'start' => optional($task->due_date)->toIso8601String(),
                 'url' => TaskResource::getUrl('edit', ['record' => $task]),
                 'backgroundColor' => match ($task->priority) {

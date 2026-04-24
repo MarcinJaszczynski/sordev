@@ -3,17 +3,16 @@
 namespace App\Filament\Pages;
 
 use Filament\Pages\Page;
-use Illuminate\Support\Facades\Storage;
-use Illuminate\Support\Str;
-use Illuminate\Http\UploadedFile;
-use Illuminate\Support\Facades\Session;
 use Maatwebsite\Excel\Facades\Excel;
 
 class ImportExportPanel extends Page
 {
     protected static ?string $navigationIcon = 'heroicon-o-arrow-down-tray';
+
     protected static string $view = 'filament.pages.import-export-panel';
+
     protected static ?string $navigationLabel = 'Import / Export danych';
+
     protected static ?string $navigationGroup = 'Narzędzia';
 
     public $models = [
@@ -28,7 +27,9 @@ class ImportExportPanel extends Page
     ];
 
     public $selectedModel = null;
+
     public $importFile = null;
+
     public $importResult = null;
 
     public function mount()
@@ -44,25 +45,27 @@ class ImportExportPanel extends Page
     public function import()
     {
         $modelClass = $this->models[$this->selectedModel] ?? null;
-        if (!$modelClass || !$this->importFile) {
+        if (! $modelClass || ! $this->importFile) {
             $this->importResult = 'Wybierz model i plik CSV.';
+
             return;
         }
         try {
             Excel::import(new \App\Imports\GenericImport($modelClass), $this->importFile);
             $this->importResult = 'Import zakończony!';
         } catch (\Exception $e) {
-            $this->importResult = 'Błąd importu: ' . $e->getMessage();
+            $this->importResult = 'Błąd importu: '.$e->getMessage();
         }
     }
 
     public function export()
     {
         $modelClass = $this->models[$this->selectedModel] ?? null;
-        if (!$modelClass) {
+        if (! $modelClass) {
             return null;
         }
         $exportClass = '\App\Exports\GenericExport';
-        return Excel::download(new $exportClass($modelClass), strtolower($this->selectedModel) . '.csv');
+
+        return Excel::download(new $exportClass($modelClass), strtolower($this->selectedModel).'.csv');
     }
 }

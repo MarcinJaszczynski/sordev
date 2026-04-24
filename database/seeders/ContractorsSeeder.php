@@ -21,16 +21,18 @@ class ContractorsSeeder extends Seeder
             $quoteChar = '';
             for ($i = 0; $i < $len; $i++) {
                 $ch = $row[$i];
-                if (!$inQuote) {
+                if (! $inQuote) {
                     if ($ch === "'" || $ch === '"') {
                         $inQuote = true;
                         $quoteChar = $ch;
                         $buf .= $ch;
+
                         continue;
                     }
                     if ($ch === ',') {
                         $parts[] = trim($buf);
                         $buf = '';
+
                         continue;
                     }
                     $buf .= $ch;
@@ -41,6 +43,7 @@ class ContractorsSeeder extends Seeder
                         if ($i + 1 < $len && $row[$i + 1] === $quoteChar) {
                             $buf .= $row[$i + 1];
                             $i++;
+
                             continue;
                         }
                         $inQuote = false;
@@ -53,6 +56,7 @@ class ContractorsSeeder extends Seeder
                 }
             }
             $parts[] = trim($buf);
+
             return $parts;
         };
 
@@ -72,6 +76,7 @@ class ContractorsSeeder extends Seeder
             // unescape doubled single quotes and backslash escapes
             $v = str_replace("''", "'", $v);
             $v = str_replace(['\\\\', "\\'", '\\"'], ['\\', "'", '"'], $v);
+
             return $v;
         };
 
@@ -81,7 +86,7 @@ class ContractorsSeeder extends Seeder
                 foreach ($inserts as $insert) {
                     $colsRaw = $insert[1];
                     $cols = array_map(function ($c) {
-                        return trim(trim($c), "` ");
+                        return trim(trim($c), '` ');
                     }, explode(',', $colsRaw));
 
                     $valuesBlock = $insert[2];
@@ -106,8 +111,8 @@ class ContractorsSeeder extends Seeder
         // fallback sample if parsing failed or dump missing
         if (empty($contractors)) {
             $contractors = [
-                ['id'=>1,'created_at'=>'2023-02-22 13:17:32','updated_at'=>'2023-02-23 13:47:35','name'=>'Tomek Chrusciel','street'=>null,'city'=>null,'region'=>null,'country'=>null,'nip'=>null,'phone'=>'603 846 062','email'=>null,'www'=>null,'description'=>null,'firstname'=>'Tomek','surname'=>'Chrusciel'],
-                ['id'=>2,'created_at'=>'2023-02-24 12:25:21','updated_at'=>'2023-02-24 12:25:21','name'=>'Tolek Tour','street'=>'42 lokal 501 Nowogrodzka','city'=>'Warszawa','region'=>null,'country'=>null,'nip'=>null,'phone'=>'656576578','email'=>null,'www'=>null,'description'=>null,'firstname'=>null,'surname'=>null],
+                ['id' => 1, 'created_at' => '2023-02-22 13:17:32', 'updated_at' => '2023-02-23 13:47:35', 'name' => 'Tomek Chrusciel', 'street' => null, 'city' => null, 'region' => null, 'country' => null, 'nip' => null, 'phone' => '603 846 062', 'email' => null, 'www' => null, 'description' => null, 'firstname' => 'Tomek', 'surname' => 'Chrusciel'],
+                ['id' => 2, 'created_at' => '2023-02-24 12:25:21', 'updated_at' => '2023-02-24 12:25:21', 'name' => 'Tolek Tour', 'street' => '42 lokal 501 Nowogrodzka', 'city' => 'Warszawa', 'region' => null, 'country' => null, 'nip' => null, 'phone' => '656576578', 'email' => null, 'www' => null, 'description' => null, 'firstname' => null, 'surname' => null],
             ];
         }
 

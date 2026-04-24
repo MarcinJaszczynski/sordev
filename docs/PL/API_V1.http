@@ -1,0 +1,216 @@
+### Zmienne środowiskowe dla VS Code REST Client
+# Skopiuj do .vscode/settings.json lub użyj tego pliku wprost.
+# Ustaw BASE_URL i TOKEN (po zalogowaniu):
+#   "rest-client.environmentVariables": {
+#     "local": { "base": "http://127.0.0.1:8000", "token": "" }
+#   }
+
+@base = http://127.0.0.1:8000
+@token =
+
+###############################################################################
+# 1. CSRF cookie (wymagane przed logowaniem SPA)
+###############################################################################
+
+### 1a. Pobierz CSRF cookie
+GET {{base}}/sanctum/csrf-cookie
+Accept: application/json
+
+###############################################################################
+# 2. AUTH
+###############################################################################
+
+### 2a. Login (SPA – sesja + ciasteczka)
+# Po tej operacji kopiuj XSRF-TOKEN z ciasteczka do nagłówka X-XSRF-TOKEN
+POST {{base}}/api/v1/auth/login
+Content-Type: application/json
+Accept: application/json
+
+{
+  "email": "admin@example.com",
+  "password": "password"
+}
+
+###
+
+### 2b. Login – błędne dane (oczekiwany 422)
+POST {{base}}/api/v1/auth/login
+Content-Type: application/json
+Accept: application/json
+
+{
+  "email": "admin@example.com",
+  "password": "wrongpassword"
+}
+
+###
+
+### 2c. Dane zalogowanego użytkownika
+GET {{base}}/api/v1/auth/me
+Accept: application/json
+Authorization: Bearer {{token}}
+
+###
+
+### 2d. Utwórz personal access token (Bearer) dla klienta mobilnego
+# Wymaga aktywnej sesji lub tokenu. Zwraca 201 z polem "token".
+POST {{base}}/api/v1/auth/token
+Content-Type: application/json
+Accept: application/json
+Authorization: Bearer {{token}}
+
+{
+  "name": "android-client",
+  "abilities": ["*"]
+}
+
+###
+
+### 2e. Token z ograniczonymi uprawnieniami (read-only)
+POST {{base}}/api/v1/auth/token
+Content-Type: application/json
+Accept: application/json
+Authorization: Bearer {{token}}
+
+{
+  "name": "read-only-integration",
+  "abilities": ["events:read", "notifications:read"]
+}
+
+###
+
+### 2f. Wylogowanie
+POST {{base}}/api/v1/auth/logout
+Accept: application/json
+Authorization: Bearer {{token}}
+
+###############################################################################
+# 3. EVENTS
+###############################################################################
+
+### 3a. Lista eventów (domyślna paginacja 20)
+GET {{base}}/api/v1/events
+Accept: application/json
+Authorization: Bearer {{token}}
+
+###
+
+### 3b. Lista eventów – filtr po statusie
+GET {{base}}/api/v1/events?status=confirmed
+Accept: application/json
+Authorization: Bearer {{token}}
+
+###
+
+### 3c. Lista eventów – wyszukiwanie + per_page
+GET {{base}}/api/v1/events?search=Krak%C3%B3w&per_page=5
+Accept: application/json
+Authorization: Bearer {{token}}
+
+###
+
+### 3d. Szczegóły eventu (zamień 1 na istniejące ID)
+GET {{base}}/api/v1/events/1
+Accept: application/json
+Authorization: Bearer {{token}}
+
+###
+
+### 3e. Przelicz ceny eventu
+POST {{base}}/api/v1/events/1/recalculate-price
+Accept: application/json
+Authorization: Bearer {{token}}
+
+###
+
+### 3f. Zmień kolejność punktów programu (dzień 1)
+POST {{base}}/api/v1/events/1/program-points/reorder
+Content-Type: application/json
+Accept: application/json
+Authorization: Bearer {{token}}
+
+{
+  "day": 1,
+  "point_ids": [3, 1, 2]
+}
+
+###
+
+### 3g. Reorder – błędny payload (brak day, oczekiwany 422)
+POST {{base}}/api/v1/events/1/program-points/reorder
+Content-Type: application/json
+Accept: application/json
+Authorization: Bearer {{token}}
+
+{
+  "point_ids": [3, 1, 2]
+}
+
+###
+
+### 3h. Próba bez autoryzacji (oczekiwany 401)
+GET {{base}}/api/v1/events
+Accept: application/json
+
+###############################################################################
+# 4. TASKS / KANBAN
+###############################################################################
+
+### 4a. Board – wszystkie taski
+GET {{base}}/api/v1/tasks/board
+Accept: application/json
+Authorization: Bearer {{token}}
+
+###
+
+### 4b. Board – tylko moje taski
+GET {{base}}/api/v1/tasks/board?assigned_to_me=1
+Accept: application/json
+Authorization: Bearer {{token}}
+
+###
+
+### 4c. Board – filtr po statusie (zamień 1 na istniejące status_id)
+GET {{base}}/api/v1/tasks/board?status_id=1
+Accept: application/json
+Authorization: Bearer {{token}}
+
+###
+
+### 4d. Przenieś task do statusu (zamień ID)
+POST {{base}}/api/v1/tasks/1/move
+Content-Type: application/json
+Accept: application/json
+Authorization: Bearer {{token}}
+
+{
+  "status_id": 2,
+  "order": 1
+}
+
+###
+
+### 4e. Move – nieistniejący status (oczekiwany 422)
+POST {{base}}/api/v1/tasks/1/move
+Content-Type: application/json
+Accept: application/json
+Authorization: Bearer {{token}}
+
+{
+  "status_id": 99999
+}
+
+###############################################################################
+# 5. NOTIFICATIONS
+###############################################################################
+
+### 5a. Liczniki powiadomień dla zalogowanego użytkownika
+GET {{base}}/api/v1/notifications/counts
+Accept: application/json
+Authorization: Bearer {{token}}
+
+###
+
+### 5b. Bez autoryzacji (oczekiwany 401)
+GET {{base}}/api/v1/notifications/counts
+Accept: application/json

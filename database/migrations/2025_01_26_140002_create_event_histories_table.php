@@ -22,7 +22,7 @@ return new class extends Migration
             $table->text('description')->nullable(); // opis zmiany
             $table->string('ip_address')->nullable();
             $table->timestamps();
-            
+
             $table->index(['event_id', 'created_at']);
             $table->index(['user_id', 'created_at']);
         });

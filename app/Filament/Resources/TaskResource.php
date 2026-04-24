@@ -5,25 +5,31 @@ namespace App\Filament\Resources;
 use App\Filament\Resources\TaskResource\Pages;
 use App\Filament\Resources\TaskResource\RelationManagers;
 use App\Models\Task;
-use App\Models\TaskStatus;
 use Filament\Forms;
 use Filament\Forms\Form;
 use Filament\Forms\Get;
 use Filament\Forms\Set;
+use Filament\Navigation\NavigationItem;
 use Filament\Resources\Resource;
 use Filament\Tables;
 use Filament\Tables\Table;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\SoftDeletingScope;
-use Filament\Navigation\NavigationItem;
 
 class TaskResource extends Resource
 {
-    protected static ?string $model = Task::class;    protected static ?string $navigationIcon = 'heroicon-o-clipboard-document-list';
+    protected static ?string $model = Task::class;
+
+    protected static ?string $navigationIcon = 'heroicon-o-clipboard-document-list';
+
     protected static ?string $navigationLabel = 'Zadania';
+
     protected static ?string $navigationGroup = 'Zadania';
+
     protected static ?int $navigationSort = 10;
+
     protected static ?string $modelLabel = 'zadanie';
+
     protected static ?string $pluralModelLabel = 'zadania';
 
     public static function getModelLabel(): string
@@ -63,7 +69,7 @@ class TaskResource extends Resource
                                 Forms\Components\RichEditor::make('description')
                                     ->label('Opis')
                                     ->toolbarButtons([
-                                        'bold', 'italic', 'underline', 'strike', 'link', 'bulletList', 'orderedList', 'blockquote', 'codeBlock', 'h2', 'h3', 'color', 'highlight', 'undo', 'redo'
+                                        'bold', 'italic', 'underline', 'strike', 'link', 'bulletList', 'orderedList', 'blockquote', 'codeBlock', 'h2', 'h3', 'color', 'highlight', 'undo', 'redo',
                                     ])
                                     ->columnSpanFull(),
                                 Forms\Components\DateTimePicker::make('due_date')
@@ -250,6 +256,7 @@ class TaskResource extends Resource
         if ($user && $user->roles && $user->roles->flatMap->permissions->contains('name', 'view task')) {
             return true;
         }
+
         return false;
     }
 }

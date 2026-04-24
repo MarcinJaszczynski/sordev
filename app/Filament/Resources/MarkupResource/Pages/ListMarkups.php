@@ -3,8 +3,8 @@
 namespace App\Filament\Resources\MarkupResource\Pages;
 
 use App\Filament\Resources\MarkupResource;
-use Filament\Resources\Pages\ListRecords;
 use Filament\Actions;
+use Filament\Resources\Pages\ListRecords;
 
 class ListMarkups extends ListRecords
 {

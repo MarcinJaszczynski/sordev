@@ -2,27 +2,32 @@
 
 namespace App\Livewire;
 
-use Livewire\Component;
 use App\Models\Event;
 use App\Models\EventProgramPoint;
 use App\Models\EventTemplateProgramPoint;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
+use Livewire\Component;
 
 class EventProgramEditor extends Component
 {
     public Event $event;
+
     public $showModal = false;
+
     public $modalData = [];
+
     public $editMode = false;
+
     public $editingPointId = null;
+
     public $expandedItems = [];
 
     public function mount(Event $event)
     {
         Log::info('EventProgramEditor::mount() wywołane', [
             'event' => $event ? $event->id : 'null',
-            'eventName' => $event ? $event->name : 'null'
+            'eventName' => $event ? $event->name : 'null',
         ]);
 
         $this->event = $event;
@@ -175,8 +180,8 @@ class EventProgramEditor extends Component
             $this->closeModal();
             session()->flash('message', 'Punkt programu został zapisany');
         } catch (\Exception $e) {
-            session()->flash('error', 'Błąd podczas zapisywania: ' . $e->getMessage());
-            Log::error('Błąd podczas zapisywania punktu programu: ' . $e->getMessage());
+            session()->flash('error', 'Błąd podczas zapisywania: '.$e->getMessage());
+            Log::error('Błąd podczas zapisywania punktu programu: '.$e->getMessage());
         }
     }
 
@@ -187,8 +192,8 @@ class EventProgramEditor extends Component
             $point->delete();
             session()->flash('message', 'Punkt programu został usunięty');
         } catch (\Exception $e) {
-            session()->flash('error', 'Błąd podczas usuwania: ' . $e->getMessage());
-            Log::error('Błąd podczas usuwania punktu programu: ' . $e->getMessage());
+            session()->flash('error', 'Błąd podczas usuwania: '.$e->getMessage());
+            Log::error('Błąd podczas usuwania punktu programu: '.$e->getMessage());
         }
     }
 
@@ -199,8 +204,8 @@ class EventProgramEditor extends Component
             $duplicate = $point->duplicate();
             session()->flash('message', 'Punkt programu został zduplikowany');
         } catch (\Exception $e) {
-            session()->flash('error', 'Błąd podczas duplikowania: ' . $e->getMessage());
-            Log::error('Błąd podczas duplikowania punktu programu: ' . $e->getMessage());
+            session()->flash('error', 'Błąd podczas duplikowania: '.$e->getMessage());
+            Log::error('Błąd podczas duplikowania punktu programu: '.$e->getMessage());
         }
     }
 
@@ -211,8 +216,8 @@ class EventProgramEditor extends Component
             $point->moveToDay($newDay);
             session()->flash('message', 'Punkt programu został przeniesiony');
         } catch (\Exception $e) {
-            session()->flash('error', 'Błąd podczas przenoszenia: ' . $e->getMessage());
-            Log::error('Błąd podczas przenoszenia punktu programu: ' . $e->getMessage());
+            session()->flash('error', 'Błąd podczas przenoszenia: '.$e->getMessage());
+            Log::error('Błąd podczas przenoszenia punktu programu: '.$e->getMessage());
         }
     }
 
@@ -224,14 +229,14 @@ class EventProgramEditor extends Component
                     EventProgramPoint::where('id', $item['value'])
                         ->update([
                             'day' => $item['group'],
-                            'order' => $item['order']
+                            'order' => $item['order'],
                         ]);
                 }
             });
             session()->flash('message', 'Kolejność została zaktualizowana');
         } catch (\Exception $e) {
-            session()->flash('error', 'Błąd podczas aktualizacji kolejności: ' . $e->getMessage());
-            Log::error('Błąd podczas aktualizacji kolejności: ' . $e->getMessage());
+            session()->flash('error', 'Błąd podczas aktualizacji kolejności: '.$e->getMessage());
+            Log::error('Błąd podczas aktualizacji kolejności: '.$e->getMessage());
         }
     }
 
@@ -244,7 +249,7 @@ class EventProgramEditor extends Component
     public function toggleExpanded($itemId)
     {
         if (in_array($itemId, $this->expandedItems)) {
-            $this->expandedItems = array_filter($this->expandedItems, fn($id) => $id !== $itemId);
+            $this->expandedItems = array_filter($this->expandedItems, fn ($id) => $id !== $itemId);
         } else {
             $this->expandedItems[] = $itemId;
         }

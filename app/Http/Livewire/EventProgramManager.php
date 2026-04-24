@@ -2,14 +2,15 @@
 
 namespace App\Http\Livewire;
 
-use Livewire\Component;
-use App\Models\EventTemplateProgramPoint;
 use App\Models\EventTemplate;
+use App\Models\EventTemplateProgramPoint;
 use Illuminate\Support\Facades\DB;
+use Livewire\Component;
 
 class EventProgramManager extends Component
 {
     public int $eventTemplateId;
+
     public array $pointsByDay = [];
 
     protected $listeners = ['pointDropped' => 'updateOrder'];
@@ -51,7 +52,7 @@ class EventProgramManager extends Component
         }
 
         foreach ($grouped as $day => &$dayItems) {
-            usort($dayItems, fn($a, $b) => $a['order'] <=> $b['order']);
+            usort($dayItems, fn ($a, $b) => $a['order'] <=> $b['order']);
         }
 
         $this->pointsByDay = $grouped;
@@ -63,8 +64,8 @@ class EventProgramManager extends Component
             ->where('id', $payload['id'])
             ->update([
                 'parent_id' => $payload['parent'],
-                'day'       => $payload['day'],
-                'order'     => $payload['order'],
+                'day' => $payload['day'],
+                'order' => $payload['order'],
             ]);
 
         $this->loadPoints();

@@ -35,18 +35,18 @@ class EventSettlement extends Model
     ];
 
     protected $casts = [
-        'planned_cost_pln'    => 'decimal:2',
-        'actual_cost_pln'     => 'decimal:2',
+        'planned_cost_pln' => 'decimal:2',
+        'actual_cost_pln' => 'decimal:2',
         'participant_due_pln' => 'decimal:2',
-        'participant_paid_pln'=> 'decimal:2',
-        'settled_at'          => 'datetime',
+        'participant_paid_pln' => 'decimal:2',
+        'settled_at' => 'datetime',
     ];
 
     public static array $statuses = [
-        'draft'          => 'Szkic',
-        'active'         => 'Aktywne',
-        'pilot_settled'  => 'Pilot rozliczył',
-        'closed'         => 'Zamknięte',
+        'draft' => 'Szkic',
+        'active' => 'Aktywne',
+        'pilot_settled' => 'Pilot rozliczył',
+        'closed' => 'Zamknięte',
     ];
 
     protected static function booted(): void
@@ -128,11 +128,11 @@ class EventSettlement extends Model
     {
         $costs = $this->costs()->get();
         $this->planned_cost_pln = $costs->sum('planned_amount_pln');
-        $this->actual_cost_pln  = $costs->sum(fn (EventSettlementCost $cost) => $this->resolvePaidCostPln($cost));
+        $this->actual_cost_pln = $costs->sum(fn (EventSettlementCost $cost) => $this->resolvePaidCostPln($cost));
 
-        $payments             = $this->participantPayments()->get();
+        $payments = $this->participantPayments()->get();
         $agreementTotals = $this->resolveAgreementPaymentTotals($payments);
-        $this->participant_due_pln  = $payments->sum('due_amount_pln') + $agreementTotals['due'];
+        $this->participant_due_pln = $payments->sum('due_amount_pln') + $agreementTotals['due'];
         $this->participant_paid_pln = $payments->sum('paid_amount_pln') + $agreementTotals['paid'];
 
         $this->saveQuietly();
@@ -150,7 +150,7 @@ class EventSettlement extends Model
     {
         $event = $this->event()->with('agreements')->first();
 
-        if (!$event) {
+        if (! $event) {
             return;
         }
 
@@ -193,7 +193,7 @@ class EventSettlement extends Model
     {
         $event = $this->event()->with('agreements')->first();
 
-        if (!$event) {
+        if (! $event) {
             return ['due' => 0.0, 'paid' => 0.0];
         }
 
@@ -215,7 +215,7 @@ class EventSettlement extends Model
             ->all();
 
         $unsyncedAgreements = $event->agreements->filter(function (EventAgreement $agreement) use ($paymentIds, $references) {
-            if (!$this->shouldIncludeAgreementInSettlementTotals($agreement)) {
+            if (! $this->shouldIncludeAgreementInSettlementTotals($agreement)) {
                 return false;
             }
 
@@ -271,7 +271,9 @@ class EventSettlement extends Model
     public function importFromEvent(): void
     {
         $event = $this->event()->with('programPoints.currency', 'bus', 'eventTemplate.hotelDays', 'dayInsurances.insurance')->first();
-        if (!$event) return;
+        if (! $event) {
+            return;
+        }
 
         $fallbackPlnCurrencyId = $this->resolveFallbackPlnCurrencyId();
         $participantCount = max(1, (int) ($event->participant_count ?? 1));
@@ -279,7 +281,9 @@ class EventSettlement extends Model
 
         // Import programu (punkty programu)
         foreach ($event->programPoints as $pp) {
-            if (!$pp->include_in_calculation || !$pp->active) continue;
+            if (! $pp->include_in_calculation || ! $pp->active) {
+                continue;
+            }
 
             // W rozliczeniu bazujemy na realnej, zapisanej kwocie punktu programu,
             // żeby każda ręczna zmiana ceny była widoczna 1:1.
@@ -295,15 +299,15 @@ class EventSettlement extends Model
             $this->costs()->updateOrCreate(
                 ['source_type' => 'program_point', 'source_id' => $pp->id],
                 [
-                    'name'                => $pp->name,
-                    'planned_amount'      => $calculatedAmount,
+                    'name' => $pp->name,
+                    'planned_amount' => $calculatedAmount,
                     'planned_currency_id' => $currencyId,
-                    'planned_rate'        => $pp->currency?->exchange_rate ?? 1,
-                    'planned_amount_pln'  => $pln,
-                    'paid_by'             => 'office',
-                    'advance_type'        => 'full',
-                    'payment_status'      => 'planned',
-                    'order'               => $pp->order ?? 0,
+                    'planned_rate' => $pp->currency?->exchange_rate ?? 1,
+                    'planned_amount_pln' => $pln,
+                    'paid_by' => 'office',
+                    'advance_type' => 'full',
+                    'payment_status' => 'planned',
+                    'order' => $pp->order ?? 0,
                 ]
             );
 
@@ -357,15 +361,15 @@ class EventSettlement extends Model
             $this->costs()->updateOrCreate(
                 ['source_type' => 'insurance_day', 'source_id' => $dayInsurance->id],
                 [
-                    'name'                => 'Ubezpieczenie Dzień ' . $day . ': ' . ($insurance->name ?? ('ID ' . $insurance->id)),
-                    'planned_amount'      => $amount,
+                    'name' => 'Ubezpieczenie Dzień '.$day.': '.($insurance->name ?? ('ID '.$insurance->id)),
+                    'planned_amount' => $amount,
                     'planned_currency_id' => $fallbackPlnCurrencyId,
-                    'planned_rate'        => 1,
-                    'planned_amount_pln'  => $amount,
-                    'paid_by'             => 'office',
-                    'advance_type'        => 'full',
-                    'payment_status'      => 'planned',
-                    'order'               => 1100 + $day,
+                    'planned_rate' => 1,
+                    'planned_amount_pln' => $amount,
+                    'paid_by' => 'office',
+                    'advance_type' => 'full',
+                    'payment_status' => 'planned',
+                    'order' => 1100 + $day,
                 ]
             );
 
@@ -388,7 +392,9 @@ class EventSettlement extends Model
      */
     private function importTransportCosts(Event $event, ?int $fallbackPlnCurrencyId): void
     {
-        if (!$event->bus) return;
+        if (! $event->bus) {
+            return;
+        }
 
         $bus = $event->bus;
         $transferKm = (float) ($event->transfer_km ?? 0);
@@ -451,15 +457,19 @@ class EventSettlement extends Model
      * Używa algorytmu DP (tak jak EventTemplateCalculationEngine) do wyznaczenia
      * minimalnej kombinacji pokoi pokrywającej faktyczną liczebność każdej grupy
      * (uczestnicy, gratis, obsługa, kierowca). Dzięki temu kwota w rozliczeniu
-    * odpowiada kwocie w kalkulacji.
+     * odpowiada kwocie w kalkulacji.
      */
     private function importAccommodationCosts(Event $event, ?int $fallbackPlnCurrencyId): void
     {
-        if (!$event->eventTemplate) return;
+        if (! $event->eventTemplate) {
+            return;
+        }
 
         $template = $event->eventTemplate;
         $hotelDays = $template->hotelDays()->get();
-        if ($hotelDays->isEmpty()) return;
+        if ($hotelDays->isEmpty()) {
+            return;
+        }
 
         // Ustal liczebność grup z wariantu ilościowego imprezy
         $participantCount = max(1, (int) ($event->participant_count ?? 1));
@@ -469,22 +479,24 @@ class EventSettlement extends Model
             ->first();
 
         $groupCounts = [
-            'qty'    => $participantCount,
+            'qty' => $participantCount,
             'gratis' => (int) ($qtyVariant->gratis ?? 0),
-            'staff'  => (int) ($qtyVariant->staff  ?? 0),
-            'driver' => (int) ($qtyVariant->driver  ?? 0),
+            'staff' => (int) ($qtyVariant->staff ?? 0),
+            'driver' => (int) ($qtyVariant->driver ?? 0),
         ];
 
         $totalAccommodationCostPln = 0;
 
         foreach ($hotelDays as $hotelDay) {
             $dayNumber = (int) ($hotelDay->day ?? 0);
-            if ($dayNumber <= 0) continue;
+            if ($dayNumber <= 0) {
+                continue;
+            }
 
             $roomGroupMap = [
-                'qty'    => $hotelDay->hotel_room_ids_qty    ?? [],
+                'qty' => $hotelDay->hotel_room_ids_qty ?? [],
                 'gratis' => $hotelDay->hotel_room_ids_gratis ?? [],
-                'staff'  => $hotelDay->hotel_room_ids_staff  ?? [],
+                'staff' => $hotelDay->hotel_room_ids_staff ?? [],
                 'driver' => $hotelDay->hotel_room_ids_driver ?? [],
             ];
 
@@ -492,22 +504,26 @@ class EventSettlement extends Model
 
             foreach ($roomGroupMap as $groupType => $roomIds) {
                 $peopleCount = $groupCounts[$groupType];
-                if ($peopleCount <= 0 || empty($roomIds)) continue;
+                if ($peopleCount <= 0 || empty($roomIds)) {
+                    continue;
+                }
 
                 $rooms = HotelRoom::whereIn('id', $roomIds)->get();
-                if ($rooms->isEmpty()) continue;
+                if ($rooms->isEmpty()) {
+                    continue;
+                }
 
                 // DP: minimalny koszt kombinacji pokoi pokrywającej >= $peopleCount osób
                 $maxCapacity = $rooms->sum('people_count') * $peopleCount;
-                $dp     = array_fill(0, $maxCapacity + 1, INF);
+                $dp = array_fill(0, $maxCapacity + 1, INF);
                 $choice = array_fill(0, $maxCapacity + 1, null);
-                $dp[0]  = 0;
+                $dp[0] = 0;
 
                 foreach ($rooms as $room) {
                     $cap = max(1, (int) $room->people_count);
                     for ($i = $cap; $i <= $maxCapacity; $i++) {
-                        if ($dp[$i - $cap] + $room->price < $dp[$i]) {
-                            $dp[$i]     = $dp[$i - $cap] + $room->price;
+                        if ($dp[$i] > $dp[$i - $cap] + $room->price) {
+                            $dp[$i] = $dp[$i - $cap] + $room->price;
                             $choice[$i] = $room->id;
                         }
                     }
@@ -515,27 +531,29 @@ class EventSettlement extends Model
 
                 // Najtańsze rozwiązanie pokrywające >= $peopleCount
                 $minCost = INF;
-                $bestI   = null;
+                $bestI = null;
                 for ($i = $peopleCount; $i <= $maxCapacity; $i++) {
                     if ($dp[$i] < $minCost) {
                         $minCost = $dp[$i];
-                        $bestI   = $i;
+                        $bestI = $i;
                     }
                 }
 
-                if ($minCost === INF || $bestI === null) continue;
+                if ($minCost === INF || $bestI === null) {
+                    continue;
+                }
 
                 // Odtwórz wybór pokoi i zsumuj koszt w PLN
                 $i = $bestI;
                 while ($i > 0 && $choice[$i] !== null) {
-                    $room        = $rooms->firstWhere('id', $choice[$i]);
-                    $roomPrice   = (float) ($room->price ?? 0);
+                    $room = $rooms->firstWhere('id', $choice[$i]);
+                    $roomPrice = (float) ($room->price ?? 0);
                     $roomCurrency = (string) ($room->currency ?? 'PLN');
-                    $convertFlag  = (bool) ($room->convert_to_pln ?? false);
+                    $convertFlag = (bool) ($room->convert_to_pln ?? false);
 
                     if ($roomCurrency === 'PLN' || $convertFlag) {
                         if ($roomCurrency !== 'PLN') {
-                            $rate       = Currency::where('symbol', $roomCurrency)->first()?->exchange_rate ?? 1;
+                            $rate = Currency::where('symbol', $roomCurrency)->first()?->exchange_rate ?? 1;
                             $roomPrice *= $rate;
                         }
                         $dayTotalPln += $roomPrice;
@@ -545,7 +563,7 @@ class EventSettlement extends Model
                     }
 
                     $cap = max(1, (int) $room->people_count);
-                    $i  -= $cap;
+                    $i -= $cap;
                 }
             }
 
@@ -557,15 +575,15 @@ class EventSettlement extends Model
             $this->costs()->updateOrCreate(
                 ['source_type' => 'accommodation', 'source_id' => null],
                 [
-                    'name'                => 'Koszty noclegu (hotel)',
-                    'planned_amount'      => $totalAccommodationCostPln,
+                    'name' => 'Koszty noclegu (hotel)',
+                    'planned_amount' => $totalAccommodationCostPln,
                     'planned_currency_id' => $fallbackPlnCurrencyId,
-                    'planned_rate'        => 1,
-                    'planned_amount_pln'  => $totalAccommodationCostPln,
-                    'paid_by'             => 'office',
-                    'advance_type'        => 'full',
-                    'payment_status'      => 'planned',
-                    'order'               => 1001,
+                    'planned_rate' => 1,
+                    'planned_amount_pln' => $totalAccommodationCostPln,
+                    'paid_by' => 'office',
+                    'advance_type' => 'full',
+                    'payment_status' => 'planned',
+                    'order' => 1001,
                 ]
             );
         }
@@ -594,29 +612,29 @@ class EventSettlement extends Model
         $usedCurrencyIds = [];
 
         foreach ($byCurrency as $currencyId => $items) {
-            if (!$currencyId) {
+            if (! $currencyId) {
                 continue;
             }
 
             $usedCurrencyIds[] = (int) $currencyId;
 
             $total = $items->sum(fn (EventSettlementCost $cost) => $this->resolvePilotCashAmount($cost));
-            $rate  = (float) ($items->first()?->actual_rate ?? $items->first()?->planned_rate ?? 1);
-            $pln   = $items->sum(fn (EventSettlementCost $cost) => $this->resolvePilotCashAmountPln($cost));
+            $rate = (float) ($items->first()?->actual_rate ?? $items->first()?->planned_rate ?? 1);
+            $pln = $items->sum(fn (EventSettlementCost $cost) => $this->resolvePilotCashAmountPln($cost));
 
             $this->pilotCashPreparations()->updateOrCreate(
                 ['currency_id' => $currencyId],
                 [
                     'calculated_amount' => $total,
-                    'rate_used'         => $rate,
-                    'pln_equivalent'    => $pln,
-                    'status'            => 'calculated',
+                    'rate_used' => $rate,
+                    'pln_equivalent' => $pln,
+                    'status' => 'calculated',
                 ]
             );
         }
 
         $this->pilotCashPreparations()
-            ->when(!empty($usedCurrencyIds), fn ($query) => $query->whereNotIn('currency_id', $usedCurrencyIds))
+            ->when(! empty($usedCurrencyIds), fn ($query) => $query->whereNotIn('currency_id', $usedCurrencyIds))
             ->when(empty($usedCurrencyIds), fn ($query) => $query)
             ->delete();
     }
@@ -733,7 +751,7 @@ class EventSettlement extends Model
                 'source_id' => $point->id,
             ],
             [
-                'name' => $point->name ?: ($point->templatePoint->name ?? ('Punkt #' . $point->id)),
+                'name' => $point->name ?: ($point->templatePoint->name ?? ('Punkt #'.$point->id)),
                 'planned_amount' => $plannedAmount,
                 'planned_currency_id' => $currencyId,
                 'planned_rate' => $rate,

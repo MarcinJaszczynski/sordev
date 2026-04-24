@@ -23,8 +23,9 @@
     }
 
     /* Add higher specificity to override library defaults when needed */
-    a[href*="/oferty"] > button, .directory-length-buttons a > button {
-        display:block !important;
-        width:100% !important;
+    a[href*="/oferty"] > button,
+    .directory-length-buttons a > button {
+        display: block !important;
+        width: 100% !important;
     }
 }

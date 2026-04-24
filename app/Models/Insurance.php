@@ -10,8 +10,11 @@ class Insurance extends Model
     use SoftDeletes;
 
     protected $table = 'insurances';
+
     protected $primaryKey = 'id';
+
     public $incrementing = true;
+
     protected $keyType = 'int';
 
     protected $fillable = [

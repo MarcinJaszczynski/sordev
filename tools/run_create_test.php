@@ -1,11 +1,12 @@
 <?php
-require __DIR__ . '/../vendor/autoload.php';
+
+require __DIR__.'/../vendor/autoload.php';
 
 use App\Models\EventTemplate;
 use App\Services\EventPriceCalculator;
 
 $t = EventTemplate::find(1);
-if (!$t) {
+if (! $t) {
     echo "No template 1\n";
     exit(1);
 }
@@ -19,7 +20,7 @@ $e = App\Models\Event::createFromTemplate($t, [
 
 echo "Event created: {$e->id}\n";
 
-$calc = new EventPriceCalculator();
+$calc = new EventPriceCalculator;
 $calc->calculateForEvent($e);
 
 $count = App\Models\EventPricePerPerson::where('event_id', $e->id)->count();

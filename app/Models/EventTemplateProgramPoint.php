@@ -3,10 +3,10 @@
 namespace App\Models;
 
 use App\Models\Concerns\HasTasks;
+use App\Services\UnifiedPriceCalculator;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Support\Facades\Log;
-use App\Services\UnifiedPriceCalculator;
 
 /**
  * Model EventTemplateProgramPoint
@@ -48,6 +48,7 @@ class EventTemplateProgramPoint extends Model
         }
         Log::debug('[setFeaturedImageAttribute] Zapisano:', ['featured_image' => $this->attributes['featured_image']]);
     }
+
     use HasFactory, HasTasks;
 
     /**
@@ -57,13 +58,13 @@ class EventTemplateProgramPoint extends Model
     {
         if (is_array($value)) {
             // Filtruj tylko stringi i poprawne ścieżki
-            $value = array_filter($value, fn($v) => is_string($v) && preg_match('/\.(png|jpg|jpeg|webp|gif)$/i', $v));
+            $value = array_filter($value, fn ($v) => is_string($v) && preg_match('/\.(png|jpg|jpeg|webp|gif)$/i', $v));
             $this->attributes['gallery_images'] = json_encode(array_values($value), JSON_UNESCAPED_SLASHES);
         } elseif (is_string($value)) {
             // Jeśli string, spróbuj zdekodować i zapisać jako array
             $arr = json_decode($value, true);
             if (is_array($arr)) {
-                $arr = array_filter($arr, fn($v) => is_string($v) && preg_match('/\.(png|jpg|jpeg|webp|gif)$/i', $v));
+                $arr = array_filter($arr, fn ($v) => is_string($v) && preg_match('/\.(png|jpg|jpeg|webp|gif)$/i', $v));
                 $this->attributes['gallery_images'] = json_encode(array_values($arr), JSON_UNESCAPED_SLASHES);
             } else {
                 $this->attributes['gallery_images'] = json_encode([], JSON_UNESCAPED_SLASHES);
@@ -72,6 +73,7 @@ class EventTemplateProgramPoint extends Model
             $this->attributes['gallery_images'] = json_encode([], JSON_UNESCAPED_SLASHES);
         }
     }
+
     use HasFactory;
 
     /**
@@ -80,11 +82,12 @@ class EventTemplateProgramPoint extends Model
     public function getGalleryImagesAttribute($value)
     {
         $array = is_array($value) ? $value : json_decode($value, true);
-        if (!is_array($array)) {
+        if (! is_array($array)) {
             return [];
         }
+
         // Zwracaj tylko stringi (ścieżki plików)
-        return array_values(array_filter($array, fn($item) => is_string($item)));
+        return array_values(array_filter($array, fn ($item) => is_string($item)));
     }
 
     /**
@@ -93,11 +96,13 @@ class EventTemplateProgramPoint extends Model
     public function getFeaturedImageAttribute($value)
     {
         Log::debug('[getFeaturedImageAttribute] Odczyt:', ['value' => $value]);
+
         return is_string($value) ? $value : null;
     }
 
     /**
      * Pola masowo przypisywalne
+     *
      * @var array<int, string>
      */
     protected $fillable = [
@@ -120,6 +125,7 @@ class EventTemplateProgramPoint extends Model
 
     /**
      * Rzutowanie pól na typy
+     *
      * @var array<string, string>
      */
     protected $casts = [
@@ -150,8 +156,9 @@ class EventTemplateProgramPoint extends Model
     public function getFeaturedImageUrlAttribute()
     {
         if ($this->featured_image) {
-            return asset('storage/' . $this->featured_image);
+            return asset('storage/'.$this->featured_image);
         }
+
         return null;
     }
 
@@ -162,9 +169,10 @@ class EventTemplateProgramPoint extends Model
     {
         if ($this->gallery_images && is_array($this->gallery_images)) {
             return array_map(function ($image) {
-                return asset('storage/' . $image);
+                return asset('storage/'.$image);
             }, $this->gallery_images);
         }
+
         return [];
     }
 
@@ -266,12 +274,12 @@ class EventTemplateProgramPoint extends Model
     {
         static::saved(function ($programPoint) {
             foreach ($programPoint->eventTemplates as $template) {
-                (new UnifiedPriceCalculator())->recalculateForTemplate($template);
+                (new UnifiedPriceCalculator)->recalculateForTemplate($template);
             }
         });
         static::deleted(function ($programPoint) {
             foreach ($programPoint->eventTemplates as $template) {
-                (new UnifiedPriceCalculator())->recalculateForTemplate($template);
+                (new UnifiedPriceCalculator)->recalculateForTemplate($template);
             }
         });
     }

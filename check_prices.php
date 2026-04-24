@@ -1,7 +1,6 @@
 <?php
 
 use App\Models\EventTemplatePricePerPerson;
-use App\Models\EventTemplateQty;
 
 require __DIR__.'/vendor/autoload.php';
 $app = require __DIR__.'/bootstrap/app.php';
@@ -17,5 +16,5 @@ $prices = EventTemplatePricePerPerson::with('eventTemplateQty')
     ->get();
 
 foreach ($prices as $p) {
-    echo 'Qty: ' . ($p->eventTemplateQty->qty ?? '-') . ', price_per_person: ' . $p->price_per_person . " PLN\n";
+    echo 'Qty: '.($p->eventTemplateQty->qty ?? '-').', price_per_person: '.$p->price_per_person." PLN\n";
 }

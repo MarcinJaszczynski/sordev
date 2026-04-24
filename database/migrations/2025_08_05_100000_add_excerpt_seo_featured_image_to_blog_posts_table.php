@@ -12,13 +12,13 @@ return new class extends Migration
     public function up(): void
     {
         Schema::table('blog_posts', function (Blueprint $table) {
-            if (!Schema::hasColumn('blog_posts', 'excerpt')) {
+            if (! Schema::hasColumn('blog_posts', 'excerpt')) {
                 $table->text('excerpt')->nullable()->after('content');
             }
-            if (!Schema::hasColumn('blog_posts', 'seo_meta')) {
+            if (! Schema::hasColumn('blog_posts', 'seo_meta')) {
                 $table->json('seo_meta')->nullable()->after('excerpt');
             }
-            if (!Schema::hasColumn('blog_posts', 'featured_image')) {
+            if (! Schema::hasColumn('blog_posts', 'featured_image')) {
                 $table->string('featured_image')->nullable()->after('seo_meta');
             }
         });
@@ -29,8 +29,12 @@ return new class extends Migration
      */
     public function down(): void
     {
-        Schema::table('blog_posts', function (Blueprint $table) {
-            $table->dropColumn(['excerpt', 'seo_meta', 'featured_image']);
-        });
+        try {
+            Schema::table('blog_posts', function (Blueprint $table) {
+                $table->dropColumn(['excerpt', 'seo_meta', 'featured_image']);
+            });
+        } catch (\Throwable $e) {
+            // ignore if table or columns do not exist
+        }
     }
 };

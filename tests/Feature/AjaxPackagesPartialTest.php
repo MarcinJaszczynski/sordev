@@ -6,6 +6,7 @@ use Tests\TestCase;
 class AjaxPackagesPartialTest extends TestCase
 {
     use RefreshDatabase;
+
     /** @test */
     public function packages_partial_returns_json_for_ajax_request()
     {

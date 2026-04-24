@@ -2,10 +2,10 @@
 
 namespace App\Filament\Widgets;
 
-use Filament\Widgets\Widget;
-use Illuminate\Support\Facades\Artisan;
 use Filament\Notifications\Notification;
+use Filament\Widgets\Widget;
 use Illuminate\Contracts\View\View;
+use Illuminate\Support\Facades\Artisan;
 
 class SitemapGeneratorWidget extends Widget
 {
@@ -15,7 +15,7 @@ class SitemapGeneratorWidget extends Widget
     {
         try {
             Artisan::call('sitemap:generate');
-            
+
             Notification::make()
                 ->title('Sukces!')
                 ->body('Sitemap został pomyślnie wygenerowany!')
@@ -24,7 +24,7 @@ class SitemapGeneratorWidget extends Widget
         } catch (\Exception $e) {
             Notification::make()
                 ->title('Błąd!')
-                ->body('Błąd: ' . $e->getMessage())
+                ->body('Błąd: '.$e->getMessage())
                 ->danger()
                 ->send();
         }

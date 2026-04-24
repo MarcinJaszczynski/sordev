@@ -56,7 +56,7 @@ class EditEventSettlement extends EditRecord
 
                     return redirect(static::getResource()::getUrl('edit', ['record' => $this->record]));
                 })
-                ->visible(fn() => $this->record->status === 'draft'),
+                ->visible(fn () => $this->record->status === 'draft'),
 
             Actions\Action::make('recalc_pilot')
                 ->label('Oblicz gotówkę pilota')
@@ -79,14 +79,14 @@ class EditEventSettlement extends EditRecord
                 ->modalDescription('Czy na pewno chcesz zamknąć rozliczenie? Tej operacji nie można cofnąć.')
                 ->action(function () {
                     $this->record->update([
-                        'status'      => 'closed',
-                        'settled_at'  => now(),
+                        'status' => 'closed',
+                        'settled_at' => now(),
                     ]);
                     Notification::make()->success()->title('Rozliczenie zamknięte')->send();
 
                     return redirect(static::getResource()::getUrl('edit', ['record' => $this->record]));
                 })
-                ->visible(fn() => in_array($this->record->status, ['active', 'pilot_settled'])),
+                ->visible(fn () => in_array($this->record->status, ['active', 'pilot_settled'])),
 
             Actions\DeleteAction::make(),
         ];

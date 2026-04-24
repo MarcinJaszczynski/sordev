@@ -26,4 +26,4 @@ class TaskStatus extends Model
     {
         return $this->hasMany(Task::class);
     }
-} 
+}

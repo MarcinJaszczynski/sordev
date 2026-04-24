@@ -41,17 +41,17 @@ class EventProgramPlanner extends Component
     public array $templateResults = [];
 
     public array $newPointData = [
-        'name'                   => '',
-        'description'            => '',
-        'parent_id'              => null,
-        'day'                    => 1,
-        'start_time'             => '08:00',
-        'end_time'               => '09:00',
-        'unit_price'             => '',
-        'quantity'               => 1,
-        'group_size'             => '',
+        'name' => '',
+        'description' => '',
+        'parent_id' => null,
+        'day' => 1,
+        'start_time' => '08:00',
+        'end_time' => '09:00',
+        'unit_price' => '',
+        'quantity' => 1,
+        'group_size' => '',
         'include_in_calculation' => false,
-        'template_id'            => null,
+        'template_id' => null,
     ];
 
     public function mount(int $eventId): void
@@ -211,17 +211,17 @@ class EventProgramPlanner extends Component
         $this->plannerSearch = '';
         $this->templateResults = [];
         $this->newPointData = [
-            'name'                   => '',
-            'description'            => '',
-            'parent_id'              => null,
-            'day'                    => $day,
-            'start_time'             => $start->format('H:i'),
-            'end_time'               => $end->format('H:i'),
-            'unit_price'             => '',
-            'quantity'               => 1,
-            'group_size'             => '',
+            'name' => '',
+            'description' => '',
+            'parent_id' => null,
+            'day' => $day,
+            'start_time' => $start->format('H:i'),
+            'end_time' => $end->format('H:i'),
+            'unit_price' => '',
+            'quantity' => 1,
+            'group_size' => '',
             'include_in_calculation' => false,
-            'template_id'            => null,
+            'template_id' => null,
         ];
         $this->showAddModal = true;
     }
@@ -230,16 +230,17 @@ class EventProgramPlanner extends Component
     {
         if (strlen($this->plannerSearch) < 2) {
             $this->templateResults = [];
+
             return;
         }
 
         $this->templateResults = EventTemplateProgramPoint::query()
-            ->where('name', 'like', '%' . $this->plannerSearch . '%')
+            ->where('name', 'like', '%'.$this->plannerSearch.'%')
             ->limit(8)
             ->get(['id', 'name', 'unit_price', 'group_size'])
             ->map(fn ($p) => [
-                'id'         => $p->id,
-                'name'       => $p->name,
+                'id' => $p->id,
+                'name' => $p->name,
                 'unit_price' => $p->unit_price,
                 'group_size' => $p->group_size,
             ])
@@ -254,21 +255,21 @@ class EventProgramPlanner extends Component
         }
 
         $this->newPointData['template_id'] = $id;
-        $this->newPointData['name']        = $template->name;
+        $this->newPointData['name'] = $template->name;
         $this->newPointData['description'] = $template->description ?? '';
-        $this->newPointData['unit_price']  = $template->unit_price ?? '';
-        $this->newPointData['group_size']  = $template->group_size ?? '';
-        $this->plannerSearch               = $template->name;
-        $this->templateResults             = [];
+        $this->newPointData['unit_price'] = $template->unit_price ?? '';
+        $this->newPointData['group_size'] = $template->group_size ?? '';
+        $this->plannerSearch = $template->name;
+        $this->templateResults = [];
     }
 
     public function clearPlannerTemplate(): void
     {
         $this->newPointData['template_id'] = null;
-        $this->newPointData['unit_price']  = '';
-        $this->newPointData['group_size']  = '';
-        $this->plannerSearch               = '';
-        $this->templateResults             = [];
+        $this->newPointData['unit_price'] = '';
+        $this->newPointData['group_size'] = '';
+        $this->plannerSearch = '';
+        $this->templateResults = [];
     }
 
     public function saveNewPoint(): void
@@ -287,46 +288,46 @@ class EventProgramPlanner extends Component
             ->max('order') ?? 0;
 
         $templateId = $this->newPointData['template_id'] ?? null;
-        $unitPrice  = filled($this->newPointData['unit_price']) ? (float) $this->newPointData['unit_price'] : 0;
-        $quantity   = max(1, (int) ($this->newPointData['quantity'] ?? 1));
-        $groupSize  = filled($this->newPointData['group_size']) ? (int) $this->newPointData['group_size'] : null;
+        $unitPrice = filled($this->newPointData['unit_price']) ? (float) $this->newPointData['unit_price'] : 0;
+        $quantity = max(1, (int) ($this->newPointData['quantity'] ?? 1));
+        $groupSize = filled($this->newPointData['group_size']) ? (int) $this->newPointData['group_size'] : null;
 
         EventProgramPoint::create([
-            'event_id'                        => $this->event->id,
+            'event_id' => $this->event->id,
             'event_template_program_point_id' => $templateId,
-            'name'                            => $name,
-            'description'                     => $this->newPointData['description'] ?: null,
-            'parent_id'                       => $this->newPointData['parent_id'] ?: null,
-            'day'                             => $day,
-            'start_time'                      => $this->newPointData['start_time'] ?: null,
-            'end_time'                        => $this->newPointData['end_time'] ?: null,
-            'order'                           => $maxOrder + 1,
-            'unit_price'                      => $unitPrice,
-            'quantity'                        => $quantity,
-            'total_price'                     => $unitPrice * $quantity,
-            'group_size'                      => $groupSize,
-            'include_in_program'              => true,
-            'include_in_calculation'          => (bool) ($this->newPointData['include_in_calculation'] ?? false),
-            'active'                          => true,
+            'name' => $name,
+            'description' => $this->newPointData['description'] ?: null,
+            'parent_id' => $this->newPointData['parent_id'] ?: null,
+            'day' => $day,
+            'start_time' => $this->newPointData['start_time'] ?: null,
+            'end_time' => $this->newPointData['end_time'] ?: null,
+            'order' => $maxOrder + 1,
+            'unit_price' => $unitPrice,
+            'quantity' => $quantity,
+            'total_price' => $unitPrice * $quantity,
+            'group_size' => $groupSize,
+            'include_in_program' => true,
+            'include_in_calculation' => (bool) ($this->newPointData['include_in_calculation'] ?? false),
+            'active' => true,
         ]);
 
         $this->reorderDayPoints($day);
         $this->event->refresh();
         $this->showAddModal = false;
-        $this->plannerSearch   = '';
+        $this->plannerSearch = '';
         $this->templateResults = [];
         $this->newPointData = [
-            'name'                   => '',
-            'description'            => '',
-            'parent_id'              => null,
-            'day'                    => 1,
-            'start_time'             => '08:00',
-            'end_time'               => '09:00',
-            'unit_price'             => '',
-            'quantity'               => 1,
-            'group_size'             => '',
+            'name' => '',
+            'description' => '',
+            'parent_id' => null,
+            'day' => 1,
+            'start_time' => '08:00',
+            'end_time' => '09:00',
+            'unit_price' => '',
+            'quantity' => 1,
+            'group_size' => '',
             'include_in_calculation' => false,
-            'template_id'            => null,
+            'template_id' => null,
         ];
 
         $this->dispatch("planner-data-updated-{$this->getId()}", events: $this->buildCalendarEvents());
@@ -334,10 +335,10 @@ class EventProgramPlanner extends Component
 
     public function closeModals(): void
     {
-        $this->showEditModal   = false;
-        $this->showAddModal    = false;
-        $this->editingPointId  = null;
-        $this->plannerSearch   = '';
+        $this->showEditModal = false;
+        $this->showAddModal = false;
+        $this->editingPointId = null;
+        $this->plannerSearch = '';
         $this->templateResults = [];
     }
 
@@ -482,7 +483,7 @@ class EventProgramPlanner extends Component
                 ->addMinutes(max(0, ($displayOrder - 1) * 60));
 
             $start = $point->start_time
-                ? Carbon::parse($date->toDateString() . ' ' . $point->start_time)
+                ? Carbon::parse($date->toDateString().' '.$point->start_time)
                 : $defaultStart;
 
             $durationMinutes = ((int) ($point->duration_hours ?? 0) * 60) + (int) ($point->duration_minutes ?? 0);
@@ -491,7 +492,7 @@ class EventProgramPlanner extends Component
             }
 
             $end = $point->end_time
-                ? Carbon::parse($date->toDateString() . ' ' . $point->end_time)
+                ? Carbon::parse($date->toDateString().' '.$point->end_time)
                 : $start->copy()->addMinutes($durationMinutes);
 
             if ($end->lte($start)) {
@@ -503,7 +504,7 @@ class EventProgramPlanner extends Component
                 'title' => sprintf(
                     '%02d. %s',
                     $displayOrder,
-                    $point->templatePoint->name ?? $point->name ?? ('Punkt #' . $point->id)
+                    $point->templatePoint->name ?? $point->name ?? ('Punkt #'.$point->id)
                 ),
                 'start' => $start->toIso8601String(),
                 'end' => $end->toIso8601String(),
@@ -554,7 +555,7 @@ class EventProgramPlanner extends Component
                     'Dzień %d • %02d. %s',
                     (int) ($point->day ?? 1),
                     (int) ($point->order ?? 1),
-                    $point->templatePoint?->name ?? $point->name ?? ('Punkt #' . $point->id)
+                    $point->templatePoint?->name ?? $point->name ?? ('Punkt #'.$point->id)
                 ),
             ])
             ->all();

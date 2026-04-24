@@ -20,6 +20,7 @@ class PaymentStatus extends Model
 
     /**
      * Pola masowo przypisywalne
+     *
      * @var array<int, string>
      */
     protected $fillable = [

@@ -1,4 +1,5 @@
 <?php
+
 // Simple SQLite merge tool: copy rows from source DB into target DB
 // Usage: php merge_sqlite.php /absolute/path/to/source.sqlite /absolute/path/to/target.sqlite
 
@@ -9,11 +10,11 @@ if ($argc < 3) {
 $sourcePath = $argv[1];
 $targetPath = $argv[2];
 
-if (!file_exists($sourcePath)) {
+if (! file_exists($sourcePath)) {
     echo "Source file not found: $sourcePath\n";
     exit(2);
 }
-if (!file_exists($targetPath)) {
+if (! file_exists($targetPath)) {
     echo "Target file not found: $targetPath\n";
     exit(3);
 }
@@ -22,31 +23,35 @@ echo "Source: $sourcePath\n";
 echo "Target: $targetPath\n";
 
 try {
-    $src = new PDO('sqlite:' . $sourcePath);
-    $tgt = new PDO('sqlite:' . $targetPath);
+    $src = new PDO('sqlite:'.$sourcePath);
+    $tgt = new PDO('sqlite:'.$targetPath);
     $src->setAttribute(PDO::ATTR_ERRMODE, PDO::ERRMODE_EXCEPTION);
     $tgt->setAttribute(PDO::ATTR_ERRMODE, PDO::ERRMODE_EXCEPTION);
 } catch (Exception $e) {
-    echo "DB open error: " . $e->getMessage() . "\n";
+    echo 'DB open error: '.$e->getMessage()."\n";
     exit(4);
 }
 
-function listTables(PDO $db) {
+function listTables(PDO $db)
+{
     $stmt = $db->query("SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%';");
+
     return $stmt->fetchAll(PDO::FETCH_COLUMN);
 }
 
-function getColumns(PDO $db, $table) {
-    $stmt = $db->query("PRAGMA table_info(" . str_replace('"', '""', $table) . ");");
+function getColumns(PDO $db, $table)
+{
+    $stmt = $db->query('PRAGMA table_info('.str_replace('"', '""', $table).');');
     $cols = $stmt->fetchAll(PDO::FETCH_ASSOC);
-    return array_map(fn($c) => $c['name'], $cols);
+
+    return array_map(fn ($c) => $c['name'], $cols);
 }
 
 $sourceTables = listTables($src);
 $targetTables = listTables($tgt);
 
-echo "Source tables: " . implode(', ', $sourceTables) . "\n";
-echo "Target tables: " . implode(', ', $targetTables) . "\n";
+echo 'Source tables: '.implode(', ', $sourceTables)."\n";
+echo 'Target tables: '.implode(', ', $targetTables)."\n";
 
 $common = array_intersect($sourceTables, $targetTables);
 if (empty($common)) {
@@ -54,7 +59,7 @@ if (empty($common)) {
     exit(0);
 }
 
-echo "Common tables to consider: " . implode(', ', $common) . "\n";
+echo 'Common tables to consider: '.implode(', ', $common)."\n";
 
 $summary = [];
 
@@ -66,20 +71,26 @@ foreach ($common as $table) {
     if (empty($commonCols)) {
         echo "  No matching columns, skipping.\n";
         $summary[$table] = ['skipped' => true, 'reason' => 'no common columns'];
+
         continue;
     }
-    echo "  Common columns: " . implode(', ', $commonCols) . "\n";
+    echo '  Common columns: '.implode(', ', $commonCols)."\n";
 
     // Build select and insert
-    $colList = implode(', ', array_map(function($c){ return '"'.$c.'"'; }, $commonCols));
-    $placeholders = implode(', ', array_map(function($c){ return ':' . $c; }, $commonCols));
+    $colList = implode(', ', array_map(function ($c) {
+        return '"'.$c.'"';
+    }, $commonCols));
+    $placeholders = implode(', ', array_map(function ($c) {
+        return ':'.$c;
+    }, $commonCols));
 
     // Fetch rows from source
     $countStmt = $src->query("SELECT COUNT(1) as cnt FROM \"$table\"");
-    $total = (int)$countStmt->fetch(PDO::FETCH_ASSOC)['cnt'];
+    $total = (int) $countStmt->fetch(PDO::FETCH_ASSOC)['cnt'];
     echo "  Source rows: $total\n";
     if ($total === 0) {
         $summary[$table] = ['inserted' => 0, 'skipped' => false];
+
         continue;
     }
 
@@ -98,26 +109,30 @@ foreach ($common as $table) {
         $q->bindValue(':off', $offset, PDO::PARAM_INT);
         $q->execute();
         $rows = $q->fetchAll(PDO::FETCH_ASSOC);
-        if (!$rows) break;
+        if (! $rows) {
+            break;
+        }
 
         $tgt->beginTransaction();
         foreach ($rows as $r) {
             // bind values by column name
             foreach ($commonCols as $c) {
-                $insertStmt->bindValue(':' . $c, isset($r[$c]) ? $r[$c] : null);
+                $insertStmt->bindValue(':'.$c, isset($r[$c]) ? $r[$c] : null);
             }
             try {
                 $ok = $insertStmt->execute();
-                if ($ok) $inserted += 1;
+                if ($ok) {
+                    $inserted += 1;
+                }
             } catch (Exception $e) {
                 // log and continue
-                echo "    insert error: " . $e->getMessage() . "\n";
+                echo '    insert error: '.$e->getMessage()."\n";
             }
         }
         $tgt->commit();
         $offset += count($rows);
         $batch++;
-        echo "    Batch $batch: processed " . min($offset, $total) . "/$total rows, inserted so far: $inserted\r";
+        echo "    Batch $batch: processed ".min($offset, $total)."/$total rows, inserted so far: $inserted\r";
     }
     echo "\n  Done table $table: inserted approx $inserted rows.\n";
     $summary[$table] = ['inserted' => $inserted, 'skipped' => false];
@@ -126,7 +141,11 @@ foreach ($common as $table) {
 echo "\nSummary:\n";
 foreach ($summary as $table => $info) {
     echo " - $table: ";
-    if ($info['skipped']) echo "skipped ({$info['reason']})\n"; else echo "inserted={$info['inserted']}\n";
+    if ($info['skipped']) {
+        echo "skipped ({$info['reason']})\n";
+    } else {
+        echo "inserted={$info['inserted']}\n";
+    }
 }
 
 echo "\nMerge complete.\n";

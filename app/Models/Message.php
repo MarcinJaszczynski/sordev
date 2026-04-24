@@ -48,7 +48,7 @@ class Message extends Model
      */
     public function getAttachmentUrlAttribute(): ?string
     {
-        if (!$this->attachment_path) {
+        if (! $this->attachment_path) {
             return null;
         }
 
@@ -60,7 +60,7 @@ class Message extends Model
      */
     public function hasAttachment(): bool
     {
-        return !empty($this->attachment_path);
+        return ! empty($this->attachment_path);
     }
 
     /**
@@ -87,7 +87,7 @@ class Message extends Model
         if ($this->created_at->isToday()) {
             return $this->created_at->format('H:i');
         } elseif ($this->created_at->isYesterday()) {
-            return 'Wczoraj ' . $this->created_at->format('H:i');
+            return 'Wczoraj '.$this->created_at->format('H:i');
         } else {
             return $this->created_at->format('d.m.Y H:i');
         }

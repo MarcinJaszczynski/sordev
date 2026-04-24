@@ -3,7 +3,6 @@
 namespace App\Filament\Resources;
 
 use App\Filament\Resources\ReservationResource\Pages;
-use App\Filament\Resources\ReservationResource\RelationManagers;
 use App\Models\EventProgramPoint;
 use App\Models\Reservation;
 use Filament\Forms;
@@ -18,10 +17,15 @@ class ReservationResource extends Resource
     protected static ?string $model = Reservation::class;
 
     protected static ?string $navigationIcon = 'heroicon-o-calendar-days';
+
     protected static ?string $navigationLabel = 'Rezerwacje';
+
     protected static ?string $navigationGroup = 'Finanse';
+
     protected static ?int $navigationSort = 11;
+
     protected static ?string $modelLabel = 'Rezerwacja';
+
     protected static ?string $pluralModelLabel = 'Rezerwacje';
 
     public static function form(Form $form): Form
@@ -80,7 +84,7 @@ class ReservationResource extends Resource
                                         $point->id => sprintf(
                                             'Dzień %d • %s',
                                             (int) ($point->day ?? 1),
-                                            $point->templatePoint?->name ?? $point->name ?? ('Punkt #' . $point->id)
+                                            $point->templatePoint?->name ?? $point->name ?? ('Punkt #'.$point->id)
                                         ),
                                     ]);
                             })
@@ -172,7 +176,7 @@ class ReservationResource extends Resource
 
                 Tables\Columns\BadgeColumn::make('status')
                     ->label('Status')
-                    ->formatStateUsing(fn($state) => Reservation::$statuses[$state] ?? $state)
+                    ->formatStateUsing(fn ($state) => Reservation::$statuses[$state] ?? $state)
                     ->colors([
                         'warning' => 'pending',
                         'success' => ['confirmed', 'completed'],

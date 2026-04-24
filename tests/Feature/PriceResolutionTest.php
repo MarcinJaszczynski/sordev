@@ -2,14 +2,10 @@
 
 namespace Tests\Feature;
 
-use Tests\TestCase;
-use Illuminate\Foundation\Testing\RefreshDatabase;
-use App\Models\EventTemplate;
-use App\Models\EventTemplateQty;
-use App\Models\EventTemplatePricePerPerson;
-use App\Models\Place;
-use App\Models\Currency;
 use App\Http\Controllers\Front\FrontController;
+use App\Models\Place;
+use Illuminate\Foundation\Testing\RefreshDatabase;
+use Tests\TestCase;
 
 class PriceResolutionTest extends TestCase
 {
@@ -21,31 +17,31 @@ class PriceResolutionTest extends TestCase
         // Build a collection of simple objects representing price rows (avoid DB schema dependency)
         $prices = collect([]);
         // older local price (id=1)
-        $prices->push((object)[
+        $prices->push((object) [
             'id' => 1,
             'start_place_id' => 1,
             'event_template_qty_id' => 41,
             'price_per_person' => 300,
-            'currency' => (object)['code' => 'PLN', 'symbol' => 'zł', 'name' => 'Polski złoty'],
+            'currency' => (object) ['code' => 'PLN', 'symbol' => 'zł', 'name' => 'Polski złoty'],
         ]);
         // newer local price (id=2) -> should be picked as latest per qty for local
-        $prices->push((object)[
+        $prices->push((object) [
             'id' => 2,
             'start_place_id' => 1,
             'event_template_qty_id' => 41,
             'price_per_person' => 235,
-            'currency' => (object)['code' => 'PLN', 'symbol' => 'zł', 'name' => 'Polski złoty'],
+            'currency' => (object) ['code' => 'PLN', 'symbol' => 'zł', 'name' => 'Polski złoty'],
         ]);
         // global other place low price (id=3)
-        $prices->push((object)[
+        $prices->push((object) [
             'id' => 3,
             'start_place_id' => 2,
             'event_template_qty_id' => 41,
             'price_per_person' => 190,
-            'currency' => (object)['code' => 'PLN', 'symbol' => 'zł', 'name' => 'Polski złoty'],
+            'currency' => (object) ['code' => 'PLN', 'symbol' => 'zł', 'name' => 'Polski złoty'],
         ]);
 
-        $ctrl = new FrontController();
+        $ctrl = new FrontController;
         $rm = new \ReflectionMethod(FrontController::class, 'resolveMinPlnFromPrices');
         $rm->setAccessible(true);
         $minLocal = $rm->invoke($ctrl, $prices, 1);

@@ -2,25 +2,23 @@
 
 namespace App\Filament\Resources;
 
-use App\Filament\Resources\TaskResource\RelationManagers\TasksRelationManager;
 use App\Filament\Resources\EventTemplateResource\Pages;
+use App\Filament\Resources\TaskResource\RelationManagers\TasksRelationManager;
 use App\Models\EventTemplate;
-use App\Models\HotelRoom;
-use App\Models\EventPriceDescription;
 use App\Models\EventTemplatePricePerPerson;
 use App\Models\Media;
 use Filament\Forms;
-use Filament\Forms\Form;
-use Filament\Forms\Components\Actions as FormActions;
 use Filament\Forms\Components\Actions\Action as FormAction;
+use Filament\Forms\Components\Actions as FormActions;
+use Filament\Forms\Components\Select;
+use Filament\Forms\Components\View as ViewComponent;
+use Filament\Forms\Form;
 use Filament\Forms\Get;
 use Filament\Forms\Set;
 use Filament\Resources\Resource;
 use Filament\Tables;
 use Filament\Tables\Table;
 use Illuminate\Support\Str;
-use Filament\Forms\Components\View as ViewComponent;
-use Filament\Forms\Components\Select;
 
 /**
  * Resource Filament dla modelu EventTemplate.
@@ -31,8 +29,11 @@ class EventTemplateResource extends Resource
     protected static ?string $model = EventTemplate::class;
 
     protected static ?string $navigationIcon = 'heroicon-o-rectangle-stack';
+
     protected static ?string $navigationGroup = 'Szablony imprez';
+
     protected static ?string $navigationLabel = 'Szablony imprez';
+
     protected static ?int $navigationSort = 10;
 
     /**
@@ -52,8 +53,7 @@ class EventTemplateResource extends Resource
                                 ->required()
                                 ->live(onBlur: true)
                                 ->afterStateUpdated(
-                                    fn($state, callable $set) =>
-                                    $set('slug', Str::slug($state))
+                                    fn ($state, callable $set) => $set('slug', Str::slug($state))
                                 ),
                             Forms\Components\TextInput::make('subtitle')
                                 ->label('Podtytuł')
@@ -99,17 +99,18 @@ class EventTemplateResource extends Resource
                         ->schema([
                             Forms\Components\Select::make('markup_id')
                                 ->label('Narzut')
-                                ->options(fn() => \App\Models\Markup::pluck('name', 'id'))
+                                ->options(fn () => \App\Models\Markup::pluck('name', 'id'))
                                 ->searchable()
                                 ->nullable()
                                 ->default(function () {
                                     $defaultMarkup = \App\Models\Markup::where('is_default', true)->first();
+
                                     return $defaultMarkup?->id;
                                 })
                                 ->helperText('Jeśli nie wybierzesz, zostanie użyty domyślny narzut.'),
                             Forms\Components\Select::make('event_price_description_id')
                                 ->label('Opis ceny imprezy')
-                                ->options(fn() => \App\Models\EventPriceDescription::pluck('name', 'id'))
+                                ->options(fn () => \App\Models\EventPriceDescription::pluck('name', 'id'))
                                 ->searchable()
                                 ->nullable()
                                 ->helperText('Wybierz opis ceny imprezy. Możesz zostawić puste.')
@@ -125,8 +126,9 @@ class EventTemplateResource extends Resource
                             $baseText = $record->apply_to_base ? 'od sumy bez narzutu' : '';
                             $markupText = $record->apply_to_markup ? 'od narzutu' : '';
                             $description = array_filter([$baseText, $markupText]);
-                            $descriptionText = !empty($description) ? ' (' . implode(', ', $description) . ')' : '';
-                            return $record->name . $descriptionText;
+                            $descriptionText = ! empty($description) ? ' ('.implode(', ', $description).')' : '';
+
+                            return $record->name.$descriptionText;
                         })
                         ->columns(2),
                 ]),
@@ -139,11 +141,11 @@ class EventTemplateResource extends Resource
                         ->schema([
                             Forms\Components\RichEditor::make('event_description')
                                 ->toolbarButtons([
-                                    'bold', 'italic', 'underline', 'strike', 'link', 'bulletList', 'orderedList', 'blockquote', 'codeBlock', 'h2', 'h3', 'color', 'highlight', 'undo', 'redo'
+                                    'bold', 'italic', 'underline', 'strike', 'link', 'bulletList', 'orderedList', 'blockquote', 'codeBlock', 'h2', 'h3', 'color', 'highlight', 'undo', 'redo',
                                 ]),
                             Forms\Components\RichEditor::make('office_description')
                                 ->toolbarButtons([
-                                    'bold', 'italic', 'underline', 'strike', 'link', 'bulletList', 'orderedList', 'blockquote', 'codeBlock', 'h2', 'h3', 'color', 'highlight', 'undo', 'redo'
+                                    'bold', 'italic', 'underline', 'strike', 'link', 'bulletList', 'orderedList', 'blockquote', 'codeBlock', 'h2', 'h3', 'color', 'highlight', 'undo', 'redo',
                                 ]),
                         ]),
                     Forms\Components\Grid::make(2)
@@ -161,7 +163,7 @@ class EventTemplateResource extends Resource
                                 ->acceptedFileTypes(['image/jpeg', 'image/png', 'image/gif', 'image/webp'])
                                 ->preserveFilenames()
                                 ->nullable()
-                                ->default(fn($record) => is_string($record?->featured_image) ? $record->featured_image : null),
+                                ->default(fn ($record) => is_string($record?->featured_image) ? $record->featured_image : null),
                             FormActions::make([
                                 FormAction::make('choose_featured_from_media')
                                     ->label('Wybierz z biblioteki')
@@ -174,11 +176,12 @@ class EventTemplateResource extends Resource
                                             ->native(false)
                                             ->options(function () {
                                                 $dirs = Media::images()->pluck('path')
-                                                    ->map(fn($p) => Str::before($p, '/'))
-                                                    ->filter(fn($d) => !empty($d))
+                                                    ->map(fn ($p) => Str::before($p, '/'))
+                                                    ->filter(fn ($d) => ! empty($d))
                                                     ->unique()
                                                     ->sort()
                                                     ->values();
+
                                                 return $dirs->combine($dirs)->all();
                                             })
                                             ->placeholder('Wszystkie')
@@ -204,7 +207,7 @@ class EventTemplateResource extends Resource
                                                 if (is_array($folders) && count($folders)) {
                                                     $query->where(function ($q) use ($folders) {
                                                         foreach ($folders as $f) {
-                                                            $q->orWhere('path', 'like', $f . '/%');
+                                                            $q->orWhere('path', 'like', $f.'/%');
                                                         }
                                                     });
                                                 }
@@ -214,12 +217,13 @@ class EventTemplateResource extends Resource
                                                     ->skip(max(0, ($page - 1) * $perPage))
                                                     ->take($perPage)
                                                     ->get()
-                                                    ->map(fn($m) => [
+                                                    ->map(fn ($m) => [
                                                         'id' => $m->id,
                                                         'filename' => $m->filename,
                                                         'url' => $m->url(),
                                                     ])->all();
                                                 $selected = $get('media_id') ? [(int) $get('media_id')] : [];
+
                                                 return [
                                                     'mode' => 'single',
                                                     'selectId' => 'featured-media-input',
@@ -264,7 +268,7 @@ class EventTemplateResource extends Resource
                                 ->uploadProgressIndicatorPosition('left')
                                 ->preserveFilenames()
                                 ->live()
-                                ->default(fn($record) => $record?->gallery ?? []),
+                                ->default(fn ($record) => $record?->gallery ?? []),
                             FormActions::make([
                                 FormAction::make('choose_gallery_from_media')
                                     ->label('Dodaj z biblioteki')
@@ -277,11 +281,12 @@ class EventTemplateResource extends Resource
                                             ->native(false)
                                             ->options(function () {
                                                 $dirs = Media::images()->pluck('path')
-                                                    ->map(fn($p) => Str::before($p, '/'))
-                                                    ->filter(fn($d) => !empty($d))
+                                                    ->map(fn ($p) => Str::before($p, '/'))
+                                                    ->filter(fn ($d) => ! empty($d))
                                                     ->unique()
                                                     ->sort()
                                                     ->values();
+
                                                 return $dirs->combine($dirs)->all();
                                             })
                                             ->placeholder('Wszystkie')
@@ -304,7 +309,7 @@ class EventTemplateResource extends Resource
                                                 if (is_array($folders) && count($folders)) {
                                                     $query->where(function ($q) use ($folders) {
                                                         foreach ($folders as $f) {
-                                                            $q->orWhere('path', 'like', $f . '/%');
+                                                            $q->orWhere('path', 'like', $f.'/%');
                                                         }
                                                     });
                                                 }
@@ -314,13 +319,14 @@ class EventTemplateResource extends Resource
                                                     ->skip(max(0, ($page - 1) * $perPage))
                                                     ->take($perPage)
                                                     ->get()
-                                                    ->map(fn($m) => [
+                                                    ->map(fn ($m) => [
                                                         'id' => $m->id,
                                                         'filename' => $m->filename,
                                                         'url' => $m->url(),
                                                     ])->all();
                                                 $raw = $get('media_ids');
                                                 $selected = is_array($raw) ? array_map('intval', $raw) : (json_decode((string) $raw, true) ?: []);
+
                                                 return [
                                                     'mode' => 'multi',
                                                     'selectId' => 'gallery-media-input',
@@ -339,7 +345,7 @@ class EventTemplateResource extends Resource
                                         $ids = is_array($raw) ? $raw : (json_decode((string) $raw, true) ?: []);
                                         $paths = Media::whereIn('id', $ids)->pluck('path')->all();
                                         $current = $get('gallery') ?? [];
-                                        if (!is_array($current)) {
+                                        if (! is_array($current)) {
                                             $current = [];
                                         }
                                         $new = array_values(array_unique(array_merge($current, $paths)));
@@ -379,7 +385,7 @@ class EventTemplateResource extends Resource
                                 ->helperText('Tytuł strony widoczny w Google (max 70 znaków)'),
                             Forms\Components\RichEditor::make('seo_description')
                                 ->toolbarButtons([
-                                    'bold', 'italic', 'underline', 'strike', 'link', 'bulletList', 'orderedList', 'blockquote', 'codeBlock', 'h2', 'h3', 'color', 'highlight', 'undo', 'redo'
+                                    'bold', 'italic', 'underline', 'strike', 'link', 'bulletList', 'orderedList', 'blockquote', 'codeBlock', 'h2', 'h3', 'color', 'highlight', 'undo', 'redo',
                                 ])
                                 ->helperText('Opis strony widoczny w Google (max 350 znaków)'),
                             Forms\Components\TextInput::make('seo_keywords')
@@ -399,7 +405,7 @@ class EventTemplateResource extends Resource
             ->modifyQueryUsing(function ($query) {
                 // Keep eager loading light to avoid exhausting memory when rendering the table
                 $query->with([
-                    'startingPlaceAvailabilities' => fn($q) => $q
+                    'startingPlaceAvailabilities' => fn ($q) => $q
                         ->where('available', true)
                         ->with(['startPlace:id,name'])
                         ->select(['id', 'event_template_id', 'start_place_id', 'available']),
@@ -437,9 +443,9 @@ class EventTemplateResource extends Resource
                     ->falseColor('danger')
                     ->sortable()
                     ->action(function ($record) {
-                        $record->update(['is_active' => !$record->is_active]);
+                        $record->update(['is_active' => ! $record->is_active]);
                     })
-                    ->tooltip(fn($record) => $record->is_active ? 'Kliknij, aby dezaktywować' : 'Kliknij, aby aktywować')
+                    ->tooltip(fn ($record) => $record->is_active ? 'Kliknij, aby dezaktywować' : 'Kliknij, aby aktywować')
                     ->toggleable(isToggledHiddenByDefault: true),
                 Tables\Columns\TextColumn::make('available_start_places')
                     ->label('Dostępne miejsca wyjazdu')
@@ -463,13 +469,13 @@ class EventTemplateResource extends Resource
                         } elseif (isset($filters['start_place']['values']) && is_array($filters['start_place']['values'])) {
                             $startId = (int) ($filters['start_place']['values'][0] ?? 0);
                         }
-                        if (!$startId) {
+                        if (! $startId) {
                             return '—';
                         }
                         $availableIds = $record->startingPlaceAvailabilities
                             ->pluck('start_place_id')
-                            ->map(fn($v) => (int) $v);
-                        if ($availableIds->isEmpty() || !$availableIds->contains($startId)) {
+                            ->map(fn ($v) => (int) $v);
+                        if ($availableIds->isEmpty() || ! $availableIds->contains($startId)) {
                             return '—';
                         }
                         $min = EventTemplatePricePerPerson::query()
@@ -477,7 +483,7 @@ class EventTemplateResource extends Resource
                             ->where('start_place_id', $startId)
                             ->where('price_per_person', '>', 0)
                             ->whereHas('currency', function ($q) {
-                                $q->where(fn($qq) => $qq
+                                $q->where(fn ($qq) => $qq
                                     ->where('code', 'PLN')
                                     ->orWhere('name', 'like', '%złoty%')
                                     ->orWhere('name', 'like', '%polish%'));
@@ -485,11 +491,12 @@ class EventTemplateResource extends Resource
                             ->selectRaw('MIN(price_per_person) as min_price')
                             ->value('min_price');
 
-                        if (!$min) {
+                        if (! $min) {
                             return '—';
                         }
 
                         $rounded = ceil(((float) $min) / 5) * 5;
+
                         return number_format($rounded, 0, ',', ' ');
                     })
                     ->toggleable(isToggledHiddenByDefault: true),
@@ -507,11 +514,11 @@ class EventTemplateResource extends Resource
             ->filters([
                 Tables\Filters\Filter::make('is_active')
                     ->label('Tylko aktywne')
-                    ->query(fn($query) => $query->where('is_active', true))
+                    ->query(fn ($query) => $query->where('is_active', true))
                     ->default(),
                 Tables\Filters\SelectFilter::make('start_place')
                     ->label('Możliwe miejsce wyjazdu')
-                    ->options(fn() => \App\Models\Place::orderBy('name')->pluck('name', 'id')->all())
+                    ->options(fn () => \App\Models\Place::orderBy('name')->pluck('name', 'id')->all())
                     ->searchable()
                     ->native(false)
                     ->query(function ($query, $data) {
@@ -540,8 +547,9 @@ class EventTemplateResource extends Resource
                         $values = EventTemplate::query()->select('duration_days')->distinct()->orderBy('duration_days')->pluck('duration_days')->all();
                         $opts = [];
                         foreach ($values as $v) {
-                            $opts[(string)$v] = (string)$v;
+                            $opts[(string) $v] = (string) $v;
                         }
+
                         return $opts;
                     })
                     ->native(false)
@@ -560,7 +568,7 @@ class EventTemplateResource extends Resource
                     ->label('Utwórz imprezę')
                     ->icon('heroicon-o-plus-circle')
                     ->color('success')
-                    ->url(fn($record) => route('filament.admin.resources.events.create', ['template' => $record->id]))
+                    ->url(fn ($record) => route('filament.admin.resources.events.create', ['template' => $record->id]))
                     ->openUrlInNewTab(),
                 Tables\Actions\ViewAction::make()
                     ->label('Podgląd'),
@@ -617,6 +625,7 @@ class EventTemplateResource extends Resource
         if ($user && $user->roles && $user->roles->flatMap->permissions->contains('name', 'view eventtemplate')) {
             return true;
         }
+
         return false;
     }
 }

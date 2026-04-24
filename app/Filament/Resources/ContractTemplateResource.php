@@ -5,8 +5,8 @@ namespace App\Filament\Resources;
 use App\Filament\Resources\ContractTemplateResource\Pages;
 use App\Models\ContractTemplate;
 use Filament\Forms;
-use Filament\Tables;
 use Filament\Resources\Resource;
+use Filament\Tables;
 use Illuminate\Database\Eloquent\Model;
 
 /**
@@ -17,12 +17,16 @@ class ContractTemplateResource extends Resource
 {
     /**
      * Powiązany model Eloquent
+     *
      * @var class-string<ContractTemplate>
-     */    protected static ?string $model = ContractTemplate::class;
+     */
+    protected static ?string $model = ContractTemplate::class;
 
     // Ikona i etykieta nawigacji w panelu
     protected static ?string $navigationIcon = 'heroicon-o-document-text';
+
     protected static ?string $navigationLabel = 'Szablony umów';
+
     protected static ?string $navigationGroup = 'Ustawienia ogólne';
 
     /**
@@ -93,6 +97,7 @@ class ContractTemplateResource extends Resource
         if ($user && $user->roles && $user->roles->flatMap->permissions->contains('name', 'view contracttemplate')) {
             return true;
         }
+
         return false;
     }
 }

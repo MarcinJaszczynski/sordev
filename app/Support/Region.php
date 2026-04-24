@@ -14,9 +14,6 @@ class Region
      * 2. Cookie 'start_place_id'
      * 3. Place with slug 'warszawa' or name 'Warszawa'
      * 4. Fallback literal 'warszawa'
-     *
-     * @param int|null $startPlaceId
-     * @return string
      */
     public static function slugForLinks(?int $startPlaceId = null): string
     {

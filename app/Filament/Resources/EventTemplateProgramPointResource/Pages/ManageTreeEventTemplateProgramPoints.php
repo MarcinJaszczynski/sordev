@@ -3,8 +3,8 @@
 namespace App\Filament\Resources\EventTemplateProgramPointResource\Pages;
 
 use App\Filament\Resources\EventTemplateProgramPointResource;
-use Filament\Resources\Pages\Page;
 use Filament\Actions\Action;
+use Filament\Resources\Pages\Page;
 
 class ManageTreeEventTemplateProgramPoints extends Page
 {
@@ -13,7 +13,9 @@ class ManageTreeEventTemplateProgramPoints extends Page
     protected static string $view = 'filament.resources.event-template-program-point-resource.pages.manage-tree';
 
     protected static ?string $navigationLabel = 'Drzewo punktów';
+
     protected static ?string $title = 'Zarządzanie drzewem punktów programu';
+
     protected static ?string $slug = 'tree';
 
     public function getTitle(): string

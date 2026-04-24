@@ -11,12 +11,19 @@ use Filament\Tables;
 use Filament\Tables\Table;
 
 class BusResource extends Resource
-{    protected static ?string $model = Bus::class;
+{
+    protected static ?string $model = Bus::class;
+
     protected static ?string $navigationIcon = 'heroicon-o-truck';
+
     protected static ?string $navigationGroup = 'Ustawienia transportu';
+
     protected static ?string $navigationLabel = 'Autokary';
+
     protected static ?int $navigationSort = 10;
+
     protected static ?string $modelLabel = 'autokar';
+
     protected static ?string $pluralModelLabel = 'autokary';
 
     public static function form(Form $form): Form
@@ -90,13 +97,13 @@ class BusResource extends Resource
                 ->label('Przeliczaj na złotówki')
                 ->boolean(),
         ])
-        ->actions([
-            Tables\Actions\EditAction::make(),
-            Tables\Actions\DeleteAction::make(),
-        ])
-        ->bulkActions([
-            Tables\Actions\DeleteBulkAction::make(),
-        ]);
+            ->actions([
+                Tables\Actions\EditAction::make(),
+                Tables\Actions\DeleteAction::make(),
+            ])
+            ->bulkActions([
+                Tables\Actions\DeleteBulkAction::make(),
+            ]);
     }
 
     public static function getRelations(): array
@@ -122,8 +129,10 @@ class BusResource extends Resource
         if ($user && $user->roles && $user->roles->flatMap->permissions->contains('name', 'view bus')) {
             return true;
         }
+
         return false;
     }
+
     public static function canView(
         $record
     ): bool {
@@ -134,8 +143,10 @@ class BusResource extends Resource
         if ($user && $user->roles && $user->roles->flatMap->permissions->contains('name', 'view bus')) {
             return true;
         }
+
         return false;
     }
+
     public static function canCreate(): bool
     {
         $user = \App\Models\User::query()->find(\Illuminate\Support\Facades\Auth::id());
@@ -145,8 +156,10 @@ class BusResource extends Resource
         if ($user && $user->roles && $user->roles->flatMap->permissions->contains('name', 'create bus')) {
             return true;
         }
+
         return false;
     }
+
     public static function canEdit($record): bool
     {
         $user = \App\Models\User::query()->find(\Illuminate\Support\Facades\Auth::id());
@@ -156,8 +169,10 @@ class BusResource extends Resource
         if ($user && $user->roles && $user->roles->flatMap->permissions->contains('name', 'update bus')) {
             return true;
         }
+
         return false;
     }
+
     public static function canDelete($record): bool
     {
         $user = \App\Models\User::query()->find(\Illuminate\Support\Facades\Auth::id());
@@ -167,6 +182,7 @@ class BusResource extends Resource
         if ($user && $user->roles && $user->roles->flatMap->permissions->contains('name', 'delete bus')) {
             return true;
         }
+
         return false;
     }
 }

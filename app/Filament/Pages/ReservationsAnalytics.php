@@ -3,12 +3,12 @@
 namespace App\Filament\Pages;
 
 use App\Models\Reservation;
+use Filament\Forms;
 use Filament\Pages\Page;
 use Filament\Tables;
 use Filament\Tables\Concerns\InteractsWithTable;
 use Filament\Tables\Contracts\HasTable;
 use Filament\Tables\Table;
-use Filament\Forms;
 use Filament\Widgets\StatsOverviewWidget\Stat;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Support\Number;
@@ -26,15 +26,23 @@ class ReservationsAnalytics extends Page implements HasTable
     ];
 
     protected static ?string $navigationIcon = 'heroicon-o-chart-bar';
+
     protected static ?string $navigationLabel = 'Raport rezerwacji';
+
     protected static string $view = 'filament.pages.reservations-analytics';
+
     protected static ?string $navigationGroup = 'Finanse';
+
     protected static ?int $navigationSort = 12;
 
     public ?string $selectedDateFrom = null;
+
     public ?string $selectedDateTo = null;
+
     public ?string $selectedStatus = null;
+
     public ?string $selectedContractor = null;
+
     public ?string $selectedEvent = null;
 
     public function mount(): void
@@ -114,17 +122,17 @@ class ReservationsAnalytics extends Page implements HasTable
                 ->color('info'),
 
             Stat::make('Potwierdzone', $confirmed)
-                ->description($total > 0 ? round(($confirmed / $total) * 100) . '%' : '0%')
+                ->description($total > 0 ? round(($confirmed / $total) * 100).'%' : '0%')
                 ->icon('heroicon-o-check-circle')
                 ->color('success'),
 
             Stat::make('Oczekujące', $pending)
-                ->description($total > 0 ? round(($pending / $total) * 100) . '%' : '0%')
+                ->description($total > 0 ? round(($pending / $total) * 100).'%' : '0%')
                 ->icon('heroicon-o-clock')
                 ->color('warning'),
 
             Stat::make('Anulowane', $cancelled)
-                ->description($total > 0 ? round(($cancelled / $total) * 100) . '%' : '0%')
+                ->description($total > 0 ? round(($cancelled / $total) * 100).'%' : '0%')
                 ->icon('heroicon-o-x-circle')
                 ->color('danger'),
 
@@ -134,7 +142,7 @@ class ReservationsAnalytics extends Page implements HasTable
                 ->color('primary'),
 
             Stat::make('Średnia rezerwacja', Number::currency($avgAmount, 'PLN'))
-                ->description(round($avgParticipants) . ' osób średnio')
+                ->description(round($avgParticipants).' osób średnio')
                 ->icon('heroicon-o-chart-pie')
                 ->color('secondary'),
         ];
@@ -178,7 +186,7 @@ class ReservationsAnalytics extends Page implements HasTable
 
                 Tables\Columns\BadgeColumn::make('status')
                     ->label('Status')
-                    ->formatStateUsing(fn($state) => Reservation::$statuses[$state] ?? $state)
+                    ->formatStateUsing(fn ($state) => Reservation::$statuses[$state] ?? $state)
                     ->colors([
                         'gray' => 'pending',
                         'warning' => 'partially_confirmed',
@@ -330,7 +338,7 @@ class ReservationsAnalytics extends Page implements HasTable
 
     private function filtersSessionKey(): string
     {
-        return static::class . '.filters';
+        return static::class.'.filters';
     }
 
     private function persistCurrentFiltersState(): void

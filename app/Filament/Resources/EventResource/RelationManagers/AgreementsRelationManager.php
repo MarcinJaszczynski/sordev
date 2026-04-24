@@ -23,7 +23,9 @@ use Illuminate\Support\Str;
 class AgreementsRelationManager extends RelationManager
 {
     protected static string $relationship = 'agreements';
+
     protected static ?string $title = 'Umowy i płatności';
+
     protected static ?string $recordTitleAttribute = 'agreement_number';
 
     public function form(Form $form): Form
@@ -133,15 +135,17 @@ class AgreementsRelationManager extends RelationManager
                         ->default(fn () => (function () {
                             $event = $this->getOwnerRecord();
                             $count = max(1, (int) ($event->participant_count ?? 1));
+
                             return $event->resolvedPricePerPerson($count) * $count;
                         })())
                         ->required()
                         ->suffix('PLN')
-                        ->helperText(fn (Get $get) => (function () use ($get): string {
+                        ->helperText(fn (Get $get) => (function (): string {
                             $event = $this->getOwnerRecord();
                             $participantCount = max(1, (int) ($event->participant_count ?? 1));
                             $pricePerPerson = $event->resolvedPricePerPerson($participantCount);
                             $totalAmount = $pricePerPerson * $participantCount;
+
                             return sprintf(
                                 'Kalkulacja: %s PLN/os. × %d os. = %s PLN',
                                 number_format($pricePerPerson, 2, ',', ' '),
@@ -361,6 +365,7 @@ class AgreementsRelationManager extends RelationManager
                             ->default(fn () => (function () {
                                 $event = $this->getOwnerRecord();
                                 $count = max(1, (int) ($event->participant_count ?? 1));
+
                                 return $event->resolvedPricePerPerson($count) * $count;
                             })())
                             ->required()
@@ -369,6 +374,7 @@ class AgreementsRelationManager extends RelationManager
                                 $event = $this->getOwnerRecord();
                                 $count = max(1, (int) ($event->participant_count ?? 1));
                                 $pricePerPerson = $event->resolvedPricePerPerson($count);
+
                                 return sprintf(
                                     'Kalkulacja: %s PLN/os. × %d os.',
                                     number_format($pricePerPerson, 2, ',', ' '),
@@ -482,7 +488,7 @@ class AgreementsRelationManager extends RelationManager
                         if ($existingTemplate > 0) {
                             Notification::make()
                                 ->title('Szablon umowy indywidualnej już istnieje')
-                                ->body("Już wygenerowałeś szablon. Wysyłaj jego link do uczestników.")
+                                ->body('Już wygenerowałeś szablon. Wysyłaj jego link do uczestników.')
                                 ->warning()
                                 ->send();
 
@@ -494,7 +500,7 @@ class AgreementsRelationManager extends RelationManager
                             'event_id' => $event->id,
                             'contract_template_id' => $data['contract_template_id'] ?? null,
                             'agreement_type' => EventAgreement::TYPE_INDIVIDUAL,
-                            'title' => ($data['title'] ?? 'Umowa uczestnika') . ' (szablon)',
+                            'title' => ($data['title'] ?? 'Umowa uczestnika').' (szablon)',
                             'agreement_date' => now()->toDateString(),
                             'event_name' => $event->name,
                             'event_start_date' => $event->start_date,
@@ -516,7 +522,7 @@ class AgreementsRelationManager extends RelationManager
 
                         Notification::make()
                             ->title('Szablon umowy indywidualnej wygenerowany')
-                            ->body("Wysyłaj poniższy link do {$payingParticipantsCount} uczestników. Każdy wypełni formularz i zapłaci indywidualnie. Cena za osobę: " . number_format($amountPerPerson, 2, ',', ' ') . ' PLN.')
+                            ->body("Wysyłaj poniższy link do {$payingParticipantsCount} uczestników. Każdy wypełni formularz i zapłaci indywidualnie. Cena za osobę: ".number_format($amountPerPerson, 2, ',', ' ').' PLN.')
                             ->success()
                             ->actions([
                                 \Filament\Notifications\Actions\Action::make('open')
@@ -553,25 +559,25 @@ class AgreementsRelationManager extends RelationManager
                             $data['participant_count'] = 1;
                         }
 
-                        if (!empty($data['participant_payment_id'])) {
+                        if (! empty($data['participant_payment_id'])) {
                             $participantPayment = EventSettlementParticipantPayment::query()->find($data['participant_payment_id']);
 
                             if ($participantPayment) {
                                 $data['participant_name'] = $data['participant_name'] ?? $participantPayment->participant_name;
 
-                                if (($data['agreement_type'] ?? null) === EventAgreement::TYPE_INDIVIDUAL && (!isset($data['amount_due']) || (float) $data['amount_due'] <= 0)) {
+                                if (($data['agreement_type'] ?? null) === EventAgreement::TYPE_INDIVIDUAL && (! isset($data['amount_due']) || (float) $data['amount_due'] <= 0)) {
                                     $data['amount_due'] = (float) $participantPayment->due_amount_pln;
                                 }
                             }
                         }
 
-                        if (($data['agreement_type'] ?? null) === EventAgreement::TYPE_INDIVIDUAL && (!isset($data['amount_due']) || (float) $data['amount_due'] <= 0)) {
+                        if (($data['agreement_type'] ?? null) === EventAgreement::TYPE_INDIVIDUAL && (! isset($data['amount_due']) || (float) $data['amount_due'] <= 0)) {
                             $data['amount_due'] = $this->resolveIndividualAmountDueForEvent(
                                 max(1, (int) ($event->participant_count ?? 1))
                             );
                         }
 
-                        if (($data['agreement_type'] ?? null) === EventAgreement::TYPE_GROUP && (!isset($data['amount_due']) || (float) $data['amount_due'] <= 0)) {
+                        if (($data['agreement_type'] ?? null) === EventAgreement::TYPE_GROUP && (! isset($data['amount_due']) || (float) $data['amount_due'] <= 0)) {
                             $participantCount = max(1, (int) ($data['participant_count'] ?? $event->participant_count ?? 1));
                             $data['amount_due'] = $event->resolvedPricePerPerson($participantCount) * $participantCount;
                         }
@@ -645,6 +651,7 @@ class AgreementsRelationManager extends RelationManager
     protected function resolveIndividualAmountDueForEvent(int $payingParticipantsCount): float
     {
         $event = $this->getOwnerRecord();
+
         return $event->resolvedPricePerPerson($payingParticipantsCount);
     }
 
@@ -718,16 +725,16 @@ class AgreementsRelationManager extends RelationManager
             foreach (File::allFiles($workspaceFilesDir) as $file) {
                 $extension = strtolower($file->getExtension());
 
-                if (!$this->isAllowedWorkspaceAttachmentExtension($extension)) {
+                if (! $this->isAllowedWorkspaceAttachmentExtension($extension)) {
                     continue;
                 }
 
-                $relativePath = str_replace($workspaceFilesDir . DIRECTORY_SEPARATOR, '', $file->getPathname());
+                $relativePath = str_replace($workspaceFilesDir.DIRECTORY_SEPARATOR, '', $file->getPathname());
                 $relativePath = str_replace('\\', '/', $relativePath);
                 $publicPath = $this->mapWorkspaceAttachmentToPublicPath($relativePath);
 
                 $catalog[$publicPath] = [
-                    'label' => 'Pliki / ' . str_replace('/', ' / ', $relativePath),
+                    'label' => 'Pliki / '.str_replace('/', ' / ', $relativePath),
                     'type' => 'workspace',
                     'source_path' => $file->getPathname(),
                 ];
@@ -745,13 +752,13 @@ class AgreementsRelationManager extends RelationManager
         $resolved = [];
 
         foreach ($selected as $path) {
-            if (!is_string($path) || $path === '') {
+            if (! is_string($path) || $path === '') {
                 continue;
             }
 
             $item = $catalog[$path] ?? null;
 
-            if (($item['type'] ?? null) === 'workspace' && !empty($item['source_path'])) {
+            if (($item['type'] ?? null) === 'workspace' && ! empty($item['source_path'])) {
                 $this->copyWorkspaceAttachmentToPublic($item['source_path'], $path);
             }
 
@@ -789,9 +796,9 @@ class AgreementsRelationManager extends RelationManager
         $slug = Str::slug($fileName);
         $hash = substr(sha1($relativePath), 0, 8);
 
-        $targetName = trim($slug !== '' ? $slug : 'plik', '-') . '-' . $hash . ($extension !== '' ? '.' . $extension : '');
+        $targetName = trim($slug !== '' ? $slug : 'plik', '-').'-'.$hash.($extension !== '' ? '.'.$extension : '');
 
-        return trim('event-agreements/library/' . ($directory !== '' ? $directory . '/' : '') . $targetName, '/');
+        return trim('event-agreements/library/'.($directory !== '' ? $directory.'/' : '').$targetName, '/');
     }
 
     protected function getParticipantPaymentOptions(): array
@@ -799,7 +806,7 @@ class AgreementsRelationManager extends RelationManager
         $event = $this->getOwnerRecord();
         $settlement = $event->activeSettlement;
 
-        if (!$settlement) {
+        if (! $settlement) {
             return [];
         }
 
@@ -808,7 +815,7 @@ class AgreementsRelationManager extends RelationManager
             ->get()
             ->mapWithKeys(function (EventSettlementParticipantPayment $payment): array {
                 $amount = number_format((float) $payment->due_amount_pln, 2, ',', ' ');
-                $label = $payment->participant_name . " ({$amount} PLN)";
+                $label = $payment->participant_name." ({$amount} PLN)";
 
                 return [$payment->id => $label];
             })

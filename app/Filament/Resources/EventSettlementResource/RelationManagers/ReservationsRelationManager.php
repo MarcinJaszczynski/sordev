@@ -12,7 +12,9 @@ use Filament\Tables\Table;
 class ReservationsRelationManager extends RelationManager
 {
     protected static string $relationship = 'reservations';
+
     protected static ?string $title = 'Rezerwacje';
+
     protected static ?string $recordTitleAttribute = 'booking_reference';
 
     public function form(Form $form): Form
@@ -60,7 +62,7 @@ class ReservationsRelationManager extends RelationManager
                                         $point->id => sprintf(
                                             'Dzień %d • %s',
                                             (int) ($point->day ?? 1),
-                                            $point->templatePoint?->name ?? $point->name ?? ('Punkt #' . $point->id)
+                                            $point->templatePoint?->name ?? $point->name ?? ('Punkt #'.$point->id)
                                         ),
                                     ]);
                             })
@@ -154,7 +156,7 @@ class ReservationsRelationManager extends RelationManager
 
                 Tables\Columns\BadgeColumn::make('status')
                     ->label('Status')
-                    ->formatStateUsing(fn($state) => Reservation::$statuses[$state] ?? $state)
+                    ->formatStateUsing(fn ($state) => Reservation::$statuses[$state] ?? $state)
                     ->colors([
                         'gray' => 'pending',
                         'warning' => 'partially_confirmed',

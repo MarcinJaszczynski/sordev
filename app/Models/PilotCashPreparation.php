@@ -35,17 +35,17 @@ class PilotCashPreparation extends Model
 
     protected $casts = [
         'calculated_amount' => 'decimal:2',
-        'approved_amount'   => 'decimal:2',
-        'provided_amount'   => 'decimal:2',
-        'spent_amount'      => 'decimal:2',
-        'returned_amount'   => 'decimal:2',
-        'balance'           => 'decimal:2',
-        'rate_used'         => 'decimal:4',
-        'pln_equivalent'    => 'decimal:2',
-        'provided_at'       => 'datetime',
-        'settled_at'        => 'datetime',
-        'reviewed_by'       => 'integer',
-        'reviewed_at'       => 'datetime',
+        'approved_amount' => 'decimal:2',
+        'provided_amount' => 'decimal:2',
+        'spent_amount' => 'decimal:2',
+        'returned_amount' => 'decimal:2',
+        'balance' => 'decimal:2',
+        'rate_used' => 'decimal:4',
+        'pln_equivalent' => 'decimal:2',
+        'provided_at' => 'datetime',
+        'settled_at' => 'datetime',
+        'reviewed_by' => 'integer',
+        'reviewed_at' => 'datetime',
     ];
 
     public static array $approvalStatuses = [
@@ -56,9 +56,9 @@ class PilotCashPreparation extends Model
 
     public static array $statuses = [
         'calculated' => 'Obliczona',
-        'approved'   => 'Zatwierdzona',
-        'provided'   => 'Wypłacona pilotowi',
-        'settled'    => 'Rozliczona',
+        'approved' => 'Zatwierdzona',
+        'provided' => 'Wypłacona pilotowi',
+        'settled' => 'Rozliczona',
     ];
 
     // --- Relacje ---
@@ -96,8 +96,9 @@ class PilotCashPreparation extends Model
     public function getComputedBalanceAttribute(): float
     {
         $received = $this->received_amount;
-        $spent    = (float) ($this->spent_amount ?? 0);
+        $spent = (float) ($this->spent_amount ?? 0);
         $returned = (float) ($this->returned_amount ?? 0);
+
         return $received - $spent - $returned;
     }
 
@@ -122,7 +123,7 @@ class PilotCashPreparation extends Model
         static::saving(function (self $model) {
             if ($model->isDirty(['approved_amount', 'provided_amount', 'spent_amount', 'returned_amount'])) {
                 $received = (float) ($model->provided_amount ?? $model->approved_amount ?? $model->calculated_amount ?? 0);
-                $spent    = (float) ($model->spent_amount ?? 0);
+                $spent = (float) ($model->spent_amount ?? 0);
                 $returned = (float) ($model->returned_amount ?? 0);
                 $model->balance = $received - $spent - $returned;
             }

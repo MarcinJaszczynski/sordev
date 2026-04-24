@@ -2,17 +2,16 @@
 
 namespace App\Filament\Resources\EventResource\RelationManagers;
 
-use App\Models\EventQty;
-use Filament\Forms;
+use Filament\Forms\Components\TextInput;
+use Filament\Forms\Components\Toggle;
 use Filament\Resources\RelationManagers\RelationManager;
 use Filament\Tables;
 use Filament\Tables\Table;
-use Filament\Forms\Components\TextInput;
-use Filament\Forms\Components\Toggle;
 
 class QtyVariantsRelationManager extends RelationManager
 {
     protected static string $relationship = 'qtyVariants';
+
     protected static ?string $recordTitleAttribute = 'qty';
 
     public function form(\Filament\Forms\Form $form): \Filament\Forms\Form

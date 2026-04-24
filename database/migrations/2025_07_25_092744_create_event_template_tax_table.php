@@ -16,10 +16,10 @@ return new class extends Migration
             $table->unsignedBigInteger('event_template_id');
             $table->unsignedBigInteger('tax_id');
             $table->timestamps();
-            
+
             // Prevent duplicate assignments
             $table->unique(['event_template_id', 'tax_id']);
-            
+
             // Add foreign keys without constraint checking due to SQLite issues
             $table->index('event_template_id');
             $table->index('tax_id');

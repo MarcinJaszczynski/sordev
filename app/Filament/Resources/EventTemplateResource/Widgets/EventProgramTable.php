@@ -2,24 +2,24 @@
 
 namespace App\Filament\Resources\EventTemplateResource\Widgets;
 
-use Filament\Widgets\Widget;
 use App\Models\EventTemplate;
+use Filament\Widgets\Widget;
 use Illuminate\Support\Collection;
 
 class EventProgramTable extends Widget
 {
     protected static string $view = 'filament.resources.event-template-resource.widgets.event-program-table';
-    
+
     public ?EventTemplate $record = null;
 
-    protected int | string | array $columnSpan = 'full';
+    protected int|string|array $columnSpan = 'full';
 
     public function getProgramDaysProperty(): Collection
     {
-        if (!$this->record) {
+        if (! $this->record) {
             return collect();
         }
-        
+
         // Pobierz punkty programu posortowane według dni i kolejności
         $programPoints = $this->record->programPoints()
             ->withPivot(['day', 'order', 'notes', 'start_time', 'end_time', 'include_in_program', 'include_in_calculation', 'active'])
@@ -33,7 +33,7 @@ class EventProgramTable extends Widget
             $daysPoints = $programPoints->filter(function ($point) use ($i) {
                 return $point->pivot->day == $i && $point->pivot->include_in_program;
             });
-            
+
             $days->put($i, $daysPoints);
         }
 
@@ -42,7 +42,10 @@ class EventProgramTable extends Widget
 
     public function getDayInsurancesProperty()
     {
-        if (!$this->record) return collect();
+        if (! $this->record) {
+            return collect();
+        }
+
         return $this->record->dayInsurances->keyBy('day');
     }
 
@@ -51,12 +54,15 @@ class EventProgramTable extends Widget
      */
     public function getBasePricePerPersonProperty()
     {
-        if (!$this->record) return null;
+        if (! $this->record) {
+            return null;
+        }
         // Pobierz pierwszy wariant ceny (np. najniższy wariant ilości i waluty)
         $price = \App\Models\EventTemplatePricePerPerson::where('event_template_id', $this->record->id)
             ->orderBy('event_template_qty_id')
             ->orderBy('currency_id')
             ->first();
+
         return $price;
     }
 

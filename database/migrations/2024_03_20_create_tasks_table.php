@@ -13,7 +13,7 @@ return new class extends Migration
             $table->string('title');
             $table->text('description')->nullable();
             $table->timestamp('due_date')->nullable();
-            $table->foreignId('status_id')->constrained('task_statuses');
+            $table->unsignedBigInteger('status_id');
             $table->string('priority')->default('medium');
             $table->foreignId('author_id')->constrained('users');
             $table->foreignId('assignee_id')->nullable()->constrained('users');
@@ -28,4 +28,4 @@ return new class extends Migration
     {
         Schema::dropIfExists('tasks');
     }
-}; 
+};

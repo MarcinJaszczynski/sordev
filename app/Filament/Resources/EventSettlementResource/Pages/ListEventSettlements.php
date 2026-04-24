@@ -3,8 +3,8 @@
 namespace App\Filament\Resources\EventSettlementResource\Pages;
 
 use App\Filament\Resources\EventSettlementResource;
-use Filament\Resources\Pages\ListRecords;
 use Filament\Actions;
+use Filament\Resources\Pages\ListRecords;
 
 class ListEventSettlements extends ListRecords
 {

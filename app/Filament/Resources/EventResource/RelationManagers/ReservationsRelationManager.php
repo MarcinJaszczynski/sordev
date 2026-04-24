@@ -13,7 +13,9 @@ use Illuminate\Contracts\Database\Query\Builder;
 class ReservationsRelationManager extends RelationManager
 {
     protected static string $relationship = 'reservations';
+
     protected static ?string $title = 'Rezerwacje';
+
     protected static ?string $recordTitleAttribute = 'booking_reference';
 
     public function form(Form $form): Form
@@ -103,7 +105,7 @@ class ReservationsRelationManager extends RelationManager
 
                 Tables\Columns\BadgeColumn::make('status')
                     ->label('Status')
-                    ->formatStateUsing(fn($state) => Reservation::$statuses[$state] ?? $state)
+                    ->formatStateUsing(fn ($state) => Reservation::$statuses[$state] ?? $state)
                     ->colors([
                         'gray' => 'pending',
                         'warning' => 'partially_confirmed',
@@ -143,11 +145,11 @@ class ReservationsRelationManager extends RelationManager
                         return $query
                             ->when(
                                 $data['reserved_from'],
-                                fn(Builder $q, $date) => $q->whereDate('reserved_at', '>=', $date),
+                                fn (Builder $q, $date) => $q->whereDate('reserved_at', '>=', $date),
                             )
                             ->when(
                                 $data['reserved_until'],
-                                fn(Builder $q, $date) => $q->whereDate('reserved_at', '<=', $date),
+                                fn (Builder $q, $date) => $q->whereDate('reserved_at', '<=', $date),
                             );
                     }),
             ])

@@ -3,15 +3,15 @@
 namespace App\Filament\Resources\EventSettlementResource\RelationManagers;
 
 use App\Filament\Resources\EventResource;
-use App\Filament\Resources\TaskResource;
 use App\Filament\Resources\EventSettlementResource\Traits\DispatchesSettlementDataChanged;
-use App\Support\StoragePath;
+use App\Filament\Resources\TaskResource;
 use App\Models\Contractor;
 use App\Models\Currency;
 use App\Models\CurrencyRateSnapshot;
 use App\Models\EventDocument;
 use App\Models\EventSettlementCost;
 use App\Models\Reservation;
+use App\Support\StoragePath;
 use Filament\Forms;
 use Filament\Forms\Form;
 use Filament\Resources\RelationManagers\RelationManager;
@@ -25,7 +25,9 @@ class SettlementCostsRelationManager extends RelationManager
     use DispatchesSettlementDataChanged;
 
     protected static string $relationship = 'costs';
+
     protected static ?string $title = 'Koszty (plan vs rzeczywiste)';
+
     protected static ?string $recordTitleAttribute = 'name';
 
     public function form(Form $form): Form
@@ -53,7 +55,7 @@ class SettlementCostsRelationManager extends RelationManager
                         ->live()
                         ->afterStateUpdated(function ($state, Forms\Set $set, Forms\Get $get) {
                             $current = $get('payment_status');
-                            if (!in_array($current, ['planned', 'reservation_required', 'advance_required', null], true)) {
+                            if (! in_array($current, ['planned', 'reservation_required', 'advance_required', null], true)) {
                                 return;
                             }
 
@@ -122,7 +124,7 @@ class SettlementCostsRelationManager extends RelationManager
 
                     Forms\Components\Select::make('planned_currency_id')
                         ->label('Waluta')
-                        ->options(fn() => Currency::orderBy('name')->pluck('name', 'id'))
+                        ->options(fn () => Currency::orderBy('name')->pluck('name', 'id'))
                         ->searchable()
                         ->live()
                         ->afterStateUpdated(function ($state, Forms\Set $set) {
@@ -175,7 +177,7 @@ class SettlementCostsRelationManager extends RelationManager
 
                     Forms\Components\Select::make('actual_currency_id')
                         ->label('Waluta')
-                        ->options(fn() => Currency::orderBy('name')->pluck('name', 'id'))
+                        ->options(fn () => Currency::orderBy('name')->pluck('name', 'id'))
                         ->searchable()
                         ->nullable()
                         ->live()
@@ -195,23 +197,25 @@ class SettlementCostsRelationManager extends RelationManager
 
                     Forms\Components\Select::make('rate_snapshot_id')
                         ->label('Snapshot kursu')
-                        ->options(fn(Forms\Get $get) => CurrencyRateSnapshot::when(
+                        ->options(fn (Forms\Get $get) => CurrencyRateSnapshot::when(
                             $get('actual_currency_id'),
-                            fn($q, $id) => $q->where('currency_id', $id)
+                            fn ($q, $id) => $q->where('currency_id', $id)
                         )
-                        ->orderByDesc('rate_date')
-                        ->limit(50)
-                        ->get()
-                        ->mapWithKeys(fn($s) => [
-                            $s->id => "{$s->rate_date?->format('d.m.Y')} | {$s->rate} ({$s->source})"
-                        ]))
+                            ->orderByDesc('rate_date')
+                            ->limit(50)
+                            ->get()
+                            ->mapWithKeys(fn ($s) => [
+                                $s->id => "{$s->rate_date?->format('d.m.Y')} | {$s->rate} ({$s->source})",
+                            ]))
                         ->nullable()
                         ->searchable()
                         ->live()
                         ->afterStateUpdated(function ($state, Forms\Set $set) {
                             if ($state) {
                                 $snap = CurrencyRateSnapshot::find($state);
-                                if ($snap) $set('actual_rate', $snap->rate);
+                                if ($snap) {
+                                    $set('actual_rate', $snap->rate);
+                                }
                             }
                         }),
 
@@ -222,7 +226,9 @@ class SettlementCostsRelationManager extends RelationManager
                         ->live(onBlur: true)
                         ->afterStateUpdated(function ($state, Forms\Set $set, Forms\Get $get) {
                             $amount = (float) ($get('actual_amount') ?: 0);
-                            if ($amount > 0) $set('actual_amount_pln', round($amount * $state, 2));
+                            if ($amount > 0) {
+                                $set('actual_amount_pln', round($amount * $state, 2));
+                            }
                         }),
 
                     Forms\Components\TextInput::make('actual_amount_pln')
@@ -246,7 +252,7 @@ class SettlementCostsRelationManager extends RelationManager
 
                     Forms\Components\Select::make('paid_by_user_id')
                         ->label('Płatnik (użytkownik)')
-                        ->options(fn() => \App\Models\User::orderBy('name')->pluck('name', 'id'))
+                        ->options(fn () => \App\Models\User::orderBy('name')->pluck('name', 'id'))
                         ->searchable()
                         ->nullable(),
                 ]),
@@ -284,11 +290,11 @@ class SettlementCostsRelationManager extends RelationManager
                         $contractor = htmlspecialchars($contractor);
 
                         return "<div class='admin-table-stack'>"
-                            . "<div class='admin-table-title'>{$name}</div>"
-                            . "<div class='admin-table-meta'>Źródło: {$source}</div>"
-                            . "<div class='admin-table-meta'>Płaci: {$paidBy}</div>"
-                            . "<div class='admin-table-meta'>Kontrahent: {$contractor}</div>"
-                            . '</div>';
+                            ."<div class='admin-table-title'>{$name}</div>"
+                            ."<div class='admin-table-meta'>Źródło: {$source}</div>"
+                            ."<div class='admin-table-meta'>Płaci: {$paidBy}</div>"
+                            ."<div class='admin-table-meta'>Kontrahent: {$contractor}</div>"
+                            .'</div>';
                     }),
 
                 Tables\Columns\TextColumn::make('contractor.name')
@@ -301,23 +307,22 @@ class SettlementCostsRelationManager extends RelationManager
                     ->label('Płatność')
                     ->html()
                     ->state(function (EventSettlementCost $record): string {
-                        $badge = static fn(string $t, string $bg, string $fg): string =>
-                            "<span class='admin-table-pill' style='background:{$bg};color:{$fg}'>" . htmlspecialchars($t) . '</span>';
+                        $badge = static fn (string $t, string $bg, string $fg): string => "<span class='admin-table-pill' style='background:{$bg};color:{$fg}'>".htmlspecialchars($t).'</span>';
 
                         $typeLabel = EventSettlementCost::$advanceTypes[$record->advance_type] ?? $record->advance_type;
                         $typeBadge = $badge($typeLabel, '#f3f4f6', '#374151');
 
                         $statusLabel = EventSettlementCost::$paymentStatuses[$record->payment_status] ?? $record->payment_status;
                         [$sBg, $sFg] = match ($record->payment_status) {
-                            'planned'              => ['#f3f4f6', '#374151'],
+                            'planned' => ['#f3f4f6', '#374151'],
                             'reservation_required' => ['#fde68a', '#92400e'],
-                            'reserved'             => ['#e0f2fe', '#0369a1'],
-                            'advance_required'     => ['#ffedd5', '#9a3412'],
-                            'advance_paid'         => ['#fde68a', '#92400e'],
-                            'partially_paid'       => ['#dbeafe', '#1e40af'],
-                            'paid'                 => ['#dcfce7', '#166534'],
-                            'cancelled'            => ['#fee2e2', '#991b1b'],
-                            default                => ['#f3f4f6', '#374151'],
+                            'reserved' => ['#e0f2fe', '#0369a1'],
+                            'advance_required' => ['#ffedd5', '#9a3412'],
+                            'advance_paid' => ['#fde68a', '#92400e'],
+                            'partially_paid' => ['#dbeafe', '#1e40af'],
+                            'paid' => ['#dcfce7', '#166534'],
+                            'cancelled' => ['#fee2e2', '#991b1b'],
+                            default => ['#f3f4f6', '#374151'],
                         };
                         $statusBadge = $badge($statusLabel, $sBg, $sFg);
 
@@ -334,12 +339,12 @@ class SettlementCostsRelationManager extends RelationManager
                             : null;
                         $diff = $actual !== null ? $actual - $planned : null;
 
-                        $plannedLabel = number_format($planned, 2, ',', ' ') . ' PLN';
+                        $plannedLabel = number_format($planned, 2, ',', ' ').' PLN';
                         $actualLabel = $actual !== null
-                            ? number_format($actual, 2, ',', ' ') . ' PLN'
+                            ? number_format($actual, 2, ',', ' ').' PLN'
                             : '—';
                         $diffLabel = $diff !== null
-                            ? number_format($diff, 2, ',', ' ') . ' PLN'
+                            ? number_format($diff, 2, ',', ' ').' PLN'
                             : '—';
 
                         $diffColor = $diff === null
@@ -347,48 +352,48 @@ class SettlementCostsRelationManager extends RelationManager
                             : ($diff > 0 ? '#b91c1c' : ($diff < 0 ? '#166534' : '#374151'));
 
                         return "<div class='admin-table-stack admin-table-stack-compact'>"
-                            . "<span class='admin-table-value'>Plan: {$plannedLabel}</span>"
-                            . "<span class='admin-table-value'>Rzecz.: {$actualLabel}</span>"
-                            . "<span class='admin-table-value-strong' style='color:{$diffColor}'>Różnica: {$diffLabel}</span>"
-                            . '</div>';
+                            ."<span class='admin-table-value'>Plan: {$plannedLabel}</span>"
+                            ."<span class='admin-table-value'>Rzecz.: {$actualLabel}</span>"
+                            ."<span class='admin-table-value-strong' style='color:{$diffColor}'>Różnica: {$diffLabel}</span>"
+                            .'</div>';
                     })
                     ->sortable(query: fn ($query, string $direction) => $query->orderBy('planned_amount_pln', $direction)),
 
                 Tables\Columns\TextColumn::make('planned_amount')
                     ->label('Plan')
-                    ->money(fn($record) => $record->plannedCurrency?->symbol ?? 'PLN')
+                    ->money(fn ($record) => $record->plannedCurrency?->symbol ?? 'PLN')
                     ->sortable(query: fn ($query, string $direction) => $query
                         ->orderBy('planned_amount_pln', $direction)
                         ->orderBy('planned_amount', $direction))
-                    ->description(fn($record) => $record->planned_amount_pln ? number_format($record->planned_amount_pln, 2) . ' PLN' : null)
+                    ->description(fn ($record) => $record->planned_amount_pln ? number_format($record->planned_amount_pln, 2).' PLN' : null)
                     ->toggleable(isToggledHiddenByDefault: true),
 
                 Tables\Columns\TextColumn::make('actual_amount')
                     ->label('Rzeczywiste')
-                    ->money(fn($record) => $record->actualCurrency?->symbol ?? $record->plannedCurrency?->symbol ?? 'PLN')
+                    ->money(fn ($record) => $record->actualCurrency?->symbol ?? $record->plannedCurrency?->symbol ?? 'PLN')
                     ->sortable(query: fn ($query, string $direction) => $query
                         ->orderByRaw("COALESCE(actual_amount_pln, 0) {$direction}")
                         ->orderByRaw("COALESCE(actual_amount, 0) {$direction}"))
                     ->placeholder('—')
-                    ->description(fn($record) => $record->actual_amount_pln ? number_format($record->actual_amount_pln, 2) . ' PLN' : null)
+                    ->description(fn ($record) => $record->actual_amount_pln ? number_format($record->actual_amount_pln, 2).' PLN' : null)
                     ->toggleable(isToggledHiddenByDefault: true),
 
                 Tables\Columns\TextColumn::make('diff_pln')
                     ->label('Różnica PLN')
-                    ->state(fn($record) => $record->diff_pln)
+                    ->state(fn ($record) => $record->diff_pln)
                     ->numeric(2)
                     ->suffix(' PLN')
                     ->placeholder('—')
                     ->sortable(query: fn ($query, string $direction) => $query->orderByRaw("(COALESCE(actual_amount_pln, 0) - COALESCE(planned_amount_pln, 0)) {$direction}"))
-                    ->color(fn($state) => $state === null ? 'gray' : ($state > 0 ? 'danger' : ($state < 0 ? 'success' : 'gray')))
+                    ->color(fn ($state) => $state === null ? 'gray' : ($state > 0 ? 'danger' : ($state < 0 ? 'success' : 'gray')))
                     ->toggleable(isToggledHiddenByDefault: true),
 
                 Tables\Columns\TextColumn::make('advance_due_date')
                     ->label('Termin / Kwota zaliczki')
                     ->date('d.m.Y')
                     ->placeholder('—')
-                    ->description(fn($record) => $record->advance_amount
-                        ? number_format((float) $record->advance_amount, 2) . ' PLN'
+                    ->description(fn ($record) => $record->advance_amount
+                        ? number_format((float) $record->advance_amount, 2).' PLN'
                         : null)
                     ->extraAttributes(['style' => 'font-size: 116.6667%;']),
 
@@ -396,27 +401,26 @@ class SettlementCostsRelationManager extends RelationManager
                     ->label('Dokumenty')
                     ->html()
                     ->state(function (EventSettlementCost $record): string {
-                        $badge = static fn(string $t, string $bg, string $fg): string =>
-                            "<span class='admin-table-pill' style='background:{$bg};color:{$fg}'>" . htmlspecialchars($t) . '</span>';
+                        $badge = static fn (string $t, string $bg, string $fg): string => "<span class='admin-table-pill' style='background:{$bg};color:{$fg}'>".htmlspecialchars($t).'</span>';
 
                         $faktury = (string) ($record->linked_documents_label ?? '—');
                         $dokCount = (int) ($record->documents_count ?? 0);
-                        $dokBadge = $badge($dokCount . ' dok.', $dokCount > 0 ? '#dcfce7' : '#f3f4f6', $dokCount > 0 ? '#166534' : '#374151');
+                        $dokBadge = $badge($dokCount.' dok.', $dokCount > 0 ? '#dcfce7' : '#f3f4f6', $dokCount > 0 ? '#166534' : '#374151');
 
                         $scanStatus = (string) ($record->document_scan_status ?? 'Brak dokumentu');
                         [$scanBg, $scanFg] = match ($scanStatus) {
-                            'Skan OK'            => ['#dcfce7', '#166534'],
+                            'Skan OK' => ['#dcfce7', '#166534'],
                             'Dokument bez skanu' => ['#fef3c7', '#92400e'],
-                            'Brak dokumentu'     => ['#fee2e2', '#991b1b'],
-                            default              => ['#f3f4f6', '#374151'],
+                            'Brak dokumentu' => ['#fee2e2', '#991b1b'],
+                            default => ['#f3f4f6', '#374151'],
                         };
                         $scanBadge = $badge($scanStatus, $scanBg, $scanFg);
 
                         return "<div class='admin-table-stack admin-table-stack-compact'>"
-                            . "<span class='admin-table-value'>" . htmlspecialchars($faktury) . '</span>'
-                            . $dokBadge
-                            . $scanBadge
-                            . '</div>';
+                            ."<span class='admin-table-value'>".htmlspecialchars($faktury).'</span>'
+                            .$dokBadge
+                            .$scanBadge
+                            .'</div>';
                     }),
 
                 Tables\Columns\BadgeColumn::make('approval_status')
@@ -425,7 +429,7 @@ class SettlementCostsRelationManager extends RelationManager
                     ->colors([
                         'warning' => 'pending',
                         'success' => 'approved',
-                        'danger'  => 'rejected',
+                        'danger' => 'rejected',
                     ])
                     ->extraAttributes(['style' => 'font-size: 116.6667%;']),
 
@@ -529,7 +533,7 @@ class SettlementCostsRelationManager extends RelationManager
 
                 Tables\Actions\CreateAction::make()
                     ->label('Dodaj pozycję')
-                    ->after(fn() => $this->dispatchSettlementDataChanged()),
+                    ->after(fn () => $this->dispatchSettlementDataChanged()),
             ])
             ->actions([
                 Tables\Actions\Action::make('add_reservation')
@@ -538,7 +542,7 @@ class SettlementCostsRelationManager extends RelationManager
                     ->color('success')
                     ->button()
                     ->size('sm')
-                    ->modalHeading(fn (EventSettlementCost $record) => 'Nowa rezerwacja: ' . $record->name)
+                    ->modalHeading(fn (EventSettlementCost $record) => 'Nowa rezerwacja: '.$record->name)
                     ->modalWidth('2xl')
                     ->form([
                         Forms\Components\TextInput::make('booking_reference')
@@ -617,7 +621,7 @@ class SettlementCostsRelationManager extends RelationManager
                         ->action(function ($record) {
                             $record->update([
                                 'payment_status' => 'advance_paid',
-                                'paid_at'        => $record->paid_at ?? now(),
+                                'paid_at' => $record->paid_at ?? now(),
                             ]);
                             $this->dispatchSettlementDataChanged();
                         })
@@ -630,12 +634,12 @@ class SettlementCostsRelationManager extends RelationManager
                         ->requiresConfirmation()
                         ->action(function ($record) {
                             $record->update([
-                                'actual_amount'      => $record->actual_amount ?? $record->planned_amount,
+                                'actual_amount' => $record->actual_amount ?? $record->planned_amount,
                                 'actual_currency_id' => $record->actual_currency_id ?? $record->planned_currency_id,
-                                'actual_rate'        => $record->actual_rate ?? $record->planned_rate,
-                                'actual_amount_pln'  => $record->actual_amount_pln ?? $record->planned_amount_pln,
-                                'payment_status'     => 'paid',
-                                'paid_at'            => $record->paid_at ?? now(),
+                                'actual_rate' => $record->actual_rate ?? $record->planned_rate,
+                                'actual_amount_pln' => $record->actual_amount_pln ?? $record->planned_amount_pln,
+                                'payment_status' => 'paid',
+                                'paid_at' => $record->paid_at ?? now(),
                             ]);
                             $this->dispatchSettlementDataChanged();
                         })
@@ -652,11 +656,11 @@ class SettlementCostsRelationManager extends RelationManager
                         })
                         ->visible(fn ($record) => $record->payment_status !== 'cancelled'),
                 ])
-                ->label('Zmień status')
-                ->icon('heroicon-o-arrows-up-down')
-                ->color('primary')
-                ->button()
-                ->size('sm'),
+                    ->label('Zmień status')
+                    ->icon('heroicon-o-arrows-up-down')
+                    ->color('primary')
+                    ->button()
+                    ->size('sm'),
 
                 Tables\Actions\ActionGroup::make([
                     Tables\Actions\Action::make('approve_item')
@@ -716,36 +720,36 @@ class SettlementCostsRelationManager extends RelationManager
                         ]))
                         ->openUrlInNewTab(),
                 ])
-                ->label('Kontrola / Inne')
-                ->icon('heroicon-o-shield-check')
-                ->color('gray')
-                ->button()
-                ->size('sm'),
+                    ->label('Kontrola / Inne')
+                    ->icon('heroicon-o-shield-check')
+                    ->color('gray')
+                    ->button()
+                    ->size('sm'),
 
                 Tables\Actions\EditAction::make()
                     ->action(function (EventSettlementCost $record, array $data): void {
                         // Handle document upload and updates only if documents were submitted
                         if (array_key_exists('documents', $data) && is_array($data['documents'])) {
-                            $settlement  = $this->getOwnerRecord();
-                            $eventId     = $settlement->event_id;
+                            $settlement = $this->getOwnerRecord();
+                            $eventId = $settlement->event_id;
                             $existingIds = $record->documents()->pluck('id')->toArray();
-                            $keptIds     = [];
+                            $keptIds = [];
 
                             foreach ($data['documents'] as $item) {
-                                $docId           = $item['doc_id'] ?? null;
-                                $targets         = (array) ($item['pdf_targets'] ?? []);
-                                $newFilePath     = $item['file_path'] ?? null;
-                                $existingPath    = $item['existing_file_path'] ?? null;
-                                $finalFilePath   = $newFilePath ?: $existingPath;
+                                $docId = $item['doc_id'] ?? null;
+                                $targets = (array) ($item['pdf_targets'] ?? []);
+                                $newFilePath = $item['file_path'] ?? null;
+                                $existingPath = $item['existing_file_path'] ?? null;
+                                $finalFilePath = $newFilePath ?: $existingPath;
 
                                 $docData = [
-                                    'event_id'            => $eventId,
-                                    'settlement_cost_id'  => $record->id,
-                                    'name'                => $item['name'],
-                                    'file_path'           => $finalFilePath,
-                                    'notes'               => $item['notes'] ?? null,
-                                    'attach_to_pilot_pdf'  => in_array('attach_to_pilot_pdf', $targets, true),
-                                    'attach_to_hotel_pdf'  => in_array('attach_to_hotel_pdf', $targets, true),
+                                    'event_id' => $eventId,
+                                    'settlement_cost_id' => $record->id,
+                                    'name' => $item['name'],
+                                    'file_path' => $finalFilePath,
+                                    'notes' => $item['notes'] ?? null,
+                                    'attach_to_pilot_pdf' => in_array('attach_to_pilot_pdf', $targets, true),
+                                    'attach_to_hotel_pdf' => in_array('attach_to_hotel_pdf', $targets, true),
                                     'attach_to_driver_pdf' => in_array('attach_to_driver_pdf', $targets, true),
                                     'attach_to_folder_pdf' => in_array('attach_to_folder_pdf', $targets, true),
                                 ];
@@ -763,7 +767,7 @@ class SettlementCostsRelationManager extends RelationManager
                                         $keptIds[] = (int) $docId;
                                     }
                                 } else {
-                                    $doc       = EventDocument::create($docData);
+                                    $doc = EventDocument::create($docData);
                                     $keptIds[] = $doc->id;
                                 }
                             }
@@ -787,7 +791,7 @@ class SettlementCostsRelationManager extends RelationManager
                         // Save the record
                         $record->update($data);
                     })
-                    ->after(fn() => $this->dispatchSettlementDataChanged()),
+                    ->after(fn () => $this->dispatchSettlementDataChanged()),
 
                 Tables\Actions\Action::make('manage_documents')
                     ->label('Dokumenty')
@@ -795,20 +799,20 @@ class SettlementCostsRelationManager extends RelationManager
                     ->color('gray')
                     ->button()
                     ->size('sm')
-                    ->modalHeading(fn (EventSettlementCost $record): string => 'Dokumenty: ' . $record->name)
+                    ->modalHeading(fn (EventSettlementCost $record): string => 'Dokumenty: '.$record->name)
                     ->modalDescription('Dodaj, edytuj lub usuń dokumenty tej pozycji.')
                     ->modalWidth('4xl')
                     ->form(function (EventSettlementCost $record): array {
                         $docs = $record->documents()->get();
                         $docState = $docs->map(fn ($doc) => [
-                            'doc_id'             => $doc->id,
+                            'doc_id' => $doc->id,
                             'existing_file_path' => $doc->file_path,
-                            'file_path'          => null,
-                            'name'               => $doc->name,
-                            'notes'              => $doc->notes,
-                            'pdf_targets'        => array_keys(array_filter([
-                                'attach_to_pilot_pdf'  => $doc->attach_to_pilot_pdf,
-                                'attach_to_hotel_pdf'  => $doc->attach_to_hotel_pdf,
+                            'file_path' => null,
+                            'name' => $doc->name,
+                            'notes' => $doc->notes,
+                            'pdf_targets' => array_keys(array_filter([
+                                'attach_to_pilot_pdf' => $doc->attach_to_pilot_pdf,
+                                'attach_to_hotel_pdf' => $doc->attach_to_hotel_pdf,
                                 'attach_to_driver_pdf' => $doc->attach_to_driver_pdf,
                                 'attach_to_folder_pdf' => $doc->attach_to_folder_pdf,
                             ])),
@@ -833,7 +837,7 @@ class SettlementCostsRelationManager extends RelationManager
                                     Forms\Components\Placeholder::make('current_file_info')
                                         ->label('Plik')
                                         ->content(fn (Forms\Get $get): string => $get('existing_file_path')
-                                            ? '📎 ' . basename((string) $get('existing_file_path'))
+                                            ? '📎 '.basename((string) $get('existing_file_path'))
                                             : '—')
                                         ->columnSpan(2),
 
@@ -860,8 +864,8 @@ class SettlementCostsRelationManager extends RelationManager
                                     Forms\Components\CheckboxList::make('pdf_targets')
                                         ->label('Pakiety PDF')
                                         ->options([
-                                            'attach_to_pilot_pdf'  => '✈ Pilot',
-                                            'attach_to_hotel_pdf'  => '🏨 Hotel',
+                                            'attach_to_pilot_pdf' => '✈ Pilot',
+                                            'attach_to_hotel_pdf' => '🏨 Hotel',
                                             'attach_to_driver_pdf' => '🚌 Kierowca',
                                             'attach_to_folder_pdf' => '📁 Teczka',
                                         ])
@@ -874,30 +878,30 @@ class SettlementCostsRelationManager extends RelationManager
                         ];
                     })
                     ->action(function (EventSettlementCost $record, array $data): void {
-                        $settlement  = $this->getOwnerRecord();
-                        $eventId     = $settlement->event_id;
+                        $settlement = $this->getOwnerRecord();
+                        $eventId = $settlement->event_id;
                         $existingIds = $record->documents()->pluck('id')->toArray();
-                        $keptIds     = [];
+                        $keptIds = [];
 
                         foreach ($data['documents'] ?? [] as $item) {
-                            $docId           = $item['doc_id'] ?? null;
-                            $targets         = (array) ($item['pdf_targets'] ?? []);
-                            $newFilePath     = $item['file_path'] ?? null;
-                            $existingPath    = $item['existing_file_path'] ?? null;
-                            $finalFilePath   = $newFilePath ?: $existingPath;
+                            $docId = $item['doc_id'] ?? null;
+                            $targets = (array) ($item['pdf_targets'] ?? []);
+                            $newFilePath = $item['file_path'] ?? null;
+                            $existingPath = $item['existing_file_path'] ?? null;
+                            $finalFilePath = $newFilePath ?: $existingPath;
 
-                            if (!$finalFilePath || !$item['name']) {
+                            if (! $finalFilePath || ! $item['name']) {
                                 continue;
                             }
 
                             $docData = [
-                                'event_id'            => $eventId,
-                                'settlement_cost_id'  => $record->id,
-                                'name'                => $item['name'],
-                                'file_path'           => $finalFilePath,
-                                'notes'               => $item['notes'] ?? null,
-                                'attach_to_pilot_pdf'  => in_array('attach_to_pilot_pdf', $targets, true),
-                                'attach_to_hotel_pdf'  => in_array('attach_to_hotel_pdf', $targets, true),
+                                'event_id' => $eventId,
+                                'settlement_cost_id' => $record->id,
+                                'name' => $item['name'],
+                                'file_path' => $finalFilePath,
+                                'notes' => $item['notes'] ?? null,
+                                'attach_to_pilot_pdf' => in_array('attach_to_pilot_pdf', $targets, true),
+                                'attach_to_hotel_pdf' => in_array('attach_to_hotel_pdf', $targets, true),
                                 'attach_to_driver_pdf' => in_array('attach_to_driver_pdf', $targets, true),
                                 'attach_to_folder_pdf' => in_array('attach_to_folder_pdf', $targets, true),
                             ];
@@ -915,7 +919,7 @@ class SettlementCostsRelationManager extends RelationManager
                                     $keptIds[] = (int) $docId;
                                 }
                             } else {
-                                $doc       = EventDocument::create($docData);
+                                $doc = EventDocument::create($docData);
                                 $keptIds[] = $doc->id;
                             }
                         }
@@ -933,10 +937,10 @@ class SettlementCostsRelationManager extends RelationManager
                             }
                         }
                     })
-                    ->after(fn() => $this->dispatchSettlementDataChanged()),
+                    ->after(fn () => $this->dispatchSettlementDataChanged()),
 
                 Tables\Actions\DeleteAction::make()
-                    ->after(fn() => $this->dispatchSettlementDataChanged()),
+                    ->after(fn () => $this->dispatchSettlementDataChanged()),
             ]);
     }
 }

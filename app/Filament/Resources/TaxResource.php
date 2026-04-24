@@ -3,25 +3,27 @@
 namespace App\Filament\Resources;
 
 use App\Filament\Resources\TaxResource\Pages;
-use App\Filament\Resources\TaxResource\RelationManagers;
 use App\Models\Tax;
 use Filament\Forms;
 use Filament\Forms\Form;
 use Filament\Resources\Resource;
 use Filament\Tables;
 use Filament\Tables\Table;
-use Illuminate\Database\Eloquent\Builder;
-use Illuminate\Database\Eloquent\SoftDeletingScope;
 
 class TaxResource extends Resource
 {
     protected static ?string $model = Tax::class;
 
     protected static ?string $navigationIcon = 'heroicon-o-calculator';
+
     protected static ?string $navigationLabel = 'Podatki';
+
     protected static ?string $modelLabel = 'Podatek';
+
     protected static ?string $pluralModelLabel = 'Podatki';
+
     protected static ?string $navigationGroup = 'Ustawienia kalkulacji';
+
     protected static ?int $navigationSort = 70;
 
     public static function form(Form $form): Form
@@ -49,7 +51,7 @@ class TaxResource extends Resource
                             ->default(true)
                             ->helperText('Czy podatek jest aktywny i może być używany w kalkulacjach'),
                     ])->columns(2),
-                
+
                 Forms\Components\Section::make('Podstawa naliczania')
                     ->description('Wybierz od czego ma być naliczany podatek')
                     ->schema([
@@ -60,7 +62,7 @@ class TaxResource extends Resource
                             ->label('Naliczaj od narzutu')
                             ->helperText('Podatek będzie naliczony od kwoty narzutu'),
                     ])->columns(2),
-                
+
                 Forms\Components\Section::make('Dodatkowe informacje')
                     ->schema([
                         Forms\Components\RichEditor::make('description')
@@ -90,7 +92,7 @@ class TaxResource extends Resource
                 Tables\Columns\IconColumn::make('apply_to_markup')
                     ->label('Od narzutu')
                     ->boolean()
-                    ->trueIcon('heroicon-o-check-circle') 
+                    ->trueIcon('heroicon-o-check-circle')
                     ->falseIcon('heroicon-o-x-circle'),
                 Tables\Columns\IconColumn::make('is_active')
                     ->label('Aktywny')

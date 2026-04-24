@@ -16,7 +16,9 @@ use Illuminate\Support\Facades\Auth;
 class DocumentsRelationManager extends RelationManager
 {
     protected static string $relationship = 'documents';
+
     protected static ?string $title = 'Faktury i dokumenty';
+
     protected static ?string $recordTitleAttribute = 'document_number';
 
     public function form(Form $form): Form
@@ -267,7 +269,7 @@ class DocumentsRelationManager extends RelationManager
                         return StoragePath::publicUrl($first);
                     })
                     ->openUrlInNewTab()
-                    ->visible(fn ($record) => !empty($record->files)),
+                    ->visible(fn ($record) => ! empty($record->files)),
 
                 Tables\Actions\EditAction::make(),
 

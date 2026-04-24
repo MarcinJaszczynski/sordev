@@ -7,7 +7,6 @@ use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
-use Illuminate\Support\Facades\Auth;
 
 class EventProgramPoint extends Model
 {
@@ -115,14 +114,14 @@ class EventProgramPoint extends Model
 
             $changes = $point->getChanges();
             $pointName = self::resolvePointName($point);
-            
+
             foreach ($changes as $field => $newValue) {
                 $oldValue = $point->getOriginal($field);
                 $event->logHistory(
-                    'program_changed', 
-                    "program_point.{$field}", 
-                    $oldValue, 
-                    $newValue, 
+                    'program_changed',
+                    "program_point.{$field}",
+                    $oldValue,
+                    $newValue,
                     "Zmieniono {$field} w punkcie programu: {$pointName}"
                 );
             }
@@ -143,7 +142,7 @@ class EventProgramPoint extends Model
                 null,
                 null,
                 $point->toArray(),
-                'Dodano punkt programu: ' . self::resolvePointName($point)
+                'Dodano punkt programu: '.self::resolvePointName($point)
             );
 
             // Przelicz całkowity koszt imprezy
@@ -162,7 +161,7 @@ class EventProgramPoint extends Model
                 null,
                 $point->toArray(),
                 null,
-                'Usunięto punkt programu: ' . self::resolvePointName($point)
+                'Usunięto punkt programu: '.self::resolvePointName($point)
             );
 
             // Przelicz całkowity koszt imprezy
@@ -308,7 +307,7 @@ class EventProgramPoint extends Model
             'program_point.day',
             $oldDay,
             $newDay,
-            "Przeniesiono punkt programu '" . self::resolvePointName($this) . "' z dnia {$oldDay} do dnia {$newDay}"
+            "Przeniesiono punkt programu '".self::resolvePointName($this)."' z dnia {$oldDay} do dnia {$newDay}"
         );
     }
 

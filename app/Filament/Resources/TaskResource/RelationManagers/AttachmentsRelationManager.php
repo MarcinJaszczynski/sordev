@@ -7,8 +7,8 @@ use Filament\Forms\Form;
 use Filament\Resources\RelationManagers\RelationManager;
 use Filament\Tables;
 use Filament\Tables\Table;
-use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Facades\Auth;
+use Illuminate\Support\Facades\Storage;
 
 class AttachmentsRelationManager extends RelationManager
 {
@@ -31,21 +31,21 @@ class AttachmentsRelationManager extends RelationManager
 
     public function table(Table $table): Table
     {
-        return $table            ->columns([
-                Tables\Columns\TextColumn::make('name')
-                    ->label('Nazwa pliku')
-                    ->searchable()
-                    ->url(fn ($record) => $record->public_url)
-                    ->openUrlInNewTab(),
-                Tables\Columns\TextColumn::make('user.name')
-                    ->label('Dodane przez'),
-                Tables\Columns\TextColumn::make('readable_size')
-                    ->label('Rozmiar')
-                    ->placeholder('—'),
-                Tables\Columns\TextColumn::make('created_at')
-                    ->label('Data dodania')
-                    ->dateTime(),
-            ])
+        return $table->columns([
+            Tables\Columns\TextColumn::make('name')
+                ->label('Nazwa pliku')
+                ->searchable()
+                ->url(fn ($record) => $record->public_url)
+                ->openUrlInNewTab(),
+            Tables\Columns\TextColumn::make('user.name')
+                ->label('Dodane przez'),
+            Tables\Columns\TextColumn::make('readable_size')
+                ->label('Rozmiar')
+                ->placeholder('—'),
+            Tables\Columns\TextColumn::make('created_at')
+                ->label('Data dodania')
+                ->dateTime(),
+        ])
             ->filters([
                 //
             ])
@@ -59,7 +59,7 @@ class AttachmentsRelationManager extends RelationManager
 
                         return $data;
                     }),
-            ])            ->actions([
+            ])->actions([
                 Tables\Actions\Action::make('download')
                     ->label('Pobierz')
                     ->icon('heroicon-o-arrow-down-tray')
@@ -73,4 +73,4 @@ class AttachmentsRelationManager extends RelationManager
                 ]),
             ]);
     }
-} 
+}

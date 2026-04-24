@@ -1,8 +1,8 @@
 <?php
 
-require_once __DIR__ . '/vendor/autoload.php';
+require_once __DIR__.'/vendor/autoload.php';
 
-$app = require_once __DIR__ . '/bootstrap/app.php';
+$app = require_once __DIR__.'/bootstrap/app.php';
 $kernel = $app->make(Illuminate\Contracts\Console\Kernel::class);
 $kernel->bootstrap();
 
@@ -22,7 +22,7 @@ echo "=== Test klonowania szablonu EventTemplate ===\n";
 // Znajdź szablon o ID 10
 $original = EventTemplate::find(10);
 
-if (!$original) {
+if (! $original) {
     echo "Błąd: Nie znaleziono szablonu o ID 10\n";
     exit(1);
 }
@@ -38,22 +38,22 @@ $original->load([
     'hotelDays',
     'startingPlaceAvailabilities',
     'taxes',
-    'pricesPerPerson'
+    'pricesPerPerson',
 ]);
 
-echo "Liczba tagów: " . $original->tags->count() . "\n";
-echo "Liczba punktów programu: " . $original->programPoints->count() . "\n";
-echo "Liczba cen za osobę: " . $original->pricesPerPerson->count() . "\n";
-echo "Liczba ubezpieczeń dni: " . $original->dayInsurances->count() . "\n";
-echo "Liczba dni hotelowych: " . $original->hotelDays->count() . "\n";
-echo "Liczba dostępności miejsc: " . $original->startingPlaceAvailabilities->count() . "\n";
-echo "Liczba podatków: " . $original->taxes->count() . "\n";
+echo 'Liczba tagów: '.$original->tags->count()."\n";
+echo 'Liczba punktów programu: '.$original->programPoints->count()."\n";
+echo 'Liczba cen za osobę: '.$original->pricesPerPerson->count()."\n";
+echo 'Liczba ubezpieczeń dni: '.$original->dayInsurances->count()."\n";
+echo 'Liczba dni hotelowych: '.$original->hotelDays->count()."\n";
+echo 'Liczba dostępności miejsc: '.$original->startingPlaceAvailabilities->count()."\n";
+echo 'Liczba podatków: '.$original->taxes->count()."\n";
 
 try {
     // Rozpocznij klonowanie
     $clone = $original->replicate();
-    $clone->name = $original->name . ' (Test Kopia)';
-    $clone->slug = $original->slug . '-test-kopia-' . uniqid();
+    $clone->name = $original->name.' (Test Kopia)';
+    $clone->slug = $original->slug.'-test-kopia-'.uniqid();
     $clone->save();
 
     echo "\n✅ Podstawowy klon utworzony: ID {$clone->id}\n";
@@ -131,6 +131,6 @@ try {
     $editUrl = "http://sorbaza_old.test/admin/event-templates/{$clone->id}/edit";
     echo "URL do edycji: {$editUrl}\n";
 } catch (Exception $e) {
-    echo "\n❌ Błąd podczas klonowania: " . $e->getMessage() . "\n";
-    echo "Stack trace:\n" . $e->getTraceAsString() . "\n";
+    echo "\n❌ Błąd podczas klonowania: ".$e->getMessage()."\n";
+    echo "Stack trace:\n".$e->getTraceAsString()."\n";
 }

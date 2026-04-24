@@ -27,6 +27,7 @@ class CreateTask extends CreateRecord
     protected function mutateFormDataBeforeCreate(array $data): array
     {
         $data['author_id'] = auth()->id();
+
         return $data;
     }
 
@@ -35,7 +36,6 @@ class CreateTask extends CreateRecord
      */
     protected function afterCreate(): void
     {
-        parent::afterCreate();
         $userId = auth()->id();
         if ($userId) {
             \App\Services\NotificationService::clearCacheForUser($userId);

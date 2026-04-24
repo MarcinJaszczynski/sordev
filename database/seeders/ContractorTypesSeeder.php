@@ -24,7 +24,7 @@ class ContractorTypesSeeder extends Seeder
             ['id' => 12, 'name' => 'Kontrahent zagraniczny'],
         ];
 
-    // insertOrIgnore to be idempotent on repeated runs (SQLite/MySQL safe)
-    DB::table('contractor_types')->insertOrIgnore($types);
+        // insertOrIgnore to be idempotent on repeated runs (SQLite/MySQL safe)
+        DB::table('contractor_types')->insertOrIgnore($types);
     }
 }

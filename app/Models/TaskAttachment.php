@@ -52,9 +52,9 @@ class TaskAttachment extends Model
         }
 
         if ($this->size >= 1024 * 1024) {
-            return number_format($this->size / (1024 * 1024), 2) . ' MB';
+            return number_format($this->size / (1024 * 1024), 2).' MB';
         }
 
-        return number_format($this->size / 1024, 1) . ' KB';
+        return number_format($this->size / 1024, 1).' KB';
     }
-} 
+}

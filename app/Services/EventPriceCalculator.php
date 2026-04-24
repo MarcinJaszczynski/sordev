@@ -17,8 +17,8 @@ class EventPriceCalculator
         EventPricePerPerson::where('event_id', $event->id)->delete();
 
         // Load points and sum only those rows that have include_in_calculation=true and active=true
-    $points = $event->programPoints()->where('active', true)->get();
-    $totalProgramCost = \App\Services\ProgramPointHelper::sumIncluded($points, 'total_price');
+        $points = $event->programPoints()->where('active', true)->get();
+        $totalProgramCost = \App\Services\ProgramPointHelper::sumIncluded($points, 'total_price');
 
         $qtys = $event->qtyVariants()->get();
 

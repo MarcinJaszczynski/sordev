@@ -13,7 +13,7 @@ return new class extends Migration
     {
         Schema::table('event_template_program_points', function (Blueprint $table) {
             //
-                        $table->boolean('convert_to_pln')->default(true); // Domyślnie "tak"
+            $table->boolean('convert_to_pln')->default(true); // Domyślnie "tak"
 
         });
     }
@@ -25,7 +25,7 @@ return new class extends Migration
     {
         Schema::table('event_template_program_points', function (Blueprint $table) {
             //
-                        $table->dropColumn('convert_to_pln');
+            $table->dropColumn('convert_to_pln');
 
         });
     }

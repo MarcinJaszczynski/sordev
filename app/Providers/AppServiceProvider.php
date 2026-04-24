@@ -2,17 +2,17 @@
 
 namespace App\Providers;
 
-use Illuminate\Support\ServiceProvider;
-use Filament\Support\Facades\FilamentAsset;
-use Filament\Support\Assets\Css;
-use Illuminate\Support\Facades\Vite;
+use App\Filament\Resources\TaskResource\RelationManagers\TasksRelationManager;
 use App\Models\Event;
 use App\Models\Place;
 use App\Observers\EventObserver;
 use App\Observers\PlaceObserver;
-use Livewire\Livewire;
-use App\Filament\Resources\TaskResource\RelationManagers\TasksRelationManager;
+use Filament\Support\Assets\Css;
+use Filament\Support\Facades\FilamentAsset;
 use Illuminate\Support\Facades\URL;
+use Illuminate\Support\Facades\Vite;
+use Illuminate\Support\ServiceProvider;
+use Livewire\Livewire;
 
 class AppServiceProvider extends ServiceProvider
 {
@@ -34,7 +34,7 @@ class AppServiceProvider extends ServiceProvider
             // Keep Filament JS stack isolated. Custom app.js is loaded on front layouts,
             // and injecting it globally into the panel can break table/select Alpine boot.
         ]);
-        
+
         // Rejestracja komponenty Blade dla powiadomień
         $this->app['blade.compiler']->component('app.filament.components.topbar-notifications', 'app-filament-components-topbar-notifications');
 
@@ -65,7 +65,7 @@ class AppServiceProvider extends ServiceProvider
                 config([
                     'app.url' => $requestRoot,
                     'app.public_url' => $requestRoot,
-                    'filesystems.disks.public.url' => $requestRoot . '/storage',
+                    'filesystems.disks.public.url' => $requestRoot.'/storage',
                 ]);
             }
         }

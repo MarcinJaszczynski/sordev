@@ -59,11 +59,55 @@ bring_up_app() {
 
 trap bring_up_app EXIT
 
-echo "[1/7] Wlaczam maintenance mode"
+repair_public_storage_paths() {
+  local legacy_root="storage/app"
+  local public_root="storage/app/public"
+
+  mkdir -p "$public_root"
+
+  # Ensure storage symlink exists (or clearly report why it cannot be created).
+  if [[ -L public/storage ]]; then
+    echo "public/storage -> $(readlink public/storage)"
+  elif [[ -e public/storage ]]; then
+    echo "UWAGA: public/storage istnieje, ale nie jest symlinkiem. Nie zmieniam automatycznie."
+  else
+    php artisan storage:link || true
+  fi
+
+  # Legacy paths found on some servers after manual deploys.
+  local legacy_paths=(
+    "event-templates"
+    "program_points"
+    "turysci.jpg"
+  )
+
+  for rel in "${legacy_paths[@]}"; do
+    local src="$legacy_root/$rel"
+    local dst="$public_root/$rel"
+
+    if [[ -d "$src" ]]; then
+      mkdir -p "$dst"
+      if command -v rsync >/dev/null 2>&1; then
+        rsync -a --ignore-existing "$src"/ "$dst"/
+      else
+        cp -an "$src"/. "$dst"/
+      fi
+      echo "Skopiowano katalog legacy: $src -> $dst"
+    elif [[ -f "$src" ]]; then
+      mkdir -p "$(dirname "$dst")"
+      if [[ ! -f "$dst" ]]; then
+        cp -a "$src" "$dst"
+        echo "Skopiowano plik legacy: $src -> $dst"
+      fi
+    fi
+  done
+}
+
+echo "[1/8] Wlaczam maintenance mode"
 php artisan down || true
 WENT_DOWN=1
 
-echo "[2/7] Aktualizuje kod"
+echo "[2/8] Aktualizuje kod"
 if command -v git >/dev/null 2>&1; then
   git fetch --all --prune
   if [[ -n "$BRANCH" ]]; then
@@ -74,10 +118,13 @@ else
   echo "Git nie jest dostepny - pomijam aktualizacje kodu."
 fi
 
-echo "[3/7] Instaluje zaleznosci produkcyjne"
+echo "[3/8] Instaluje zaleznosci produkcyjne"
 composer install --no-dev --prefer-dist --optimize-autoloader --no-interaction
 
-echo "[4/7] Czyszcze cache Laravel"
+echo "[4/8] Naprawiam storage publiczny (link + legacy obrazy)"
+repair_public_storage_paths
+
+echo "[5/8] Czyszcze cache Laravel"
 php artisan optimize:clear
 php artisan config:clear
 php artisan route:clear
@@ -85,18 +132,18 @@ php artisan view:clear
 php artisan event:clear
 
 if [[ "$WITH_MIGRATE" -eq 1 ]]; then
-  echo "[5/7] Uruchamiam migracje"
+  echo "[6/8] Uruchamiam migracje"
   php artisan migrate --force
 else
-  echo "[5/7] Pomijam migracje (uzyj --with-migrate, jesli potrzebne)"
+  echo "[6/8] Pomijam migracje (uzyj --with-migrate, jesli potrzebne)"
 fi
 
-echo "[6/7] Buduje cache produkcyjny"
+echo "[7/8] Buduje cache produkcyjny"
 php artisan config:cache
 php artisan route:cache
 php artisan view:cache
 
-echo "[7/7] Wylaczam maintenance mode"
+echo "[8/8] Wylaczam maintenance mode"
 php artisan up
 WENT_DOWN=0
 

@@ -2,29 +2,31 @@
 
 namespace App\Filament\Resources;
 
-use App\Models\PlaceDistance;
-use Illuminate\Database\Eloquent\Builder;
+use App\Filament\Resources\PlaceDistanceResource\Pages;
 use App\Models\Place;
-use Filament\Forms;
-use Filament\Forms\Form;
-use Filament\Resources\Resource;
-use Filament\Tables;
-use Filament\Tables\Table;
-use Filament\Tables\Columns\TextColumn;
+use App\Models\PlaceDistance;
 use Filament\Forms\Components\Select;
 use Filament\Forms\Components\TextInput;
+use Filament\Forms\Form;
+use Filament\Notifications\Notification;
+use Filament\Resources\Resource;
+use Filament\Tables;
 use Filament\Tables\Actions\BulkAction;
 use Filament\Tables\Actions\BulkActionGroup;
-use Filament\Notifications\Notification;
-use Illuminate\Support\Collection;
+use Filament\Tables\Columns\TextColumn;
+use Filament\Tables\Table;
+use Illuminate\Database\Eloquent\Builder;
 // use Filament\Tables\Columns\NumberColumn; (not needed)
-use App\Filament\Resources\PlaceDistanceResource\Pages;
+use Illuminate\Support\Collection;
 
 class PlaceDistanceResource extends Resource
 {
     protected static ?string $model = PlaceDistance::class;
+
     protected static ?string $navigationIcon = 'heroicon-o-arrow-right-on-rectangle';
+
     protected static ?string $navigationLabel = 'Odległości między miejscami';
+
     protected static ?string $navigationGroup = 'Ustawienia ogólne';
 
     public static function form(Form $form): Form
@@ -73,7 +75,7 @@ class PlaceDistanceResource extends Resource
 
                 Tables\Filters\SelectFilter::make('api_source')
                     ->label('Źródło API')
-                    ->options(PlaceDistance::query()->whereNotNull('api_source')->distinct()->pluck('api_source','api_source')->filter()->toArray()),
+                    ->options(PlaceDistance::query()->whereNotNull('api_source')->distinct()->pluck('api_source', 'api_source')->filter()->toArray()),
 
                 Tables\Filters\Filter::make('has_distance')
                     ->label('Ma odległość')
@@ -207,9 +209,9 @@ class PlaceDistanceResource extends Resource
             return null;
         }
 
-        $url = 'https://api.openrouteservice.org/v2/directions/driving-car?api_key=' . $apiKey
-            . '&start=' . $from->longitude . ',' . $from->latitude
-            . '&end=' . $to->longitude . ',' . $to->latitude;
+        $url = 'https://api.openrouteservice.org/v2/directions/driving-car?api_key='.$apiKey
+            .'&start='.$from->longitude.','.$from->latitude
+            .'&end='.$to->longitude.','.$to->latitude;
 
         try {
             $response = file_get_contents($url);

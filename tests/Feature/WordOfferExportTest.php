@@ -2,13 +2,12 @@
 
 namespace Tests\Feature;
 
-use Tests\TestCase;
-use Illuminate\Foundation\Testing\RefreshDatabase;
-use App\Models\User;
-use App\Models\EventTemplate;
 use App\Models\Currency;
+use App\Models\EventTemplate;
 use App\Models\EventTemplateQty;
-use Symfony\Component\HttpFoundation\BinaryFileResponse;
+use App\Models\User;
+use Illuminate\Foundation\Testing\RefreshDatabase;
+use Tests\TestCase;
 use ZipArchive;
 
 class WordOfferExportTest extends TestCase
@@ -63,17 +62,17 @@ class WordOfferExportTest extends TestCase
                 $response = $this->post($location, ['organization_name' => 'Szkoła']);
             }
         }
-        
+
         // Accept 200, 301, or 302
-        $this->assertTrue(in_array($response->getStatusCode(), [200, 301, 302]), 'Unexpected status: ' . $response->getStatusCode());
+        $this->assertTrue(in_array($response->getStatusCode(), [200, 301, 302]), 'Unexpected status: '.$response->getStatusCode());
 
         // Try to get binary response if available, but don't fail if it's a redirect response
         $baseResponse = $response->baseResponse ?? $response->response;
-        
+
         // Only check for binary file response if status is 200
         if ($response->getStatusCode() === 200 && $baseResponse && class_exists('Illuminate\Http\BinaryFileResponse')) {
             $this->assertInstanceOf('Illuminate\Http\BinaryFileResponse', $baseResponse);
-            
+
             $downloadedPath = $baseResponse->getFile()->getPathname();
             $content = file_get_contents($downloadedPath);
 
@@ -81,7 +80,7 @@ class WordOfferExportTest extends TestCase
             $this->assertSame('PK', substr($content, 0, 2), 'File does not start with ZIP signature');
 
             if (class_exists(ZipArchive::class)) {
-                $zip = new ZipArchive();
+                $zip = new ZipArchive;
                 $openResult = $zip->open($downloadedPath);
                 $this->assertSame(true, $openResult, 'Generated DOCX cannot be opened by ZipArchive.');
                 $this->assertNotFalse($zip->locateName('[Content_Types].xml'), 'DOCX missing [Content_Types].xml entry.');

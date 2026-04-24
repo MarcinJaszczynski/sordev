@@ -125,7 +125,7 @@ class Task extends Model implements Sortable
         }
 
         return TaskContextRegistry::labelForRecord($this->taskable)
-            ?? '#' . $this->taskable_id;
+            ?? '#'.$this->taskable_id;
     }
 
     public function getTaskContextLabelAttribute(): string
@@ -134,7 +134,7 @@ class Task extends Model implements Sortable
             return 'Wolne / nieprzypisane';
         }
 
-        return trim(($this->taskable_type_label ?? 'Powiązanie') . ': ' . $this->taskable_label);
+        return trim(($this->taskable_type_label ?? 'Powiązanie').': '.$this->taskable_label);
     }
 
     protected function normalizeTaskableContext(): void
@@ -164,4 +164,4 @@ class Task extends Model implements Sortable
         $this->taskable_type = $parent->taskable_type;
         $this->taskable_id = $parent->taskable_id;
     }
-} 
+}

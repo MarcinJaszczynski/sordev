@@ -81,6 +81,7 @@ class SubtasksRelationManager extends RelationManager
                         $data['author_id'] = Auth::id();
                         $data['taskable_type'] = $this->getOwnerRecord()->taskable_type;
                         $data['taskable_id'] = $this->getOwnerRecord()->taskable_id;
+
                         return $data;
                     }),
             ])
@@ -94,4 +95,4 @@ class SubtasksRelationManager extends RelationManager
                 ]),
             ]);
     }
-} 
+}

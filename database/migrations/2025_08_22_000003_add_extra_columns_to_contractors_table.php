@@ -9,25 +9,25 @@ return new class extends Migration
     public function up(): void
     {
         Schema::table('contractors', function (Blueprint $table) {
-            if (!Schema::hasColumn('contractors', 'region')) {
+            if (! Schema::hasColumn('contractors', 'region')) {
                 $table->string('region')->nullable();
             }
-            if (!Schema::hasColumn('contractors', 'country')) {
+            if (! Schema::hasColumn('contractors', 'country')) {
                 $table->string('country')->nullable();
             }
-            if (!Schema::hasColumn('contractors', 'nip')) {
+            if (! Schema::hasColumn('contractors', 'nip')) {
                 $table->string('nip')->nullable();
             }
-            if (!Schema::hasColumn('contractors', 'www')) {
+            if (! Schema::hasColumn('contractors', 'www')) {
                 $table->string('www')->nullable();
             }
-            if (!Schema::hasColumn('contractors', 'description')) {
+            if (! Schema::hasColumn('contractors', 'description')) {
                 $table->text('description')->nullable();
             }
-            if (!Schema::hasColumn('contractors', 'firstname')) {
+            if (! Schema::hasColumn('contractors', 'firstname')) {
                 $table->string('firstname')->nullable();
             }
-            if (!Schema::hasColumn('contractors', 'surname')) {
+            if (! Schema::hasColumn('contractors', 'surname')) {
                 $table->string('surname')->nullable();
             }
         });
@@ -36,7 +36,7 @@ return new class extends Migration
     public function down(): void
     {
         Schema::table('contractors', function (Blueprint $table) {
-            $table->dropColumn(['region','country','nip','www','description','firstname','surname']);
+            $table->dropColumn(['region', 'country', 'nip', 'www', 'description', 'firstname', 'surname']);
         });
     }
 };

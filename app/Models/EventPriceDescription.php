@@ -7,6 +7,7 @@ use Illuminate\Database\Eloquent\Model;
 class EventPriceDescription extends Model
 {
     protected $table = 'event_price_descriptions';
+
     protected $fillable = [
         'name',
         'description', // HTML-formatted text

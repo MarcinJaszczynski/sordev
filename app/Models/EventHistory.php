@@ -47,7 +47,7 @@ class EventHistory extends Model
      */
     public function getReadableActionAttribute(): string
     {
-        return match($this->action) {
+        return match ($this->action) {
             'created' => 'Utworzono',
             'updated' => 'Zaktualizowano',
             'deleted' => 'Usunięto',
@@ -66,7 +66,7 @@ class EventHistory extends Model
      */
     public function getActionColorAttribute(): string
     {
-        return match($this->action) {
+        return match ($this->action) {
             'created', 'program_added', 'program_copied' => 'success',
             'updated', 'program_changed', 'program_moved' => 'warning',
             'deleted', 'program_removed' => 'danger',

@@ -4,6 +4,7 @@ namespace App\Jobs;
 
 use App\Models\EventTemplate;
 use App\Models\EventTemplatePricePerPerson;
+use App\Services\PriceRecalcProgress;
 use App\Services\UnifiedPriceCalculator;
 use Filament\Notifications\Notification;
 use Illuminate\Bus\Queueable;
@@ -13,14 +14,15 @@ use Illuminate\Queue\InteractsWithQueue;
 use Illuminate\Queue\SerializesModels;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Mail;
-use App\Services\PriceRecalcProgress;
 
 class RecalculateSelectedEventTemplatePricesJob implements ShouldQueue
 {
     use Dispatchable, InteractsWithQueue, Queueable, SerializesModels;
 
     public array $templateIds;
+
     public int $userId;
+
     public bool $force = false;
 
     public function __construct(array $templateIds, int $userId, bool $force = false)
@@ -32,7 +34,7 @@ class RecalculateSelectedEventTemplatePricesJob implements ShouldQueue
 
     public function handle(): void
     {
-        $calculator = new UnifiedPriceCalculator();
+        $calculator = new UnifiedPriceCalculator;
         $totalTemplates = 0;
         $totalPricesCreated = 0;
         $totalPricesAfter = 0;
@@ -40,7 +42,9 @@ class RecalculateSelectedEventTemplatePricesJob implements ShouldQueue
 
         foreach ($this->templateIds as $id) {
             $template = EventTemplate::withTrashed()->find($id);
-            if (!$template) continue;
+            if (! $template) {
+                continue;
+            }
             try {
                 $before = EventTemplatePricePerPerson::where('event_template_id', $template->id)->count();
                 // Jeśli tryb force => przekazujemy flagę deleteExisting do kalkulatora
@@ -55,7 +59,7 @@ class RecalculateSelectedEventTemplatePricesJob implements ShouldQueue
                 $totalPricesAfter += $after;
             } catch (\Throwable $e) {
                 $errors++;
-                Log::error('Recalculate selected job error for template #' . $template->id . ': ' . $e->getMessage());
+                Log::error('Recalculate selected job error for template #'.$template->id.': '.$e->getMessage());
                 if ($this->userId) {
                     PriceRecalcProgress::addError($this->userId, 1);
                 }
@@ -75,15 +79,15 @@ class RecalculateSelectedEventTemplatePricesJob implements ShouldQueue
                     ->success()
                     ->sendToDatabase($user);
 
-                if (!empty($user->email)) {
+                if (! empty($user->email)) {
                     $summary = "Szablony: {$totalTemplates}\nNowe rekordy: {$totalPricesCreated}\nRazem rekordów po przeliczeniu: {$totalPricesAfter}\nBłędów: {$errors}";
-                    Mail::raw('Przeliczanie cen zakończone.\n' . $summary, function ($m) use ($user) {
+                    Mail::raw('Przeliczanie cen zakończone.\n'.$summary, function ($m) use ($user) {
                         $m->to($user->email)->subject('Podsumowanie przeliczania cen');
                     });
                 }
             }
         } catch (\Throwable $e) {
-            Log::warning('Failed to send completion notification: ' . $e->getMessage());
+            Log::warning('Failed to send completion notification: '.$e->getMessage());
         }
     }
 }

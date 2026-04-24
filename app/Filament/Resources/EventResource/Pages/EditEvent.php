@@ -36,7 +36,7 @@ class EditEvent extends EditRecord
             $data['total_cost'] = $this->record->resolvedBaseTotalCost(
                 $participantCount,
                 $gratisCount,
-                !empty($data['start_place_id']) ? (int) $data['start_place_id'] : null
+                ! empty($data['start_place_id']) ? (int) $data['start_place_id'] : null
             );
         } catch (\Throwable $e) {
             // keep existing total_cost value when recalculation fails
@@ -51,7 +51,7 @@ class EditEvent extends EditRecord
     {
         $participantCount = max(1, (int) ($data['participant_count'] ?? 1));
         $gratisCount = max(0, (int) ($data['gratis_count'] ?? 0));
-        $startPlaceId = !empty($data['start_place_id']) ? (int) $data['start_place_id'] : null;
+        $startPlaceId = ! empty($data['start_place_id']) ? (int) $data['start_place_id'] : null;
 
         $this->pendingGratisCount = $gratisCount;
         unset($data['gratis_count']);

@@ -1,14 +1,15 @@
 <?php
-require __DIR__ . '/../vendor/autoload.php';
+
+require __DIR__.'/../vendor/autoload.php';
 
 use App\Models\EventTemplate;
 use App\Services\EventTemplatePriceCalculator;
 
-$app = require __DIR__ . '/../bootstrap/app.php';
+$app = require __DIR__.'/../bootstrap/app.php';
 $kernel = $app->make(Illuminate\Contracts\Console\Kernel::class);
 $kernel->bootstrap();
 
-$calculator = new EventTemplatePriceCalculator();
+$calculator = new EventTemplatePriceCalculator;
 $templates = EventTemplate::all();
 $total = $templates->count();
 
@@ -24,7 +25,7 @@ foreach ($templates as $template) {
         echo "[{$i}/{$total}] ID={$template->id} - done in {$elapsed}s\n";
     } catch (Throwable $e) {
         $elapsed = round(microtime(true) - $start, 2);
-        echo "[{$i}/{$total}] ID={$template->id} - ERROR after {$elapsed}s: " . $e->getMessage() . "\n";
+        echo "[{$i}/{$total}] ID={$template->id} - ERROR after {$elapsed}s: ".$e->getMessage()."\n";
     }
 }
 
