@@ -13,11 +13,11 @@ class AuthApiTest extends TestCase
     private function apiJson(string $method, string $uri, array $data = [], array $headers = [])
     {
         return $this->json($method, '/api/v1'.$uri, $data, array_merge([
-            'Accept'  => 'application/json',
+            'Accept' => 'application/json',
             // Ustawienie Origin z listy SANCTUM_STATEFUL_DOMAINS sprawia, że
             // EnsureFrontendRequestsAreStateful aktywuje session middleware,
             // dzięki czemu $request->session() działa w login/logout.
-            'Origin'  => 'http://localhost:3000',
+            'Origin' => 'http://localhost:3000',
             'Referer' => 'http://localhost:3000/',
         ], $headers));
     }
@@ -31,14 +31,14 @@ class AuthApiTest extends TestCase
         ]);
 
         $response = $this->apiJson('POST', '/auth/login', [
-            'email'    => $user->email,
+            'email' => $user->email,
             'password' => 'secret123',
         ]);
 
         $response->assertStatus(200)
             ->assertJson([
                 'success' => true,
-                'data'    => ['user' => ['id' => $user->id]],
+                'data' => ['user' => ['id' => $user->id]],
             ]);
     }
 
@@ -49,7 +49,7 @@ class AuthApiTest extends TestCase
         ]);
 
         $response = $this->apiJson('POST', '/auth/login', [
-            'email'    => $user->email,
+            'email' => $user->email,
             'password' => 'wrongpassword',
         ]);
 
@@ -89,7 +89,7 @@ class AuthApiTest extends TestCase
         $response->assertStatus(200)
             ->assertJson([
                 'success' => true,
-                'data'    => ['user' => ['id' => $user->id, 'email' => $user->email]],
+                'data' => ['user' => ['id' => $user->id, 'email' => $user->email]],
             ]);
     }
 
@@ -134,7 +134,7 @@ class AuthApiTest extends TestCase
         $response->assertStatus(201)
             ->assertJson([
                 'success' => true,
-                'data'    => ['token_type' => 'Bearer'],
+                'data' => ['token_type' => 'Bearer'],
             ])
             ->assertJsonPath('data.token', fn ($val) => is_string($val) && strlen($val) > 10);
     }
@@ -145,7 +145,7 @@ class AuthApiTest extends TestCase
 
         $response = $this->actingAs($user, 'sanctum')
             ->apiJson('POST', '/auth/token', [
-                'name'      => 'read-only-client',
+                'name' => 'read-only-client',
                 'abilities' => ['events:read', 'notifications:read'],
             ]);
 

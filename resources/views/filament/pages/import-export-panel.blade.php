@@ -5,7 +5,7 @@
         <form wire:submit.prevent="import" class="space-y-4">
             <div>
                 <label for="model" class="block font-medium text-gray-900 dark:text-gray-200">Wybierz model:</label>
-                <select wire:model="selectedModel" id="model" class="filament-forms-select w-full">
+                <select wire:model.live.debounce.500ms="selectedModel" id="model" class="filament-forms-select w-full">
                     @foreach ($models as $key => $class)
                         <option value="{{ $key }}">{{ $key }}</option>
                     @endforeach
@@ -13,7 +13,7 @@
             </div>
             <div>
                 <label for="importFile" class="block font-medium text-gray-900 dark:text-gray-200">Plik CSV do importu:</label>
-                <input type="file" wire:model="importFile" id="importFile" class="filament-forms-input w-full" accept=".csv">
+                <input type="file" wire:model.live.debounce.500ms="importFile" id="importFile" class="filament-forms-input w-full" accept=".csv">
             </div>
             <div class="flex gap-4">
                 <button type="submit" class="filament-button filament-button-primary">Importuj</button>

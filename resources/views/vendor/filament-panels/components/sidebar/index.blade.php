@@ -90,7 +90,7 @@
                     x-data="{}"
                     x-on:click="$store.sidebar.close()"
                     x-show="$store.sidebar.isOpen"
-                    class="ms-auto flex"
+                    class="ms-auto hidden lg:flex"
                 />
             @endif
         </header>
@@ -167,7 +167,7 @@
                     ).style.display = 'none'
                     group
                         .querySelector('.fi-sidebar-group-collapse-button')
-                        .classList.add('rotate-180')
+                        .classList.add('-rotate-180')
                 })
         </script>
 

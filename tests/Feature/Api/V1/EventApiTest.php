@@ -95,7 +95,7 @@ class EventApiTest extends TestCase
 
     public function test_events_show_returns_event_detail(): void
     {
-        $user  = User::factory()->create();
+        $user = User::factory()->create();
         $event = $this->makeEvent();
 
         $response = $this->apiAs($user, 'GET', '/events/'.$event->id);
@@ -124,11 +124,44 @@ class EventApiTest extends TestCase
         $response->assertStatus(401);
     }
 
+    // ── calculation ───────────────────────────────────────────────────────
+
+    public function test_events_calculation_returns_calculation_payload(): void
+    {
+        $user = User::factory()->create();
+        $event = $this->makeEvent(['participant_count' => 12]);
+
+        $response = $this->apiAs($user, 'GET', '/events/'.$event->id.'/calculation');
+
+        $response->assertStatus(200)
+            ->assertJson(['success' => true])
+            ->assertJsonPath('data.event_id', $event->id)
+            ->assertJsonStructure([
+                'data' => [
+                    'event_id',
+                    'participant_count',
+                    'planned_total_pln',
+                    'settlement_planned_pln',
+                    'margin_delta_pln',
+                    'summary',
+                ],
+            ]);
+    }
+
+    public function test_events_calculation_without_auth_returns_401(): void
+    {
+        $event = $this->makeEvent();
+
+        $response = $this->json('GET', '/api/v1/events/'.$event->id.'/calculation', [], ['Accept' => 'application/json']);
+
+        $response->assertStatus(401);
+    }
+
     // ── recalculate-price ─────────────────────────────────────────────────
 
     public function test_recalculate_price_returns_price_per_person(): void
     {
-        $user  = User::factory()->create();
+        $user = User::factory()->create();
         $event = $this->makeEvent(['participant_count' => 10]);
 
         $response = $this->apiAs($user, 'POST', '/events/'.$event->id.'/recalculate-price');
@@ -152,7 +185,7 @@ class EventApiTest extends TestCase
 
     public function test_reorder_program_points_updates_order(): void
     {
-        $user  = User::factory()->create();
+        $user = User::factory()->create();
         $event = $this->makeEvent();
 
         $p1 = EventProgramPoint::factory()->create(['event_id' => $event->id, 'day' => 1, 'order' => 1]);
@@ -160,7 +193,7 @@ class EventApiTest extends TestCase
         $p3 = EventProgramPoint::factory()->create(['event_id' => $event->id, 'day' => 1, 'order' => 3]);
 
         $response = $this->apiAs($user, 'POST', '/events/'.$event->id.'/program-points/reorder', [
-            'day'       => 1,
+            'day' => 1,
             'point_ids' => [$p3->id, $p1->id, $p2->id],
         ]);
 
@@ -175,7 +208,7 @@ class EventApiTest extends TestCase
 
     public function test_reorder_rejects_missing_day(): void
     {
-        $user  = User::factory()->create();
+        $user = User::factory()->create();
         $event = $this->makeEvent();
 
         $response = $this->apiAs($user, 'POST', '/events/'.$event->id.'/program-points/reorder', [
@@ -188,14 +221,14 @@ class EventApiTest extends TestCase
 
     public function test_reorder_rejects_point_ids_from_different_day(): void
     {
-        $user  = User::factory()->create();
+        $user = User::factory()->create();
         $event = $this->makeEvent();
 
         $p1 = EventProgramPoint::factory()->create(['event_id' => $event->id, 'day' => 1]);
         $p2 = EventProgramPoint::factory()->create(['event_id' => $event->id, 'day' => 2]);
 
         $response = $this->apiAs($user, 'POST', '/events/'.$event->id.'/program-points/reorder', [
-            'day'       => 1,
+            'day' => 1,
             'point_ids' => [$p1->id, $p2->id],   // p2 jest dnia 2 – powinno odrzucić
         ]);
 
@@ -205,11 +238,11 @@ class EventApiTest extends TestCase
 
     public function test_reorder_rejects_empty_point_ids(): void
     {
-        $user  = User::factory()->create();
+        $user = User::factory()->create();
         $event = $this->makeEvent();
 
         $response = $this->apiAs($user, 'POST', '/events/'.$event->id.'/program-points/reorder', [
-            'day'       => 1,
+            'day' => 1,
             'point_ids' => [],
         ]);
 

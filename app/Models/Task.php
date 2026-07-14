@@ -2,7 +2,10 @@
 
 namespace App\Models;
 
+use App\Enums\TaskPriority;
+use App\Enums\TaskSource;
 use App\Support\Tasks\TaskContextRegistry;
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
@@ -22,6 +25,7 @@ class Task extends Model implements Sortable
         'due_date',
         'status_id',
         'priority',
+        'source',
         'author_id',
         'assignee_id',
         'parent_id',
@@ -32,6 +36,13 @@ class Task extends Model implements Sortable
 
     protected $casts = [
         'due_date' => 'datetime',
+        'latest_activity_at' => 'datetime',
+        'source' => TaskSource::class,
+    ];
+
+    protected $attributes = [
+        'priority' => 'normal',
+        'source' => 'office',
     ];
 
     public $sortable = [
@@ -42,6 +53,14 @@ class Task extends Model implements Sortable
     protected static function booted(): void
     {
         static::saving(function (Task $task): void {
+            $task->priority = TaskPriority::normalize(
+                $task->priority instanceof TaskPriority ? $task->priority->value : (string) $task->priority
+            );
+
+            if (! filled($task->source)) {
+                $task->source = TaskSource::Office;
+            }
+
             $task->normalizeTaskableContext();
             $task->inheritTaskableContextFromParent();
         });
@@ -163,5 +182,34 @@ class Task extends Model implements Sortable
 
         $this->taskable_type = $parent->taskable_type;
         $this->taskable_id = $parent->taskable_id;
+    }
+
+    public function buildSortQuery(): Builder
+    {
+        $query = static::query()->where('status_id', $this->status_id);
+
+        if ($this->parent_id) {
+            return $query->where('parent_id', $this->parent_id);
+        }
+
+        return $query->whereNull('parent_id');
+    }
+
+    public function scopeOfficeOnly(Builder $query): Builder
+    {
+        if (! \Illuminate\Support\Facades\Schema::hasColumn('tasks', 'source')) {
+            return $query;
+        }
+
+        return $query->where('source', '!=', TaskSource::PilotChecklist->value);
+    }
+
+    public function scopePilotChecklistOnly(Builder $query): Builder
+    {
+        if (! \Illuminate\Support\Facades\Schema::hasColumn('tasks', 'source')) {
+            return $query->whereRaw('1 = 0');
+        }
+
+        return $query->where('source', TaskSource::PilotChecklist->value);
     }
 }

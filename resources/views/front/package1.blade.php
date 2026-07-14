@@ -73,10 +73,10 @@
             <div class="column-left">
                 @php
                     $photoPath = $item->full_image_url ?: asset('uploads/default.png');
-                    $photoAlt = $item->featured_image ? $item->name : 'Brak zdjęcia';
+                    $photoAlt = $item->name ?: 'Zdjęcie oferty';
                 @endphp
-                <div class="display-photo" style="background-image: url('{{ $photoPath }}'); background-size: cover; background-position: center; background-repeat: no-repeat; min-height: 300px;">
-                    <img src="{{ $photoPath }}" alt="{{ $photoAlt }}" fetchpriority="high" decoding="async">
+                <div class="display-photo" style="min-height: 300px; aspect-ratio: 16 / 10; overflow: hidden; border-radius: 6px;">
+                    <img src="{{ $photoPath }}" alt="{{ $photoAlt }}" style="width: 100%; height: 100%; object-fit: cover; object-position: center; display: block;" fetchpriority="high" decoding="async">
                 </div></div>
             <div class="column-right">
                 <div class="title-section">

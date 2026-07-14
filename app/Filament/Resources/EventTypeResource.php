@@ -4,6 +4,7 @@ namespace App\Filament\Resources;
 
 use App\Filament\Resources\EventTypeResource\Pages;
 use App\Models\EventType;
+use App\Support\FilamentNavigation;
 use Filament\Forms;
 use Filament\Forms\Form;
 use Filament\Resources\Resource;
@@ -16,7 +17,7 @@ class EventTypeResource extends Resource
 
     protected static ?string $navigationIcon = 'heroicon-o-rectangle-stack';
 
-    protected static ?string $navigationGroup = 'Szablony imprez';
+    protected static ?string $navigationGroup = FilamentNavigation::GROUP_SETTINGS;
 
     protected static ?string $navigationLabel = 'Typy imprez';
 
@@ -31,7 +32,7 @@ class EventTypeResource extends Resource
                     ->required()
                     ->maxLength(255)
                     ->columnSpanFull(),
-                Forms\Components\RichEditor::make('desc')
+                \FilamentTiptapEditor\TiptapEditor::make('desc')
                     ->columnSpanFull(),
             ])
             ->columns(1);

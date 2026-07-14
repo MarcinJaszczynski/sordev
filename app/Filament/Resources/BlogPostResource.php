@@ -4,6 +4,7 @@ namespace App\Filament\Resources;
 
 use App\Filament\Resources\BlogPostResource\Pages;
 use App\Models\BlogPost;
+use App\Support\FilamentNavigation;
 use Filament\Forms;
 use Filament\Forms\Form;
 use Filament\Resources\Resource;
@@ -21,7 +22,14 @@ class BlogPostResource extends Resource
 
     protected static ?string $navigationLabel = 'Blog';
 
-    protected static ?int $navigationSort = 5;
+    protected static ?string $navigationGroup = FilamentNavigation::GROUP_SYSTEM;
+
+    protected static ?int $navigationSort = 50;
+
+    public static function shouldRegisterNavigation(): bool
+    {
+        return false;
+    }
 
     public static function form(Form $form): Form
     {
@@ -49,12 +57,10 @@ class BlogPostResource extends Resource
 
             Forms\Components\Section::make('Treść')
                 ->schema([
-                    Forms\Components\RichEditor::make('content')
+                    \FilamentTiptapEditor\TiptapEditor::make('content')
                         ->label('Treść')
                         ->required()
-                        ->toolbarButtons([
-                            'bold', 'italic', 'underline', 'strike', 'link', 'bulletList', 'orderedList', 'blockquote', 'codeBlock', 'h2', 'h3', 'color', 'highlight', 'undo', 'redo',
-                        ])
+                        
                         ->columnSpanFull(),
                 ]),
 

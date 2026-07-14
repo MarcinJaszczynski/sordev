@@ -2,8 +2,11 @@
 
 namespace App\Filament\Resources\EventSettlementResource\RelationManagers;
 
+use App\Filament\Forms\ReservationFormFields;
+use App\Filament\Forms\ReservationFormOptions;
+use App\Filament\Resources\ReservationResource;
 use App\Models\Reservation;
-use Filament\Forms;
+use App\Support\ReservationPricingLabel;
 use Filament\Forms\Form;
 use Filament\Resources\RelationManagers\RelationManager;
 use Filament\Tables;
@@ -19,183 +22,70 @@ class ReservationsRelationManager extends RelationManager
 
     public function form(Form $form): Form
     {
+        $settlement = $this->getOwnerRecord();
+        $event = $settlement->event;
+
         return $form
-            ->schema([
-                Forms\Components\Section::make('Rezerwacja')
-                    ->columns(2)
-                    ->schema([
-                        Forms\Components\TextInput::make('booking_reference')
-                            ->label('Numer rezerwacji')
-                            ->unique(ignoreRecord: true)
-                            ->nullable(),
-
-                        Forms\Components\Select::make('contractor_id')
-                            ->label('Kontrahent')
-                            ->relationship('contractor', 'name')
-                            ->searchable()
-                            ->nullable(),
-
-                        Forms\Components\TextInput::make('participant_count')
-                            ->label('Liczba uczestników')
-                            ->numeric()
-                            ->default(1)
-                            ->required(),
-
-                        Forms\Components\TextInput::make('reserved_amount')
-                            ->label('Zarezerwowana kwota (PLN)')
-                            ->numeric()
-                            ->nullable()
-                            ->suffix('PLN'),
-
-                        Forms\Components\Select::make('program_point_id')
-                            ->label('Punkt programu')
-                            ->options(function () {
-                                $eventId = $this->getOwnerRecord()->event_id;
-
-                                return \App\Models\EventProgramPoint::query()
-                                    ->where('event_id', $eventId)
-                                    ->with('templatePoint')
-                                    ->orderBy('day')
-                                    ->orderBy('order')
-                                    ->get()
-                                    ->mapWithKeys(fn ($point) => [
-                                        $point->id => sprintf(
-                                            'Dzień %d • %s',
-                                            (int) ($point->day ?? 1),
-                                            $point->templatePoint?->name ?? $point->name ?? ('Punkt #'.$point->id)
-                                        ),
-                                    ]);
-                            })
-                            ->searchable()
-                            ->nullable()
-                            ->live()
-                            ->afterStateUpdated(function ($state, Forms\Set $set) {
-                                if (! $state) {
-                                    return;
-                                }
-
-                                $costId = \App\Models\EventSettlementCost::query()
-                                    ->where('settlement_id', $this->getOwnerRecord()->id)
-                                    ->where('source_type', 'program_point')
-                                    ->where('source_id', $state)
-                                    ->value('id');
-
-                                if ($costId) {
-                                    $set('settlement_cost_id', $costId);
-                                }
-                            }),
-
-                        Forms\Components\Select::make('settlement_cost_id')
-                            ->label('Koszt rozliczenia')
-                            ->options(function () {
-                                return \App\Models\EventSettlementCost::query()
-                                    ->where('settlement_id', $this->getOwnerRecord()->id)
-                                    ->orderBy('order')
-                                    ->pluck('name', 'id');
-                            })
-                            ->searchable()
-                            ->nullable(),
-
-                        Forms\Components\Select::make('status')
-                            ->label('Status')
-                            ->options(Reservation::$statuses)
-                            ->required()
-                            ->default('pending'),
-
-                        Forms\Components\DateTimePicker::make('reserved_at')
-                            ->label('Data rezerwacji')
-                            ->required(),
-
-                        Forms\Components\DateTimePicker::make('expires_at')
-                            ->label('Wygasa')
-                            ->nullable()
-                            ->helperText('Pozostaw puste, aby rezerwacja była ważna bezterminowo'),
-
-                        Forms\Components\RichEditor::make('notes')
-                            ->columnSpanFull(),
-                    ]),
-            ]);
+            ->schema(ReservationFormFields::schema(new ReservationFormOptions(
+                eventId: $event?->id,
+                event: $event,
+                settlementId: $settlement->id,
+                showProgramPoint: true,
+                showSettlementCost: true,
+                showHotelNotes: true,
+            )))
+            ->columns(2);
     }
 
     public function table(Table $table): Table
     {
         return $table
             ->columns([
-                Tables\Columns\TextColumn::make('id')
-                    ->label('ID')
-                    ->sortable()
-                    ->width(60),
-
                 Tables\Columns\TextColumn::make('booking_reference')
-                    ->label('Numer rezerwacji')
-                    ->sortable()
-                    ->searchable(),
-
-                Tables\Columns\TextColumn::make('contractor.name')
-                    ->label('Kontrahent')
-                    ->sortable()
+                    ->label('Nr rezerwacji')
                     ->searchable()
                     ->placeholder('—'),
 
-                Tables\Columns\TextColumn::make('programPoint.name')
+                Tables\Columns\TextColumn::make('contractor.name')
+                    ->label('Kontrahent')
+                    ->placeholder('—'),
+
+                Tables\Columns\TextColumn::make('programPoint.templatePoint.name')
                     ->label('Punkt programu')
-                    ->state(fn (Reservation $record) => $record->programPoint?->templatePoint?->name ?? $record->programPoint?->name)
-                    ->placeholder('—')
-                    ->toggleable(isToggledHiddenByDefault: true),
+                    ->placeholder('—'),
 
                 Tables\Columns\TextColumn::make('participant_count')
-                    ->label('Uczestnicy')
-                    ->sortable()
+                    ->label('Osób')
                     ->alignCenter(),
 
                 Tables\Columns\TextColumn::make('reserved_amount')
                     ->label('Kwota')
-                    ->money('PLN')
-                    ->sortable()
-                    ->alignEnd(),
+                    ->formatStateUsing(fn (Reservation $record): string => ReservationPricingLabel::format($record)),
 
                 Tables\Columns\BadgeColumn::make('status')
                     ->label('Status')
-                    ->formatStateUsing(fn ($state) => Reservation::$statuses[$state] ?? $state)
-                    ->colors([
-                        'gray' => 'pending',
-                        'warning' => 'partially_confirmed',
-                        'success' => ['confirmed', 'completed'],
-                        'danger' => 'cancelled',
-                    ]),
+                    ->formatStateUsing(fn ($state) => Reservation::$statuses[$state] ?? $state),
 
                 Tables\Columns\TextColumn::make('reserved_at')
                     ->label('Data rezerwacji')
-                    ->dateTime('d.m.Y H:i')
-                    ->sortable(),
-
-                Tables\Columns\TextColumn::make('expires_at')
-                    ->label('Wygasa')
-                    ->dateTime('d.m.Y')
-                    ->sortable()
-                    ->placeholder('—'),
-            ])
-            ->filters([
-                Tables\Filters\SelectFilter::make('status')
-                    ->label('Status')
-                    ->options(Reservation::$statuses),
-
-                Tables\Filters\SelectFilter::make('contractor_id')
-                    ->label('Kontrahent')
-                    ->relationship('contractor', 'name'),
+                    ->dateTime('d.m.Y H:i'),
             ])
             ->headerActions([
-                Tables\Actions\CreateAction::make(),
+                Tables\Actions\Action::make('create_reservation')
+                    ->label('Utwórz')
+                    ->icon('heroicon-o-plus')
+                    ->url(function (): string {
+                        $settlement = $this->getOwnerRecord();
+
+                        return ReservationResource::getUrl('create').'?'.http_build_query([
+                            'event_id' => $settlement->event_id,
+                            'settlement_id' => $settlement->id,
+                        ]);
+                    }),
             ])
             ->actions([
-                Tables\Actions\EditAction::make(),
+                Tables\Actions\EditAction::make()->modalWidth(ReservationFormFields::MODAL_WIDTH),
                 Tables\Actions\DeleteAction::make(),
-            ])
-            ->bulkActions([
-                Tables\Actions\BulkActionGroup::make([
-                    Tables\Actions\DeleteBulkAction::make(),
-                ]),
-            ])
-            ->defaultSort('reserved_at', 'desc');
+            ]);
     }
 }

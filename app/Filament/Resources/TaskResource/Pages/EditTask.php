@@ -2,8 +2,11 @@
 
 namespace App\Filament\Resources\TaskResource\Pages;
 
+use App\Filament\Concerns\MarksTaskInboxAsSeen;
 use App\Filament\Resources\TaskResource;
 use App\Models\Task;
+use App\Services\NotificationService;
+use App\Support\Tasks\TaskAuthorization;
 use App\Support\Tasks\TaskContextRegistry;
 use Filament\Actions;
 use Filament\Resources\Pages\EditRecord;
@@ -11,7 +14,19 @@ use Illuminate\Support\Str;
 
 class EditTask extends EditRecord
 {
+    use MarksTaskInboxAsSeen;
+
     protected static string $resource = TaskResource::class;
+
+    public function mount(int | string $record): void
+    {
+        parent::mount($record);
+
+        $userId = auth()->id();
+        if ($userId) {
+            NotificationService::markTaskAsRead($userId, $this->getRecord());
+        }
+    }
 
     public function getBreadcrumbs(): array
     {
@@ -37,7 +52,7 @@ class EditTask extends EditRecord
             ? 'Nadrzedne: '.collect($parentChain)->pluck('title')->filter()->join(' -> ')
             : null;
 
-        $effectiveContextTask = $this->resolveEffectiveContextTask($record);
+        $effectiveContextTask = TaskContextRegistry::resolveEffectiveContextTask($record);
         $effectiveContext = null;
 
         if ($effectiveContextTask && $effectiveContextTask->taskable_type && $effectiveContextTask->taskable_id) {
@@ -52,11 +67,23 @@ class EditTask extends EditRecord
 
     protected function getHeaderActions(): array
     {
-        return [
-            Actions\DeleteAction::make(),
-            Actions\ForceDeleteAction::make(),
+        $contextActions = collect(TaskContextRegistry::linksForTask($this->getRecord()))
+            ->values()
+            ->map(fn (array $link, int $index): Actions\Action => Actions\Action::make('context_link_'.$index)
+                ->label($link['label'])
+                ->icon($link['icon'])
+                ->url($link['url'])
+                ->openUrlInNewTab()
+                ->color('gray'))
+            ->all();
+
+        return array_merge($contextActions, [
+            Actions\DeleteAction::make()
+                ->visible(fn (): bool => TaskAuthorization::canDelete(auth()->user(), $this->getRecord())),
+            Actions\ForceDeleteAction::make()
+                ->visible(fn (): bool => TaskAuthorization::canForceDelete(auth()->user(), $this->getRecord())),
             Actions\RestoreAction::make(),
-        ];
+        ]);
     }
 
     /**
@@ -93,32 +120,5 @@ class EditTask extends EditRecord
         }
 
         return array_reverse($chain);
-    }
-
-    protected function resolveEffectiveContextTask(Task $task): ?Task
-    {
-        $seen = [];
-        $cursor = $task;
-
-        while ($cursor) {
-            if (isset($seen[$cursor->id])) {
-                break;
-            }
-
-            $seen[$cursor->id] = true;
-
-            if ($cursor->taskable_type && $cursor->taskable_id) {
-                return $cursor;
-            }
-
-            if (! $cursor->parent_id) {
-                break;
-            }
-
-            $cursor->loadMissing('parent');
-            $cursor = $cursor->parent;
-        }
-
-        return null;
     }
 }

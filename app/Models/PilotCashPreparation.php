@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use App\Models\Concerns\HasStickyNotes;
 use App\Models\Concerns\HasTasks;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
@@ -9,7 +10,7 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
 
 class PilotCashPreparation extends Model
 {
-    use HasFactory, HasTasks;
+    use HasFactory, HasStickyNotes, HasTasks;
 
     protected $fillable = [
         'settlement_id',

@@ -15,11 +15,13 @@ class CommentsRelationManager extends RelationManager
 
     protected static ?string $recordTitleAttribute = 'content';
 
+    protected static ?string $title = 'Komentarze';
+
     public function form(Form $form): Form
     {
         return $form
             ->schema([
-                Forms\Components\RichEditor::make('content')
+                \FilamentTiptapEditor\TiptapEditor::make('content')
                     ->label('Treść')
                     ->required()
                     ->columnSpanFull(),
@@ -30,13 +32,17 @@ class CommentsRelationManager extends RelationManager
     {
         return $table
             ->recordTitleAttribute('content')
+            ->defaultSort('created_at', 'desc')
             ->columns([
                 Tables\Columns\TextColumn::make('author.name')
                     ->label('Autor'),
                 Tables\Columns\TextColumn::make('content')
                     ->label('Treść')
                     ->html()
-                    ->limit(100),
+                    ->wrap()
+                    ->lineClamp(6)
+                    ->limit(200)
+                    ->extraAttributes(['class' => 'bg-slate-50 dark:bg-slate-900/50 rounded-lg px-3 py-2 leading-relaxed font-medium']),
                 Tables\Columns\TextColumn::make('created_at')
                     ->label('Data utworzenia')
                     ->dateTime(),

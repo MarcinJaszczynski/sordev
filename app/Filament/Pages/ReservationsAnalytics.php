@@ -3,6 +3,7 @@
 namespace App\Filament\Pages;
 
 use App\Models\Reservation;
+use App\Support\FilamentNavigation;
 use Filament\Forms;
 use Filament\Pages\Page;
 use Filament\Tables;
@@ -31,9 +32,9 @@ class ReservationsAnalytics extends Page implements HasTable
 
     protected static string $view = 'filament.pages.reservations-analytics';
 
-    protected static ?string $navigationGroup = 'Finanse';
+    protected static ?string $navigationGroup = FilamentNavigation::GROUP_OPERATIONS;
 
-    protected static ?int $navigationSort = 12;
+    protected static ?int $navigationSort = 7;
 
     public ?string $selectedDateFrom = null;
 
@@ -103,6 +104,7 @@ class ReservationsAnalytics extends Page implements HasTable
             ->selectRaw("SUM(CASE WHEN status IN ('confirmed', 'partially_confirmed', 'completed') THEN 1 ELSE 0 END) as confirmed")
             ->selectRaw("SUM(CASE WHEN status = 'pending' THEN 1 ELSE 0 END) as pending")
             ->selectRaw("SUM(CASE WHEN status = 'cancelled' THEN 1 ELSE 0 END) as cancelled")
+            ->selectRaw("SUM(CASE WHEN status = 'not_required' THEN 1 ELSE 0 END) as not_required")
             ->selectRaw('COALESCE(SUM(reserved_amount), 0) as total_amount')
             ->selectRaw('COALESCE(AVG(participant_count), 0) as avg_participants')
             ->first();
@@ -111,6 +113,7 @@ class ReservationsAnalytics extends Page implements HasTable
         $confirmed = (int) ($summary?->confirmed ?? 0);
         $pending = (int) ($summary?->pending ?? 0);
         $cancelled = (int) ($summary?->cancelled ?? 0);
+        $notRequired = (int) ($summary?->not_required ?? 0);
         $totalAmount = (float) ($summary?->total_amount ?? 0);
         $avgAmount = $total > 0 ? $totalAmount / $total : 0;
         $avgParticipants = (float) ($summary?->avg_participants ?? 0);
@@ -135,6 +138,11 @@ class ReservationsAnalytics extends Page implements HasTable
                 ->description($total > 0 ? round(($cancelled / $total) * 100).'%' : '0%')
                 ->icon('heroicon-o-x-circle')
                 ->color('danger'),
+
+            Stat::make('Nie wymaga', $notRequired)
+                ->description($total > 0 ? round(($notRequired / $total) * 100).'%' : '0%')
+                ->icon('heroicon-o-minus-circle')
+                ->color('gray'),
 
             Stat::make('Łączna kwota', Number::currency($totalAmount, 'PLN'))
                 ->description('Zarezerwowanych środków')
@@ -186,12 +194,14 @@ class ReservationsAnalytics extends Page implements HasTable
 
                 Tables\Columns\BadgeColumn::make('status')
                     ->label('Status')
+                    ->sortable()
                     ->formatStateUsing(fn ($state) => Reservation::$statuses[$state] ?? $state)
                     ->colors([
                         'gray' => 'pending',
                         'warning' => 'partially_confirmed',
                         'success' => ['confirmed', 'completed'],
                         'danger' => 'cancelled',
+                        'info' => 'not_required',
                     ]),
 
                 Tables\Columns\TextColumn::make('reserved_at')

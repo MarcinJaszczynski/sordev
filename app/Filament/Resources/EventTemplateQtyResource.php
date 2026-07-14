@@ -4,6 +4,7 @@ namespace App\Filament\Resources;
 
 use App\Filament\Resources\EventTemplateQtyResource\Pages;
 use App\Models\EventTemplateQty;
+use App\Support\FilamentNavigation;
 use Filament\Forms;
 use Filament\Forms\Form;
 use Filament\Resources\Resource;
@@ -27,11 +28,11 @@ class EventTemplateQtyResource extends Resource
     // Ikona i etykiety nawigacji w panelu
     protected static ?string $navigationIcon = 'heroicon-o-user-group';
 
-    protected static ?string $navigationGroup = 'Szablony imprez';
+    protected static ?string $navigationGroup = FilamentNavigation::GROUP_EVENT_TEMPLATES;
 
     protected static ?string $navigationLabel = 'Warianty ilości';
 
-    protected static ?int $navigationSort = 30;
+    protected static ?int $navigationSort = 3;
 
     protected static ?string $modelLabel = 'wariant ilości uczestników';
 
@@ -47,7 +48,7 @@ class EventTemplateQtyResource extends Resource
                 ->required()
                 ->numeric(),
             Forms\Components\TextInput::make('gratis')
-                ->label('Gratis (opieka)')
+                ->label('Opiekun/Inne (opieka)')
                 ->numeric()
                 ->default(fn ($record) => $record?->gratis ?? null)
                 ->helperText('Domyślnie: zaokrąglone w górę qty/15')
@@ -75,7 +76,7 @@ class EventTemplateQtyResource extends Resource
                 ->label('Ilość uczestników')
                 ->sortable(),
             Tables\Columns\TextColumn::make('gratis')
-                ->label('Gratis (opieka)')
+                ->label('Opiekun/Inne (opieka)')
                 ->sortable(),
             Tables\Columns\TextColumn::make('staff')
                 ->label('Obsługa')
@@ -126,14 +127,15 @@ class EventTemplateQtyResource extends Resource
      */
     public static function canViewAny(): bool
     {
-        $user = \App\Models\User::query()->find(\Illuminate\Support\Facades\Auth::id());
-        if ($user && $user->roles && $user->roles->contains('name', 'admin')) {
-            return true;
+        $user = auth()->user();
+        if (! $user) {
+            return false;
         }
-        if ($user && $user->roles && $user->roles->flatMap->permissions->contains('name', 'view event_template_qty')) {
+
+        if ($user->hasRole(['admin', 'super_admin'])) {
             return true;
         }
 
-        return false;
+        return $user->can('view event_template');
     }
 }

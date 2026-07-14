@@ -20,6 +20,7 @@ class EventPricePerPerson extends Model
         'tax_amount',
         'price_with_tax',
         'tax_breakdown',
+        'is_manual',
     ];
 
     protected $casts = [
@@ -30,6 +31,7 @@ class EventPricePerPerson extends Model
         'tax_amount' => 'decimal:2',
         'price_with_tax' => 'decimal:2',
         'tax_breakdown' => 'array',
+        'is_manual' => 'boolean',
     ];
 
     public function event()

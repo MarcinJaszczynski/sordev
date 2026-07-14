@@ -4,6 +4,7 @@ namespace App\Filament\Resources;
 
 use App\Filament\Resources\EventPriceDescriptionResource\Pages;
 use App\Models\EventPriceDescription;
+use App\Support\FilamentNavigation;
 use Filament\Forms;
 use Filament\Forms\Form;
 use Filament\Resources\Resource;
@@ -16,7 +17,7 @@ class EventPriceDescriptionResource extends Resource
 
     protected static ?string $navigationIcon = 'heroicon-o-currency-euro';
 
-    protected static ?string $navigationGroup = 'Ustawienia';
+    protected static ?string $navigationGroup = FilamentNavigation::GROUP_CONFIG;
 
     protected static ?string $label = 'Opis ceny imprezy';
 
@@ -26,7 +27,7 @@ class EventPriceDescriptionResource extends Resource
 
     public static function shouldRegisterNavigation(): bool
     {
-        return true;
+        return false;
     }
 
     public static function form(Form $form): Form
@@ -36,12 +37,10 @@ class EventPriceDescriptionResource extends Resource
                 Forms\Components\TextInput::make('name')
                     ->label('Nazwa')
                     ->required(),
-                Forms\Components\RichEditor::make('description')
+                \FilamentTiptapEditor\TiptapEditor::make('description')
                     ->label('Opis (możesz używać <b>, <ul>, <li> itd.)')
                     ->required()
-                    ->toolbarButtons([
-                        'bold', 'italic', 'bulletList', 'orderedList', 'link', 'undo', 'redo',
-                    ])
+                    
                     ->columnSpanFull(),
             ]);
     }

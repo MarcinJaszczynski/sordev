@@ -4,6 +4,7 @@ namespace App\Filament\Resources;
 
 use App\Filament\Resources\PaymentTypeResource\Pages;
 use App\Models\PaymentType;
+use App\Support\FilamentNavigation;
 use Filament\Forms;
 use Filament\Forms\Form;
 use Filament\Resources\Resource;
@@ -24,7 +25,7 @@ class PaymentTypeResource extends Resource
      */
     protected static ?string $model = PaymentType::class;
 
-    protected static ?string $navigationGroup = 'Ustawienia kalkulacji';
+    protected static ?string $navigationGroup = FilamentNavigation::GROUP_CONFIG;
 
     protected static ?string $navigationIcon = 'heroicon-o-calculator';
 
@@ -33,6 +34,11 @@ class PaymentTypeResource extends Resource
     protected static ?string $pluralModelLabel = 'Typy płatności';
 
     protected static ?string $modelLabel = 'Typ płatności';
+
+    public static function shouldRegisterNavigation(): bool
+    {
+        return false;
+    }
 
     /**
      * Definicja formularza do edycji/dodawania typu płatności
@@ -43,7 +49,7 @@ class PaymentTypeResource extends Resource
             Forms\Components\TextInput::make('name')
                 ->label('Nazwa')
                 ->required(),
-            Forms\Components\RichEditor::make('description')
+            \FilamentTiptapEditor\TiptapEditor::make('description')
                 ->label('Opis')
                 ->nullable(),
         ]);

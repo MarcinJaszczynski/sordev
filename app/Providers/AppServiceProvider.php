@@ -3,10 +3,28 @@
 namespace App\Providers;
 
 use App\Filament\Resources\TaskResource\RelationManagers\TasksRelationManager;
+use App\Models\ClientInvoiceRequest;
+use App\Models\ContractPaymentSchedule;
 use App\Models\Event;
+use App\Models\EventAgreementPaymentSchedule;
+use App\Models\EventParticipantResignation;
+use App\Models\EventSettlementCost;
 use App\Models\Place;
+use App\Models\VendorInvoice;
+use App\Observers\ClientInvoiceRequestObserver;
+use App\Observers\ContractPaymentScheduleObserver;
+use App\Observers\EventAgreementPaymentScheduleObserver;
 use App\Observers\EventObserver;
+use App\Observers\EventParticipantResignationObserver;
+use App\Observers\EventSettlementCostObserver;
 use App\Observers\PlaceObserver;
+use App\Observers\VendorInvoiceObserver;
+use Illuminate\Support\Facades\Schema;
+use App\Services\Tfg\HttpTfgFeedClient;
+use App\Services\Tfg\MockTfgFeedClient;
+use App\Services\Tfg\TfgFeedClientInterface;
+use App\Support\FilamentFormBinding;
+use App\Support\ViteAssetResolver;
 use Filament\Support\Assets\Css;
 use Filament\Support\Facades\FilamentAsset;
 use Illuminate\Support\Facades\URL;
@@ -21,7 +39,11 @@ class AppServiceProvider extends ServiceProvider
      */
     public function register(): void
     {
-        //
+        $this->app->bind(TfgFeedClientInterface::class, function () {
+            return config('tfg.driver') === 'http'
+                ? app(HttpTfgFeedClient::class)
+                : app(MockTfgFeedClient::class);
+        });
     }
 
     /**
@@ -29,8 +51,33 @@ class AppServiceProvider extends ServiceProvider
      */
     public function boot(): void
     {
+        \FilamentTiptapEditor\TiptapEditor::macro('maxLength', function (int | \Closure | null $length): \FilamentTiptapEditor\TiptapEditor {
+            $this->rules(fn (): array => filled($value = $this->evaluate($length)) ? ["max:{$value}"] : []);
+
+            return $this;
+        });
+
+        \FilamentTiptapEditor\TiptapEditor::configureUsing(function (\FilamentTiptapEditor\TiptapEditor $editor) {
+            $editor
+                ->tools([
+                    'undo', 'redo', '|',
+                    'heading', 'bullet-list', 'ordered-list', 'blockquote', '|',
+                    'bold', 'italic', 'strike', 'code', 'underline', 'color', 'highlight', 'link', '|',
+                    'superscript', 'subscript', '|',
+                    'align-left', 'align-center', 'align-right', 'align-justify',
+                ])
+                ->maxContentWidth('none')
+                ->disableFloatingMenus()
+                ->disableBubbleMenus()
+                ->bubbleMenuTools(['bold', 'italic', 'underline', 'strike', 'color', 'highlight', 'link']);
+        }, isImportant: false);
+
+        FilamentFormBinding::apply();
+
+        Vite::useBuildDirectory('vite-dist');
+
         FilamentAsset::register([
-            Css::make('app-styles', Vite::asset('resources/css/app.css')),
+            Css::make('app-styles', ViteAssetResolver::asset('resources/css/app.css')),
             // Keep Filament JS stack isolated. Custom app.js is loaded on front layouts,
             // and injecting it globally into the panel can break table/select Alpine boot.
         ]);
@@ -43,6 +90,26 @@ class AppServiceProvider extends ServiceProvider
 
         // Przelicz koszty i odśwież rozliczenie przy zmianach danych imprezy
         Event::observe(EventObserver::class);
+
+        EventParticipantResignation::observe(EventParticipantResignationObserver::class);
+
+        EventSettlementCost::observe(EventSettlementCostObserver::class);
+
+        if (Schema::hasTable('contract_payment_schedules')) {
+            ContractPaymentSchedule::observe(ContractPaymentScheduleObserver::class);
+        }
+
+        if (Schema::hasTable('event_agreement_payment_schedules')) {
+            EventAgreementPaymentSchedule::observe(EventAgreementPaymentScheduleObserver::class);
+        }
+
+        if (Schema::hasTable('vendor_invoices')) {
+            VendorInvoice::observe(VendorInvoiceObserver::class);
+        }
+
+        if (Schema::hasTable('client_invoice_requests')) {
+            ClientInvoiceRequest::observe(ClientInvoiceRequestObserver::class);
+        }
 
         // Backward-compatible alias: stara ścieżka komponentu po przeprowadzce klasy
         // (zapobiega ComponentNotFoundException dla starych tokenów Livewire w sesji użytkownika)

@@ -2,13 +2,19 @@
 
 namespace App\Filament\Resources;
 
+use App\Filament\Forms\PhoneInput;
 use App\Filament\Resources\UserResource\Pages;
 use App\Models\User;
+use App\Support\FilamentNavigation;
+use App\Support\PilotIdentityValidation;
+use App\Support\UserRoleManagement;
 use Filament\Forms;
 use Filament\Forms\Form;
 use Filament\Resources\Resource;
 use Filament\Tables;
 use Filament\Tables\Table;
+use Illuminate\Database\Eloquent\Builder;
+use Illuminate\Database\Eloquent\Model;
 
 /**
  * Resource Filament dla modelu User.
@@ -25,13 +31,44 @@ class UserResource extends Resource
 
     protected static ?string $navigationIcon = 'heroicon-o-users';
 
-    protected static ?string $navigationLabel = 'Użytkownicy';
+    protected static ?string $navigationLabel = 'Zespół (piloci)';
 
-    protected static ?string $navigationGroup = 'Admin';
+    protected static ?string $navigationGroup = FilamentNavigation::GROUP_EVENTS;
+
+    protected static ?int $navigationSort = 3;
 
     protected static ?string $modelLabel = 'użytkownik';
 
     protected static ?string $pluralModelLabel = 'użytkownicy';
+
+    public static function canEdit(Model $record): bool
+    {
+        if (! parent::canEdit($record)) {
+            return false;
+        }
+
+        if (UserRoleManagement::canManageRolesAndPermissions(auth()->user())) {
+            return true;
+        }
+
+        return $record instanceof User && UserRoleManagement::isPilotOnlyUser($record);
+    }
+
+    public static function canDelete(Model $record): bool
+    {
+        return static::canEdit($record) && parent::canDelete($record);
+    }
+
+    public static function getEloquentQuery(): Builder
+    {
+        $query = parent::getEloquentQuery();
+
+        if (! UserRoleManagement::canManageRolesAndPermissions(auth()->user())) {
+            return UserRoleManagement::scopePilotTeamMembers($query);
+        }
+
+        return $query;
+    }
 
     /**
      * Zwraca etykietę pojedynczą modelu
@@ -66,38 +103,74 @@ class UserResource extends Resource
                         ->label('E-mail')
                         ->email()
                         ->required(),
+                    PhoneInput::make('phone')
+                        ->label('Telefon'),
                     Forms\Components\TextInput::make('password')
                         ->label('Hasło')
                         ->password()
-                        ->dehydrateStateUsing(fn ($state) => ! empty($state) ? bcrypt($state) : null)
                         ->required(fn ($context) => $context === 'create')
                         ->maxLength(255)
-                        ->nullable(),
+                        ->nullable()
+                        ->helperText('Hasło zapisze się na koncie. E-mail z danymi logowania wyślesz ręcznie przyciskiem «Wyślij dane logowania».'),
                     Forms\Components\Select::make('status')
-                        ->label('Status')
+                        ->label('Status konta')
                         ->options([
                             'active' => 'Aktywny',
                             'inactive' => 'Nieaktywny',
                         ])
+                        ->default(UserRoleManagement::DEFAULT_STATUS)
                         ->required()
                         ->columnSpanFull(),
+                    Forms\Components\Placeholder::make('pilot_panel_access_sent_info')
+                        ->label('Ostatnie powiadomienie o dostępie do panelu')
+                        ->content(function (?User $record): string {
+                            if (! $record?->pilot_panel_access_sent_at) {
+                                return 'Nie wysłano — użyj przycisku «Wyślij dane logowania» u góry formularza.';
+                            }
+
+                            $by = $record->pilotPanelAccessSentByUser?->name ?? '—';
+
+                            return $record->pilot_panel_access_sent_at->format('d.m.Y H:i').' · '.$by;
+                        })
+                        ->visible(fn (?User $record): bool => $record?->hasRole('pilot') ?? false)
+                        ->columnSpanFull(),
+                ]),
+
+            Forms\Components\Section::make('Dane pilota')
+                ->description('Domyślnie każdy nowy użytkownik w tej sekcji jest pilotem.')
+                ->columns(2)
+                ->schema([
+                    Forms\Components\DatePicker::make('birth_date')
+                        ->label('Data urodzenia')
+                        ->displayFormat('d.m.Y')
+                        ->native(false)
+                        ->nullable(),
+                    Forms\Components\TextInput::make('pesel')
+                        ->label('PESEL')
+                        ->maxLength(11)
+                        ->nullable()
+                        ->rules(PilotIdentityValidation::optionalPeselRules())
+                        ->helperText('Opcjonalnie — 11 cyfr.'),
                 ]),
 
             Forms\Components\Section::make('Uprawnienia i dostęp')
                 ->columns(1)
+                ->visible(fn (): bool => UserRoleManagement::canManageRolesAndPermissions(auth()->user()))
+                ->description('Role inne niż pilot oraz indywidualne uprawnienia mogą nadawać wyłącznie administratorzy.')
                 ->schema([
                     Forms\Components\Select::make('roles')
                         ->label('Role użytkownika')
                         ->multiple()
                         ->relationship('roles', 'name')
                         ->preload()
-                        ->helperText('Wybierz role dla użytkownika'),
+                        ->default(UserRoleManagement::defaultPilotRoleIds())
+                        ->helperText('Domyślnie: pilot. Inne role tylko dla administratorów.'),
                     Forms\Components\Select::make('permissions')
                         ->label('Indywidualne uprawnienia')
                         ->multiple()
                         ->relationship('permissions', 'name')
                         ->preload()
-                        ->helperText('Możesz nadać indywidualne uprawnienia użytkownikowi'),
+                        ->helperText('Opcjonalne uprawnienia poza rolami — tylko dla administratorów.'),
                 ]),
         ]);
     }
@@ -110,7 +183,17 @@ class UserResource extends Resource
         return $table->columns([
             Tables\Columns\TextColumn::make('name')->label('Imię i nazwisko')->searchable(),
             Tables\Columns\TextColumn::make('email')->label('E-mail')->searchable(),
+            Tables\Columns\TextColumn::make('phone')->label('Telefon')->placeholder('—')->copyable(),
             Tables\Columns\TextColumn::make('status')->label('Status')->formatStateUsing(fn ($state) => $state === 'active' ? 'Aktywny' : 'Nieaktywny'),
+            Tables\Columns\TextColumn::make('pilot_panel_access_sent_at')
+                ->label('Dostęp — e-mail')
+                ->dateTime('d.m.Y H:i')
+                ->placeholder('Nie wysłano')
+                ->toggleable(isToggledHiddenByDefault: true),
+            Tables\Columns\TextColumn::make('roles.name')
+                ->label('Role')
+                ->badge()
+                ->visible(fn (): bool => UserRoleManagement::canManageRolesAndPermissions(auth()->user())),
         ])
             ->actions([
                 Tables\Actions\EditAction::make()->label('Edytuj'),

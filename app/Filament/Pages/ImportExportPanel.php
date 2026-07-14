@@ -2,6 +2,7 @@
 
 namespace App\Filament\Pages;
 
+use App\Support\FilamentNavigation;
 use Filament\Pages\Page;
 use Maatwebsite\Excel\Facades\Excel;
 
@@ -13,7 +14,7 @@ class ImportExportPanel extends Page
 
     protected static ?string $navigationLabel = 'Import / Export danych';
 
-    protected static ?string $navigationGroup = 'Narzędzia';
+    protected static ?string $navigationGroup = FilamentNavigation::GROUP_SYSTEM;
 
     public $models = [
         'Event' => \App\Models\Event::class,

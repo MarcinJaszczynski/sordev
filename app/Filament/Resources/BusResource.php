@@ -2,8 +2,10 @@
 
 namespace App\Filament\Resources;
 
+use App\Filament\Concerns\AuthorizesWithShield;
 use App\Filament\Resources\BusResource\Pages;
 use App\Models\Bus;
+use App\Support\FilamentNavigation;
 use Filament\Forms;
 use Filament\Forms\Form;
 use Filament\Resources\Resource;
@@ -12,11 +14,13 @@ use Filament\Tables\Table;
 
 class BusResource extends Resource
 {
+    use AuthorizesWithShield;
+
     protected static ?string $model = Bus::class;
 
     protected static ?string $navigationIcon = 'heroicon-o-truck';
 
-    protected static ?string $navigationGroup = 'Ustawienia transportu';
+    protected static ?string $navigationGroup = FilamentNavigation::GROUP_CONFIG;
 
     protected static ?string $navigationLabel = 'Autokary';
 
@@ -42,7 +46,7 @@ class BusResource extends Resource
                         ->default(55)
                         ->required()
                         ->columnSpan(1),
-                    Forms\Components\RichEditor::make('description')
+                    \FilamentTiptapEditor\TiptapEditor::make('description')
                         ->label('Opis')
                         ->nullable()
                         ->columnSpanFull(),
@@ -118,71 +122,5 @@ class BusResource extends Resource
             'create' => Pages\CreateBus::route('/create'),
             'edit' => Pages\EditBus::route('/{record}/edit'),
         ];
-    }
-
-    public static function canViewAny(): bool
-    {
-        $user = \App\Models\User::query()->find(\Illuminate\Support\Facades\Auth::id());
-        if ($user && $user->roles && $user->roles->contains('name', 'admin')) {
-            return true;
-        }
-        if ($user && $user->roles && $user->roles->flatMap->permissions->contains('name', 'view bus')) {
-            return true;
-        }
-
-        return false;
-    }
-
-    public static function canView(
-        $record
-    ): bool {
-        $user = \App\Models\User::query()->find(\Illuminate\Support\Facades\Auth::id());
-        if ($user && $user->roles && $user->roles->contains('name', 'admin')) {
-            return true;
-        }
-        if ($user && $user->roles && $user->roles->flatMap->permissions->contains('name', 'view bus')) {
-            return true;
-        }
-
-        return false;
-    }
-
-    public static function canCreate(): bool
-    {
-        $user = \App\Models\User::query()->find(\Illuminate\Support\Facades\Auth::id());
-        if ($user && $user->roles && $user->roles->contains('name', 'admin')) {
-            return true;
-        }
-        if ($user && $user->roles && $user->roles->flatMap->permissions->contains('name', 'create bus')) {
-            return true;
-        }
-
-        return false;
-    }
-
-    public static function canEdit($record): bool
-    {
-        $user = \App\Models\User::query()->find(\Illuminate\Support\Facades\Auth::id());
-        if ($user && $user->roles && $user->roles->contains('name', 'admin')) {
-            return true;
-        }
-        if ($user && $user->roles && $user->roles->flatMap->permissions->contains('name', 'update bus')) {
-            return true;
-        }
-
-        return false;
-    }
-
-    public static function canDelete($record): bool
-    {
-        $user = \App\Models\User::query()->find(\Illuminate\Support\Facades\Auth::id());
-        if ($user && $user->roles && $user->roles->contains('name', 'admin')) {
-            return true;
-        }
-        if ($user && $user->roles && $user->roles->flatMap->permissions->contains('name', 'delete bus')) {
-            return true;
-        }
-
-        return false;
     }
 }

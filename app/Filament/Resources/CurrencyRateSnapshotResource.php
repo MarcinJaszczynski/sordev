@@ -5,6 +5,7 @@ namespace App\Filament\Resources;
 use App\Filament\Resources\CurrencyRateSnapshotResource\Pages;
 use App\Models\Currency;
 use App\Models\CurrencyRateSnapshot;
+use App\Support\FilamentNavigation;
 use Filament\Forms;
 use Filament\Forms\Form;
 use Filament\Resources\Resource;
@@ -19,9 +20,14 @@ class CurrencyRateSnapshotResource extends Resource
 
     protected static ?string $navigationLabel = 'Kursy walut';
 
-    protected static ?string $navigationGroup = 'Finanse';
+    protected static ?string $navigationGroup = FilamentNavigation::GROUP_DICTIONARIES;
 
-    protected static ?int $navigationSort = 20;
+    protected static ?int $navigationSort = 80;
+
+    public static function shouldRegisterNavigation(): bool
+    {
+        return false;
+    }
 
     protected static ?string $modelLabel = 'Kurs waluty';
 
@@ -68,7 +74,7 @@ class CurrencyRateSnapshotResource extends Resource
                     ->default('manual')
                     ->nullable(),
 
-                Forms\Components\RichEditor::make('notes')
+                \FilamentTiptapEditor\TiptapEditor::make('notes')
                     ->columnSpanFull(),
             ]),
         ]);

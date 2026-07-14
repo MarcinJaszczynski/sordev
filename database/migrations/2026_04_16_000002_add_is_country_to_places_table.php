@@ -8,7 +8,7 @@ return new class extends Migration
 {
     public function up(): void
     {
-        if (!Schema::hasColumn('places', 'is_country')) {
+        if (! Schema::hasColumn('places', 'is_country')) {
             Schema::table('places', function (Blueprint $table) {
                 $table->boolean('is_country')->nullable()->after('starting_place');
             });

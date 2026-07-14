@@ -3,12 +3,15 @@
 namespace App\Filament\Resources\EventTemplateResource\Pages;
 
 use App\Filament\Resources\EventTemplateResource;
+use App\Filament\Resources\EventTemplateResource\Concerns\HasGenerateEventAction;
 use App\Models\EventTemplate;
 use Filament\Actions;
 use Filament\Resources\Pages\Page;
 
 class ProgramEventTemplate extends Page
 {
+    use HasGenerateEventAction;
+
     // NIE używaj use DispatchesEvents;
     protected static string $resource = EventTemplateResource::class;
 
@@ -43,6 +46,7 @@ class ProgramEventTemplate extends Page
     protected function getHeaderActions(): array
     {
         return [
+            $this->makeGenerateEventAction(),
             Actions\Action::make('back')
                 ->label('Wróć do edycji')
                 ->icon('heroicon-o-arrow-left')

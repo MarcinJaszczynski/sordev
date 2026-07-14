@@ -19,7 +19,7 @@
                 <div class="alert alert-success">{{ session('success') }}</div>
             @endif
 
-            @if($errors->any())
+            @if(isset($errors) && $errors->any())
                 <div class="alert alert-danger">
                     <ul class="mb-0 ps-3">
                         @foreach($errors->all() as $error)

@@ -41,9 +41,15 @@ fi
 
 if [[ "$RUN_TESTS" == "1" ]]; then
   echo "[8/8] Testy"
-  php artisan test --stop-on-failure
+  DB_CONNECTION=sqlite DB_DATABASE=:memory: php artisan test --stop-on-failure
 else
   echo "[8/8] Testy pomiete (ustaw VERIFY_RUN_TESTS=1 aby wlaczyc)"
+fi
+
+if command -v npm >/dev/null 2>&1 && [[ -f package.json ]]; then
+  if [[ ! -f public/vite-dist/manifest.json ]]; then
+    echo "Uwaga: brak public/vite-dist/manifest.json — uruchom: npm ci && npm run build"
+  fi
 fi
 
 echo "Verify OK"

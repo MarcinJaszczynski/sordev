@@ -1,0 +1,88 @@
+<?php
+
+namespace App\Models;
+
+use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Database\Eloquent\Relations\HasMany;
+
+class EventHotelStay extends Model
+{
+    protected $fillable = [
+        'event_id',
+        'day',
+        'contractor_id',
+        'contractor_location_id',
+        'event_program_point_id',
+        'offer_notes',
+        'notes',
+        'same_as_day',
+        'pricing_mode',
+        'flat_amount',
+        'flat_currency_id',
+        'flat_convert_to_pln',
+    ];
+
+    protected $casts = [
+        'day' => 'integer',
+        'same_as_day' => 'integer',
+        'flat_amount' => 'decimal:2',
+        'flat_convert_to_pln' => 'boolean',
+    ];
+
+    public function event(): BelongsTo
+    {
+        return $this->belongsTo(Event::class);
+    }
+
+    public function contractor(): BelongsTo
+    {
+        return $this->belongsTo(Contractor::class);
+    }
+
+    public function contractorLocation(): BelongsTo
+    {
+        return $this->belongsTo(ContractorLocation::class, 'contractor_location_id');
+    }
+
+    public function programPoint(): BelongsTo
+    {
+        return $this->belongsTo(EventProgramPoint::class, 'event_program_point_id');
+    }
+
+    public function roomLines(): HasMany
+    {
+        return $this->hasMany(EventHotelRoomLine::class)->orderBy('order');
+    }
+
+    public function totalPln(?string $eventPricingMode = 'lines'): float
+    {
+        if ($eventPricingMode === 'flat_stay') {
+            return 0.0;
+        }
+
+        if ($this->pricing_mode === 'flat_night' && $this->flat_amount !== null) {
+            $amount = round((float) $this->flat_amount, 2);
+            $currency = $this->flat_currency_id
+                ? Currency::query()->find($this->flat_currency_id)
+                : null;
+
+            if (! $currency || $currency->symbol === 'PLN') {
+                return $amount;
+            }
+
+            if (! (bool) ($this->flat_convert_to_pln ?? true)) {
+                return 0.0;
+            }
+
+            return round($amount * (float) ($currency->exchange_rate ?? 1), 2);
+        }
+
+        return round((float) $this->roomLines->sum(fn (EventHotelRoomLine $line) => $line->lineTotalPln()), 2);
+    }
+
+    public function isComplete(): bool
+    {
+        return $this->roomLines()->exists();
+    }
+}

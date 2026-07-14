@@ -19,6 +19,34 @@
 .transport-type-icon img { max-width:100%; max-height:100%; object-fit:contain; }
 .transport-type-fallback { font-size:.75rem; font-weight:600; color:#666; text-transform:uppercase; letter-spacing:.02em; }
 .transport-type-icons--mobile { margin-top:6px; }
+
+.package-box-layout { align-items: flex-start; }
+.package-box-photo {
+    width: 35% !important;
+    flex: 0 0 35% !important;
+    max-width: 35% !important;
+    height: auto !important;
+    aspect-ratio: 1 / 1 !important;
+    max-height: none !important;
+    align-self: flex-start !important;
+    overflow: hidden !important;
+}
+.package-box-photo img {
+    width: 100% !important;
+    height: 100% !important;
+    object-fit: cover !important;
+    object-position: center !important;
+    display: block !important;
+}
+@media (max-width: 966px) {
+    .package-box-photo {
+        width: 100% !important;
+        flex: 0 0 auto !important;
+        max-width: 100% !important;
+        height: auto !important;
+        aspect-ratio: 1 / 1 !important;
+    }
+}
 </style>
 <!-- preserved original styles (no additional responsive overrides) -->
 @php $hasAny = (isset($eventTemplate) && count($eventTemplate) > 0); @endphp
@@ -47,7 +75,7 @@
             <div class="package-box-layout">
                 <div
                     class="package-box-photo"
-                    style="background-image: url({{ $item->preview_image_url ?: asset('uploads/default.png') }}); cursor: pointer;"
+                    style="cursor: pointer;"
                     @php
                         $__baseUrl = route('package.pretty', [
                             'regionSlug' => $regionSlugForLinks,
@@ -61,6 +89,7 @@
                         }
                     @endphp
                     onclick="window.location.href='{{ $__baseUrl }}';">
+                    <img src="{{ $item->preview_image_url ?: asset('uploads/default.png') }}" alt="{{ $item->name }}" style="width: 100%; height: 100%; object-fit: cover; object-position: center; display: block;" loading="lazy" decoding="async" onerror="this.onerror=null;this.src='{{ $item->full_image_url ?: asset('uploads/default.png') }}';">
                 </div>
                 <div class="package-box-name-mobile">
                     <div class="title-section">

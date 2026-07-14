@@ -1,0 +1,110 @@
+<?php
+
+namespace App\Support;
+
+use App\Filament\Client\Pages\ClientAgreementPage;
+use App\Filament\Client\Pages\ClientGroupPaymentsPage;
+use App\Filament\Client\Pages\ClientInvoiceRequestPage;
+use App\Filament\Client\Pages\ClientMyPaymentsPage;
+use App\Filament\Client\Pages\ClientPaymentSchedulePage;
+use App\Filament\Client\Pages\ClientProgramPage;
+use App\Filament\Client\Resources\ClientEventResource;
+use App\Models\Event;
+use App\Services\ClientAccessService;
+use Illuminate\Support\Facades\Auth;
+
+/**
+ * Sub-nawigacja workspace wycieczki w portalu klienta.
+ */
+final class ClientTripModuleNavigation
+{
+    /** @return array<int, array{key: string, label: string, description?: string, url: string, icon?: string, active?: bool}> */
+    public static function tabs(Event $event, ?string $active = null): array
+    {
+        $user = Auth::user();
+        $service = app(ClientAccessService::class);
+        $fullAccess = $service->hasFullAccess($event, $user);
+        $isGuardian = $user && $service->isGuardian($user, $event);
+        $isParticipant = $user && $service->isParticipant($user, $event);
+
+        $tabs = [
+            [
+                'key' => 'info',
+                'label' => 'Informacje',
+                'description' => 'Dane wycieczki',
+                'url' => ClientEventResource::getUrl('view', ['record' => $event->id]),
+                'icon' => 'heroicon-o-information-circle',
+            ],
+        ];
+
+        if ($fullAccess) {
+            $tabs[] = [
+                'key' => 'program',
+                'label' => 'Program',
+                'description' => 'Plan dnia po dniu',
+                'url' => ClientProgramPage::urlFor($event),
+                'icon' => 'heroicon-o-calendar-days',
+            ];
+            $tabs[] = [
+                'key' => 'agreement',
+                'label' => 'Umowa',
+                'description' => 'Twoja umowa',
+                'url' => ClientAgreementPage::urlFor($event),
+                'icon' => 'heroicon-o-document-text',
+            ];
+            $tabs[] = [
+                'key' => 'payment_schedule',
+                'label' => 'Harmonogram płatności',
+                'description' => 'Terminy i transze',
+                'url' => ClientPaymentSchedulePage::urlFor($event),
+                'icon' => 'heroicon-o-banknotes',
+            ];
+
+            if ($isParticipant) {
+                $tabs[] = [
+                    'key' => 'my_payments',
+                    'label' => 'Moje wpłaty',
+                    'description' => 'Status płatności',
+                    'url' => ClientMyPaymentsPage::urlFor($event),
+                    'icon' => 'heroicon-o-credit-card',
+                ];
+                $tabs[] = [
+                    'key' => 'invoice_request',
+                    'label' => 'Wniosek o fakturę',
+                    'description' => 'Dane do faktury',
+                    'url' => ClientInvoiceRequestPage::urlFor($event),
+                    'icon' => 'heroicon-o-receipt-percent',
+                ];
+            }
+
+            if ($isGuardian) {
+                $tabs[] = [
+                    'key' => 'group_payments',
+                    'label' => 'Wpłaty grupy',
+                    'description' => 'Stan wpłat uczestników',
+                    'url' => ClientGroupPaymentsPage::urlFor($event),
+                    'icon' => 'heroicon-o-users',
+                ];
+                if (! $isParticipant) {
+                    $tabs[] = [
+                        'key' => 'invoice_request',
+                        'label' => 'Wniosek o fakturę',
+                        'description' => 'Dane do faktury',
+                        'url' => ClientInvoiceRequestPage::urlFor($event),
+                        'icon' => 'heroicon-o-receipt-percent',
+                    ];
+                }
+            }
+        }
+
+        if ($active !== null) {
+            $tabs = array_map(function (array $tab) use ($active): array {
+                $tab['active'] = $tab['key'] === $active;
+
+                return $tab;
+            }, $tabs);
+        }
+
+        return $tabs;
+    }
+}

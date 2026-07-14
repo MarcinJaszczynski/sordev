@@ -19,6 +19,7 @@ Route::prefix('v1')->group(function () {
     Route::middleware('auth:sanctum')->group(function () {
         Route::get('/events', [EventController::class, 'index']);
         Route::get('/events/{event}', [EventController::class, 'show']);
+        Route::get('/events/{event}/calculation', [EventController::class, 'calculation']);
         Route::post('/events/{event}/recalculate-price', [EventController::class, 'recalculatePrice']);
         Route::post('/events/{event}/program-points/reorder', [EventController::class, 'reorderProgramPoints']);
 

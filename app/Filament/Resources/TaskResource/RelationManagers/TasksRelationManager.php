@@ -2,23 +2,35 @@
 
 namespace App\Filament\Resources\TaskResource\RelationManagers;
 
+use App\Filament\Concerns\InteractsWithTaskEditModal;
+use App\Filament\Concerns\InteractsWithTaskOwnershipScope;
 use App\Filament\Resources\TaskResource;
 use App\Models\Task;
+use App\Support\Tasks\TaskAuthorization;
+use App\Support\Tasks\TaskQueryFilters;
 use Filament\Forms;
 use Filament\Forms\Form;
 use Filament\Resources\RelationManagers\RelationManager;
 use Filament\Tables;
 use Filament\Tables\Table;
 use Illuminate\Database\Eloquent\Builder;
-use Illuminate\Support\Facades\Auth;
+use Illuminate\Support\HtmlString;
 
 class TasksRelationManager extends RelationManager
 {
+    use InteractsWithTaskEditModal;
+    use InteractsWithTaskOwnershipScope;
+
     protected static string $relationship = 'tasks';
 
     protected static ?string $recordTitleAttribute = 'title';
 
     protected static ?string $title = 'Zadania';
+
+    public function mount(): void
+    {
+        $this->mountInteractsWithTaskEditModal();
+    }
 
     public function form(Form $form): Form
     {
@@ -29,7 +41,7 @@ class TasksRelationManager extends RelationManager
                     ->required()
                     ->maxLength(255),
 
-                Forms\Components\RichEditor::make('description')
+                \FilamentTiptapEditor\TiptapEditor::make('description')
                     ->label('Opis')
                     ->columnSpanFull(),
 
@@ -46,12 +58,8 @@ class TasksRelationManager extends RelationManager
 
                 Forms\Components\Select::make('priority')
                     ->label('Priorytet')
-                    ->options([
-                        'low' => 'Niski',
-                        'medium' => 'Średni',
-                        'high' => 'Wysoki',
-                    ])
-                    ->default('medium')
+                    ->options(\App\Enums\TaskPriority::options())
+                    ->default(\App\Enums\TaskPriority::Normal->value)
                     ->required(),
 
                 Forms\Components\Select::make('assignee_id')
@@ -67,6 +75,7 @@ class TasksRelationManager extends RelationManager
                             ->where('taskable_type', $this->getOwnerRecord()::class)
                             ->where('taskable_id', $this->getOwnerRecord()->getKey())
                             ->whereNull('parent_id')
+                            ->tap(fn ($query) => TaskQueryFilters::officeOnly($query))
                             ->orderBy('title')
                             ->pluck('title', 'id')
                             ->all();
@@ -79,84 +88,53 @@ class TasksRelationManager extends RelationManager
 
     public function table(Table $table): Table
     {
-        return $table
-            ->modifyQueryUsing(fn (Builder $query) => $query->with(['status', 'assignee', 'author', 'parent']))
-            ->defaultSort('due_date')
-            ->columns([
-                Tables\Columns\TextColumn::make('title')
-                    ->label('Tytuł')
-                    ->searchable()
-                    ->wrap(),
+        $owner = $this->getOwnerRecord();
 
-                Tables\Columns\TextColumn::make('status.name')
-                    ->label('Status')
-                    ->badge(),
-
-                Tables\Columns\TextColumn::make('priority')
-                    ->label('Priorytet')
-                    ->badge()
-                    ->formatStateUsing(fn (?string $state) => match ($state) {
-                        'high' => 'Wysoki',
-                        'medium' => 'Średni',
-                        'low' => 'Niski',
-                        default => '—',
-                    })
-                    ->color(fn (?string $state) => match ($state) {
-                        'high' => 'danger',
-                        'medium' => 'warning',
-                        'low' => 'success',
-                        default => 'gray',
-                    }),
-
-                Tables\Columns\TextColumn::make('assignee.name')
-                    ->label('Przypisane do')
-                    ->placeholder('—'),
-
-                Tables\Columns\TextColumn::make('parent.title')
-                    ->label('Zależne od')
-                    ->placeholder('—')
-                    ->wrap(),
-
-                Tables\Columns\TextColumn::make('due_date')
-                    ->label('Termin')
-                    ->dateTime('d.m.Y H:i')
-                    ->placeholder('—'),
-            ])
+        return TaskResource::configureSharedTable(
+            $table,
+            officeOnly: true,
+            showContext: false,
+            includeTrashed: false,
+            additionalQueryModifier: fn (Builder $query): Builder => $this->applyTasksScopeTo($query),
+        )
+            ->heading('Zadania')
+            ->description(new HtmlString(
+                view('filament.tasks.ownership-quick-filters', ['tasksScope' => $this->tasksScope])->render()
+            ))
+            ->columns(TaskResource::eventTasksTableColumns())
             ->filters([
+                TaskResource::finishedVisibilityTableFilter(),
+                TaskResource::archivedVisibilityTableFilter(),
                 Tables\Filters\SelectFilter::make('status')
                     ->label('Status')
                     ->relationship('status', 'name'),
-
                 Tables\Filters\SelectFilter::make('priority')
                     ->label('Priorytet')
-                    ->options([
-                        'low' => 'Niski',
-                        'medium' => 'Średni',
-                        'high' => 'Wysoki',
-                    ]),
+                    ->options(\App\Enums\TaskPriority::options()),
             ])
             ->headerActions([
-                Tables\Actions\CreateAction::make()
-                    ->mutateFormDataUsing(function (array $data): array {
-                        $data['author_id'] = Auth::id();
-                        $data['taskable_type'] = $this->getOwnerRecord()::class;
-                        $data['taskable_id'] = $this->getOwnerRecord()->getKey();
-
-                        return $data;
-                    }),
+                $this->makeCreateTaskAction(defaultFormData: fn (): array => [
+                    'taskable_type' => $owner::class,
+                    'taskable_id' => $owner->getKey(),
+                ]),
             ])
             ->actions([
-                Tables\Actions\EditAction::make(),
-                Tables\Actions\Action::make('open_task')
-                    ->label('Pełny widok')
-                    ->icon('heroicon-o-arrow-top-right-on-square')
-                    ->url(fn (Task $record): string => TaskResource::getUrl('edit', ['record' => $record])),
-                Tables\Actions\DeleteAction::make(),
+                TaskResource::modalEditTableAction(),
+                Tables\Actions\DeleteAction::make()
+                    ->visible(fn (Task $record): bool => TaskAuthorization::canDelete(auth()->user(), $record)),
             ])
             ->bulkActions([
-                Tables\Actions\BulkActionGroup::make([
-                    Tables\Actions\DeleteBulkAction::make(),
-                ]),
+                Tables\Actions\BulkActionGroup::make(TaskResource::tableBulkActions()),
             ]);
+    }
+
+    protected function afterTasksScopeChanged(): void
+    {
+        $this->resetTable();
+    }
+
+    protected function afterTaskModalSaved(Task $task): void
+    {
+        $this->resetTable();
     }
 }

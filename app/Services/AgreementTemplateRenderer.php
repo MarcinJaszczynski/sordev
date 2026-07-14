@@ -61,6 +61,13 @@ class AgreementTemplateRenderer
             '[ORGANIZATOR_TELEFON]' => (string) ($payload['organizer_phone'] ?? '—'),
             '[REFERENCJA_REZERWACJI]' => (string) ($payload['booking_reference'] ?? '—'),
             '[LINK_UMOWY]' => (string) ($payload['public_link'] ?? '—'),
+            '[UMOWA_BAZOWA]' => (string) ($payload['parent_agreement_number'] ?? '—'),
+            '[RODZAJE_ZMIAN_ANEKSU]' => (string) ($payload['annex_change_types'] ?? '—'),
+            '[OPIS_ZMIAN_PROGRAMU]' => (string) ($payload['annex_program_change_notes'] ?? '—'),
+            '[PROGRAM_ANEKSU]' => (string) ($payload['annex_program_text'] ?? '—'),
+            '[CENA_JEDNOSTKOWA]' => (string) ($payload['unit_price'] ?? ($payload['amount_per_person'] ?? '—')),
+            '[SCHEMAT_PLATNOSCI]' => (string) ($payload['payment_scheme_label'] ?? '—'),
+            '[HARMONOGRAM_PLATNOSCI]' => (string) ($payload['payment_schedule_text'] ?? '—'),
         ];
 
         // Backward compatibility: support legacy moustache placeholders.

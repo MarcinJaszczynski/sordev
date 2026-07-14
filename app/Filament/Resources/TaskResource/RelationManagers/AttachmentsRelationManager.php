@@ -16,6 +16,8 @@ class AttachmentsRelationManager extends RelationManager
 
     protected static ?string $recordTitleAttribute = 'name';
 
+    protected static ?string $title = 'Załączniki';
+
     public function form(Form $form): Form
     {
         return $form
@@ -23,6 +25,7 @@ class AttachmentsRelationManager extends RelationManager
                 Forms\Components\FileUpload::make('file_path')
                     ->label('Plik')
                     ->required()
+                    ->disk('public')
                     ->directory('task-attachments')
                     ->storeFileNamesIn('name')
                     ->preserveFilenames(),
@@ -34,9 +37,7 @@ class AttachmentsRelationManager extends RelationManager
         return $table->columns([
             Tables\Columns\TextColumn::make('name')
                 ->label('Nazwa pliku')
-                ->searchable()
-                ->url(fn ($record) => $record->public_url)
-                ->openUrlInNewTab(),
+                ->searchable(),
             Tables\Columns\TextColumn::make('user.name')
                 ->label('Dodane przez'),
             Tables\Columns\TextColumn::make('readable_size')
@@ -52,10 +53,13 @@ class AttachmentsRelationManager extends RelationManager
             ->headerActions([
                 Tables\Actions\CreateAction::make()
                     ->mutateFormDataUsing(function (array $data): array {
+                        $disk = Storage::disk('public');
+                        $path = $data['file_path'] ?? null;
+
                         $data['user_id'] = Auth::id();
-                        $data['mime_type'] = $data['file_path'] ? Storage::mimeType($data['file_path']) : null;
-                        $data['size'] = $data['file_path'] ? Storage::size($data['file_path']) : null;
-                        $data['name'] = $data['name'] ?? basename((string) ($data['file_path'] ?? ''));
+                        $data['mime_type'] = $path && $disk->exists($path) ? $disk->mimeType($path) : null;
+                        $data['size'] = $path && $disk->exists($path) ? $disk->size($path) : null;
+                        $data['name'] = $data['name'] ?? basename((string) $path);
 
                         return $data;
                     }),
@@ -63,7 +67,7 @@ class AttachmentsRelationManager extends RelationManager
                 Tables\Actions\Action::make('download')
                     ->label('Pobierz')
                     ->icon('heroicon-o-arrow-down-tray')
-                    ->url(fn ($record) => $record->public_url)
+                    ->url(fn ($record) => $record->download_url)
                     ->openUrlInNewTab(),
                 Tables\Actions\DeleteAction::make(),
             ])

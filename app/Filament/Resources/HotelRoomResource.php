@@ -4,6 +4,7 @@ namespace App\Filament\Resources;
 
 use App\Filament\Resources\HotelRoomResource\Pages;
 use App\Models\HotelRoom;
+use App\Support\FilamentNavigation;
 use Filament\Forms;
 use Filament\Forms\Form;
 use Filament\Resources\Resource;
@@ -18,7 +19,7 @@ class HotelRoomResource extends Resource
 
     protected static ?string $navigationLabel = 'Pokoje hotelowe';
 
-    protected static ?string $navigationGroup = 'Ustawienia noclegów';
+    protected static ?string $navigationGroup = FilamentNavigation::GROUP_CONFIG;
 
     protected static ?string $modelLabel = 'pokój hotelowy';
 
@@ -34,14 +35,24 @@ class HotelRoomResource extends Resource
                         ->label('Nazwa')
                         ->required()
                         ->columnSpan(2),
+                    Forms\Components\TextInput::make('capacity')
+                        ->label('Pojemność (max osób)')
+                        ->numeric()
+                        ->minValue(1)
+                        ->helperText('Maksymalna liczba osób w pokoju (np. z oferty hotelu).'),
+                    Forms\Components\TextInput::make('standard')
+                        ->label('Standard')
+                        ->maxLength(100)
+                        ->placeholder('np. standard, superior, apartament'),
                     Forms\Components\TextInput::make('people_count')
-                        ->label('Ilość osób w pokoju')
+                        ->label('Ilość osób (kalkulacja)')
                         ->numeric()
                         ->required()
+                        ->helperText('Liczba osób używana w kalkulacji i planie noclegów.')
                         ->columnSpan(1),
-                    Forms\Components\RichEditor::make('description')
+                    \FilamentTiptapEditor\TiptapEditor::make('description')
                         ->columnSpanFull(),
-                    Forms\Components\RichEditor::make('notes')
+                    \FilamentTiptapEditor\TiptapEditor::make('notes')
                         ->columnSpanFull(),
                 ]),
 
@@ -79,6 +90,8 @@ class HotelRoomResource extends Resource
     {
         return $table->columns([
             Tables\Columns\TextColumn::make('name')->label('Nazwa')->sortable(),
+            Tables\Columns\TextColumn::make('capacity')->label('Pojemność')->sortable(),
+            Tables\Columns\TextColumn::make('standard')->label('Standard')->sortable()->toggleable(),
             Tables\Columns\TextColumn::make('description')->label('Opis')->html(false)->limit(40),
             Tables\Columns\TextColumn::make('notes')->label('Uwagi')->html(false)->limit(40),
             Tables\Columns\TextColumn::make('people_count')->label('Ilość osób')->sortable(),

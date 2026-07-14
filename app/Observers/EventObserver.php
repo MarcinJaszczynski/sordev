@@ -3,6 +3,7 @@
 namespace App\Observers;
 
 use App\Models\Event;
+use App\Models\EventSettlement;
 use App\Models\User;
 use App\Services\NotificationService;
 use Illuminate\Support\Facades\Auth;
@@ -34,6 +35,17 @@ class EventObserver
         $totalCostManuallyChanged = in_array('total_cost', $changed, true);
 
         if ($costRelevantChanged && ! $totalCostManuallyChanged) {
+            if (in_array('participant_count', $changed, true)) {
+                try {
+                    $event->resyncProgramPointQuantities();
+                } catch (\Throwable $e) {
+                    \Illuminate\Support\Facades\Log::warning('EventObserver: resyncProgramPointQuantities failed', [
+                        'event_id' => $event->id,
+                        'error' => $e->getMessage(),
+                    ]);
+                }
+            }
+
             try {
                 $event->calculateTotalCost();
             } catch (\Throwable $e) {
@@ -51,6 +63,15 @@ class EventObserver
                     'error' => $e->getMessage(),
                 ]);
             }
+
+            try {
+                EventSettlement::findOrCreateActiveForEvent($event);
+            } catch (\Throwable $e) {
+                \Illuminate\Support\Facades\Log::warning('EventObserver: initializeSettlement failed', [
+                    'event_id' => $event->id,
+                    'error' => $e->getMessage(),
+                ]);
+            }
         }
 
         $this->clearAffectedUsersCache($event);
@@ -58,6 +79,15 @@ class EventObserver
 
     public function created(Event $event): void
     {
+        try {
+            EventSettlement::findOrCreateActiveForEvent($event);
+        } catch (\Throwable $e) {
+            \Illuminate\Support\Facades\Log::warning('EventObserver: initializeSettlement failed on create', [
+                'event_id' => $event->id,
+                'error' => $e->getMessage(),
+            ]);
+        }
+
         $this->clearAffectedUsersCache($event);
     }
 

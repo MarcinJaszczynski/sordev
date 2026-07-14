@@ -59,10 +59,25 @@ bring_up_app() {
 
 trap bring_up_app EXIT
 
+ensure_laravel_storage_paths() {
+  mkdir -p storage/framework/sessions
+  mkdir -p storage/framework/views
+  mkdir -p storage/framework/cache/data
+  mkdir -p storage/logs
+  mkdir -p bootstrap/cache
+
+  for dir in storage/framework/views storage/framework/sessions storage/logs bootstrap/cache; do
+    if [[ ! -f "$dir/.gitignore" ]]; then
+      printf '*\n!.gitignore\n' > "$dir/.gitignore"
+    fi
+  done
+}
+
 repair_public_storage_paths() {
   local legacy_root="storage/app"
   local public_root="storage/app/public"
 
+  ensure_laravel_storage_paths
   mkdir -p "$public_root"
 
   # Ensure storage symlink exists (or clearly report why it cannot be created).

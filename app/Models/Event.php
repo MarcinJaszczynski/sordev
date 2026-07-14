@@ -2,10 +2,15 @@
 
 namespace App\Models;
 
+use App\Models\Concerns\HasStickyNotes;
 use App\Models\Concerns\HasTasks;
+use App\Services\EventProgramScheduleService;
+use App\Services\TemplateProgramPointCopier;
+use Carbon\Carbon;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Database\Eloquent\Relations\BelongsToMany;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Database\Eloquent\Relations\HasOne;
 use Illuminate\Support\Collection;
@@ -15,7 +20,7 @@ use Illuminate\Support\Str;
 
 class Event extends Model
 {
-    use HasFactory, HasTasks;
+    use HasFactory, HasStickyNotes, HasTasks;
 
     public const STATUS_INQUIRY = 'inquiry';
 
@@ -45,6 +50,7 @@ class Event extends Model
         'event_template_id',
         'start_place_id',
         'contractor_id',
+        'transport_contractor_id',
         'name',
         'client_name',
         'client_email',
@@ -52,16 +58,26 @@ class Event extends Model
         'start_date',
         'end_date',
         'duration_days',
+        'program_day_start_times',
         'transfer_km',
         'program_km',
         'bus_id',
+        'use_manual_transport_cost',
+        'manual_transport_cost',
         'markup_id',
         'participant_count',
+        'diet_info',
+        'www_extra_info',
+        'return_time',
         'total_cost',
         'status',
         'notes',
         'office_notes',
         'hotel_notes',
+        'hotel_pricing_mode',
+        'hotel_flat_stay_amount',
+        'hotel_flat_stay_currency_id',
+        'hotel_flat_stay_convert_to_pln',
         'pilot_notes',
         'driver_notes',
         'departure_time',
@@ -69,16 +85,181 @@ class Event extends Model
         'driver_name',
         'driver_phone',
         'vehicle_registration',
+        'bus_info',
         'pickup_place_details',
+        'insurance_policy_number',
+        'insurance_terms',
+        'insurance_document_path',
+        'insurance_amount',
+        'insurance_payment_status',
+        'insurance_status',
+        'insurance_paid_at',
         'created_by',
         'assigned_to',
+        'pilot_funds_paid',
+        'pilot_funds_paid_at',
+        'pilot_funds_paid_by',
+        'pilot_advance_planned_amount',
+        'pilot_advance_planned_at',
+        'pilot_advance_planned_by',
+        'pilot_advance_paid_amount',
+        'pilot_advance_paid_currency_id',
+        'pilot_advance_paid_comment',
+        'pilot_portal_show_currency_exchange',
+        'pilot_portal_show_bus_collections',
+        'shared_with_pilot',
+        'shared_with_pilot_at',
+        'shared_with_pilot_by',
+        'pilot_trip_email_sent_at',
+        'check_in_status',
+        'check_in_notes',
+        'driver_pickup_info_sent_at',
+        'driver_pickup_info_sent_by',
     ];
 
     protected $casts = [
         'start_date' => 'date',
         'end_date' => 'date',
         'total_cost' => 'decimal:2',
+        'manual_transport_cost' => 'decimal:2',
+        'use_manual_transport_cost' => 'boolean',
+        'insurance_amount' => 'decimal:2',
+        'insurance_paid_at' => 'datetime',
+        'pilot_funds_paid' => 'boolean',
+        'pilot_funds_paid_at' => 'datetime',
+        'pilot_advance_planned_amount' => 'decimal:2',
+        'pilot_advance_planned_at' => 'datetime',
+        'pilot_advance_paid_amount' => 'decimal:2',
+        'pilot_portal_show_currency_exchange' => 'boolean',
+        'pilot_portal_show_bus_collections' => 'boolean',
+        'shared_with_pilot' => 'boolean',
+        'shared_with_pilot_at' => 'datetime',
+        'pilot_trip_email_sent_at' => 'datetime',
+        'driver_pickup_info_sent_at' => 'datetime',
+        'hotel_flat_stay_convert_to_pln' => 'boolean',
+        'program_day_start_times' => 'array',
     ];
+
+    public const DEFAULT_PROGRAM_DAY_START = '08:00';
+
+    public function programDayStartTime(int $day): string
+    {
+        if (! Schema::hasColumn('events', 'program_day_start_times')) {
+            return self::DEFAULT_PROGRAM_DAY_START.':00';
+        }
+
+        $times = is_array($this->program_day_start_times) ? $this->program_day_start_times : [];
+        $raw = $times[(string) $day] ?? $times[$day] ?? self::DEFAULT_PROGRAM_DAY_START;
+
+        return $this->normalizeProgramDayStartTime((string) $raw);
+    }
+
+    public function programDayStartTimeLabel(int $day): string
+    {
+        return substr($this->programDayStartTime($day), 0, 5);
+    }
+
+    /**
+     * @return array<string, string>
+     */
+    public function programDayStartTimes(): array
+    {
+        if (! Schema::hasColumn('events', 'program_day_start_times')) {
+            return [];
+        }
+
+        $times = is_array($this->program_day_start_times) ? $this->program_day_start_times : [];
+        $normalized = [];
+
+        foreach ($times as $day => $time) {
+            $normalized[(string) $day] = $this->normalizeProgramDayStartTime((string) $time);
+        }
+
+        return $normalized;
+    }
+
+    public function setProgramDayStartTime(int $day, string $time): void
+    {
+        if (! Schema::hasColumn('events', 'program_day_start_times')) {
+            return;
+        }
+
+        $times = is_array($this->program_day_start_times) ? $this->program_day_start_times : [];
+        $times[(string) $day] = substr($this->normalizeProgramDayStartTime($time), 0, 5);
+        $this->program_day_start_times = $times;
+    }
+
+    protected function normalizeProgramDayStartTime(string $time): string
+    {
+        $time = trim($time);
+
+        if ($time === '') {
+            return self::DEFAULT_PROGRAM_DAY_START.':00';
+        }
+
+        try {
+            $normalized = strlen($time) > 5 ? substr($time, 0, 8) : $time;
+            $format = strlen($time) > 5 ? 'H:i:s' : 'H:i';
+
+            return Carbon::createFromFormat($format, $normalized)->format('H:i:s');
+        } catch (\Throwable) {
+            return self::DEFAULT_PROGRAM_DAY_START.':00';
+        }
+    }
+
+    public static function getCheckInStatusOptions(): array
+    {
+        return [
+            'pending' => 'Do zrobienia',
+            'in_progress' => 'W trakcie',
+            'completed' => 'Zakończona',
+        ];
+    }
+
+    public function isCheckInCompleted(): bool
+    {
+        if (! Schema::hasColumn('events', 'check_in_status')) {
+            return false;
+        }
+
+        return ($this->check_in_status ?? 'pending') === 'completed';
+    }
+
+    public function requiresDriverPickupInfo(): bool
+    {
+        return filled($this->transport_contractor_id)
+            || filled($this->bus_id)
+            || filled($this->transport_company_name)
+            || filled($this->driver_name)
+            || filled($this->driver_phone);
+    }
+
+    public function isDriverPickupInfoSent(): bool
+    {
+        if (! Schema::hasColumn('events', 'driver_pickup_info_sent_at')) {
+            return false;
+        }
+
+        return filled($this->driver_pickup_info_sent_at);
+    }
+
+    public static function getInsuranceStatusOptions(): array
+    {
+        return [
+            'pending' => 'Do zrobienia',
+            'in_progress' => 'W trakcie',
+            'completed' => 'Gotowe',
+        ];
+    }
+
+    public static function getInsurancePaymentStatusOptions(): array
+    {
+        return [
+            'pending' => 'Do zapłaty',
+            'partial' => 'Częściowo opłacone',
+            'paid' => 'Opłacone',
+        ];
+    }
 
     public static function getStatusOptions(): array
     {
@@ -105,6 +286,11 @@ class Event extends Model
             'secondary' => self::STATUS_SETTLED,
             'danger' => [self::STATUS_PENDING_CANCELLATION, self::STATUS_CANCELLED],
         ];
+    }
+
+    public static function statusListCellClass(?string $status): string
+    {
+        return 'event-list-status-cell event-list-status-cell--'.($status ?: 'unknown');
     }
 
     public static function getEditableStatuses(): array
@@ -141,6 +327,25 @@ class Event extends Model
         return self::getStatusOptions()[$this->status] ?? $this->status;
     }
 
+    /**
+     * Unikalny kod imprezy: 2 cyfry roku + 6 znaków alfanumerycznych (A–Z, 0–9).
+     */
+    public static function generateUniqueCode(?Carbon $at = null): string
+    {
+        $year = ($at ?? now())->format('y');
+        $alphabet = '0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ';
+
+        do {
+            $suffix = '';
+            for ($i = 0; $i < 6; $i++) {
+                $suffix .= $alphabet[random_int(0, strlen($alphabet) - 1)];
+            }
+            $code = $year.$suffix;
+        } while (self::where('code', $code)->exists());
+
+        return $code;
+    }
+
     protected static function booted()
     {
 
@@ -149,14 +354,8 @@ class Event extends Model
                 $event->created_by = Auth::id();
             }
 
-            // Generuj unikalny kod imprezy: YY-LOSOWE6
             if (empty($event->code)) {
-                $year = now()->format('y');
-                do {
-                    $random = strtoupper(Str::random(6));
-                    $code = $year.'-'.$random;
-                } while (self::where('code', $code)->exists());
-                $event->code = $code;
+                $event->code = self::generateUniqueCode();
             }
         });
 
@@ -190,6 +389,127 @@ class Event extends Model
     }
 
     /**
+     * Zamawiający imprezy (jeden lub więcej kontrahentów)
+     */
+    public function orderingContractors(): BelongsToMany
+    {
+        $relation = $this->belongsToMany(Contractor::class, 'event_contractor')
+            ->withTimestamps()
+            ->orderByPivot('sort_order')
+            ->orderBy('contractors.name');
+
+        $pivotColumns = ['sort_order'];
+
+        if (Schema::hasColumn('event_contractor', 'contact_id')) {
+            $pivotColumns[] = 'contact_id';
+        }
+
+        if (Schema::hasColumn('event_contractor', 'department_label')) {
+            $pivotColumns[] = 'department_label';
+        }
+
+        return $relation->withPivot($pivotColumns);
+    }
+
+    /**
+     * @param  array<int, int>|array<int, array<string, mixed>>|null  $parties
+     */
+    public function syncOrderingContractors(array $parties): void
+    {
+        if (! Schema::hasTable('event_contractor')) {
+            return;
+        }
+
+        if ($parties !== [] && is_int($parties[0] ?? null)) {
+            $legacyParties = collect($parties)
+                ->filter()
+                ->map(fn ($id): array => ['contractor_id' => (int) $id])
+                ->all();
+
+            app(\App\Services\EventOrderingPartyService::class)->syncForEvent($this, $legacyParties);
+
+            return;
+        }
+
+        app(\App\Services\EventOrderingPartyService::class)->syncForEvent($this, $parties);
+    }
+
+    /**
+     * @param  array<int, array<string, mixed>>|null  $parties
+     */
+    public function syncOrderingParties(?array $parties): void
+    {
+        app(\App\Services\EventOrderingPartyService::class)->syncForEvent($this, $parties);
+    }
+
+    public function syncPrimaryClientFromOrderingParties(): void
+    {
+        if (! Schema::hasTable('event_contractor')) {
+            return;
+        }
+
+        $parties = app(\App\Services\EventOrderingPartyService::class)->partiesToFormState($this->fresh());
+        $payload = app(\App\Services\EventOrderingPartyService::class)->primaryClientAttributes($parties);
+
+        if ($payload === []) {
+            return;
+        }
+
+        $this->forceFill($payload)->saveQuietly();
+    }
+
+    public function formattedOrderingPartiesNames(): string
+    {
+        if (Schema::hasTable('event_contractor')) {
+            $this->loadMissing('orderingContractors');
+
+            if ($this->orderingContractors->isNotEmpty()) {
+                $service = app(\App\Services\EventOrderingPartyService::class);
+                $hasContactPivot = Schema::hasColumn('event_contractor', 'contact_id');
+                $hasDepartmentPivot = Schema::hasColumn('event_contractor', 'department_label');
+
+                $contactIds = $hasContactPivot
+                    ? $this->orderingContractors
+                        ->pluck('pivot.contact_id')
+                        ->filter()
+                        ->map(fn ($id) => (int) $id)
+                        ->unique()
+                        ->values()
+                        ->all()
+                    : [];
+
+                $contactsById = $contactIds !== []
+                    ? \App\Models\Contact::query()->whereIn('id', $contactIds)->get()->keyBy('id')
+                    : collect();
+
+                return $this->orderingContractors
+                    ->map(function (Contractor $contractor) use ($service, $hasContactPivot, $hasDepartmentPivot, $contactsById): string {
+                        $contactId = $hasContactPivot
+                            ? ($contractor->pivot->contact_id ?? null)
+                            : null;
+                        $department = $hasDepartmentPivot
+                            ? ($contractor->pivot->department_label ?? null)
+                            : null;
+                        $contact = $contactId ? $contactsById->get((int) $contactId) : null;
+
+                        return $service->formatPartyLabelFromModels($contact, $contractor, $department);
+                    })
+                    ->implode(', ');
+            }
+        }
+
+        return (string) ($this->client_name ?? '—');
+    }
+
+    /**
+     * Kontrahent transportowy (firma transportowa)
+     */
+    public function transportContractor(): BelongsTo
+    {
+        return $this->belongsTo(Contractor::class, 'transport_contractor_id');
+    }
+
+    /**
     /**
      * Miejsce startu imprezy
      */
@@ -214,12 +534,227 @@ class Event extends Model
         return $this->belongsTo(User::class, 'assigned_to');
     }
 
+    public function pilotAdvancePlannedByUser(): BelongsTo
+    {
+        return $this->belongsTo(User::class, 'pilot_advance_planned_by');
+    }
+
+    public function sharedWithPilotByUser(): BelongsTo
+    {
+        return $this->belongsTo(User::class, 'shared_with_pilot_by');
+    }
+
+    public function portalAccesses(): HasMany
+    {
+        return $this->hasMany(EventPortalAccess::class);
+    }
+
+    public function clientInvoiceRequests(): HasMany
+    {
+        return $this->hasMany(ClientInvoiceRequest::class);
+    }
+
+    public function pilotFundsPaidByUser(): BelongsTo
+    {
+        return $this->belongsTo(User::class, 'pilot_funds_paid_by');
+    }
+
+    public function pilotAdvancePaidCurrency(): BelongsTo
+    {
+        return $this->belongsTo(Currency::class, 'pilot_advance_paid_currency_id');
+    }
+
+    public function showsPilotCurrencyExchange(): bool
+    {
+        if (! Schema::hasColumn('events', 'pilot_portal_show_currency_exchange')) {
+            return true;
+        }
+
+        return (bool) ($this->pilot_portal_show_currency_exchange ?? true);
+    }
+
+    public function showsPilotBusCollections(): bool
+    {
+        if (! Schema::hasColumn('events', 'pilot_portal_show_bus_collections')) {
+            return false;
+        }
+
+        return (bool) ($this->pilot_portal_show_bus_collections ?? false);
+    }
+
+    public function pilotAdvanceLines(): HasMany
+    {
+        return $this->hasMany(PilotAdvanceLine::class)->orderBy('sort_order')->orderBy('id');
+    }
+
+    public function driverPickupInfoSentByUser(): BelongsTo
+    {
+        return $this->belongsTo(User::class, 'driver_pickup_info_sent_by');
+    }
+
+    public function scopeForPilot($query, User $user)
+    {
+        $query = $query
+            ->where('assigned_to', $user->id)
+            ->where('status', '!=', self::STATUS_CANCELLED);
+
+        if (Schema::hasColumn('events', 'shared_with_pilot')) {
+            $query->where('shared_with_pilot', true);
+        }
+
+        return $query;
+    }
+
+    public function scopeUpcoming($query)
+    {
+        $today = now()->toDateString();
+
+        return $query->where(function ($inner) use ($today): void {
+            $inner
+                ->whereDate('end_date', '>=', $today)
+                ->orWhere(function ($fallback) use ($today): void {
+                    $fallback
+                        ->whereNull('end_date')
+                        ->whereDate('start_date', '>=', $today);
+                });
+        });
+    }
+
+    public function scopeCompleted($query)
+    {
+        $today = now()->toDateString();
+
+        return $query->where(function ($inner) use ($today): void {
+            $inner
+                ->whereDate('end_date', '<', $today)
+                ->orWhere(function ($fallback) use ($today): void {
+                    $fallback
+                        ->whereNull('end_date')
+                        ->whereDate('start_date', '<', $today);
+                });
+        });
+    }
+
     /**
      * Punkty programu dla tej imprezy
      */
     public function programPoints(): HasMany
     {
         return $this->hasMany(EventProgramPoint::class);
+    }
+
+    /**
+     * Punkty programu oznaczone jako hotel/nocleg
+     */
+    public function hotelProgramPoints(): HasMany
+    {
+        return $this->hasMany(EventProgramPoint::class)
+            ->where('is_hotel', true)
+            ->with('contractor')
+            ->orderBy('day')
+            ->orderBy('order');
+    }
+
+    /**
+     * Punkty programu oznaczone jako dodatkowa usługa hotelu (bankiet, obiad, DJ itp.)
+     */
+    public function hotelServiceProgramPoints(): HasMany
+    {
+        return $this->hasMany(EventProgramPoint::class)
+            ->where('is_hotel_service', true)
+            ->with('contractor')
+            ->orderBy('day')
+            ->orderBy('order');
+    }
+
+    public function hotelStays(): HasMany
+    {
+        return $this->hasMany(EventHotelStay::class)->orderBy('day');
+    }
+
+    /**
+     * Kontrahenci (hotele) przypisani do planu noclegów tej imprezy.
+     *
+     * @return \Illuminate\Support\Collection<int, int>
+     */
+    public function assignedHotelContractorIds(): \Illuminate\Support\Collection
+    {
+        if (! \Illuminate\Support\Facades\Schema::hasTable('event_hotel_stays')) {
+            return collect();
+        }
+
+        return $this->hotelStays()
+            ->get()
+            ->pluck('contractor_id')
+            ->map(fn ($id) => (int) $id)
+            ->filter(fn (int $id): bool => $id > 0)
+            ->unique()
+            ->values();
+    }
+
+    public function hotelCorrespondenceLogs(): HasMany
+    {
+        return $this->hasMany(HotelCorrespondenceLog::class)->orderByDesc('contacted_at');
+    }
+
+    public function participants(): HasMany
+    {
+        return $this->hasMany(EventParticipant::class)->orderBy('last_name')->orderBy('first_name');
+    }
+
+    public function activeParticipants(): HasMany
+    {
+        return $this->participants()->where('status', EventParticipant::STATUS_ACTIVE);
+    }
+
+    public function dateForProgramDay(int $day): ?Carbon
+    {
+        if (! $this->start_date) {
+            return null;
+        }
+
+        return $this->start_date->copy()->addDays(max(0, $day - 1));
+    }
+
+    /**
+     * Punkty programu oznaczone jako transport.
+     */
+    public function transportProgramPoints(): HasMany
+    {
+        return $this->hasMany(EventProgramPoint::class)
+            ->where('is_transport', true)
+            ->with('contractor')
+            ->orderBy('day')
+            ->orderBy('order');
+    }
+
+    /**
+     * Synchronizuje dane transportu imprezy z oznaczonych punktów programu.
+     */
+    public function syncTransportFromProgramPoints(): void
+    {
+        if (! Schema::hasColumn('events', 'transport_contractor_id')) {
+            return;
+        }
+
+        $transportPoint = $this->transportProgramPoints()
+            ->whereNotNull('contractor_id')
+            ->first();
+
+        if (! $transportPoint) {
+            return;
+        }
+
+        $payload = [
+            'transport_contractor_id' => $transportPoint->contractor_id,
+        ];
+
+        if (Schema::hasColumn('events', 'transport_company_name')) {
+            $payload['transport_company_name'] = $transportPoint->contractor?->name ?: ($this->transport_company_name ?: null);
+        }
+
+        $this->fill($payload);
+        $this->saveQuietly();
     }
 
     /**
@@ -317,12 +852,132 @@ class Event extends Model
         return $this->hasMany(EventPricePerPerson::class);
     }
 
+    public function participantResignations(): HasMany
+    {
+        return $this->hasMany(EventParticipantResignation::class);
+    }
+
+    /**
+     * Ręcznie zamrożone wartości etapów kalkulacji (cena klienta / koszt).
+     */
+    public function calculationStages(): HasMany
+    {
+        return $this->hasMany(EventCalculationStage::class);
+    }
+
+    /**
+     * Zwraca ręcznie zamrożony wpis etapu kalkulacji (jeśli istnieje).
+     */
+    public function calculationStage(string $stage): ?EventCalculationStage
+    {
+        return $this->calculationStages->firstWhere('stage', $stage);
+    }
+
     /**
      * Ubezpieczenia dniowe przypisane do imprezy
      */
     public function dayInsurances(): HasMany
     {
         return $this->hasMany(EventDayInsurance::class);
+    }
+
+    public function requiresInsuranceWorkflow(): bool
+    {
+        if (! Schema::hasTable('event_day_insurance')) {
+            return false;
+        }
+
+        if ($this->relationLoaded('dayInsurances')) {
+            return $this->dayInsurances
+                ->contains(fn (EventDayInsurance $row) => ! blank($row->insurance_id));
+        }
+
+        return $this->dayInsurances()
+            ->whereNotNull('insurance_id')
+            ->exists();
+    }
+
+    public function isInsuranceCompleted(): bool
+    {
+        if (! $this->requiresInsuranceWorkflow()) {
+            return true;
+        }
+
+        return filled($this->insurance_policy_number)
+            && filled($this->insurance_terms)
+            && filled($this->insurance_document_path)
+            && ($this->insurance_status === 'completed')
+            && ($this->insurance_payment_status === 'paid');
+    }
+
+    public function hasInsuranceDataSaved(): bool
+    {
+        if (! $this->requiresInsuranceWorkflow()) {
+            return true;
+        }
+
+        return filled($this->insurance_policy_number)
+            || filled($this->insurance_terms)
+            || filled($this->insurance_document_path)
+            || filled($this->insurance_amount)
+            || filled($this->insurance_paid_at)
+            || ($this->insurance_status && $this->insurance_status !== 'pending')
+            || ($this->insurance_payment_status && $this->insurance_payment_status !== 'pending');
+    }
+
+    public function insuranceChecklistLabel(): string
+    {
+        if (! $this->requiresInsuranceWorkflow()) {
+            return 'Brak wymogu';
+        }
+
+        if ($this->isInsuranceCompleted()) {
+            return 'Kompletne';
+        }
+
+        if ($this->hasInsuranceDataSaved()) {
+            $parts = array_filter([
+                filled($this->insurance_policy_number) ? 'polisa '.$this->insurance_policy_number : null,
+                filled($this->insurance_document_path) ? 'dokument wgrany' : null,
+            ]);
+
+            return 'W trakcie'.($parts !== [] ? ' ('.implode(', ', $parts).')' : '');
+        }
+
+        return 'Brak danych';
+    }
+
+    public static function normalizeInsuranceDocumentPath(mixed $path): ?string
+    {
+        if (is_array($path)) {
+            $path = $path[array_key_first($path)] ?? null;
+        }
+
+        return filled($path) ? (string) $path : null;
+    }
+
+    public function updateInsuranceFromFormData(array $data): void
+    {
+        $this->update([
+            'insurance_policy_number' => $data['insurance_policy_number'] ?? null,
+            'insurance_status' => $data['insurance_status'] ?? 'pending',
+            'insurance_payment_status' => $data['insurance_payment_status'] ?? 'pending',
+            'insurance_amount' => filled($data['insurance_amount'] ?? null) ? (float) $data['insurance_amount'] : null,
+            'insurance_paid_at' => $data['insurance_paid_at'] ?? null,
+            'insurance_document_path' => self::normalizeInsuranceDocumentPath($data['insurance_document_path'] ?? null),
+            'insurance_terms' => $data['insurance_terms'] ?? null,
+        ]);
+    }
+
+    public function insuranceSaveSummary(): string
+    {
+        $parts = array_filter([
+            filled($this->insurance_policy_number) ? 'Polisa: '.$this->insurance_policy_number : null,
+            filled($this->insurance_document_path) ? 'Dokument zapisany' : null,
+            $this->insuranceChecklistLabel(),
+        ]);
+
+        return $parts !== [] ? implode(' • ', $parts) : 'Brak zapisanych danych ubezpieczenia';
     }
 
     /**
@@ -372,6 +1027,10 @@ class Event extends Model
             'notes' => $data['notes'] ?? null,
         ];
 
+        if (Schema::hasColumn('events', 'diet_info')) {
+            $eventPayload['diet_info'] = $data['diet_info'] ?? null;
+        }
+
         if (Schema::hasColumn('events', 'office_notes')) {
             $eventPayload['office_notes'] = $data['office_notes'] ?? null;
         }
@@ -396,6 +1055,10 @@ class Event extends Model
             $eventPayload['transport_company_name'] = $data['transport_company_name'] ?? null;
         }
 
+        if (Schema::hasColumn('events', 'transport_contractor_id')) {
+            $eventPayload['transport_contractor_id'] = $data['transport_contractor_id'] ?? null;
+        }
+
         if (Schema::hasColumn('events', 'driver_name')) {
             $eventPayload['driver_name'] = $data['driver_name'] ?? null;
         }
@@ -408,6 +1071,10 @@ class Event extends Model
             $eventPayload['vehicle_registration'] = $data['vehicle_registration'] ?? null;
         }
 
+        if (Schema::hasColumn('events', 'bus_info')) {
+            $eventPayload['bus_info'] = $data['bus_info'] ?? null;
+        }
+
         if (Schema::hasColumn('events', 'pickup_place_details')) {
             $eventPayload['pickup_place_details'] = $data['pickup_place_details'] ?? null;
         }
@@ -416,10 +1083,35 @@ class Event extends Model
             $eventPayload['contractor_id'] = $data['contractor_id'] ?? null;
         }
 
+        if (Schema::hasColumn('events', 'use_manual_transport_cost')) {
+            $eventPayload['use_manual_transport_cost'] = (bool) ($data['use_manual_transport_cost'] ?? false);
+            $eventPayload['manual_transport_cost'] = filled($data['manual_transport_cost'] ?? null)
+                ? (float) $data['manual_transport_cost']
+                : null;
+        }
+
+        $orderingParties = $data['ordering_parties'] ?? null;
+        $orderingContractorIds = $data['orderingContractors'] ?? null;
+        unset($data['ordering_parties'], $data['orderingContractors']);
+
         $event = self::create($eventPayload);
+
+        if (is_array($orderingParties) && $orderingParties !== []) {
+            $event->syncOrderingParties($orderingParties);
+        } elseif (is_array($orderingContractorIds) && $orderingContractorIds !== []) {
+            $event->syncOrderingContractors($orderingContractorIds);
+        }
 
         // Skopiuj punkty programu z szablonu (w tym podpunkty)
         $event->copyProgramPointsFromTemplate();
+
+        try {
+            $hotelPlan = app(\App\Services\EventHotelPlanService::class);
+            $hotelPlan->snapshotFromTemplate($event);
+            $hotelPlan->linkStaysToProgramPoints($event);
+        } catch (\Throwable $e) {
+            // ignore when hotel tables unavailable
+        }
 
         // Kopiuj warianty ilości (qty) z szablonu do event-scoped
         try {
@@ -591,110 +1283,24 @@ class Event extends Model
             return;
         }
 
-        // Log start of copy for debugging
         try {
             \Illuminate\Support\Facades\Log::info('copyProgramPointsFromTemplate:start', ['event_id' => $this->id, 'event_template_id' => $this->event_template_id ?? null]);
         } catch (\Throwable $_) {
-            // ignore logging issues
         }
 
-        $templatePoints = $this->eventTemplate->programPoints()
-            ->with(['children', 'currency'])
-            ->withPivot(['day', 'order', 'notes', 'start_time', 'end_time', 'include_in_program', 'include_in_calculation', 'active'])
-            ->get();
+        app(TemplateProgramPointCopier::class)->copyToEvent($this);
 
-        // Map to keep track of created main points so children can reference parent_id
-        $createdPointsByTemplateId = [];
+        app(EventProgramScheduleService::class)->bootstrapFromTemplate($this->fresh());
 
-        foreach ($templatePoints as $point) {
-            $unitPrice = $this->convertToEventCurrency($point->unit_price ?? 0, $point->currency);
-            $groupSize = max(1, (int) ($point->group_size ?? 1));
-            $quantity = max(1, (int) ceil(max(1, (int) ($this->participant_count ?? 1)) / $groupSize));
-
-            // Skopiuj główny punkt programu z wszystkimi polami
-            $mainPoint = EventProgramPoint::create([
-                'event_id' => $this->id,
-                'event_template_program_point_id' => $point->id,
-                'name' => $point->name ?? null,
-                'description' => $point->description ?? null,
-                'office_notes' => $point->office_notes ?? null,
-                'pilot_notes' => $point->pilot_notes ?? null,
-                'day' => $point->pivot->day,
-                'order' => $point->pivot->order,
-                'start_time' => $point->pivot->start_time,
-                'end_time' => $point->pivot->end_time,
-                'duration_hours' => $point->duration_hours ?? null,
-                'duration_minutes' => $point->duration_minutes ?? null,
-                'featured_image' => $point->featured_image ?? null,
-                'gallery_images' => is_array($point->gallery_images) ? json_encode(array_values($point->gallery_images), JSON_UNESCAPED_SLASHES) : ($point->gallery_images ?? null),
-                'unit_price' => $unitPrice,
-                'quantity' => $quantity,
-                'total_price' => $unitPrice * $quantity,
-                'notes' => $point->pivot->notes ?? null,
-                'include_in_program' => $point->pivot->include_in_program ?? true,
-                'include_in_calculation' => $point->pivot->include_in_calculation ?? true,
-                'active' => $point->pivot->active ?? true,
-                'show_title_style' => $point->pivot->show_title_style ?? true,
-                'show_description' => $point->pivot->show_description ?? true,
-                'group_size' => $point->group_size ?? null,
-                'currency_id' => $point->currency_id ?? null,
-                'convert_to_pln' => $point->convert_to_pln ?? false,
-            ]);
-
-            $createdPointsByTemplateId[$point->id] = $mainPoint->id;
-
-            // Skopiuj podpunkty jako równorzędne punkty (bez parent_id)
-            if ($point->children && $point->children->count() > 0) {
-                $childOrder = $point->pivot->order + 0.1;
-                foreach ($point->children as $child) {
-                    $childUnitPrice = $this->convertToEventCurrency($child->unit_price ?? 0, $child->currency);
-                    $childGroupSize = max(1, (int) ($child->group_size ?? 1));
-                    $childQuantity = max(1, (int) ceil(max(1, (int) ($this->participant_count ?? 1)) / $childGroupSize));
-
-                    $childPoint = EventProgramPoint::create([
-                        'event_id' => $this->id,
-                        'event_template_program_point_id' => $child->id,
-                        'name' => $child->name ?? null,
-                        'description' => $child->description ?? null,
-                        'office_notes' => $child->office_notes ?? null,
-                        'pilot_notes' => $child->pilot_notes ?? null,
-                        'day' => $point->pivot->day,
-                        'order' => $childOrder,
-                        'start_time' => null,
-                        'end_time' => null,
-                        'duration_hours' => $child->duration_hours ?? null,
-                        'duration_minutes' => $child->duration_minutes ?? null,
-                        'featured_image' => $child->featured_image ?? null,
-                        'gallery_images' => is_array($child->gallery_images) ? json_encode(array_values($child->gallery_images), JSON_UNESCAPED_SLASHES) : ($child->gallery_images ?? null),
-                        'unit_price' => $childUnitPrice,
-                        'quantity' => $childQuantity,
-                        'total_price' => $childUnitPrice * $childQuantity,
-                        'notes' => $child->pivot->notes ?? null,
-                        // Use child's pivot flags if present; do not inherit from parent — each child should be independent
-                        'include_in_program' => $child->pivot->include_in_program ?? true,
-                        'include_in_calculation' => $child->pivot->include_in_calculation ?? true,
-                        'active' => $child->pivot->active ?? true,
-                        'show_title_style' => $child->pivot->show_title_style ?? true,
-                        'show_description' => $child->pivot->show_description ?? true,
-                        'group_size' => $child->group_size ?? null,
-                        'currency_id' => $child->currency_id ?? null,
-                        'convert_to_pln' => $child->convert_to_pln ?? false,
-                        // tworzymy podpunkt jako osobny, równorzędny wpis (parent_id pozostaje null)
-                    ]);
-
-                    $childOrder += 0.1;
-                }
-            }
-        }
-
-        // Log completion for debugging
         try {
             \Illuminate\Support\Facades\Log::info('copyProgramPointsFromTemplate:done', ['event_id' => $this->id, 'created_points_count' => $this->programPoints()->count()]);
         } catch (\Throwable $_) {
-            // ignore logging issues
         }
+
         $this->logHistory('program_copied', null, null, null, 'Skopiowano punkty programu z szablonu (w tym podpunkty)');
         $this->calculateTotalCost();
+        $this->refreshActiveSettlementCosts();
+        $this->syncTransportFromProgramPoints();
     }
 
     /**
@@ -710,6 +1316,46 @@ class Event extends Model
         $exchangeRate = \App\Models\Currency::where('symbol', $currency->symbol)->first()?->exchange_rate ?? 1;
 
         return $price * $exchangeRate;
+    }
+
+    /**
+     * Przelicz ilości (quantity) w punktach programu na podstawie aktualnego participant_count.
+     * Dotyczy tylko punktów z ustawionym group_size (ilość grup zależy od liczby uczestników).
+     */
+    public function resyncProgramPointQuantities(): void
+    {
+        $participantCount = max(1, (int) ($this->participant_count ?? 1));
+
+        $this->programPoints()
+            ->whereNotNull('group_size')
+            ->where('group_size', '>', 0)
+            ->each(function ($point) use ($participantCount) {
+                $groupSize = max(1, (int) $point->group_size);
+                $newQuantity = max(1, (int) ceil($participantCount / $groupSize));
+                $previousQuantity = max(1, (int) ($point->quantity ?? 1));
+                $previousCalculated = round((float) ($point->calculated_price ?? 0), 2);
+                $previousPlanned = round((float) ($point->planned_price ?? 0), 2);
+
+                $point->quantity = $newQuantity;
+                $point->total_price = round((float) ($point->unit_price ?? 0) * $newQuantity, 2);
+
+                if ($point->templatePoint) {
+                    $newCalculated = round((float) ($point->templatePoint->unit_price ?? 0) * $newQuantity, 2);
+                    $point->calculated_price = $newCalculated;
+
+                    // Jeśli planowana była dotychczas zgodna z kalkulacją, traktujemy ją jako automatyczną
+                    // i też ją przeliczamy przy zmianie liczby uczestników.
+                    $wasAutoPlanned = ($previousPlanned <= 0.0)
+                        || (abs($previousPlanned - $previousCalculated) < 0.01)
+                        || ($previousQuantity === 1);
+
+                    if ($wasAutoPlanned) {
+                        $point->planned_price = $newCalculated;
+                    }
+                }
+
+                $point->saveQuietly();
+            });
     }
 
     /**
@@ -900,6 +1546,14 @@ class Event extends Model
      * Koszt ubezpieczeń przypisanych do dni eventu.
      * Liczenie zgodne z EventProgramTree: suma ubezpieczeń per dzień × (uczestnicy + gratis).
      */
+    /**
+     * Publiczny dostęp do kosztu ubezpieczeń (dla wspólnego kalkulatora).
+     */
+    public function insuranceCostPln(int $participantCount, int $gratisCount = 0): float
+    {
+        return $this->resolvedInsuranceCost($participantCount, $gratisCount);
+    }
+
     protected function resolvedInsuranceCost(int $participantCount, int $gratisCount = 0): float
     {
         $count = max(0, $participantCount) + max(0, $gratisCount);
@@ -937,7 +1591,18 @@ class Event extends Model
     {
         $count = max(1, (int) ($participantCount ?? $this->participant_count ?? 1));
 
-        // Priority 1: Engine calculation with template + gratis
+        // Priority 1: ręcznie ustawione ceny w tabeli event_price_per_person
+        $manualPrice = $this->resolveStoredPricePerPerson($count, manualOnly: true);
+        if ($manualPrice !== null) {
+            return $manualPrice;
+        }
+
+        $storedPrice = $this->resolveStoredPricePerPerson($count, manualOnly: false);
+        if ($storedPrice !== null) {
+            return $storedPrice;
+        }
+
+        // Priority 2: silnik kalkulacji (szablon + gratis)
         if ($this->eventTemplate && $this->start_place_id) {
             try {
                 $variant = $this->qtyVariants()
@@ -967,31 +1632,45 @@ class Event extends Model
             }
         }
 
-        // Priority 2: EventPricePerPerson table - find closest qty
-        // Load pricePerPerson with eventTemplateQty to find closest by qty
-        $priceRows = $this->pricePerPerson()
-            ->with('eventTemplateQty:id,qty')
-            ->get()
-            ->sortBy(function ($row) use ($count) {
-                $qty = (int) ($row->eventTemplateQty->qty ?? $row->event_template_qty_id ?? 0);
-
-                return abs($qty - $count);
-            });
-
-        if ($priceRows->isNotEmpty()) {
-            $bestMatch = $priceRows->first();
-            if ((float) $bestMatch->price_per_person > 0) {
-                return round((float) $bestMatch->price_per_person, 2);
-            }
-        }
-
-        // Priority 3: Fallback to total_cost / count
+        // Priority 3: Fallback do total_cost / count
         $totalCost = (float) ($this->total_cost ?? 0);
         if ($totalCost > 0) {
             return round($totalCost / $count, 2);
         }
 
         return 0.0;
+    }
+
+    private function resolveStoredPricePerPerson(int $count, bool $manualOnly): ?float
+    {
+        $query = $this->pricePerPerson()
+            ->with('eventTemplateQty:id,qty');
+
+        if ($manualOnly) {
+            $query->where('is_manual', true);
+        }
+
+        $priceRows = $query->get()
+            ->sortBy(function ($row) use ($count) {
+                $qty = (int) ($row->eventTemplateQty->qty ?? $row->event_template_qty_id ?? 0);
+
+                return abs($qty - $count);
+            });
+
+        if ($priceRows->isEmpty()) {
+            return null;
+        }
+
+        $bestMatch = $priceRows->first();
+        if ((float) $bestMatch->price_per_person > 0) {
+            return round((float) $bestMatch->price_per_person, 2);
+        }
+
+        if ((float) ($bestMatch->price_with_tax ?? 0) > 0) {
+            return round((float) $bestMatch->price_with_tax, 2);
+        }
+
+        return null;
     }
 
     /**
@@ -1116,12 +1795,24 @@ class Event extends Model
         return $this->hasMany(EventSettlement::class);
     }
 
+    public function vendorInvoices(): HasMany
+    {
+        return $this->hasMany(VendorInvoice::class);
+    }
+
     /**
      * Aktywne/ostatnie rozliczenie imprezy
      */
     public function activeSettlement()
     {
-        return $this->hasOne(EventSettlement::class)->latest();
+        return $this->hasOne(EventSettlement::class)
+            ->whereIn('status', ['draft', 'active', 'pilot_settled'])
+            ->latestOfMany();
+    }
+
+    public function latestSettlement()
+    {
+        return $this->hasOne(EventSettlement::class)->latestOfMany();
     }
 
     /**
@@ -1129,7 +1820,22 @@ class Event extends Model
      */
     public function agreements(): HasMany
     {
-        return $this->hasMany(EventAgreement::class);
+        $dateColumn = $this->agreementDateColumn();
+
+        if (Schema::hasTable('contracts')) {
+            return $this->hasMany(Contract::class)
+                ->orderByDesc($dateColumn)
+                ->orderByDesc('id');
+        }
+
+        return $this->hasMany(EventAgreement::class)
+            ->orderByDesc($dateColumn)
+            ->orderByDesc('id');
+    }
+
+    private function agreementDateColumn(): string
+    {
+        return Schema::hasTable('contracts') ? 'contract_date' : 'agreement_date';
     }
 
     /**
@@ -1140,23 +1846,24 @@ class Event extends Model
         return $this->hasMany(Reservation::class);
     }
 
+    public function busCollections(): HasMany
+    {
+        return $this->hasMany(EventBusCollection::class);
+    }
+
     public function buildIndividualAgreementReport(?Collection $agreements = null): array
     {
-        $source = $agreements
-            ?: $this->agreements()
-                ->orderBy('agreement_date')
-                ->orderBy('id')
-                ->get();
+        $source = $agreements ?: $this->agreements()->get();
 
         $agreements = $source
-            ->filter(function (EventAgreement $agreement): bool {
-                return $agreement->agreement_type === EventAgreement::TYPE_INDIVIDUAL
+            ->filter(function (EventAgreement|Contract $agreement): bool {
+                return $agreement->agreement_type === Contract::TYPE_INDIVIDUAL
                     && ! in_array($agreement->status, ['template', 'cancelled'], true);
             })
             ->values();
 
         $rows = $agreements
-            ->map(function (EventAgreement $agreement): array {
+            ->map(function (EventAgreement|Contract $agreement): array {
                 $amountDue = (float) $agreement->amount_due;
                 $amountPaid = (float) $agreement->amount_paid;
                 $amountRemaining = max(0, $amountDue - $amountPaid);
@@ -1180,6 +1887,7 @@ class Event extends Model
                     'paid_at' => $agreement->paid_at,
                 ];
             })
+            ->sortBy('participant_name', SORT_NATURAL | SORT_FLAG_CASE)
             ->values();
 
         $totalCount = $rows->count();
@@ -1224,5 +1932,22 @@ class Event extends Model
     public function documents(): HasMany
     {
         return $this->hasMany(EventDocument::class)->orderBy('sort_order')->orderBy('created_at');
+    }
+
+    public static function templatePointLooksLikeHotel(object $point): bool
+    {
+        $name = mb_strtolower(trim((string) ($point->name ?? '')));
+
+        if ($name === '') {
+            return false;
+        }
+
+        foreach (['hotel', 'nocleg', 'zakwater', 'pensjonat', 'hostel'] as $needle) {
+            if (str_contains($name, $needle)) {
+                return true;
+            }
+        }
+
+        return false;
     }
 }

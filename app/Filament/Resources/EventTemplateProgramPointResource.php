@@ -2,11 +2,13 @@
 
 namespace App\Filament\Resources;
 
+use App\Filament\Forms\CurrencyConversionFields;
 use App\Filament\Resources\EventTemplateProgramPointResource\Pages;
 use App\Filament\Resources\TaskResource\RelationManagers\TasksRelationManager;
 use App\Models\Currency;
 use App\Models\EventTemplateProgramPoint;
 use App\Models\Media;
+use App\Support\FilamentNavigation;
 use Filament\Forms;
 use Filament\Forms\Components\Actions\Action as FormAction;
 use Filament\Forms\Components\Actions as FormActions;
@@ -33,13 +35,13 @@ class EventTemplateProgramPointResource extends Resource
     protected static ?string $model = EventTemplateProgramPoint::class;
 
     // Ikona i etykiety nawigacji w panelu
-    protected static ?string $navigationGroup = 'Szablony imprez';
+    protected static ?string $navigationGroup = FilamentNavigation::GROUP_EVENT_TEMPLATES;
 
     protected static ?string $navigationIcon = 'heroicon-o-map-pin';
 
     protected static ?string $navigationLabel = 'Punkty programu';
 
-    protected static ?int $navigationSort = 20;
+    protected static ?int $navigationSort = 2;
 
     /**
      * Definicja formularza do edycji/dodawania punktu programu
@@ -62,11 +64,11 @@ class EventTemplateProgramPointResource extends Resource
                             ->required()
                             ->columnSpanFull(),
 
-                        Forms\Components\RichEditor::make('description')
+                        \FilamentTiptapEditor\TiptapEditor::make('description')
                             ->label('Opis punktu programu')
                             ->placeholder('Opisz szczegóły punktu programu, np. przebieg, atrakcje, ważne informacje...')
                             ->hint('Opis widoczny dla uczestników i organizatorów. Możesz używać pogrubień, list, linków.')
-                            ->toolbarButtons(['bold', 'italic', 'bulletList', 'orderedList', 'link', 'undo', 'redo'])
+                            
                             ->nullable()
                             ->columnSpanFull(),
 
@@ -92,17 +94,17 @@ class EventTemplateProgramPointResource extends Resource
                     ->collapsible()
                     ->columns(2)
                     ->schema([
-                        Forms\Components\RichEditor::make('office_notes')
+                        \FilamentTiptapEditor\TiptapEditor::make('office_notes')
                             ->label('Uwagi dla biura')
                             ->placeholder('Wpisz uwagi organizacyjne, np. wymagania, kontakty, szczegóły logistyczne...')
                             ->hint('Tylko dla pracowników biura. Nie widoczne dla uczestników.')
-                            ->toolbarButtons(['bold', 'italic', 'bulletList', 'orderedList', 'link', 'undo', 'redo']),
+                            ,
 
-                        Forms\Components\RichEditor::make('pilot_notes')
+                        \FilamentTiptapEditor\TiptapEditor::make('pilot_notes')
                             ->label('Uwagi dla pilota')
                             ->placeholder('Wskazówki dla pilota/opiekuna grupy, np. na co zwrócić uwagę, co przekazać uczestnikom...')
                             ->hint('Tylko dla pilota/opiekuna. Nie widoczne dla uczestników.')
-                            ->toolbarButtons(['bold', 'italic', 'bulletList', 'orderedList', 'link', 'undo', 'redo']),
+                            ,
                     ]),
 
                 // Sekcja zdjęć
@@ -334,17 +336,9 @@ class EventTemplateProgramPointResource extends Resource
                             ->numeric()
                             ->default(1),
 
-                        Forms\Components\Select::make('currency_id')
-                            ->label('Waluta')
-                            ->options(Currency::all()->pluck('name', 'id'))
-                            ->searchable()
-                            ->hint('Wybierz walutę, w której podana jest cena.')
-                            ->required(),
-
-                        Forms\Components\Toggle::make('convert_to_pln')
-                            ->label('Przeliczaj na złotówki')
-                            ->hint('Jeśli zaznaczone, cena zostanie automatycznie przeliczona na PLN według kursu z dnia.')
-                            ->default(true),
+                        CurrencyConversionFields::currencySelect(),
+                        CurrencyConversionFields::convertToggle(),
+                        CurrencyConversionFields::plnPreview('unit_price'),
                     ]),
 
                 // Sekcja tagów i kategoryzacji
@@ -364,11 +358,11 @@ class EventTemplateProgramPointResource extends Resource
                                     ->placeholder('Wpisz nazwę tagu')
                                     ->hint('Nazwa powinna być krótka i jednoznaczna.')
                                     ->required(),
-                                Forms\Components\RichEditor::make('description')
+                                \FilamentTiptapEditor\TiptapEditor::make('description')
                                     ->label('Opis tagu')
                                     ->placeholder('Opcjonalny opis tagu, np. do czego służy, kiedy stosować...')
                                     ->hint('Opis widoczny tylko dla administratorów.')
-                                    ->toolbarButtons(['bold', 'italic', 'bulletList', 'orderedList', 'link', 'undo', 'redo']),
+                                    ,
                                 Forms\Components\Select::make('visibility')
                                     ->label('Widoczność tagu')
                                     ->options([
@@ -569,14 +563,15 @@ class EventTemplateProgramPointResource extends Resource
      */
     public static function canViewAny(): bool
     {
-        $user = \Illuminate\Support\Facades\Auth::user();
-        if ($user && $user->roles && $user->roles->contains('name', 'admin')) {
-            return true;
+        $user = auth()->user();
+        if (! $user) {
+            return false;
         }
-        if ($user && $user->roles && $user->roles->flatMap->permissions->contains('name', 'view eventtemplateprogrampoint')) {
+
+        if ($user->hasRole(['admin', 'super_admin'])) {
             return true;
         }
 
-        return false;
+        return $user->can('view event_template');
     }
 }

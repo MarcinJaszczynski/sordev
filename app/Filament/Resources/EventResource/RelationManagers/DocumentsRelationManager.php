@@ -48,6 +48,11 @@ class DocumentsRelationManager extends RelationManager
                             ->live()
                             ->default(false),
 
+                        Forms\Components\Toggle::make('is_invoice')
+                            ->label('To jest faktura')
+                            ->inline(false)
+                            ->default(false),
+
                         Forms\Components\Select::make('offer_status')
                             ->label('Status oferty')
                             ->options(EventDocument::$offerStatuses)
@@ -62,15 +67,15 @@ class DocumentsRelationManager extends RelationManager
                             ->label('Data odpowiedzi klienta')
                             ->visible(fn (Forms\Get $get): bool => (bool) $get('is_offer')),
 
-                        Forms\Components\RichEditor::make('offer_response_notes')
+                        \FilamentTiptapEditor\TiptapEditor::make('offer_response_notes')
                             ->visible(fn (Forms\Get $get): bool => (bool) $get('is_offer'))
                             ->columnSpanFull(),
 
-                        Forms\Components\RichEditor::make('offer_modification_notes')
+                        \FilamentTiptapEditor\TiptapEditor::make('offer_modification_notes')
                             ->visible(fn (Forms\Get $get): bool => (bool) $get('is_offer'))
                             ->columnSpanFull(),
 
-                        Forms\Components\RichEditor::make('notes')
+                        \FilamentTiptapEditor\TiptapEditor::make('notes')
                             ->columnSpanFull(),
                     ]),
 
@@ -184,6 +189,14 @@ class DocumentsRelationManager extends RelationManager
                     ->trueColor('success')
                     ->falseColor('gray'),
 
+                Tables\Columns\IconColumn::make('is_invoice')
+                    ->label('Faktura')
+                    ->boolean()
+                    ->trueIcon('heroicon-o-check-circle')
+                    ->falseIcon('heroicon-o-minus-circle')
+                    ->trueColor('success')
+                    ->falseColor('gray'),
+
                 Tables\Columns\BadgeColumn::make('offer_status')
                     ->label('Status oferty')
                     ->formatStateUsing(fn (?string $state) => EventDocument::$offerStatuses[$state ?? 'draft'] ?? $state)
@@ -285,6 +298,10 @@ class DocumentsRelationManager extends RelationManager
                 Tables\Filters\Filter::make('is_offer')
                     ->label('Tylko oferty')
                     ->query(fn ($query) => $query->where('is_offer', true)),
+
+                Tables\Filters\Filter::make('is_invoice')
+                    ->label('Tylko faktury')
+                    ->query(fn ($query) => $query->where('is_invoice', true)),
             ])
             ->headerActions([
                 Tables\Actions\CreateAction::make()
@@ -325,7 +342,7 @@ class DocumentsRelationManager extends RelationManager
                             ->options(EventDocument::$offerStatuses)
                             ->required()
                             ->default(fn (EventDocument $record) => $record->offer_status ?: 'responded'),
-                        Forms\Components\RichEditor::make('offer_response_notes')
+                        \FilamentTiptapEditor\TiptapEditor::make('offer_response_notes')
                             ->required(),
                         Forms\Components\DateTimePicker::make('offer_response_at')
                             ->label('Data odpowiedzi')
@@ -371,7 +388,7 @@ class DocumentsRelationManager extends RelationManager
                     ->icon('heroicon-o-x-circle')
                     ->color('danger')
                     ->form([
-                        Forms\Components\RichEditor::make('review_notes')
+                        \FilamentTiptapEditor\TiptapEditor::make('review_notes')
                             ->required(),
                     ])
                     ->action(function (EventDocument $record, array $data): void {
@@ -427,6 +444,7 @@ class DocumentsRelationManager extends RelationManager
         }
 
         $data['is_offer'] = (bool) ($data['is_offer'] ?? false);
+        $data['is_invoice'] = (bool) ($data['is_invoice'] ?? false);
 
         if ($data['is_offer']) {
             $data['offer_status'] = $data['offer_status'] ?? 'draft';

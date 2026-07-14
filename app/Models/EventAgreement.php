@@ -2,20 +2,44 @@
 
 namespace App\Models;
 
+use App\Models\Concerns\HasCustomAgreementContent;
 use App\Services\AgreementPaymentSyncService;
 use App\Services\AgreementTemplateRenderer;
+use App\Services\ContractGroupPricingService;
+use App\Services\ContractOrderingPartyService;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Support\Str;
 
+/**
+ * Umowy w tabeli event_agreements (legacy, przed migracją do contracts).
+ */
 class EventAgreement extends Model
 {
+    use HasCustomAgreementContent;
     use HasFactory;
 
     public const TYPE_GROUP = 'group';
 
     public const TYPE_INDIVIDUAL = 'individual';
+
+    public const TYPE_CUSTOM = 'custom';
+
+    public const BODY_EDIT_TEMPLATE = 'template';
+
+    public const BODY_EDIT_MANUAL = 'manual';
+
+    public const BODY_EDIT_UPLOAD = 'upload';
+
+    public const PAYMENT_SCHEME_LUMP_SUM = 'lump_sum';
+
+    public const PAYMENT_SCHEME_INSTALLMENTS = 'installments';
+
+    public const PAYMENT_SCHEME_INDIVIDUAL = 'individual';
+
+    protected $table = 'event_agreements';
 
     protected $fillable = [
         'event_id',
@@ -31,11 +55,14 @@ class EventAgreement extends Model
         'customer_name',
         'customer_email',
         'customer_phone',
+        'ordering_party_notes',
         'participant_name',
         'participant_birth_date',
         'participant_email',
         'participant_phone',
         'participant_count',
+        'unit_price',
+        'payment_scheme',
         'amount_due',
         'amount_paid',
         'currency',
@@ -50,6 +77,8 @@ class EventAgreement extends Model
         'public_token',
         'public_token_expires_at',
         'agreement_body',
+        'body_edit_mode',
+        'custom_agreement_document_path',
         'attachments',
         'admin_notes',
         'meta',
@@ -61,6 +90,7 @@ class EventAgreement extends Model
         'event_start_date' => 'date',
         'event_end_date' => 'date',
         'participant_birth_date' => 'date',
+        'unit_price' => 'decimal:2',
         'amount_due' => 'decimal:2',
         'amount_paid' => 'decimal:2',
         'signed_at' => 'datetime',
@@ -94,6 +124,19 @@ class EventAgreement extends Model
     public static array $types = [
         self::TYPE_GROUP => 'Grupowa',
         self::TYPE_INDIVIDUAL => 'Indywidualna',
+        self::TYPE_CUSTOM => 'Umowa własna',
+    ];
+
+    public static array $bodyEditModes = [
+        self::BODY_EDIT_TEMPLATE => 'Z szablonu',
+        self::BODY_EDIT_MANUAL => 'Ręczna edycja',
+        self::BODY_EDIT_UPLOAD => 'Wgrany dokument PDF',
+    ];
+
+    public static array $paymentSchemes = [
+        self::PAYMENT_SCHEME_LUMP_SUM => 'Jednorazowa',
+        self::PAYMENT_SCHEME_INSTALLMENTS => 'W transzach',
+        self::PAYMENT_SCHEME_INDIVIDUAL => 'Płatności indywidualne',
     ];
 
     protected static function booted(): void
@@ -117,6 +160,10 @@ class EventAgreement extends Model
             if ($agreement->agreement_type === self::TYPE_INDIVIDUAL && blank($agreement->participant_count)) {
                 $agreement->participant_count = 1;
             }
+
+            $agreement->body_edit_mode ??= $agreement->agreement_type === self::TYPE_CUSTOM
+                ? self::BODY_EDIT_UPLOAD
+                : self::BODY_EDIT_TEMPLATE;
         });
 
         static::created(function (self $agreement): void {
@@ -126,7 +173,7 @@ class EventAgreement extends Model
                 $updates['agreement_number'] = sprintf('UM/%s/%05d', now()->format('Y'), $agreement->id);
             }
 
-            if (blank($agreement->agreement_body)) {
+            if (blank($agreement->agreement_body) && $agreement->shouldAutoGenerateAgreementBody()) {
                 $agreement->fill($updates);
                 $updates['agreement_body'] = $agreement->renderAgreementBody();
             }
@@ -185,6 +232,16 @@ class EventAgreement extends Model
         return $this->belongsTo(EventSettlementParticipantPayment::class, 'participant_payment_id');
     }
 
+    public function orderingParties(): HasMany
+    {
+        return $this->hasMany(EventAgreementOrderingParty::class)->orderBy('sort_order');
+    }
+
+    public function paymentSchedules(): HasMany
+    {
+        return $this->hasMany(EventAgreementPaymentSchedule::class)->orderBy('sort_order');
+    }
+
     public function getStatusLabelAttribute(): string
     {
         return self::$statuses[$this->status] ?? $this->status;
@@ -226,12 +283,10 @@ class EventAgreement extends Model
             return (float) $this->amount_due;
         }
 
-        // Priority 1: linked settlement row
         if ($this->participantPayment && (float) $this->participantPayment->due_amount_pln > 0) {
             return (float) $this->participantPayment->due_amount_pln;
         }
 
-        // Priority 2: event calculated price per person
         if ($this->event) {
             $count = max(1, (int) ($payingParticipantsCount ?? $this->event->participant_count ?? 1));
             $resolvedPrice = $this->event->resolvedPricePerPerson($count);
@@ -239,14 +294,12 @@ class EventAgreement extends Model
                 return $resolvedPrice;
             }
 
-            // Legacy fallback: derive per-person share from event total cost.
             $eventTotalCost = (float) ($this->event->total_cost ?? 0);
             if ($eventTotalCost > 0) {
                 return round($eventTotalCost / $count, 2);
             }
         }
 
-        // Priority 3: fallback to existing amount_due
         return (float) $this->amount_due;
     }
 
@@ -258,6 +311,10 @@ class EventAgreement extends Model
 
     public function regenerateAgreementBody(): void
     {
+        if (! $this->shouldAutoGenerateAgreementBody()) {
+            return;
+        }
+
         $this->agreement_body = $this->renderAgreementBody();
         $this->saveQuietly();
     }
@@ -297,6 +354,27 @@ class EventAgreement extends Model
             default => 'Nie wybrano',
         };
 
+        $orderingPartyService = app(ContractOrderingPartyService::class);
+        $groupPricingService = app(ContractGroupPricingService::class);
+        $orderingParties = $orderingPartyService->partiesForTemplatePayload($this);
+        $orderingPartiesNames = $orderingPartyService->formattedPartyNames($this);
+        $orderingPartiesList = collect($orderingParties)
+            ->map(function (array $party): string {
+                $details = collect([
+                    filled($party['email'] ?? null) ? 'e-mail: '.$party['email'] : null,
+                    filled($party['phone'] ?? null) ? 'tel: '.$party['phone'] : null,
+                    filled($party['nip'] ?? null) ? 'NIP: '.$party['nip'] : null,
+                    ($party['address'] ?? '—') !== '—' ? $party['address'] : null,
+                ])->filter()->implode(', ');
+
+                return trim($party['name'].($details !== '' ? ' ('.$details.')' : ''));
+            })
+            ->implode("\n");
+
+        if ($orderingPartiesNames !== '—') {
+            $orderingInstitution = $orderingPartiesNames;
+        }
+
         return [
             'agreement_number' => $this->agreement_number ?: ('UMOWA-'.$this->id),
             'agreement_date' => optional($this->agreement_date)->format('d.m.Y') ?: now()->format('d.m.Y'),
@@ -312,6 +390,9 @@ class EventAgreement extends Model
             'ordering_person' => $orderingPerson,
             'ordering_email' => $orderingEmail,
             'ordering_phone' => $orderingPhone,
+            'ordering_parties_names' => $orderingPartiesNames,
+            'ordering_parties_list' => $orderingPartiesList !== '' ? $orderingPartiesList : $orderingPartiesNames,
+            'ordering_party_notes' => (string) ($this->ordering_party_notes ?: '—'),
             'signer_name' => (string) ($this->signer_name ?: $this->customer_name ?: '—'),
             'signer_email' => (string) ($this->signer_email ?: $this->customer_email ?: '—'),
             'signer_phone' => (string) ($this->signer_phone ?: $this->customer_phone ?: '—'),
@@ -344,6 +425,9 @@ class EventAgreement extends Model
             'organizer_phone' => (string) config('company.phone', '—'),
             'booking_reference' => (string) $bookingReference,
             'public_link' => $this->public_link,
+            'unit_price' => number_format($groupPricingService->resolvedUnitPrice($this), 2, ',', ' '),
+            'payment_scheme_label' => $groupPricingService->paymentSchemeLabel($this),
+            'payment_schedule_text' => $groupPricingService->formatPaymentSchedulesText($this),
         ];
     }
 }

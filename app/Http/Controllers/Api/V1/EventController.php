@@ -4,10 +4,10 @@ namespace App\Http\Controllers\Api\V1;
 
 use App\Models\Event;
 use App\Models\EventProgramPoint;
+use App\Services\EventCalculationPresenter;
 use App\Services\EventPriceCalculator;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
-use Illuminate\Support\Facades\DB;
 
 class EventController extends BaseApiController
 {
@@ -51,6 +51,11 @@ class EventController extends BaseApiController
         return $this->success($event);
     }
 
+    public function calculation(Event $event): JsonResponse
+    {
+        return $this->success(EventCalculationPresenter::for($event)->toApiArray());
+    }
+
     public function recalculatePrice(Event $event, EventPriceCalculator $calculator): JsonResponse
     {
         $calculator->calculateForEvent($event);
@@ -72,36 +77,21 @@ class EventController extends BaseApiController
         ]);
 
         $day = (int) $validated['day'];
-        $pointIds = collect($validated['point_ids'])->map(fn ($id) => (int) $id)->values();
+        $pointIds = collect($validated['point_ids'])->map(fn ($id) => (int) $id)->values()->all();
 
-        $existingIds = EventProgramPoint::query()
-            ->where('event_id', $event->id)
-            ->where('day', $day)
-            ->whereIn('id', $pointIds)
-            ->pluck('id')
-            ->map(fn ($id) => (int) $id)
-            ->values();
-
-        if ($existingIds->count() !== $pointIds->count()) {
-            return $this->error('Lista punktow zawiera rekordy spoza wskazanego dnia lub eventu.');
+        try {
+            app(\App\Services\EventProgramPointOrderService::class)->reorderDay($event, $day, $pointIds);
+        } catch (\InvalidArgumentException $e) {
+            return $this->error($e->getMessage());
         }
-
-        DB::transaction(function () use ($pointIds, $day, $event): void {
-            foreach ($pointIds as $order => $pointId) {
-                EventProgramPoint::query()
-                    ->where('id', $pointId)
-                    ->where('event_id', $event->id)
-                    ->update([
-                        'day' => $day,
-                        'order' => $order + 1,
-                    ]);
-            }
-        });
 
         $updated = EventProgramPoint::query()
             ->where('event_id', $event->id)
             ->where('day', $day)
+            ->orderByRaw('COALESCE(parent_id, id)')
+            ->orderByRaw('CASE WHEN parent_id IS NULL THEN 0 ELSE 1 END')
             ->orderBy('order')
+            ->orderBy('id')
             ->get();
 
         return $this->success([

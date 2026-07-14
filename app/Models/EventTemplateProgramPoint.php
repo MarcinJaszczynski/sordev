@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use App\Models\Concerns\HasStickyNotes;
 use App\Models\Concerns\HasTasks;
 use App\Services\UnifiedPriceCalculator;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
@@ -49,7 +50,7 @@ class EventTemplateProgramPoint extends Model
         Log::debug('[setFeaturedImageAttribute] Zapisano:', ['featured_image' => $this->attributes['featured_image']]);
     }
 
-    use HasFactory, HasTasks;
+    use HasFactory, HasStickyNotes, HasTasks;
 
     /**
      * Mutator: zawsze zapisuje poprawny JSON array stringów dla gallery_images

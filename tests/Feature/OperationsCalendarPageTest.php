@@ -1,0 +1,229 @@
+<?php
+
+namespace Tests\Feature;
+
+use App\Filament\Pages\OperationsCalendarPage;
+use App\Models\Task;
+use App\Models\User;
+use Illuminate\Foundation\Testing\RefreshDatabase;
+use Livewire\Livewire;
+use Spatie\Permission\Models\Role;
+use Tests\TestCase;
+
+class OperationsCalendarPageTest extends TestCase
+{
+    use RefreshDatabase;
+
+    protected function setUp(): void
+    {
+        parent::setUp();
+
+        $this->seed(\Database\Seeders\TaskStatusSeeder::class);
+
+        Role::firstOrCreate(['name' => 'admin', 'guard_name' => 'web']);
+    }
+
+    public function test_open_calendar_task_entry_mounts_edit_action(): void
+    {
+        $user = User::factory()->create();
+        $user->assignRole('admin');
+
+        $task = Task::create([
+            'title' => 'Zadanie z kalendarza',
+            'due_date' => now()->addDay(),
+            'status_id' => Task::getDefaultStatusId(),
+            'priority' => 'normal',
+            'author_id' => $user->id,
+            'assignee_id' => $user->id,
+        ]);
+
+        Livewire::actingAs($user)
+            ->test(OperationsCalendarPage::class)
+            ->call('openCalendarEntry', 'task-'.$task->id)
+            ->assertSet('editingTaskId', $task->id)
+            ->assertSet('mountedActions', ['editTask']);
+    }
+
+    public function test_calendar_defaults_to_assigned_scope(): void
+    {
+        $user = User::factory()->create();
+        $user->assignRole('admin');
+        $other = User::factory()->create();
+
+        Task::create([
+            'title' => 'Przypisane z kalendarza',
+            'due_date' => now()->addDay(),
+            'status_id' => Task::getDefaultStatusId(),
+            'priority' => 'normal',
+            'author_id' => $other->id,
+            'assignee_id' => $user->id,
+        ]);
+
+        Task::create([
+            'title' => 'Obce z kalendarza',
+            'due_date' => now()->addDay(),
+            'status_id' => Task::getDefaultStatusId(),
+            'priority' => 'normal',
+            'author_id' => $other->id,
+            'assignee_id' => $other->id,
+        ]);
+
+        $component = Livewire::actingAs($user)
+            ->test(OperationsCalendarPage::class)
+            ->assertSet('tasksScope', 'assigned');
+
+        $taskEvents = collect($component->instance()->calendarEvents)
+            ->filter(fn (array $event): bool => ($event['type'] ?? null) === 'tasks');
+
+        $this->assertCount(1, $taskEvents);
+        $this->assertStringContainsString('Przypisane z kalendarza', (string) $taskEvents->first()['title']);
+    }
+
+    public function test_reset_task_filters_shows_all_tasks_and_enables_tasks_type(): void
+    {
+        $user = User::factory()->create();
+        $user->assignRole('admin');
+        $other = User::factory()->create();
+
+        Task::create([
+            'title' => 'Przypisane z kalendarza',
+            'due_date' => now()->addDay(),
+            'status_id' => Task::getDefaultStatusId(),
+            'priority' => 'normal',
+            'author_id' => $other->id,
+            'assignee_id' => $user->id,
+        ]);
+
+        Task::create([
+            'title' => 'Obce z kalendarza',
+            'due_date' => now()->addDay(),
+            'status_id' => Task::getDefaultStatusId(),
+            'priority' => 'normal',
+            'author_id' => $other->id,
+            'assignee_id' => $other->id,
+        ]);
+
+        $component = Livewire::actingAs($user)
+            ->test(OperationsCalendarPage::class)
+            ->call('resetTaskFilters')
+            ->assertSet('tasksScope', 'all')
+            ->assertSet('tasksOnlyUrgent', false);
+
+        $taskEvents = collect($component->instance()->calendarEvents)
+            ->filter(fn (array $event): bool => ($event['type'] ?? null) === 'tasks');
+
+        $this->assertCount(2, $taskEvents);
+    }
+
+    public function test_calendar_hides_finished_tasks_by_default(): void
+    {
+        $user = User::factory()->create();
+        $user->assignRole('admin');
+
+        $completedId = \App\Models\TaskStatus::query()->where('name', 'Zakończone')->value('id');
+        $cancelledId = \App\Models\TaskStatus::query()->where('name', 'Anulowane')->value('id');
+
+        Task::create([
+            'title' => 'Aktywne z kalendarza',
+            'due_date' => now()->addDay(),
+            'status_id' => Task::getDefaultStatusId(),
+            'priority' => 'normal',
+            'author_id' => $user->id,
+            'assignee_id' => $user->id,
+        ]);
+
+        Task::create([
+            'title' => 'Zakończone z kalendarza',
+            'due_date' => now()->addDay(),
+            'status_id' => $completedId,
+            'priority' => 'normal',
+            'author_id' => $user->id,
+        ]);
+
+        Task::create([
+            'title' => 'Anulowane z kalendarza',
+            'due_date' => now()->addDay(),
+            'status_id' => $cancelledId,
+            'priority' => 'normal',
+            'author_id' => $user->id,
+        ]);
+
+        $component = Livewire::actingAs($user)
+            ->test(OperationsCalendarPage::class)
+            ->assertSet('showFinishedTasks', false);
+
+        $taskEvents = collect($component->instance()->calendarEvents)
+            ->filter(fn (array $event): bool => ($event['type'] ?? null) === 'tasks');
+
+        $this->assertCount(1, $taskEvents);
+        $this->assertStringContainsString('Aktywne z kalendarza', (string) $taskEvents->first()['title']);
+    }
+
+    public function test_calendar_can_show_finished_tasks_when_filter_enabled(): void
+    {
+        $user = User::factory()->create();
+        $user->assignRole('admin');
+
+        $completedId = \App\Models\TaskStatus::query()->where('name', 'Zakończone')->value('id');
+
+        Task::create([
+            'title' => 'Zakończone z kalendarza',
+            'due_date' => now()->addDay(),
+            'status_id' => $completedId,
+            'priority' => 'normal',
+            'author_id' => $user->id,
+            'assignee_id' => $user->id,
+        ]);
+
+        $component = Livewire::actingAs($user)
+            ->test(OperationsCalendarPage::class)
+            ->set('showFinishedTasks', true);
+
+        $taskEvents = collect($component->instance()->calendarEvents)
+            ->filter(fn (array $event): bool => ($event['type'] ?? null) === 'tasks');
+
+        $this->assertCount(1, $taskEvents);
+        $this->assertStringContainsString('Zakończone z kalendarza', (string) $taskEvents->first()['title']);
+    }
+
+    public function test_calendar_task_entries_do_not_expose_top_level_url(): void
+    {
+        $user = User::factory()->create();
+        $user->assignRole('admin');
+
+        $task = Task::create([
+            'title' => 'Bez linku w url',
+            'due_date' => now()->addDay(),
+            'status_id' => Task::getDefaultStatusId(),
+            'priority' => 'normal',
+            'author_id' => $user->id,
+        ]);
+
+        $entry = collect(app(\App\Services\CalendarEventAggregator::class)->events([
+            'types' => ['tasks'],
+            'tasks_scope' => 'all',
+            'user_id' => $user->id,
+        ]))->firstWhere('id', 'task-'.$task->id);
+
+        $this->assertNotNull($entry);
+        $this->assertArrayNotHasKey('url', $entry);
+        $this->assertNotEmpty($entry['links']);
+    }
+
+    public function test_open_calendar_event_entry_mounts_context_action(): void
+    {
+        $user = User::factory()->create();
+        $user->assignRole('admin');
+
+        $event = \App\Models\Event::factory()->create([
+            'assigned_to' => $user->id,
+            'start_date' => now()->addDays(3)->toDateString(),
+            'end_date' => now()->addDays(5)->toDateString(),
+        ]);
+
+        Livewire::actingAs($user)
+            ->test(OperationsCalendarPage::class)
+            ->call('openCalendarEntry', 'event-'.$event->id)
+            ->assertSet('mountedActions', ['calendarEntryContext']);
+    }
+}

@@ -1,0 +1,28 @@
+---
+description: Livewire i komponenty interaktywne (program, drzewo, kanban)
+globs: app/Livewire/**/*.php,resources/views/livewire/**/*
+alwaysApply: false
+---
+
+# Livewire / Alpine
+
+## Komponenty w projekcie
+
+- `EventProgramPlanner` — planer 24h programu
+- `ProgramPointChildrenEditor` — podpunkty / sety
+- `EventProgramTreeEditor` — drzewo programu
+
+## Zasady
+
+- Pola tekstowe: `wire:model.live.debounce.500ms` (nie `defer` / `blur` / samo `wire:model` w LW3).
+- Filament: globalnie `FilamentFormBinding` — `live(debounce: 500)` zamiast `onBlur`.
+- `wire:key` w pętlach `@foreach`.
+- W tabelach Filament: **nie** `wire:click` w komórce — `x-on:click.stop="$wire.method()"`.
+- Unikaj `deferLoading()` na RelationManagerach powiązanych z Livewire.
+- Duże skrypty: osobny plik Vite (`resources/js/`) + `@vite` w Blade.
+- Po zmianach interakcji: `make console-audit` lub ręczny test w `/admin/events/.../program`.
+
+## Alpine
+
+- Zmienne w `x-data` muszą być zdefiniowane (np. `labels` nie `x.labels`).
+- Filtr dnia programu: event `event-program-context-changed` + `syncProgramContext`.

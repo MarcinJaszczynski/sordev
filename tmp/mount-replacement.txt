@@ -1,0 +1,22 @@
+    public function mount(int|string $record): void
+    {
+        $this->record = $this->resolveRecord($record);
+        abort_unless(static::getResource()::canEdit($this->getRecord()), 403);
+        $this->record->load(['bus', 'markup', 'programPoints.templatePoint']);
+
+        // Jeśli impreza nie ma wariantów ilościowych (to nie szablon),
+        // przekieruj od razu do edycji rozliczenia.
+        try {
+            $hasVariants = $this->record->qtyVariants()->exists();
+        } catch (\Throwable $e) {
+            $hasVariants = false;
+        }
+
+        if (! $hasVariants) {
+            $settlement = \App\Models\EventSettlement::findOrCreateActiveForEvent($this->record);
+
+            redirect(\App\Filament\Resources\EventSettlementResource::getUrl('edit', ['record' => $settlement]))->send();
+            // stop further execution of mount
+            return;
+        }
+    }

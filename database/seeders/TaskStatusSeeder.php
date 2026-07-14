@@ -29,15 +29,27 @@ class TaskStatusSeeder extends Seeder
                 'is_default' => false,
             ],
             [
+                'name' => 'Zaakceptowane',
+                'color' => '#emerald',
+                'order' => 4,
+                'is_default' => false,
+            ],
+            [
                 'name' => 'Zakończone',
                 'color' => '#green',
-                'order' => 4,
+                'order' => 5,
                 'is_default' => false,
             ],
             [
                 'name' => 'Anulowane',
                 'color' => '#red',
-                'order' => 5,
+                'order' => 6,
+                'is_default' => false,
+            ],
+            [
+                'name' => 'Zarchiwizowane',
+                'color' => '#64748b',
+                'order' => 7,
                 'is_default' => false,
             ],
         ];

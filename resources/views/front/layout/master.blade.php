@@ -159,6 +159,44 @@
             padding-left: 0.25rem !important; /* small internal spacing */
             padding-right: 0.25rem !important;
         }
+
+        /* Final hard override: offer list previews must be square (1:1) and fully cover */
+        @if(request()->is('*/oferty') || request()->is('*/oferty/*') || request()->routeIs('packages'))
+        .package-box .package-box-layout {
+            align-items: flex-start !important;
+        }
+
+        .package-box .package-box-layout .package-box-photo {
+            position: relative !important;
+            flex: 0 0 35% !important;
+            width: 35% !important;
+            min-width: 35% !important;
+            max-width: 35% !important;
+            aspect-ratio: 1 / 1 !important;
+            height: auto !important;
+            overflow: hidden !important;
+            align-self: flex-start !important;
+        }
+
+        .package-box .package-box-layout .package-box-photo > img {
+            width: 100% !important;
+            height: 100% !important;
+            object-fit: cover !important;
+            object-position: center !important;
+            display: block !important;
+        }
+
+        @media (max-width: 966px) {
+            .package-box .package-box-layout .package-box-photo {
+                flex: 0 0 auto !important;
+                width: 100% !important;
+                min-width: 100% !important;
+                max-width: 100% !important;
+                aspect-ratio: 1 / 1 !important;
+                height: auto !important;
+            }
+        }
+        @endif
     </style>
 
     <!-- All Javascripts -->

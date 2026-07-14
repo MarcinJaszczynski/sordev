@@ -4,6 +4,7 @@ namespace App\Filament\Resources;
 
 use App\Filament\Resources\DocumentSectionResource\Pages;
 use App\Models\DocumentSection;
+use App\Support\FilamentNavigation;
 use Filament\Forms;
 use Filament\Forms\Form;
 use Filament\Resources\Resource;
@@ -19,9 +20,14 @@ class DocumentSectionResource extends Resource
 
     protected static ?string $navigationLabel = 'Sekcje dokumentów';
 
-    protected static ?string $navigationGroup = 'Narzędzia';
+    protected static ?string $navigationGroup = FilamentNavigation::GROUP_SYSTEM;
 
     protected static ?int $navigationSort = 30;
+
+    public static function shouldRegisterNavigation(): bool
+    {
+        return false;
+    }
 
     public static function form(Form $form): Form
     {

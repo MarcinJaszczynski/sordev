@@ -2,10 +2,14 @@
 
 namespace App\Models;
 
+use App\Models\Concerns\HasStickyNotes;
 use App\Models\Concerns\HasTasks;
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Database\Eloquent\SoftDeletes;
+use Illuminate\Support\Facades\Schema;
 
 /**
  * Model Contractor
@@ -25,7 +29,7 @@ use Illuminate\Database\Eloquent\SoftDeletes;
  */
 class Contractor extends Model
 {
-    use HasFactory, HasTasks, SoftDeletes;
+    use HasFactory, HasStickyNotes, HasTasks, SoftDeletes;
 
     /**
      * Pola masowo przypisywalne
@@ -49,14 +53,54 @@ class Contractor extends Model
         'description',
         'status',
         'office_notes',
+        'birth_date',
+        'pesel',
+        'uses_business_locations',
     ];
+
+    protected $casts = [
+        'birth_date' => 'date',
+        'uses_business_locations' => 'boolean',
+    ];
+
+    /**
+     * Czy kontrahent ma typ „pilot” (po nazwie typu).
+     */
+    public function hasPilotType(): bool
+    {
+        if ($this->relationLoaded('types')) {
+            return $this->types->contains(fn (ContractorType $type) => strcasecmp((string) $type->name, 'pilot') === 0);
+        }
+
+        return $this->types()
+            ->whereRaw('LOWER(contractor_types.name) = ?', ['pilot'])
+            ->exists();
+    }
+
+    public static function contactPivotTable(): string
+    {
+        if (Schema::hasTable('contractor_contact')) {
+            return 'contractor_contact';
+        }
+
+        if (Schema::hasTable('contact_contractor')) {
+            return 'contact_contractor';
+        }
+
+        return 'contractor_contact';
+    }
+
+    public static function hasContactPivotTable(): bool
+    {
+        return Schema::hasTable('contractor_contact') || Schema::hasTable('contact_contractor');
+    }
 
     /**
      * Relacja wiele-do-wielu z kontaktami
      */
     public function contacts()
     {
-        return $this->belongsToMany(Contact::class, 'contractor_contact');
+        return $this->belongsToMany(Contact::class, static::contactPivotTable());
     }
 
     /**
@@ -65,6 +109,30 @@ class Contractor extends Model
     public function types()
     {
         return $this->belongsToMany(ContractorType::class, 'contractor_contractortype')->withTimestamps();
+    }
+
+    /**
+     * @param  array<int, string>  $typeNames
+     */
+    public function scopeWithAnyTypeName(Builder $query, array $typeNames): Builder
+    {
+        if (! Schema::hasTable('contractor_types') || ! Schema::hasTable('contractor_contractortype')) {
+            return $query;
+        }
+
+        $normalized = array_values(array_filter(array_map(
+            static fn ($name) => is_string($name) ? mb_strtolower(trim($name)) : null,
+            $typeNames
+        )));
+
+        if ($normalized === []) {
+            return $query;
+        }
+
+        return $query->whereHas('types', function (Builder $typeQuery) use ($normalized): void {
+            $placeholders = implode(',', array_fill(0, count($normalized), '?'));
+            $typeQuery->whereRaw('LOWER(contractor_types.name) IN ('.$placeholders.')', $normalized);
+        });
     }
 
     /**
@@ -84,10 +152,93 @@ class Contractor extends Model
     }
 
     /**
+     * Imprezy, w których kontrahent jest zamawiającym
+     */
+    public function orderingEvents()
+    {
+        return $this->belongsToMany(Event::class, 'event_contractor')
+            ->withPivot('sort_order')
+            ->withTimestamps();
+    }
+
+    /**
      * Rezerwacje złożone przez tego kontrahenta
      */
     public function reservations()
     {
         return $this->hasMany(Reservation::class);
+    }
+
+    public function vendorInvoices()
+    {
+        return $this->hasMany(VendorInvoice::class);
+    }
+
+    public function locations(): HasMany
+    {
+        return $this->hasMany(ContractorLocation::class)->orderByDesc('is_primary')->orderBy('name');
+    }
+
+    public function activeLocations(): HasMany
+    {
+        return $this->locations()->where('status', 'active');
+    }
+
+    public function usesBusinessLocations(): bool
+    {
+        if (! Schema::hasColumn('contractors', 'uses_business_locations')) {
+            return false;
+        }
+
+        return (bool) $this->uses_business_locations;
+    }
+
+    public function defaultLocation(): ?ContractorLocation
+    {
+        if (! Schema::hasTable('contractor_locations')) {
+            return null;
+        }
+
+        $this->loadMissing('activeLocations');
+
+        $primary = $this->activeLocations->firstWhere('is_primary', true);
+
+        return $primary ?? $this->activeLocations->first();
+    }
+
+    public function displayLabel(): string
+    {
+        if (filled($this->name)) {
+            return trim((string) $this->name);
+        }
+
+        $parts = array_filter([
+            filled($this->firstname) ? trim((string) $this->firstname) : null,
+            filled($this->surname) ? trim((string) $this->surname) : null,
+        ]);
+
+        if ($parts !== []) {
+            return implode(' ', $parts);
+        }
+
+        if (filled($this->email)) {
+            return trim((string) $this->email);
+        }
+
+        return "Kontrahent #{$this->id}";
+    }
+
+    /**
+     * @return array<int, string>
+     */
+    public static function filamentSelectOptions(): array
+    {
+        return static::query()
+            ->orderBy('name')
+            ->get()
+            ->mapWithKeys(fn (self $contractor): array => [
+                (int) $contractor->id => $contractor->displayLabel(),
+            ])
+            ->all();
     }
 }

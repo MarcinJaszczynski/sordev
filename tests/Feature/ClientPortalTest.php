@@ -1,0 +1,181 @@
+<?php
+
+namespace Tests\Feature;
+
+use App\Models\Contract;
+use App\Models\Event;
+use App\Models\EventPortalAccess;
+use App\Models\EventSettlement;
+use App\Models\EventSettlementParticipantPayment;
+use App\Models\User;
+use App\Services\ClientGroupPaymentsService;
+use App\Services\ClientPortalProvisioningService;
+use Filament\Facades\Filament;
+use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Facades\Schema;
+use Spatie\Permission\Models\Role;
+use Tests\TestCase;
+
+class ClientPortalTest extends TestCase
+{
+    use RefreshDatabase;
+
+    protected function setUp(): void
+    {
+        parent::setUp();
+
+        Role::firstOrCreate(['name' => 'client_participant']);
+        Role::firstOrCreate(['name' => 'client_guardian']);
+        Role::firstOrCreate(['name' => 'admin']);
+    }
+
+    public function test_client_can_access_portal_panel(): void
+    {
+        $user = User::factory()->create(['status' => 'active']);
+        $user->assignRole('client_participant');
+
+        $this->actingAs($user)
+            ->get('/portal')
+            ->assertOk();
+
+        $this->actingAs($user)
+            ->get('/admin')
+            ->assertForbidden();
+    }
+
+    public function test_provisioning_from_group_agreement_creates_guardian_access(): void
+    {
+        if (! Schema::hasTable('contracts') || ! Schema::hasTable('event_portal_accesses')) {
+            $this->markTestSkipped('Brak tabel contracts lub event_portal_accesses.');
+        }
+
+        $event = Event::factory()->create();
+        $contract = Contract::create([
+            'event_id' => $event->id,
+            'contract_type' => Contract::TYPE_GROUP,
+            'title' => 'Umowa grupowa',
+            'contract_date' => now()->toDateString(),
+            'customer_name' => 'Szkoła',
+            'signer_name' => 'Jan Opiekun',
+            'signer_email' => 'opiekun@test.local',
+            'participant_count' => 20,
+            'total_price' => 5000,
+            'currency' => 'PLN',
+            'status' => 'signed',
+            'payment_status' => 'pending',
+        ]);
+
+        $access = app(ClientPortalProvisioningService::class)->provisionFromAgreement($contract);
+
+        $this->assertNotNull($access);
+        $this->assertSame(EventPortalAccess::ROLE_GUARDIAN, $access->role);
+        $this->assertDatabaseHas('users', ['email' => 'opiekun@test.local']);
+        $this->assertTrue(User::where('email', 'opiekun@test.local')->first()->hasRole('client_guardian'));
+    }
+
+    public function test_guardian_sees_group_payments_participant_does_not(): void
+    {
+        if (! Schema::hasTable('event_settlement_participant_payments')) {
+            $this->markTestSkipped('Brak tabeli event_settlement_participant_payments.');
+        }
+
+        $event = Event::factory()->create();
+        $settlement = EventSettlement::findOrCreateActiveForEvent($event);
+
+        EventSettlementParticipantPayment::create([
+            'settlement_id' => $settlement->id,
+            'participant_name' => 'Uczestnik 1',
+            'booking_reference' => 'REF1',
+            'due_amount_pln' => 1000,
+            'paid_amount_pln' => 500,
+        ]);
+        EventSettlementParticipantPayment::create([
+            'settlement_id' => $settlement->id,
+            'participant_name' => 'Uczestnik 2',
+            'booking_reference' => 'REF2',
+            'due_amount_pln' => 1000,
+            'paid_amount_pln' => 1000,
+        ]);
+
+        $guardian = User::factory()->create(['status' => 'active', 'email' => 'guardian@test.local']);
+        $guardian->assignRole('client_guardian');
+        $participant = User::factory()->create(['status' => 'active', 'email' => 'part@test.local']);
+        $participant->assignRole('client_participant');
+
+        EventPortalAccess::create([
+            'event_id' => $event->id,
+            'user_id' => $guardian->id,
+            'role' => EventPortalAccess::ROLE_GUARDIAN,
+            'shared_at' => now(),
+            'source' => EventPortalAccess::SOURCE_ADMIN,
+        ]);
+        EventPortalAccess::create([
+            'event_id' => $event->id,
+            'user_id' => $participant->id,
+            'role' => EventPortalAccess::ROLE_PARTICIPANT,
+            'shared_at' => now(),
+            'source' => EventPortalAccess::SOURCE_ADMIN,
+        ]);
+
+        $service = app(ClientGroupPaymentsService::class);
+
+        $this->assertCount(2, $service->rowsFor($guardian, $event));
+        $this->assertCount(0, $service->rowsFor($participant, $event));
+    }
+
+    public function test_participant_portal_pages_require_access(): void
+    {
+        if (! Schema::hasTable('event_portal_accesses')) {
+            $this->markTestSkipped('Brak tabeli event_portal_accesses.');
+        }
+
+        $event = Event::factory()->create(['status' => Event::STATUS_CONFIRMED]);
+        $user = User::factory()->create(['status' => 'active']);
+        $user->assignRole('client_participant');
+
+        $this->actingAs($user)
+            ->get('/portal/program/'.$event->id)
+            ->assertForbidden();
+
+        EventPortalAccess::create([
+            'event_id' => $event->id,
+            'user_id' => $user->id,
+            'role' => EventPortalAccess::ROLE_PARTICIPANT,
+            'shared_at' => now(),
+            'source' => EventPortalAccess::SOURCE_ADMIN,
+        ]);
+
+        Filament::setServingStatus(true);
+        Filament::setCurrentPanel(Filament::getPanel('portal'));
+
+        $this->actingAs($user)
+            ->get('/portal/program/'.$event->id)
+            ->assertOk();
+
+        Filament::setServingStatus(false);
+        Filament::setCurrentPanel(null);
+    }
+
+    public function test_guardian_cannot_access_group_payments_without_guardian_role(): void
+    {
+        if (! Schema::hasTable('event_portal_accesses')) {
+            $this->markTestSkipped('Brak tabeli event_portal_accesses.');
+        }
+
+        $event = Event::factory()->create(['status' => Event::STATUS_CONFIRMED]);
+        $user = User::factory()->create(['status' => 'active']);
+        $user->assignRole('client_participant');
+
+        EventPortalAccess::create([
+            'event_id' => $event->id,
+            'user_id' => $user->id,
+            'role' => EventPortalAccess::ROLE_PARTICIPANT,
+            'shared_at' => now(),
+            'source' => EventPortalAccess::SOURCE_ADMIN,
+        ]);
+
+        $this->actingAs($user)
+            ->get('/portal/group-payments/'.$event->id)
+            ->assertForbidden();
+    }
+}

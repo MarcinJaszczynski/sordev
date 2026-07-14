@@ -21,7 +21,8 @@ class NotificationController extends Controller
                 'new_events' => 0,
                 'confirmed_events' => 0,
                 'pending_cancellation_events' => 0,
-                'important' => 0,
+                'invoice_requests' => 0,
+                'total_unread' => 0,
                 'counts' => [
                     'tasks' => 0,
                     'messages' => 0,
@@ -29,7 +30,8 @@ class NotificationController extends Controller
                     'new_events' => 0,
                     'confirmed_events' => 0,
                     'pending_cancellation_events' => 0,
-                    'important' => 0,
+                    'invoice_requests' => 0,
+                    'total_unread' => 0,
                 ],
                 'items' => [],
                 'items_by_type' => [
@@ -38,12 +40,19 @@ class NotificationController extends Controller
                     'new_event' => [],
                     'event' => [],
                     'pending_cancellation_event' => [],
+                    'invoice_request' => [],
                     'message' => [],
                 ],
             ]);
         }
 
-        $notificationData = NotificationService::getTopbarDataForUser($user->id);
+        $notificationData = NotificationService::getTopbarDataForUser(
+            $user->id,
+            NotificationService::TOPBAR_LIMIT_PER_TYPE,
+            NotificationService::TOPBAR_COMBINED_LIMIT,
+            NotificationService::TOPBAR_TASK_QUERY_LIMIT,
+            fresh: true,
+        );
         $counts = $notificationData['counts'];
 
         return response()->json([
@@ -53,7 +62,8 @@ class NotificationController extends Controller
             'new_events' => $counts['new_events'] ?? 0,
             'confirmed_events' => $counts['confirmed_events'] ?? 0,
             'pending_cancellation_events' => $counts['pending_cancellation_events'] ?? 0,
-            'important' => $counts['important'] ?? 0,
+            'invoice_requests' => $counts['invoice_requests'] ?? 0,
+            'total_unread' => $counts['total_unread'] ?? 0,
             'counts' => $counts,
             'items' => $notificationData['items'] ?? [],
             'items_by_type' => $notificationData['items_by_type'] ?? [
@@ -62,8 +72,28 @@ class NotificationController extends Controller
                 'new_event' => [],
                 'event' => [],
                 'pending_cancellation_event' => [],
+                'invoice_request' => [],
                 'message' => [],
             ],
         ]);
+    }
+
+    public function markRead(): JsonResponse
+    {
+        $user = Auth::user();
+
+        if (! $user) {
+            return response()->json(['ok' => false], 401);
+        }
+
+        $fingerprint = (string) request()->input('fingerprint', '');
+
+        if ($fingerprint === '') {
+            return response()->json(['ok' => false], 422);
+        }
+
+        NotificationService::markAsRead($user->id, $fingerprint);
+
+        return response()->json(['ok' => true]);
     }
 }

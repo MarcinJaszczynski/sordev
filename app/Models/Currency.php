@@ -91,4 +91,56 @@ class Currency extends Model
 
         return $cache;
     }
+
+    public function displayLabel(): string
+    {
+        $code = filled($this->code) ? trim((string) $this->code) : null;
+        $symbol = filled($this->symbol) ? trim((string) $this->symbol) : null;
+        $name = filled($this->name) ? trim((string) $this->name) : null;
+
+        if ($code !== null) {
+            if ($name !== null && strcasecmp($code, $name) !== 0) {
+                return "{$code} — {$name}";
+            }
+
+            return $code;
+        }
+
+        if ($symbol !== null) {
+            if ($name !== null && strcasecmp($symbol, $name) !== 0) {
+                return "{$symbol} — {$name}";
+            }
+
+            return $symbol;
+        }
+
+        return $name ?? "Waluta #{$this->id}";
+    }
+
+    /**
+     * Opcje Select w Filament — zawsze string, nigdy null (legacy: brak code).
+     *
+     * @return array<int, string>
+     */
+    public static function filamentSelectOptions(): array
+    {
+        return static::query()
+            ->orderBy('name')
+            ->get()
+            ->mapWithKeys(fn (self $currency): array => [
+                (int) $currency->id => $currency->displayLabel(),
+            ])
+            ->all();
+    }
+
+    public static function defaultPlnId(): ?int
+    {
+        $plnIds = static::plnIds();
+        if ($plnIds !== []) {
+            return (int) $plnIds[0];
+        }
+
+        return static::query()->where('code', 'PLN')->value('id')
+            ?? static::query()->where('symbol', 'PLN')->value('id');
+    }
 }

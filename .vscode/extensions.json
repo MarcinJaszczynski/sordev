@@ -1,0 +1,20 @@
+{
+  "recommendations": [
+    "bmewburn.vscode-intelephense-client",
+    "open-southeners.laravel-pint",
+    "onecentlin.laravel-blade",
+    "amiralizadeh9480.laravel-extra-intellisense",
+    "dbaeumer.vscode-eslint",
+    "esbenp.prettier-vscode",
+    "editorconfig.editorconfig",
+    "eamodio.gitlens",
+    "usernamehw.errorlens",
+    "yzhang.markdown-all-in-one",
+    "christian-kohler.path-intellisense",
+    "gruntfuggly.todo-tree",
+    "streetsidesoftware.code-spell-checker",
+    "cweijan.vscode-mysql-client2",
+    "mikestead.dotenv",
+    "bradlc.vscode-tailwindcss"
+  ]
+}

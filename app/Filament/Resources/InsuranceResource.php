@@ -4,6 +4,7 @@ namespace App\Filament\Resources;
 
 use App\Filament\Resources\InsuranceResource\Pages;
 use App\Models\Insurance;
+use App\Support\FilamentNavigation;
 use Filament\Forms;
 use Filament\Forms\Form;
 use Filament\Resources\Resource;
@@ -20,7 +21,7 @@ class InsuranceResource extends Resource
 
     protected static ?string $navigationLabel = 'Ubezpieczenia';
 
-    protected static ?string $navigationGroup = 'Ustawienia ogólne';
+    protected static ?string $navigationGroup = FilamentNavigation::GROUP_CONFIG;
 
     protected static ?string $modelLabel = 'Ubezpieczenie';
 
@@ -46,7 +47,7 @@ class InsuranceResource extends Resource
                             ->step(0.01)
                             ->minValue(0)
                             ->columnSpan(1),
-                        Forms\Components\RichEditor::make('description')
+                        \FilamentTiptapEditor\TiptapEditor::make('description')
                             ->columnSpanFull(),
                     ]),
 

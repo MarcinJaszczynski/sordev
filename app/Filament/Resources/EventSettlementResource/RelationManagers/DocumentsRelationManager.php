@@ -17,9 +17,11 @@ class DocumentsRelationManager extends RelationManager
 {
     protected static string $relationship = 'documents';
 
-    protected static ?string $title = 'Faktury i dokumenty';
+    protected static ?string $title = 'Załączniki rozliczenia';
 
     protected static ?string $recordTitleAttribute = 'document_number';
+
+    public ?string $documentTypeFilter = null;
 
     public function form(Form $form): Form
     {
@@ -102,7 +104,7 @@ class DocumentsRelationManager extends RelationManager
                         ->downloadable()
                         ->openable(),
 
-                    Forms\Components\RichEditor::make('notes')
+                    \FilamentTiptapEditor\TiptapEditor::make('notes')
                         ->columnSpanFull(),
 
                     Forms\Components\CheckboxList::make('pdf_attachment_targets')
@@ -168,6 +170,11 @@ class DocumentsRelationManager extends RelationManager
     public function table(Table $table): Table
     {
         return $table
+            ->modifyQueryUsing(function ($query): void {
+                if (filled($this->documentTypeFilter)) {
+                    $query->where('document_type', $this->documentTypeFilter);
+                }
+            })
             ->columns([
                 Tables\Columns\BadgeColumn::make('document_type')
                     ->label('Typ')
@@ -302,7 +309,7 @@ class DocumentsRelationManager extends RelationManager
                     ->icon('heroicon-o-x-circle')
                     ->color('danger')
                     ->form([
-                        Forms\Components\RichEditor::make('notes')
+                        \FilamentTiptapEditor\TiptapEditor::make('notes')
                             ->required(),
                     ])
                     ->action(function (EventSettlementDocument $record, array $data): void {

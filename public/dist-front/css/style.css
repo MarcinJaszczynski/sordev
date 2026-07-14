@@ -1041,16 +1041,19 @@ select {
 }
 
     .image-wrapper {
-        height: 10vw;
+        width: 100%;
+        aspect-ratio: 4 / 3;
         display:flex;
         align-items: center;
         justify-content: center;
+        overflow: hidden;
     }
     .image-wrapper img{
+        width: 100%;
         height: 100%;
-        min-width: 100%;
-        overflow: clip;
         object-fit: cover;
+        object-position: center;
+        display: block;
     }
 @media(max-width: 1100px){
     .carousel{
@@ -1061,7 +1064,7 @@ select {
             width: calc(45%);
         }
         .image-wrapper {
-            height: 15vw;
+            aspect-ratio: 4 / 3;
         }
     }
 }
@@ -1084,7 +1087,7 @@ select {
             }
 
             .image-wrapper {
-                height: 35vw;
+                aspect-ratio: 4 / 3;
             }
             .card-title {
                 font-size: 1.75em;
@@ -3757,7 +3760,8 @@ select {
     }
     .package-page-layout-section-one .column-left .display-photo {
         width: 100%;
-        min-height: 300px;
+        min-height: 0;
+        aspect-ratio: 16 / 10;
         display: flex;
         align-items: center;
         justify-content: center;
@@ -3813,13 +3817,26 @@ select {
     }
 
     .package-box-photo{
-        position: relative;;
+        position: relative;
+        flex: 0 0 35%;
         min-width:35%;
-        max-height:100%;
+        max-width:35%;
+        width: 35%;
+        height: auto;
+        max-height: none;
         overflow: hidden;
-        aspect-ratio: 3/2.5;
+        aspect-ratio: 1 / 1;
+        align-self: flex-start;
         border-bottom-left-radius: 6px;
         border-top-left-radius: 6px;
+    }
+
+    .package-box-photo img {
+        width: 100%;
+        height: 100%;
+        object-fit: cover;
+        object-position: center;
+        display: block;
     }
 
     .package-box-info{
@@ -4031,12 +4048,15 @@ select {
     }
 
     .package-box-photo {
+        flex: 0 0 35%;
         min-width: 35%;
+        max-width: 35%;
+        width: 35%;
+        height: auto;
+        max-height: none;
         overflow: hidden;
-        aspect-ratio:3/2;
-        background-size: cover;
-        background-position: center;
-        background-repeat: no-repeat;
+        aspect-ratio: 1 / 1;
+        align-self: flex-start;
     }
 
     .package-box-info{
@@ -4107,7 +4127,12 @@ select {
         }
 
         .package-box-photo {
-            aspect-ratio: 3/2;
+            flex: 0 0 auto;
+            min-width: 100%;
+            max-width: 100%;
+            width: 100%;
+            height: auto;
+            aspect-ratio: 1 / 1;
             border-bottom-left-radius: 0;
             border-top-right-radius: 6px;
         }
@@ -4349,6 +4374,7 @@ select {
         height: 100%;
         min-height: 100%;
         width: 100%;
+        aspect-ratio: 16 / 10;
         position: relative;
         overflow: hidden;
         border-radius: 6px;
@@ -5907,7 +5933,8 @@ select {
     }
 
     .package-page-layout-section-one .column-left .display-photo img {
-        aspect-ratio: 3 / 2.5;
+        width: 100%;
+        height: 100%;
     }
 
     .package-page-layout-section-one .column-right {

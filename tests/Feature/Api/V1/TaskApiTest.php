@@ -21,7 +21,7 @@ class TaskApiTest extends TestCase
     private function makeStatus(array $overrides = []): TaskStatus
     {
         return TaskStatus::factory()->create(array_merge([
-            'name'  => 'To do',
+            'name' => 'To do',
             'color' => '#cccccc',
             'order' => 1,
         ], $overrides));
@@ -31,11 +31,11 @@ class TaskApiTest extends TestCase
 
     public function test_board_returns_statuses_and_tasks(): void
     {
-        $user   = User::factory()->create();
+        $user = User::factory()->create();
         $status = $this->makeStatus();
         Task::factory()->create([
-            'status_id'   => $status->id,
-            'author_id'   => $user->id,
+            'status_id' => $status->id,
+            'author_id' => $user->id,
             'assignee_id' => $user->id,
         ]);
 
@@ -55,7 +55,7 @@ class TaskApiTest extends TestCase
 
     public function test_board_filters_assigned_to_me(): void
     {
-        $user  = User::factory()->create();
+        $user = User::factory()->create();
         $other = User::factory()->create();
         $status = $this->makeStatus();
 
@@ -72,9 +72,9 @@ class TaskApiTest extends TestCase
 
     public function test_board_filters_by_status_id(): void
     {
-        $user    = User::factory()->create();
-        $s1      = $this->makeStatus(['name' => 'To do', 'order' => 1]);
-        $s2      = $this->makeStatus(['name' => 'Done', 'order' => 2]);
+        $user = User::factory()->create();
+        $s1 = $this->makeStatus(['name' => 'To do', 'order' => 1]);
+        $s2 = $this->makeStatus(['name' => 'Done', 'order' => 2]);
 
         Task::factory()->create(['status_id' => $s1->id, 'author_id' => $user->id]);
         Task::factory()->create(['status_id' => $s2->id, 'author_id' => $user->id]);
@@ -101,9 +101,9 @@ class TaskApiTest extends TestCase
 
     public function test_author_can_move_task(): void
     {
-        $user   = User::factory()->create();
-        $s1     = $this->makeStatus(['name' => 'To do', 'order' => 1]);
-        $s2     = $this->makeStatus(['name' => 'In progress', 'order' => 2]);
+        $user = User::factory()->create();
+        $s1 = $this->makeStatus(['name' => 'To do', 'order' => 1]);
+        $s2 = $this->makeStatus(['name' => 'In progress', 'order' => 2]);
 
         $task = Task::factory()->create([
             'status_id' => $s1->id,
@@ -123,14 +123,14 @@ class TaskApiTest extends TestCase
 
     public function test_assignee_can_move_task(): void
     {
-        $author   = User::factory()->create();
+        $author = User::factory()->create();
         $assignee = User::factory()->create();
-        $s1       = $this->makeStatus(['order' => 1]);
-        $s2       = $this->makeStatus(['name' => 'Done', 'order' => 2]);
+        $s1 = $this->makeStatus(['order' => 1]);
+        $s2 = $this->makeStatus(['name' => 'Done', 'order' => 2]);
 
         $task = Task::factory()->create([
-            'status_id'   => $s1->id,
-            'author_id'   => $author->id,
+            'status_id' => $s1->id,
+            'author_id' => $author->id,
             'assignee_id' => $assignee->id,
         ]);
 
@@ -143,10 +143,10 @@ class TaskApiTest extends TestCase
 
     public function test_unrelated_user_cannot_move_task(): void
     {
-        $author      = User::factory()->create();
-        $unrelated   = User::factory()->create();
-        $s1          = $this->makeStatus(['order' => 1]);
-        $s2          = $this->makeStatus(['name' => 'Done', 'order' => 2]);
+        $author = User::factory()->create();
+        $unrelated = User::factory()->create();
+        $s1 = $this->makeStatus(['order' => 1]);
+        $s2 = $this->makeStatus(['name' => 'Done', 'order' => 2]);
 
         $task = Task::factory()->create([
             'status_id' => $s1->id,
@@ -162,7 +162,7 @@ class TaskApiTest extends TestCase
 
     public function test_move_with_order_updates_order(): void
     {
-        $user   = User::factory()->create();
+        $user = User::factory()->create();
         $status = $this->makeStatus();
 
         $task = Task::factory()->create([
@@ -172,7 +172,7 @@ class TaskApiTest extends TestCase
 
         $response = $this->apiAs($user, 'POST', '/tasks/'.$task->id.'/move', [
             'status_id' => $status->id,
-            'order'     => 5,
+            'order' => 5,
         ]);
 
         $response->assertStatus(200);
@@ -181,7 +181,7 @@ class TaskApiTest extends TestCase
 
     public function test_move_requires_status_id(): void
     {
-        $user   = User::factory()->create();
+        $user = User::factory()->create();
         $status = $this->makeStatus();
 
         $task = Task::factory()->create([
@@ -198,7 +198,7 @@ class TaskApiTest extends TestCase
     public function test_move_without_auth_returns_401(): void
     {
         $status = $this->makeStatus();
-        $task   = Task::factory()->create(['status_id' => $status->id]);
+        $task = Task::factory()->create(['status_id' => $status->id]);
 
         $response = $this->json('POST', '/api/v1/tasks/'.$task->id.'/move', [
             'status_id' => $status->id,

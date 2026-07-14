@@ -27,7 +27,7 @@
             <div class="package-box-layout">
                 <div
                     class="package-box-photo"
-                    style="background-image: url({{ $item->preview_image_url ?: asset('uploads/default.png') }}); cursor: pointer;"
+                    style="cursor: pointer;"
                     @php
                         $__baseUrl = route('package.pretty', [
                             'regionSlug' => $regionSlugForLinks,
@@ -37,6 +37,7 @@
                         ]);
                     @endphp
                     onclick="window.location.href='{{ $__baseUrl }}';">
+                    <img src="{{ $item->preview_image_url ?: asset('uploads/default.png') }}" alt="{{ $item->name }}" style="width: 100%; height: 100%; object-fit: cover; object-position: center; display: block;" loading="lazy" decoding="async" onerror="this.onerror=null;this.src='{{ $item->full_image_url ?: asset('uploads/default.png') }}';">
                 </div>
                 <div class="package-box-name-mobile">
                     <div class="title-section">

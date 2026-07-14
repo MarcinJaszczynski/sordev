@@ -4,16 +4,8 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>{{ $audienceLabel }} - {{ $event->name }}{{ $event->code ? ' [' . $event->code . ']' : '' }}</title>
+    @include('pdf.packages._styles')
     <style>
-        @page { margin: 24px 22px; }
-        * { box-sizing: border-box; }
-        body {
-            font-family: DejaVu Sans, sans-serif;
-            color: #0f172a;
-            font-size: 12px;
-            line-height: 1.45;
-            margin: 0;
-        }
         .header {
             border: 2px solid #1e3a8a;
             border-radius: 12px;
@@ -99,6 +91,7 @@
     </style>
 </head>
 <body>
+    <div class="a4">
     <div class="header">
         <table class="header-table">
             <tr>
@@ -207,6 +200,27 @@
                 </tbody>
             </table>
         @endif
+        @if(isset($hotelProgramPoints) && $hotelProgramPoints->isNotEmpty())
+            <div style="font-weight:bold;margin-bottom:6px;margin-top:8px;">Hotele / noclegi w programie imprezy</div>
+            <table class="table" style="margin-bottom: 14px;">
+                <thead>
+                    <tr>
+                        <th style="width:10%;">Dzień</th>
+                        <th style="width:40%;">Punkt programu</th>
+                        <th style="width:50%;">Kontrahent / Hotel</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    @foreach($hotelProgramPoints as $hp)
+                        <tr>
+                            <td>{{ (int) ($hp->day ?? 1) }}</td>
+                            <td>{{ $hp->name ?? $hp->templatePoint?->name ?? '—' }}</td>
+                            <td>{{ $hp->contractor?->name ?? '—' }}</td>
+                        </tr>
+                    @endforeach
+                </tbody>
+            </table>
+        @endif
         @forelse($hotelPlan as $day)
             <table class="table">
                 <thead>
@@ -284,6 +298,15 @@
                     <h3>Kontakty</h3>
                     <div>Biuro: <span class="value">{{ $company['phone'] ?? '—' }}</span> / {{ $company['email'] ?? '—' }}</div>
                     <div>Pilot/koordynator: <span class="value">{{ $event->assignedUser?->name ?: '—' }}</span></div>
+                    @if(filled($event->assignedUser?->phone))
+                        <div>Tel. pilota: <span class="value">{{ $event->assignedUser->phone }}</span></div>
+                    @endif
+                    @if($event->assignedUser?->birth_date)
+                        <div>Data urodzenia pilota: <span class="value">{{ $event->assignedUser->birth_date->format('d.m.Y') }}</span></div>
+                    @endif
+                    @if(filled($event->assignedUser?->pesel))
+                        <div>PESEL pilota: <span class="value">{{ $event->assignedUser->pesel }}</span></div>
+                    @endif
                     <div>Klient: <span class="value">{{ $event->client_name ?: '—' }}</span></div>
                     <div>Telefon klienta: <span class="value">{{ $event->client_phone ?: '—' }}</span></div>
                 </td>
@@ -298,8 +321,8 @@
                 <td class="card" style="width:20%;"><h3>Łącznie zawartych</h3><span class="value">{{ $agreementsSummary['total'] }}</span></td>
                 <td class="card" style="width:20%;"><h3>Opłacone</h3><span class="value">{{ $agreementsSummary['payment_progress_label'] }}</span></td>
                 <td class="card" style="width:20%;"><h3>Nieopłacone</h3><span class="value">{{ $agreementsSummary['unpaid'] }}</span></td>
-                <td class="card" style="width:20%;"><h3>Wpłacono</h3><span class="value">{{ number_format($agreementsSummary['amount_paid'], 2, ',', ' ') }} PLN</span></td>
-                <td class="card" style="width:20%;"><h3>Pozostało</h3><span class="value">{{ number_format($agreementsSummary['amount_remaining'], 2, ',', ' ') }} PLN</span></td>
+                <td class="card" style="width:20%;"><h3>Wpłacono</h3><span class="value money-nowrap">{{ \App\Support\MoneyFormatter::format($agreementsSummary['amount_paid']) }}</span></td>
+                <td class="card" style="width:20%;"><h3>Pozostało</h3><span class="value money-nowrap">{{ \App\Support\MoneyFormatter::format($agreementsSummary['amount_remaining']) }}</span></td>
             </tr>
         </table>
 
@@ -328,9 +351,9 @@
                         <td>
                             <span class="badge {{ in_array($row['status'], ['signed', 'completed']) ? 'b-green' : 'b-blue' }}">{{ $row['status_label'] }}</span>
                         </td>
-                        <td>{{ number_format((float) $row['amount_due'], 2, ',', ' ') }} {{ $row['currency'] }}</td>
-                        <td>{{ number_format((float) $row['amount_paid'], 2, ',', ' ') }} {{ $row['currency'] }}</td>
-                        <td>{{ number_format((float) $row['amount_remaining'], 2, ',', ' ') }} {{ $row['currency'] }}</td>
+                        <td class="money-nowrap">{{ \App\Support\MoneyFormatter::format($row['amount_due'], $row['currency']) }}</td>
+                        <td class="money-nowrap">{{ \App\Support\MoneyFormatter::format($row['amount_paid'], $row['currency']) }}</td>
+                        <td class="money-nowrap">{{ \App\Support\MoneyFormatter::format($row['amount_remaining'], $row['currency']) }}</td>
                     </tr>
                 @empty
                     <tr><td colspan="8" class="muted">Brak zawartych umów indywidualnych dla tej imprezy.</td></tr>
@@ -372,6 +395,7 @@
 
     <div class="footer">
         {{ $company['name'] ?? config('app.name') }} • {{ $company['address_line_1'] ?? '' }} {{ $company['address_line_2'] ?? '' }} • {{ $company['phone'] ?? '' }} • {{ $company['email'] ?? '' }}
+    </div>
     </div>
 </body>
 </html>

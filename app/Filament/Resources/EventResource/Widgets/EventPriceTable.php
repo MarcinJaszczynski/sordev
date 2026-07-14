@@ -6,7 +6,10 @@ use App\Filament\Resources\EventSettlementResource;
 use App\Models\Event;
 use App\Models\EventPricePerPerson;
 use App\Models\EventSettlement;
+use App\Services\EventManualPricePerPersonService;
+use App\Services\EventTransportCostCalculator;
 use Filament\Widgets\Widget;
+use Livewire\Attributes\On;
 
 class EventPriceTable extends Widget
 {
@@ -24,6 +27,8 @@ class EventPriceTable extends Widget
 
     public $transportCost = 0;
 
+    public ?float $eventTransportKm = null;
+
     public $detailedCalculations = [];
 
     public array $eventOnlyPointsForDetails = [];
@@ -37,6 +42,13 @@ class EventPriceTable extends Widget
     public array $nearestVariants = [];
 
     public $editingPrice = null; // holds EventPricePerPerson model data for inline editing
+
+    public bool $useManualPricePerPerson = false;
+
+    public ?float $manualPricePerPerson = null;
+
+    /** Autorytatywna kalkulacja (jeden wspólny kalkulator: każdy koszt raz). */
+    public array $authoritativeCalc = [];
 
     public function mount()
     {
@@ -117,6 +129,132 @@ class EventPriceTable extends Widget
 
         // Oblicz szczegółowe kalkulacje z uwzględnieniem różnych wariantów
         $this->calculateDetailedPricing();
+
+        $this->syncManualPricePerPersonState();
+
+        $this->loadAuthoritativeCalc();
+    }
+
+    /**
+     * Autorytatywna kalkulacja (źródło prawdy): każdy koszt raz, marża, podatki, cena/os.
+     */
+    protected function loadAuthoritativeCalc(): void
+    {
+        try {
+            $calculator = \App\Services\EventCostCalculator::for($this->record);
+            $count = max(1, (int) ($this->record->participant_count ?? 1));
+
+            $variants = $this->record->qtyVariants()
+                ->orderBy('qty')
+                ->pluck('qty')
+                ->map(fn ($q) => (int) $q)
+                ->filter(fn ($q) => $q > 0)
+                ->unique()
+                ->values();
+
+            if ($variants->isEmpty()) {
+                $variants = collect([$count]);
+            }
+
+            $byVariant = [];
+            foreach ($variants as $q) {
+                $byVariant[$q] = $calculator->calculate($q);
+            }
+
+            $this->authoritativeCalc = [
+                'current_count' => $count,
+                'current' => $byVariant[$count] ?? $calculator->calculate($count),
+                'variants' => $byVariant,
+            ];
+        } catch (\Throwable $e) {
+            report($e);
+            $this->authoritativeCalc = [];
+        }
+    }
+
+    /**
+     * Zsynchronizuj stan przełącznika ręcznej ceny za osobę z zapisaną pozycją is_manual.
+     */
+    protected function syncManualPricePerPersonState(): void
+    {
+        $state = app(EventManualPricePerPersonService::class)->formState($this->record);
+
+        $this->useManualPricePerPerson = $state['use_manual_price_per_person'];
+
+        // Wyciągnij cenę PLN z listy linii, lub pierwszą dostępną
+        $lines = $state['manual_price_per_person_lines'] ?? [];
+        $this->manualPricePerPerson = null;
+
+        if (! empty($lines)) {
+            // Załaduj waluty aby znaleźć PLN
+            $currencies = \App\Models\Currency::query()
+                ->whereIn('id', array_column($lines, 'currency_id'))
+                ->get()
+                ->keyBy('id');
+
+            // Najpierw szukaj PLN (po kodzie waluty)
+            foreach ($lines as $line) {
+                $currencyId = (int) ($line['currency_id'] ?? 0);
+                $currency = $currencies[$currencyId] ?? null;
+                if ($currency && strtoupper($currency->code ?? '') === 'PLN') {
+                    $this->manualPricePerPerson = $line['amount'] ?? null;
+                    break;
+                }
+            }
+            // Jeśli nie znaleźliśmy PLN, bierz pierwszą linię
+            if ($this->manualPricePerPerson === null) {
+                $this->manualPricePerPerson = $lines[0]['amount'] ?? null;
+            }
+        }
+    }
+
+    /**
+     * Zapisz (lub usuń) ręczną cenę za osobę — analogicznie do ręcznego kosztu transportu.
+     * Reużywa mechanizmu event_price_per_person.is_manual, więc jest jednym źródłem prawdy.
+     */
+    public function saveManualPricePerPerson(): void
+    {
+        if (! $this->record) {
+            return;
+        }
+
+        if (! $this->useManualPricePerPerson) {
+            app(EventManualPricePerPersonService::class)->sync($this->record, false, []);
+
+            $this->dispatch('toast', type: 'success', message: 'Przywrócono cenę z kalkulacji.');
+            $this->refreshCalculations();
+
+            return;
+        }
+
+        $amount = $this->manualPricePerPerson;
+        if ($amount === null || ! is_numeric($amount) || (float) $amount < 0) {
+            $this->dispatch('toast', type: 'error', message: 'Podaj prawidłową cenę za osobę.');
+
+            return;
+        }
+
+        // Znajdź currency_id dla PLN
+        $plnCurrency = \App\Models\Currency::query()
+            ->where('code', 'PLN')
+            ->orWhere('symbol', 'PLN')
+            ->orWhere('symbol', 'zł')
+            ->first();
+
+        if (! $plnCurrency) {
+            $this->dispatch('toast', type: 'error', message: 'Nie znaleziono waluty PLN w systemie.');
+
+            return;
+        }
+
+        app(EventManualPricePerPersonService::class)->sync(
+            $this->record,
+            true,
+            [['amount' => round((float) $amount, 2), 'currency_id' => $plnCurrency->id]],
+        );
+
+        $this->dispatch('toast', type: 'success', message: 'Zapisano ręczną cenę za osobę. Koszty przeniesiono z kalkulacji.');
+        $this->refreshCalculations();
     }
 
     protected function buildPricePayload(array $data, bool $requirePricePerPerson = false): array
@@ -210,37 +348,40 @@ class EventPriceTable extends Widget
         return [$payload, $errors];
     }
 
-    public function calculateTransportCost()
+    protected function transportCalculator(): EventTransportCostCalculator
     {
+        return new EventTransportCostCalculator($this->record);
+    }
+
+    public function calculateTransportCost(): void
+    {
+        $calculator = $this->transportCalculator();
+        $this->eventTransportKm = $calculator->resolveTransportKm();
         $this->transportCost = 0;
+
+        $variant = $this->currentVariant ?? [
+            'qty' => max(1, (int) ($this->record->participant_count ?? 1)),
+            'gratis' => 0,
+            'staff' => 1,
+            'driver' => 1,
+        ];
+
+        if ($calculator->usesManualTransportCost()) {
+            $this->transportCost = $calculator->effectiveTransportCost($variant);
+
+            return;
+        }
 
         if (! $this->record->bus) {
             return;
         }
 
-        $bus = $this->record->bus;
-        $transferKm = $this->record->transfer_km ?? 0;
-        $programKm = $this->record->program_km ?? 0;
-        $duration = $this->record->duration_days ?? 1;
+        $this->transportCost = $calculator->effectiveTransportCost($variant);
+    }
 
-        $totalKm = 2 * $transferKm + $programKm;
-        $includedKm = $duration * ($bus->package_km_per_day ?? 0);
-        $baseCost = $duration * ($bus->package_price_per_day ?? 0);
-
-        if ($totalKm <= $includedKm) {
-            $this->transportCost = $baseCost;
-        } else {
-            $extraKm = $totalKm - $includedKm;
-            $this->transportCost = $baseCost + ($extraKm * ($bus->extra_km_price ?? 0));
-        }
-
-        // Przelicz na PLN jeśli autokar ma inną walutę
-        if ($bus->currency && $bus->currency !== 'PLN') {
-            // Znajdź walutę w tabeli currencies po symbolu
-            $currency = \App\Models\Currency::where('symbol', $bus->currency)->first();
-            $exchangeRate = $currency?->exchange_rate ?? 1;
-            $this->transportCost *= $exchangeRate;
-        }
+    protected function resolveEventTransportKm(): float
+    {
+        return $this->transportCalculator()->resolveTransportKm();
     }
 
     public function calculateDetailedPricing()
@@ -280,12 +421,21 @@ class EventPriceTable extends Widget
             $sourceWidget = app(\App\Filament\Resources\EventTemplateResource\Widgets\EventTemplatePriceTable::class);
             $sourceWidget->record = $template;
             $sourceWidget->startPlaceId = $this->record->start_place_id;
-            $sourceWidget->transportKm = null;
+            $sourceWidget->busOverride = $this->record->bus ?? $template->bus;
+            $resolvedKm = $this->resolveEventTransportKm();
+            $sourceWidget->transportKm = $resolvedKm > 0 ? $resolvedKm : null;
             $sourceWidget->variantOverrides = $selectedVariants;
 
             $this->qtyVariants = $sourceWidget->getQtyVariantsProperty();
             $this->detailedCalculations = $sourceWidget->getDetailedCalculations();
+            if ($this->record->hotelStays()->exists()) {
+                app(\App\Services\EventHotelPlanService::class)
+                    ->applyEventHotelStructureToCalculations($this->detailedCalculations, $this->record);
+            }
+            $this->syncTransportInDetailedCalculations();
             $this->appendEventOnlyPointsToDetailedCalculations();
+            $this->calculateTransportCost();
+            $this->recomputePerPersonInDetailedCalculations();
         } catch (\Throwable $e) {
             report($e);
             $this->qtyVariants = [];
@@ -294,12 +444,33 @@ class EventPriceTable extends Widget
         }
     }
 
+    private function syncTransportInDetailedCalculations(): void
+    {
+        $this->transportCalculator()->syncTransportInDetailedCalculations(
+            $this->detailedCalculations,
+            $this->qtyVariants,
+            $this->currentVariant,
+            fn (int|string $qty, float $delta) => $this->applyPlnDeltaToDetailedTotals($qty, $delta),
+        );
+    }
+
     private function appendEventOnlyPointsToDetailedCalculations(): void
     {
+        // Gdy istnieje plan hotelowy, nocleg pochodzi z niego — nie doliczamy
+        // punktów programu typu nocleg (unikamy podwójnego liczenia).
+        $hasHotelPlan = $this->record->hotelStays()->exists();
+
         $eventPoints = collect($this->programPoints ?? [])
-            ->filter(function ($point) {
-                return (bool) ($point->active ?? true)
-                    && (bool) ($point->include_in_calculation ?? true);
+            ->filter(function ($point) use ($hasHotelPlan) {
+                if (! (bool) ($point->active ?? true) || ! (bool) ($point->include_in_calculation ?? true)) {
+                    return false;
+                }
+
+                if ($hasHotelPlan && $this->isAccommodationProgramPoint($point)) {
+                    return false;
+                }
+
+                return true;
             })
             ->sortBy(['day', 'order'])
             ->values();
@@ -367,6 +538,52 @@ class EventPriceTable extends Widget
                 if ($baseDelta > 0) {
                     $this->applyPlnDeltaToDetailedTotals($qty, $baseDelta);
                 }
+            }
+        }
+    }
+
+    private function isAccommodationProgramPoint($point): bool
+    {
+        if ((bool) ($point->is_hotel ?? false)) {
+            return true;
+        }
+
+        $name = mb_strtolower((string) ($point->templatePoint?->name ?? $point->name ?? ''));
+
+        foreach (['nocleg', 'zakwaterowanie', 'hotel', 'pobyt'] as $keyword) {
+            if (str_contains($name, $keyword)) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    /**
+     * Po wszystkich modyfikacjach sum (transport, punkty eventu, struktura hotelu)
+     * przelicz cenę za osobę = SUMA KOŃCOWA ÷ liczba osób, aby była spójna z totalem.
+     */
+    private function recomputePerPersonInDetailedCalculations(): void
+    {
+        if (empty($this->detailedCalculations)) {
+            return;
+        }
+
+        foreach ($this->detailedCalculations as $qty => $currencies) {
+            $divisor = (int) $qty;
+            if ($divisor <= 0) {
+                continue;
+            }
+
+            foreach ($currencies as $code => $data) {
+                if (! is_array($data) || ! array_key_exists('total', $data)) {
+                    continue; // pomiń klucze 'markup', 'taxes', 'hotel_structure'
+                }
+
+                $raw = (float) ($data['total'] ?? 0) / $divisor;
+                $this->detailedCalculations[$qty][$code]['price_per_person_raw'] = round($raw, 2);
+                $this->detailedCalculations[$qty][$code]['price_per_person_rounded'] =
+                    \App\Services\PriceRoundingService::roundPerPerson($raw, (string) $code);
             }
         }
     }
@@ -451,6 +668,14 @@ class EventPriceTable extends Widget
         $this->loadCalculations();
     }
 
+    #[On('event-price-table-refresh')]
+    public function refreshCalculationsFromForm(): void
+    {
+        if ($this->record) {
+            $this->refreshCalculations();
+        }
+    }
+
     public function settleProgramPoint(int $programPointId)
     {
         if (! $this->record) {
@@ -522,9 +747,10 @@ class EventPriceTable extends Widget
         }
 
         $price->fill($payload);
+        $price->is_manual = true;
         $price->save();
 
-        $this->dispatch('toast', type: 'success', message: 'Cena zapisana');
+        $this->dispatch('toast', type: 'success', message: 'Cena zapisana (ręczna — nie zostanie nadpisana przy przeliczaniu)');
         $this->editingPrice = null;
         $this->refreshCalculations();
     }
@@ -541,5 +767,35 @@ class EventPriceTable extends Widget
         $price->delete();
         $this->dispatch('toast', type: 'success', message: 'Cena usunięta');
         $this->refreshCalculations();
+    }
+
+    public function createManualPrice(): void
+    {
+        if (! $this->record) {
+            return;
+        }
+
+        $participantCount = max(1, (int) ($this->record->participant_count ?? 1));
+        $variant = $this->record->qtyVariants()
+            ->orderByRaw('ABS(qty - ?)', [$participantCount])
+            ->first();
+
+        $price = EventPricePerPerson::create([
+            'event_id' => $this->record->id,
+            'event_template_qty_id' => $variant?->id,
+            'currency_id' => null,
+            'start_place_id' => $this->record->start_place_id,
+            'price_per_person' => $this->record->resolvedPricePerPerson($participantCount),
+            'transport_cost' => 0,
+            'price_base' => null,
+            'markup_amount' => null,
+            'tax_amount' => null,
+            'price_with_tax' => null,
+            'tax_breakdown' => null,
+            'is_manual' => true,
+        ]);
+
+        $this->editPrice($price->id);
+        $this->dispatch('toast', type: 'success', message: 'Dodano pozycję do ręcznej edycji ceny.');
     }
 }

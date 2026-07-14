@@ -27,7 +27,7 @@ class SnapshotsRelationManager extends RelationManager
                     ->required()
                     ->maxLength(255),
 
-                Forms\Components\RichEditor::make('description')
+                \FilamentTiptapEditor\TiptapEditor::make('description')
                     ->maxLength(500),
             ]);
     }
@@ -132,7 +132,7 @@ class SnapshotsRelationManager extends RelationManager
                             ->maxLength(255)
                             ->default('Snapshot ręczny '.now()->format('d.m.Y H:i')),
 
-                        Forms\Components\RichEditor::make('description')
+                        \FilamentTiptapEditor\TiptapEditor::make('description')
                             ->maxLength(500)
                             ->helperText('Opisz powód utworzenia tego snapshotu'),
                     ])

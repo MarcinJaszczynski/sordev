@@ -68,11 +68,12 @@
                 ['bg' => 'bg-emerald-600','dark' => 'dark:bg-emerald-700','ring' => 'ring-emerald-500/30'],
                 ['bg' => 'bg-amber-500',  'dark' => 'dark:bg-amber-600',  'ring' => 'ring-amber-400/30'],
                 ['bg' => 'bg-red-600',    'dark' => 'dark:bg-red-700',    'ring' => 'ring-red-500/30'],
+                ['bg' => 'bg-slate-500',  'dark' => 'dark:bg-slate-600',  'ring' => 'ring-slate-400/30'],
                 ['bg' => 'bg-violet-600', 'dark' => 'dark:bg-violet-700', 'ring' => 'ring-violet-500/30'],
                 ['bg' => 'bg-cyan-600',   'dark' => 'dark:bg-cyan-700',   'ring' => 'ring-cyan-500/30'],
             ];
         @endphp
-        <div class="grid grid-cols-2 sm:grid-cols-3 xl:grid-cols-6 gap-4">
+        <div class="grid grid-cols-2 sm:grid-cols-3 xl:grid-cols-7 gap-4">
             @foreach($stats as $i => $stat)
                 @php $cfg = $statConfig[$i] ?? $statConfig[0]; @endphp
                 <div class="flex flex-col justify-between rounded-2xl p-5 shadow-lg ring-1 {{ $cfg['bg'] }} {{ $cfg['dark'] }} {{ $cfg['ring'] }} text-white">
@@ -233,7 +234,7 @@
                             datasets: [
                                 {
                                     data: data.status?.counts ?? [],
-                                    backgroundColor: ['#10b981', '#f59e0b', '#ef4444', '#8b5cf6', '#3b82f6', '#06b6d4', '#f97316', '#d946ef'],
+                                    backgroundColor: ['#10b981', '#f59e0b', '#ef4444', '#64748b', '#8b5cf6', '#3b82f6', '#06b6d4', '#f97316', '#d946ef'],
                                     borderColor: 'transparent',
                                     hoverOffset: 12,
                                 },

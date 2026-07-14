@@ -18,6 +18,7 @@ class AuthServiceProvider extends ServiceProvider
     protected $policies = [
         Bus::class => BusPolicy::class,
         Markup::class => MarkupPolicy::class,
+        \App\Models\Event::class => \App\Policies\EventPolicy::class,
     ];
 
     /**

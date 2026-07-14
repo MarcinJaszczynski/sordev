@@ -130,10 +130,10 @@
                             {
                                 type: 'doughnut',
                                 data: {
-                                    labels: x.labels.map(l => @js(\App\Models\EventSettlementCost::$paymentStatuses)[l]),
+                                    labels: labels.map(l => @js(\App\Models\EventSettlementCost::$paymentStatuses)[l]),
                                     datasets: [{
-                                        data: x.data,
-                                        backgroundColor: x.colors,
+                                        data: data,
+                                        backgroundColor: colors,
                                         borderColor: '#ffffff'
                                     }]
                                 },
@@ -161,10 +161,10 @@
                             {
                                 type: 'bar',
                                 data: {
-                                    labels: x.labels,
+                                    labels: labels,
                                     datasets: [{
                                         label: 'Wartość (PLN)',
-                                        data: x.data,
+                                        data: data,
                                         backgroundColor: '#10b981',
                                         borderColor: '#059669',
                                         borderWidth: 1
@@ -195,10 +195,10 @@
                             {
                                 type: 'line',
                                 data: {
-                                    labels: x.labels,
+                                    labels: labels,
                                     datasets: [{
                                         label: 'Wydane (PLN)',
-                                        data: x.data,
+                                        data: data,
                                         borderColor: '#3b82f6',
                                         backgroundColor: 'rgba(59, 130, 246, 0.1)',
                                         tension: 0.4,
@@ -232,10 +232,10 @@
                             {
                                 type: 'pie',
                                 data: {
-                                    labels: x.labels,
+                                    labels: labels,
                                     datasets: [{
-                                        data: x.data,
-                                        backgroundColor: x.colors,
+                                        data: data,
+                                        backgroundColor: colors,
                                         borderColor: '#ffffff'
                                     }]
                                 },

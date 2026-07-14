@@ -12,9 +12,9 @@ class TaskStatusFactory extends Factory
     public function definition(): array
     {
         return [
-            'name'       => $this->faker->words(2, true),
-            'color'      => $this->faker->safeHexColor(),
-            'order'      => $this->faker->numberBetween(1, 10),
+            'name' => $this->faker->words(2, true),
+            'color' => $this->faker->safeHexColor(),
+            'order' => $this->faker->numberBetween(1, 10),
             'is_default' => false,
         ];
     }

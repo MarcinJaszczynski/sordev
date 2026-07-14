@@ -2,19 +2,38 @@
 
 namespace App\Services;
 
+use App\Filament\Pages\ClientInvoiceRequestsInboxPage;
+use App\Filament\Resources\EventResource;
+use App\Filament\Resources\TaskResource;
+use App\Models\ClientInvoiceRequest;
 use App\Models\Event;
 use App\Models\Task;
 use App\Models\TaskComment;
-use App\Models\TaskStatus;
 use App\Models\User;
+use App\Models\UserNotificationRead;
+use App\Support\Tasks\TaskNavigation;
+use App\Support\Tasks\TaskQueryFilters;
+use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\Cache;
+use Illuminate\Support\Facades\Schema;
 use Illuminate\Support\Str;
 
 class NotificationService
 {
+    public const TOPBAR_LIMIT_PER_TYPE = 15;
+
+    public const TOPBAR_COMBINED_LIMIT = 15;
+
+    public const TOPBAR_TASK_QUERY_LIMIT = 30;
+
     private static function userCanSeeAllEvents(User $user): bool
     {
         return $user->hasRole(['super_admin', 'admin']);
+    }
+
+    private static function userCanSeeInvoiceRequests(User $user): bool
+    {
+        return $user->hasRole(['super_admin', 'admin', 'biuro', 'ksiegowosc']);
     }
 
     private static function eventQueryForUser(User $user)
@@ -28,322 +47,575 @@ class NotificationService
         return $query;
     }
 
-    private static function buildEventIndexUrlWithStatus(string $status): string
+    private static function emptyTopbarPayload(): array
     {
-        return route('filament.admin.resources.events.index').'?tableFilters[status][value]='.urlencode($status);
+        return [
+            'counts' => [
+                'tasks' => 0,
+                'messages' => 0,
+                'comments' => 0,
+                'new_events' => 0,
+                'confirmed_events' => 0,
+                'pending_cancellation_events' => 0,
+                'invoice_requests' => 0,
+                'total_unread' => 0,
+            ],
+            'items' => [],
+            'items_by_type' => [
+                'task' => [],
+                'comment' => [],
+                'new_event' => [],
+                'event' => [],
+                'pending_cancellation_event' => [],
+                'invoice_request' => [],
+                'message' => [],
+            ],
+        ];
     }
 
     private static function formatEventNotification(Event $event, string $type, string $fallbackLabel): array
     {
         $startDate = $event->start_date ? $event->start_date->format('d.m.Y') : 'bez daty';
 
-        $url = match ($type) {
-            'new_event' => static::buildEventIndexUrlWithStatus(Event::STATUS_INQUIRY),
-            'event' => static::buildEventIndexUrlWithStatus(Event::STATUS_CONFIRMED),
-            'pending_cancellation_event' => static::buildEventIndexUrlWithStatus(Event::STATUS_PENDING_CANCELLATION),
-            default => route('filament.admin.resources.events.edit', ['record' => $event->id]),
-        };
-
         return [
             'type' => $type,
             'id' => (int) $event->id,
+            'revision' => (string) (optional($event->updated_at)?->timestamp ?? now()->timestamp),
             'title' => Str::limit($event->name ?? ('Impreza #'.$event->id), 60),
             'meta' => ($event->status_label ?: $fallbackLabel).' | Start: '.$startDate,
             'time' => optional($event->updated_at)->diffForHumans() ?? 'teraz',
-            'url' => $url,
+            'url' => EventResource::getUrl('edit', ['record' => $event->id]),
             'at' => optional($event->updated_at)?->timestamp ?? now()->timestamp,
+            'color' => match ($type) {
+                'new_event' => 'amber',
+                'pending_cancellation_event' => 'rose',
+                default => 'blue',
+            },
+        ];
+    }
+
+    private static function formatInsuranceAlertNotification(Event $event): array
+    {
+        $startDate = $event->start_date ? $event->start_date->format('d.m.Y') : 'bez daty';
+
+        return [
+            'type' => 'event',
+            'id' => (int) $event->id,
+            'revision' => (string) (optional($event->updated_at)?->timestamp ?? now()->timestamp),
+            'title' => 'Ubezpieczenie do domknięcia: '.Str::limit($event->name ?? ('Impreza #'.$event->id), 42),
+            'meta' => 'Brak kompletu danych/płatności ubezpieczenia | Start: '.$startDate,
+            'time' => optional($event->updated_at)->diffForHumans() ?? 'teraz',
+            'url' => EventResource::getUrl('edit', ['record' => $event->id]),
+            'at' => optional($event->updated_at)?->timestamp ?? now()->timestamp,
+            'color' => 'blue',
         ];
     }
 
     /**
-     * Pobiera liczbę nowych powiadomień dla użytkownika
+     * @param  array<string, mixed>  $item
+     * @return array<string, mixed>
      */
+    private static function finalizeItem(array $item, int $userId): array
+    {
+        if (! isset($item['revision']) && isset($item['at'])) {
+            $item['revision'] = (string) $item['at'];
+        }
+
+        unset($item['at']);
+        $item['fingerprint'] = UserNotificationRead::fingerprintFor($item);
+        $item['is_read'] = static::isRead($userId, $item['fingerprint']);
+
+        return $item;
+    }
+
+    /**
+     * @param  list<array<string, mixed>>  $items
+     * @return list<array<string, mixed>>
+     */
+    private static function finalizeItems(array $items, int $userId): array
+    {
+        return collect($items)
+            ->map(fn (array $item): array => static::finalizeItem($item, $userId))
+            ->values()
+            ->all();
+    }
+
+    /**
+     * @param  list<array<string, mixed>>  $items
+     */
+    private static function unreadOnly(array $items): Collection
+    {
+        return collect($items)->filter(fn (array $item): bool => ! ($item['is_read'] ?? false));
+    }
+
+    /**
+     * @param  list<array<string, mixed>>  $items
+     */
+    private static function unreadCount(array $items): int
+    {
+        return static::unreadOnly($items)->count();
+    }
+
+    /**
+     * @param  list<array<string, mixed>>  $items
+     * @return list<array<string, mixed>>
+     */
+    private static function sortNewestFirst(array $items): array
+    {
+        return collect($items)
+            ->sortByDesc(fn (array $item): int => (int) ($item['revision'] ?? 0))
+            ->values()
+            ->all();
+    }
+
+    /**
+     * @param  list<array<string, mixed>>  $items
+     * @return list<array<string, mixed>>
+     */
+    private static function unreadList(array $items, int $limit): array
+    {
+        return collect($items)
+            ->filter(fn (array $item): bool => ! ($item['is_read'] ?? false))
+            ->sortByDesc(fn (array $item): int => (int) ($item['revision'] ?? 0))
+            ->take($limit)
+            ->values()
+            ->all();
+    }
+
+    /**
+     * @return list<array<string, mixed>>
+     */
+    private static function taskNotificationsFor(User $user, int $queryLimit = 30): array
+    {
+        $query = Task::query();
+        TaskQueryFilters::officeOnly($query);
+        TaskQueryFilters::mine($query, $user->id);
+        TaskQueryFilters::excludeCompleted($query);
+        TaskQueryFilters::excludeArchived($query);
+
+        return $query
+            ->with('status')
+            ->orderByDesc('updated_at')
+            ->limit($queryLimit)
+            ->get()
+            ->map(function (Task $task): array {
+                $due = $task->due_date ? $task->due_date->format('d.m.Y H:i') : 'brak terminu';
+
+                return [
+                    'type' => 'task',
+                    'id' => (int) $task->id,
+                    'revision' => (string) ($task->updated_at?->timestamp ?? 0),
+                    'title' => Str::limit($task->title, 60),
+                    'meta' => 'Termin: '.$due.' | Status: '.($task->status->name ?? 'brak'),
+                    'time' => optional($task->updated_at)->diffForHumans() ?? 'teraz',
+                    'url' => TaskNavigation::fullViewUrl($task),
+                    'at' => optional($task->updated_at)?->timestamp ?? now()->timestamp,
+                    'color' => 'violet',
+                ];
+            })
+            ->all();
+    }
+
+    /**
+     * @return list<array<string, mixed>>
+     */
+    private static function commentNotificationsFor(User $user, int $queryLimit = 50): array
+    {
+        return TaskComment::query()
+            ->where('user_id', '!=', $user->id)
+            ->whereHas('task', function ($query) use ($user) {
+                TaskQueryFilters::officeOnly($query);
+                TaskQueryFilters::excludeArchived($query);
+                $query->where(function ($inner) use ($user) {
+                    $inner->where('assignee_id', $user->id)
+                        ->orWhere('author_id', $user->id);
+                });
+            })
+            ->with(['author:id,name', 'task:id,title,source,taskable_type,taskable_id'])
+            ->orderByDesc('created_at')
+            ->limit($queryLimit)
+            ->get()
+            ->map(function (TaskComment $comment): array {
+                $taskTitle = Str::limit($comment->task?->title ?? ('Zadanie #'.$comment->task_id), 40);
+
+                return [
+                    'type' => 'comment',
+                    'id' => (int) $comment->id,
+                    'task_id' => (int) $comment->task_id,
+                    'revision' => (string) ($comment->created_at?->timestamp ?? 0),
+                    'title' => 'Nowy komentarz: '.$taskTitle,
+                    'meta' => ($comment->author?->name ?? 'Użytkownik').': '.Str::limit($comment->content ?? '', 70),
+                    'time' => optional($comment->created_at)->diffForHumans() ?? 'teraz',
+                    'url' => $comment->task
+                        ? TaskNavigation::fullViewUrl($comment->task, TaskNavigation::commentsRelationManagerIndex())
+                        : TaskResource::getUrl('index'),
+                    'at' => optional($comment->created_at)?->timestamp ?? now()->timestamp,
+                    'color' => 'sky',
+                ];
+            })
+            ->all();
+    }
+
+    /**
+     * @return list<array<string, mixed>>
+     */
+    private static function eventNotificationsFor(User $user, string $status, string $type, string $label, int $queryLimit = 50): array
+    {
+        $orderColumn = $type === 'new_event' ? 'created_at' : 'updated_at';
+
+        return static::eventQueryForUser($user)
+            ->where('status', $status)
+            ->orderByDesc($orderColumn)
+            ->limit($queryLimit)
+            ->get()
+            ->map(fn (Event $event): array => static::formatEventNotification($event, $type, $label))
+            ->all();
+    }
+
+    /**
+     * @return list<array<string, mixed>>
+     */
+    private static function insuranceAlertNotificationsFor(User $user, int $queryLimit = 15): array
+    {
+        if (! Schema::hasColumn('events', 'insurance_status') || ! Schema::hasTable('event_day_insurance')) {
+            return [];
+        }
+
+        return static::eventQueryForUser($user)
+            ->whereIn('status', [Event::STATUS_CONFIRMED, Event::STATUS_TO_SETTLE])
+            ->whereHas('dayInsurances', fn ($query) => $query->whereNotNull('insurance_id'))
+            ->orderByDesc('updated_at')
+            ->limit($queryLimit)
+            ->get()
+            ->filter(fn (Event $event): bool => ! $event->isInsuranceCompleted())
+            ->map(fn (Event $event): array => static::formatInsuranceAlertNotification($event))
+            ->values()
+            ->all();
+    }
+
+    /**
+     * @return array{items: list<array<string, mixed>>, unread_messages: int}
+     */
+    private static function messageNotificationsFor(User $user, int $queryLimit = 20): array
+    {
+        $unreadMessagesCount = 0;
+        $conversationNotifications = [];
+
+        $userConversations = $user->conversations()->with(['lastMessage', 'participants'])->get();
+
+        foreach ($userConversations as $conversation) {
+            $lastReadAt = $conversation->pivot->last_read_at ?? $conversation->pivot->joined_at ?? now()->subWeek();
+            $unreadCount = $conversation->messages()
+                ->where('user_id', '!=', $user->id)
+                ->where('created_at', '>', $lastReadAt)
+                ->count();
+
+            if ($unreadCount > 0) {
+                $conversationNotifications[] = [
+                    'type' => 'message',
+                    'id' => (int) $conversation->id,
+                    'revision' => (string) (optional($conversation->last_message_at)?->timestamp ?? now()->timestamp),
+                    'title' => $conversation->getDisplayName($user),
+                    'meta' => $unreadCount.' nieprzeczytanych wiadomości',
+                    'time' => optional($conversation->last_message_at)->diffForHumans() ?? 'teraz',
+                    'url' => route('filament.admin.pages.chat'),
+                    'at' => optional($conversation->last_message_at)?->timestamp ?? now()->timestamp,
+                    'color' => 'blue',
+                ];
+            }
+
+            $unreadMessagesCount += $unreadCount;
+        }
+
+        return [
+            'items' => collect($conversationNotifications)
+                ->sortByDesc(fn (array $item) => $item['at'] ?? 0)
+                ->take($queryLimit)
+                ->values()
+                ->all(),
+            'unread_messages' => $unreadMessagesCount,
+        ];
+    }
+
+    /**
+     * @return list<array<string, mixed>>
+     */
+    private static function invoiceRequestNotificationsFor(User $user, int $queryLimit = 50): array
+    {
+        if (! static::userCanSeeInvoiceRequests($user) || ! Schema::hasTable('client_invoice_requests')) {
+            return [];
+        }
+
+        return ClientInvoiceRequest::query()
+            ->with(['event:id,name'])
+            ->where('status', ClientInvoiceRequest::STATUS_PENDING)
+            ->orderByDesc('created_at')
+            ->limit($queryLimit)
+            ->get()
+            ->map(function (ClientInvoiceRequest $request): array {
+                $eventName = $request->event?->name ?? ('Impreza #'.$request->event_id);
+
+                return [
+                    'type' => 'invoice_request',
+                    'id' => (int) $request->id,
+                    'revision' => (string) ($request->created_at?->timestamp ?? 0),
+                    'title' => Str::limit($request->company_name, 50),
+                    'meta' => 'NIP: '.$request->nip.' | '.$eventName,
+                    'time' => optional($request->created_at)->diffForHumans() ?? 'teraz',
+                    'url' => ClientInvoiceRequestsInboxPage::getUrl(['tableFilters' => ['status' => ['value' => ClientInvoiceRequest::STATUS_PENDING]]]),
+                    'at' => optional($request->created_at)?->timestamp ?? now()->timestamp,
+                    'color' => 'indigo',
+                ];
+            })
+            ->all();
+    }
+
     public static function getUnreadCountsForUser(int $userId): array
     {
         return static::getTopbarDataForUser($userId)['counts'];
     }
 
-    /**
-     * Zwraca dane do górnego paska powiadomień: liczniki + listę najważniejszych zdarzeń.
-     */
-    public static function getTopbarDataForUser(int $userId): array
+    public static function getTopbarDataForUser(int $userId, int $limitPerType = 4, int $combinedLimit = 10, int $taskQueryLimit = 30, bool $fresh = false): array
     {
-        $cacheKey = "user_notifications_{$userId}";
+        $cacheKey = "user_notifications_{$userId}_{$limitPerType}_{$combinedLimit}_{$taskQueryLimit}";
 
-        return Cache::remember($cacheKey, now()->addMinutes(2), function () use ($userId) {
-            $user = User::find($userId);
-
-            if (! $user) {
-                return [
-                    'counts' => [
-                        'tasks' => 0,
-                        'messages' => 0,
-                        'comments' => 0,
-                        'task_updates' => 0,
-                        'new_events' => 0,
-                        'confirmed_events' => 0,
-                        'pending_cancellation_events' => 0,
-                        'important' => 0,
-                    ],
-                    'items' => [],
-                    'items_by_type' => [
-                        'task' => [],
-                        'comment' => [],
-                        'new_event' => [],
-                        'event' => [],
-                        'pending_cancellation_event' => [],
-                        'message' => [],
-                    ],
-                ];
+        try {
+            if ($fresh) {
+                Cache::forget($cacheKey);
             }
 
-            $activeStatusIds = TaskStatus::query()
-                ->whereIn('name', ['Do zrobienia', 'W trakcie', 'Oczekuje na weryfikację'])
-                ->pluck('id');
+            return Cache::remember($cacheKey, now()->addSeconds(30), function () use ($userId, $limitPerType, $combinedLimit, $taskQueryLimit) {
+                $user = User::find($userId);
 
-            $myActiveTasks = Task::query()
-                ->where('assignee_id', $user->id)
-                ->whereIn('status_id', $activeStatusIds)
-                ->count();
-
-            $myAuthoredTasks = Task::query()
-                ->where('author_id', $user->id)
-                ->whereHas('status', function ($query) {
-                    $query->whereNotIn('name', ['Zakończone', 'Anulowane']);
-                })
-                ->count();
-
-            $taskUpdatesCount = Task::query()
-                ->where(function ($query) use ($user) {
-                    $query->where('assignee_id', $user->id)
-                        ->orWhere('author_id', $user->id);
-                })
-                ->where('updated_at', '>', now()->subDay())
-                ->count();
-
-            $confirmedEventsCount = static::eventQueryForUser($user)
-                ->where('status', Event::STATUS_CONFIRMED)
-                ->count();
-
-            $newEventsCount = static::eventQueryForUser($user)
-                ->where('status', Event::STATUS_INQUIRY)
-                ->count();
-
-            $pendingCancellationEventsCount = static::eventQueryForUser($user)
-                ->where('status', Event::STATUS_PENDING_CANCELLATION)
-                ->count();
-
-            $unreadMessagesCount = 0;
-            $conversationNotifications = [];
-
-            $userConversations = $user->conversations()->with(['lastMessage', 'participants'])->get();
-
-            foreach ($userConversations as $conversation) {
-                $lastReadAt = $conversation->pivot->last_read_at ?? $conversation->pivot->joined_at ?? now()->subWeek();
-                $unreadCount = $conversation->messages()
-                    ->where('user_id', '!=', $user->id)
-                    ->where('created_at', '>', $lastReadAt)
-                    ->count();
-
-                if ($unreadCount > 0) {
-                    $conversationNotifications[] = [
-                        'type' => 'message',
-                        'title' => $conversation->getDisplayName($user),
-                        'meta' => $unreadCount.' nieprzeczytanych wiadomosci',
-                        'time' => optional($conversation->last_message_at)->diffForHumans() ?? 'teraz',
-                        'url' => route('filament.admin.pages.chat'),
-                        'at' => optional($conversation->last_message_at)?->timestamp ?? now()->timestamp,
-                    ];
+                if (! $user) {
+                    return static::emptyTopbarPayload();
                 }
 
-                $unreadMessagesCount += $unreadCount;
+                $queryLimit = max($limitPerType, min(50, $combinedLimit));
+
+                $taskItems = static::finalizeItems(static::taskNotificationsFor($user, $taskQueryLimit), $userId);
+                $commentItems = static::finalizeItems(static::commentNotificationsFor($user, $queryLimit), $userId);
+                $newEventItems = static::finalizeItems(
+                    static::eventNotificationsFor($user, Event::STATUS_INQUIRY, 'new_event', 'Nowa impreza', $queryLimit),
+                    $userId,
+                );
+                $confirmedEventItems = static::finalizeItems(
+                    static::eventNotificationsFor($user, Event::STATUS_CONFIRMED, 'event', 'Nowe potwierdzenie', $queryLimit),
+                    $userId,
+                );
+                $pendingCancellationItems = static::finalizeItems(
+                    static::eventNotificationsFor($user, Event::STATUS_PENDING_CANCELLATION, 'pending_cancellation_event', 'Do anulacji', $queryLimit),
+                    $userId,
+                );
+                $insuranceItems = static::finalizeItems(static::insuranceAlertNotificationsFor($user), $userId);
+                $eventItems = static::sortNewestFirst(
+                    collect($confirmedEventItems)->merge($insuranceItems)->values()->all(),
+                );
+
+                $messageData = static::messageNotificationsFor($user, $queryLimit);
+                $messageItems = static::finalizeItems($messageData['items'], $userId);
+
+                $invoiceItems = static::finalizeItems(static::invoiceRequestNotificationsFor($user, $queryLimit), $userId);
+
+                $tasksCount = static::unreadCount($taskItems);
+                $commentsCount = static::unreadCount($commentItems);
+                $newEventsCount = static::unreadCount($newEventItems);
+                $confirmedEventsCount = static::unreadCount($eventItems);
+                $pendingCancellationEventsCount = static::unreadCount($pendingCancellationItems);
+                $invoiceRequestsCount = static::unreadCount($invoiceItems);
+                $unreadMessagesCount = (int) $messageData['unread_messages'];
+
+                $itemsByType = [
+                    'task' => static::unreadList($taskItems, $limitPerType),
+                    'comment' => static::unreadList($commentItems, $limitPerType),
+                    'new_event' => static::unreadList($newEventItems, $limitPerType),
+                    'event' => static::unreadList($eventItems, $limitPerType),
+                    'pending_cancellation_event' => static::unreadList($pendingCancellationItems, $limitPerType),
+                    'invoice_request' => static::unreadList($invoiceItems, $limitPerType),
+                    'message' => static::unreadList($messageItems, $limitPerType),
+                ];
+
+                $items = collect(array_merge(
+                    $itemsByType['comment'],
+                    $itemsByType['task'],
+                    $itemsByType['new_event'],
+                    $itemsByType['event'],
+                    $itemsByType['pending_cancellation_event'],
+                    $itemsByType['invoice_request'],
+                    $itemsByType['message'],
+                ))
+                    ->take($combinedLimit)
+                    ->values()
+                    ->all();
+
+                $totalUnread = $tasksCount
+                    + $commentsCount
+                    + $newEventsCount
+                    + $confirmedEventsCount
+                    + $pendingCancellationEventsCount
+                    + $invoiceRequestsCount
+                    + $unreadMessagesCount;
+
+                return [
+                    'counts' => [
+                        'tasks' => $tasksCount,
+                        'messages' => $unreadMessagesCount,
+                        'comments' => $commentsCount,
+                        'new_events' => $newEventsCount,
+                        'confirmed_events' => $confirmedEventsCount,
+                        'pending_cancellation_events' => $pendingCancellationEventsCount,
+                        'invoice_requests' => $invoiceRequestsCount,
+                        'total_unread' => $totalUnread,
+                    ],
+                    'items' => $items,
+                    'items_by_type' => $itemsByType,
+                ];
+            });
+        } catch (\Throwable $e) {
+            \Illuminate\Support\Facades\Log::warning('NotificationService::getTopbarDataForUser failed: '.$e->getMessage(), [
+                'user_id' => $userId,
+            ]);
+
+            return static::emptyTopbarPayload();
+        }
+    }
+
+    public static function markTaskAsRead(int $userId, Task $task): void
+    {
+        static::markAsRead($userId, UserNotificationRead::fingerprintFor([
+            'type' => 'task',
+            'id' => (int) $task->id,
+            'revision' => (string) ($task->updated_at?->timestamp ?? 0),
+        ]));
+    }
+
+    public static function markAsRead(int $userId, string $fingerprint): void
+    {
+        if (! Schema::hasTable('user_notification_reads') || $fingerprint === '') {
+            return;
+        }
+
+        UserNotificationRead::query()->updateOrCreate(
+            [
+                'user_id' => $userId,
+                'fingerprint' => $fingerprint,
+            ],
+            [
+                'read_at' => now(),
+            ],
+        );
+
+        static::clearCacheForUser($userId);
+    }
+
+    public static function isRead(int $userId, string $fingerprint): bool
+    {
+        if (! Schema::hasTable('user_notification_reads') || $fingerprint === '') {
+            return false;
+        }
+
+        return UserNotificationRead::query()
+            ->where('user_id', $userId)
+            ->where('fingerprint', $fingerprint)
+            ->exists();
+    }
+
+    /**
+     * @return array{counts: array<string, int>, items: list<array<string, mixed>>, type_labels: array<string, string>}
+     */
+    public static function getInboxDataForUser(int $userId, ?string $typeFilter = null, bool $unreadOnly = false): array
+    {
+        $data = static::getTopbarDataForUser($userId, 50, 200);
+
+        $items = collect();
+
+        foreach ($data['items_by_type'] as $type => $list) {
+            foreach ($list as $item) {
+                $items->push(array_merge(['type' => $type], $item));
+            }
+        }
+
+        if ($typeFilter && $typeFilter !== 'all') {
+            $items = $items->where('type', $typeFilter);
+        }
+
+        if ($unreadOnly) {
+            $items = $items->filter(fn (array $item): bool => ! ($item['is_read'] ?? false));
+        }
+
+        return [
+            'counts' => $data['counts'],
+            'items' => $items
+                ->sortByDesc(fn (array $item): int => (int) ($item['revision'] ?? 0))
+                ->values()
+                ->all(),
+            'type_labels' => static::inboxTypeLabels(),
+        ];
+    }
+
+    /**
+     * @return array<string, string>
+     */
+    public static function inboxTypeLabels(): array
+    {
+        return [
+            'all' => 'Wszystkie',
+            'task' => 'Zadania',
+            'comment' => 'Komentarze',
+            'new_event' => 'Nowe imprezy',
+            'event' => 'Nowe potwierdzenia',
+            'pending_cancellation_event' => 'Do anulacji',
+            'invoice_request' => 'Wnioski o fakturę',
+            'message' => 'Wiadomości',
+        ];
+    }
+
+    public static function markAllAsRead(int $userId): int
+    {
+        if (! Schema::hasTable('user_notification_reads')) {
+            return 0;
+        }
+
+        $data = static::getInboxDataForUser($userId);
+        $marked = 0;
+
+        foreach ($data['items'] as $item) {
+            $fingerprint = (string) ($item['fingerprint'] ?? '');
+
+            if ($fingerprint === '' || ($item['is_read'] ?? false)) {
+                continue;
             }
 
-            $taskNotifications = Task::query()
-                ->with('status')
-                ->where('assignee_id', $user->id)
-                ->whereIn('status_id', $activeStatusIds)
-                ->orderByRaw('due_date IS NULL, due_date ASC')
-                ->limit(4)
-                ->get()
-                ->map(function (Task $task): array {
-                    $due = $task->due_date ? $task->due_date->format('d.m.Y H:i') : 'brak terminu';
+            static::markAsRead($userId, $fingerprint);
+            $marked++;
+        }
 
-                    return [
-                        'type' => 'task',
-                        'title' => Str::limit($task->title, 60),
-                        'meta' => 'Termin: '.$due.' | Status: '.($task->status->name ?? 'brak'),
-                        'time' => optional($task->updated_at)->diffForHumans() ?? 'teraz',
-                        'url' => route('filament.admin.resources.tasks.edit', ['record' => $task->id]),
-                        'at' => optional($task->updated_at)?->timestamp ?? now()->timestamp,
-                    ];
-                })
-                ->all();
-
-            $eventNotifications = static::eventQueryForUser($user)
-                ->where('status', Event::STATUS_CONFIRMED)
-                ->orderByRaw('start_date IS NULL, start_date ASC')
-                ->limit(4)
-                ->get()
-                ->map(fn (Event $event): array => static::formatEventNotification($event, 'event', 'Impreza'))
-                ->all();
-
-            $newEventNotifications = static::eventQueryForUser($user)
-                ->where('status', Event::STATUS_INQUIRY)
-                ->orderByDesc('created_at')
-                ->limit(4)
-                ->get()
-                ->map(fn (Event $event): array => static::formatEventNotification($event, 'new_event', 'Nowa impreza'))
-                ->all();
-
-            $pendingCancellationEventNotifications = static::eventQueryForUser($user)
-                ->where('status', Event::STATUS_PENDING_CANCELLATION)
-                ->orderByDesc('updated_at')
-                ->limit(4)
-                ->get()
-                ->map(fn (Event $event): array => static::formatEventNotification($event, 'pending_cancellation_event', 'Do anulacji'))
-                ->all();
-
-            $commentNotifications = TaskComment::query()
-                ->where('user_id', '!=', $user->id)
-                ->where('created_at', '>', now()->subDays(14))
-                ->whereHas('task', function ($query) use ($user) {
-                    $query->where('assignee_id', $user->id)
-                        ->orWhere('author_id', $user->id);
-                })
-                ->with(['author:id,name', 'task:id,title'])
-                ->orderByDesc('created_at')
-                ->limit(6)
-                ->get()
-                ->map(function (TaskComment $comment): array {
-                    $taskTitle = Str::limit($comment->task?->title ?? ('Zadanie #'.$comment->task_id), 40);
-
-                    return [
-                        'type' => 'comment',
-                        'title' => 'Nowy komentarz: '.$taskTitle,
-                        'meta' => ($comment->author?->name ?? 'Użytkownik').': '.Str::limit($comment->content ?? '', 70),
-                        'time' => optional($comment->created_at)->diffForHumans() ?? 'teraz',
-                        'url' => $comment->task_id
-                            ? route('filament.admin.resources.tasks.edit', ['record' => $comment->task_id])
-                            : route('filament.admin.resources.tasks.index'),
-                        'at' => optional($comment->created_at)?->timestamp ?? now()->timestamp,
-                    ];
-                })
-                ->all();
-
-            $items = collect(array_merge(
-                $commentNotifications,
-                $taskNotifications,
-                $newEventNotifications,
-                $eventNotifications,
-                $pendingCancellationEventNotifications,
-                $conversationNotifications,
-            ))
-                ->sortByDesc(fn (array $item) => $item['at'] ?? 0)
-                ->take(10)
-                ->map(function (array $item): array {
-                    unset($item['at']);
-
-                    return $item;
-                })
-                ->values()
-                ->all();
-
-            $itemsByType = [
-                'task' => collect($taskNotifications)
-                    ->sortByDesc(fn (array $item) => $item['at'] ?? 0)
-                    ->take(10)
-                    ->map(function (array $item): array {
-                        unset($item['at']);
-
-                        return $item;
-                    })
-                    ->values()
-                    ->all(),
-                'comment' => collect($commentNotifications)
-                    ->sortByDesc(fn (array $item) => $item['at'] ?? 0)
-                    ->take(10)
-                    ->map(function (array $item): array {
-                        unset($item['at']);
-
-                        return $item;
-                    })
-                    ->values()
-                    ->all(),
-                'new_event' => collect($newEventNotifications)
-                    ->sortByDesc(fn (array $item) => $item['at'] ?? 0)
-                    ->take(10)
-                    ->map(function (array $item): array {
-                        unset($item['at']);
-
-                        return $item;
-                    })
-                    ->values()
-                    ->all(),
-                'event' => collect($eventNotifications)
-                    ->sortByDesc(fn (array $item) => $item['at'] ?? 0)
-                    ->take(10)
-                    ->map(function (array $item): array {
-                        unset($item['at']);
-
-                        return $item;
-                    })
-                    ->values()
-                    ->all(),
-                'pending_cancellation_event' => collect($pendingCancellationEventNotifications)
-                    ->sortByDesc(fn (array $item) => $item['at'] ?? 0)
-                    ->take(10)
-                    ->map(function (array $item): array {
-                        unset($item['at']);
-
-                        return $item;
-                    })
-                    ->values()
-                    ->all(),
-                'message' => collect($conversationNotifications)
-                    ->sortByDesc(fn (array $item) => $item['at'] ?? 0)
-                    ->take(10)
-                    ->map(function (array $item): array {
-                        unset($item['at']);
-
-                        return $item;
-                    })
-                    ->values()
-                    ->all(),
-            ];
-
-            $commentsCount = count($commentNotifications);
-
-            $newTasksCount = $myActiveTasks + $myAuthoredTasks;
-
-            return [
-                'counts' => [
-                    'tasks' => $newTasksCount,
-                    'messages' => $unreadMessagesCount,
-                    'comments' => $commentsCount,
-                    'task_updates' => $taskUpdatesCount,
-                    'new_events' => $newEventsCount,
-                    'confirmed_events' => $confirmedEventsCount,
-                    'pending_cancellation_events' => $pendingCancellationEventsCount,
-                    'important' => $newTasksCount + $newEventsCount + $confirmedEventsCount + $pendingCancellationEventsCount + $unreadMessagesCount + $commentsCount,
-                ],
-                'items' => $items,
-                'items_by_type' => $itemsByType,
-            ];
-        });
+        return $marked;
     }
 
-    /**
-     * Czyści cache powiadomień dla użytkownika
-     */
     public static function clearCacheForUser(int $userId): void
     {
-        Cache::forget("user_notifications_{$userId}");
+        foreach ([[4, 10, 30], [15, 15, 30], [50, 200, 30]] as [$perType, $combined, $taskQueryLimit]) {
+            Cache::forget("user_notifications_{$userId}_{$perType}_{$combined}_{$taskQueryLimit}");
+        }
+
+        foreach ([[4, 10], [15, 15], [50, 50], [50, 200]] as [$perType, $combined]) {
+            Cache::forget("user_notifications_{$userId}_{$perType}_{$combined}");
+        }
     }
 
-    /**
-     * Oznacza wiadomości jako przeczytane dla użytkownika w konwersacji
-     */
+    public static function clearCacheForFinanceUsers(): void
+    {
+        if (! Schema::hasTable('users')) {
+            return;
+        }
+
+        User::query()
+            ->whereHas('roles', fn ($query) => $query->whereIn('name', ['super_admin', 'admin', 'biuro', 'ksiegowosc']))
+            ->pluck('id')
+            ->each(fn (int $userId) => static::clearCacheForUser($userId));
+    }
+
     public static function markMessagesAsRead(int $userId, int $conversationId): void
     {
         $user = User::find($userId);

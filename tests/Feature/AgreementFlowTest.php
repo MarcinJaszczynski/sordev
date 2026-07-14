@@ -2,6 +2,7 @@
 
 namespace Tests\Feature;
 
+use App\Models\Contract;
 use App\Models\ContractTemplate;
 use App\Models\Currency;
 use App\Models\Event;
@@ -13,6 +14,7 @@ use App\Models\EventSettlementParticipantPayment;
 use App\Models\EventTemplate;
 use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Facades\Schema;
 use Tests\TestCase;
 
 class AgreementFlowTest extends TestCase
@@ -409,7 +411,7 @@ class AgreementFlowTest extends TestCase
         $this->assertSame(1000.0, (float) $agreement->amount_paid);
     }
 
-    private function createAgreement(array $overrides = []): EventAgreement
+    private function createAgreement(array $overrides = []): EventAgreement|Contract
     {
         $user = User::factory()->create();
         $this->actingAs($user);
@@ -438,7 +440,7 @@ class AgreementFlowTest extends TestCase
             'content' => "Umowa nr {{agreement_number}}\nKlient: {{customer_name}}\nKwota: {{amount_due}} {{currency}}",
         ]);
 
-        $agreement = EventAgreement::create(array_merge([
+        return $this->createAgreementRecord(array_merge([
             'event_id' => $event->id,
             'contract_template_id' => $contractTemplate->id,
             'title' => 'Umowa imprezy',
@@ -452,9 +454,45 @@ class AgreementFlowTest extends TestCase
             'amount_due' => 2500.00,
             'currency' => 'PLN',
             'created_by' => $user->id,
-        ], $overrides));
+        ], $overrides))->fresh();
+    }
 
-        return $agreement->fresh();
+    private function createAgreementRecord(array $attributes): EventAgreement|Contract
+    {
+        $model = Schema::hasTable('contracts') ? Contract::class : EventAgreement::class;
+
+        return $model::create($attributes);
+    }
+
+    /**
+     * @return \Illuminate\Database\Eloquent\Builder<Contract>|\Illuminate\Database\Eloquent\Builder<EventAgreement>
+     */
+    private function agreementQueryForEvent(int $eventId)
+    {
+        $model = Schema::hasTable('contracts') ? Contract::class : EventAgreement::class;
+
+        return $model::query()->where('event_id', $eventId);
+    }
+
+    public function test_public_contract_link_is_accessible_when_only_in_contracts_table(): void
+    {
+        $this->withoutMiddleware();
+
+        if (! Schema::hasTable('contracts')) {
+            $this->markTestSkipped('Tabela contracts nie istnieje w tym środowisku testowym.');
+        }
+
+        $agreement = $this->createAgreement([
+            'status' => 'sent',
+            'payment_status' => 'pending',
+        ]);
+
+        $this->assertInstanceOf(Contract::class, $agreement);
+        $this->assertSame(0, EventAgreement::where('public_token', $agreement->public_token)->count());
+
+        $response = $this->get(route('agreement.flow.show', ['token' => $agreement->public_token]));
+
+        $response->assertSuccessful();
     }
 
     public function test_individual_agreement_template_clones_for_each_participant(): void
@@ -485,7 +523,7 @@ class AgreementFlowTest extends TestCase
         ]);
 
         // Utwórz szablonową umowę indywidualną
-        $templateAgreement = EventAgreement::create([
+        $templateAgreement = $this->createAgreementRecord([
             'event_id' => $event->id,
             'contract_template_id' => $contractTemplate->id,
             'agreement_type' => EventAgreement::TYPE_INDIVIDUAL,
@@ -513,8 +551,8 @@ class AgreementFlowTest extends TestCase
         $this->assertEquals(302, $response1->getStatusCode()); // Redirect
 
         // W bazie są teraz dwie umowy: szablon + klon dla uczestnika 1
-        $this->assertEquals(2, EventAgreement::where('event_id', $event->id)->count());
-        $clone1 = EventAgreement::where('event_id', $event->id)
+        $this->assertEquals(2, $this->agreementQueryForEvent($event->id)->count());
+        $clone1 = $this->agreementQueryForEvent($event->id)
             ->where('status', 'draft')
             ->first();
 
@@ -529,9 +567,9 @@ class AgreementFlowTest extends TestCase
         $this->assertEquals(302, $response2->getStatusCode()); // Redirect
 
         // Teraz są trzy umowy: szablon + dwa klony
-        $this->assertEquals(3, EventAgreement::where('event_id', $event->id)->count());
+        $this->assertEquals(3, $this->agreementQueryForEvent($event->id)->count());
 
-        $clone2 = EventAgreement::where('event_id', $event->id)
+        $clone2 = $this->agreementQueryForEvent($event->id)
             ->where('status', 'draft')
             ->where('id', '!=', $clone1->id)
             ->first();
@@ -569,7 +607,7 @@ class AgreementFlowTest extends TestCase
             'content' => 'Test agreement body',
         ]);
 
-        $templateAgreement = EventAgreement::create([
+        $templateAgreement = $this->createAgreementRecord([
             'event_id' => $event->id,
             'contract_template_id' => $contractTemplate->id,
             'agreement_type' => EventAgreement::TYPE_INDIVIDUAL,
@@ -597,7 +635,7 @@ class AgreementFlowTest extends TestCase
         $this->get(route('agreement.flow.show', ['token' => $templateAgreement->public_token]))
             ->assertRedirect();
 
-        $clone = EventAgreement::where('event_id', $event->id)
+        $clone = $this->agreementQueryForEvent($event->id)
             ->where('status', 'draft')
             ->where('id', '!=', $templateAgreement->id)
             ->first();
@@ -622,7 +660,7 @@ class AgreementFlowTest extends TestCase
             'amount_paid' => 250.00,
         ]);
 
-        EventAgreement::create([
+        $this->createAgreementRecord([
             'event_id' => $agreement->event_id,
             'contract_template_id' => $agreement->contract_template_id,
             'agreement_type' => EventAgreement::TYPE_INDIVIDUAL,
@@ -646,7 +684,7 @@ class AgreementFlowTest extends TestCase
             'created_by' => $agreement->created_by,
         ]);
 
-        EventAgreement::create([
+        $this->createAgreementRecord([
             'event_id' => $agreement->event_id,
             'contract_template_id' => $agreement->contract_template_id,
             'agreement_type' => EventAgreement::TYPE_GROUP,
@@ -667,7 +705,7 @@ class AgreementFlowTest extends TestCase
             'created_by' => $agreement->created_by,
         ]);
 
-        EventAgreement::create([
+        $this->createAgreementRecord([
             'event_id' => $agreement->event_id,
             'contract_template_id' => $agreement->contract_template_id,
             'agreement_type' => EventAgreement::TYPE_INDIVIDUAL,

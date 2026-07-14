@@ -20,13 +20,16 @@ return new class extends Migration
             Schema::table('event_templates', function (Blueprint $table) {
                 try {
                     $table->dropForeign(['start_place_id']);
-                } catch (\Throwable $e) {}
+                } catch (\Throwable $e) {
+                }
                 try {
                     $table->dropForeign(['end_place_id']);
-                } catch (\Throwable $e) {}
+                } catch (\Throwable $e) {
+                }
                 try {
                     $table->dropColumn(['start_place_id', 'end_place_id']);
-                } catch (\Throwable $e) {}
+                } catch (\Throwable $e) {
+                }
             });
         }
     }

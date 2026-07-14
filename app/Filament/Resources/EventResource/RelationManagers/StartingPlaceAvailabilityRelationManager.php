@@ -18,10 +18,18 @@ class StartingPlaceAvailabilityRelationManager extends RelationManager
     public function form(\Filament\Forms\Form $form): \Filament\Forms\Form
     {
         return $form->schema([
-            Select::make('start_place_id')->label('Miejsce startu')->relationship('startPlace', 'name')->preload()->required(),
+            Select::make('start_place_id')
+                ->label('Miejsce startu')
+                ->relationship(
+                    'startPlace',
+                    'name',
+                    fn ($query) => $query->startingPlaces()->orderBy('name')
+                )
+                ->preload()
+                ->required(),
             Select::make('end_place_id')->label('Miejsce zakończenia')->relationship('endPlace', 'name')->preload()->required(),
             Toggle::make('available')->label('Dostępne')->default(true),
-            Forms\Components\RichEditor::make('note'),
+            \FilamentTiptapEditor\TiptapEditor::make('note'),
         ]);
     }
 

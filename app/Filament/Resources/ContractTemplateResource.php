@@ -4,7 +4,10 @@ namespace App\Filament\Resources;
 
 use App\Filament\Resources\ContractTemplateResource\Pages;
 use App\Models\ContractTemplate;
+use App\Services\ContractAttachmentCatalogService;
+use App\Support\FilamentNavigation;
 use Filament\Forms;
+use Filament\Notifications\Notification;
 use Filament\Resources\Resource;
 use Filament\Tables;
 use Illuminate\Database\Eloquent\Model;
@@ -27,7 +30,7 @@ class ContractTemplateResource extends Resource
 
     protected static ?string $navigationLabel = 'Szablony umów';
 
-    protected static ?string $navigationGroup = 'Ustawienia ogólne';
+    protected static ?string $navigationGroup = FilamentNavigation::GROUP_CONFIG;
 
     /**
      * Definicja formularza do edycji/dodawania szablonu umowy
@@ -43,6 +46,11 @@ class ContractTemplateResource extends Resource
                 ->rows(16)
                 ->required()
                 ->helperText('Dostępne znaczniki: [NUMER_UMOWY], [DATA_UMOWY], [TYP_UMOWY], [NAZWA_IMPREZY], [DATA_START], [DATA_KONIEC], [KWOTA], [WALUTA], [ZAMAWIAJACY_IMIE_NAZWISKO], [ZAMAWIAJACY_INSTYTUCJA], [ZAMAWIAJACY_ADRES], [ZAMAWIAJACY_EMAIL], [ZAMAWIAJACY_TELEFON], [OPIEKUN], [UCZESTNIK], [PODOPIECZNY], [DATA_URODZENIA], [DODATKOWE_UBEZPIECZENIE], [LINK_UMOWY].'),
+            Forms\Components\CheckboxList::make('default_attachments')
+                ->label('Domyślne załączniki dla tego szablonu')
+                ->options(fn (): array => app(ContractAttachmentCatalogService::class)->getOptions())
+                ->columns(1)
+                ->helperText('Po wybraniu tego szablonu przy tworzeniu umowy te pliki będą domyślnie zaznaczone. Puste pole oznacza użycie ustawień globalnych.'),
         ]);
     }
 
@@ -54,6 +62,11 @@ class ContractTemplateResource extends Resource
         return $table
             ->columns([
                 Tables\Columns\TextColumn::make('name')->label('Nazwa'),
+                Tables\Columns\TextColumn::make('default_attachments')
+                    ->label('Domyślne załączniki')
+                    ->formatStateUsing(fn (?array $state): string => filled($state) ? (string) count($state) : 'Globalne')
+                    ->badge()
+                    ->color(fn (?array $state): string => filled($state) ? 'success' : 'gray'),
                 Tables\Columns\TextColumn::make('updated_at')->label('Ostatnia edycja')->dateTime('d.m.Y H:i'),
             ])
             ->actions([
@@ -61,6 +74,29 @@ class ContractTemplateResource extends Resource
                 Tables\Actions\DeleteAction::make(),
             ])
             ->headerActions([
+                Tables\Actions\Action::make('global_attachment_defaults')
+                    ->label('Domyślne załączniki globalne')
+                    ->icon('heroicon-o-paper-clip')
+                    ->form([
+                        Forms\Components\CheckboxList::make('default_attachments')
+                            ->label('Załączniki zaznaczane przy nowej umowie')
+                            ->options(fn (): array => app(ContractAttachmentCatalogService::class)->getOptions())
+                            ->columns(1)
+                            ->helperText('Te pliki będą domyślnie zaznaczone, gdy szablon nie ma własnej listy załączników.'),
+                    ])
+                    ->fillForm(fn (): array => [
+                        'default_attachments' => app(ContractAttachmentCatalogService::class)->resolveDefaultSelectedPaths(),
+                    ])
+                    ->action(function (array $data): void {
+                        app(ContractAttachmentCatalogService::class)->saveGlobalDefaults(
+                            array_values((array) ($data['default_attachments'] ?? [])),
+                        );
+
+                        Notification::make()
+                            ->title('Zapisano domyślne załączniki globalne')
+                            ->success()
+                            ->send();
+                    }),
                 Tables\Actions\CreateAction::make(),
             ]);
     }

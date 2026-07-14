@@ -144,7 +144,7 @@ class PilotCashRelationManager extends RelationManager
                         ->label('Data rozliczenia')
                         ->nullable(),
 
-                    Forms\Components\RichEditor::make('notes'),
+                    \FilamentTiptapEditor\TiptapEditor::make('notes'),
                 ]),
         ]);
     }
@@ -250,7 +250,7 @@ class PilotCashRelationManager extends RelationManager
             ])
             ->headerActions([
                 Tables\Actions\CreateAction::make()
-                    ->label('Dodaj walutę pilota')
+                    ->label('Dodaj walutę')
                     ->after(fn () => $this->dispatchSettlementDataChanged()),
             ])
             ->actions([
@@ -351,7 +351,7 @@ class PilotCashRelationManager extends RelationManager
                     ->icon('heroicon-o-x-circle')
                     ->color('danger')
                     ->form([
-                        Forms\Components\RichEditor::make('notes')
+                        \FilamentTiptapEditor\TiptapEditor::make('notes')
                             ->required(),
                     ])
                     ->action(function (PilotCashPreparation $record, array $data) {

@@ -1,0 +1,314 @@
+<?php
+
+namespace App\Services;
+
+use App\Models\Contact;
+use App\Models\Contractor;
+use App\Models\Event;
+use Illuminate\Support\Facades\Schema;
+
+class EventOrderingPartyService
+{
+    /**
+     * @return array<int, array{contact_id: int|null, contractor_id: int|null, department_label: string|null}>
+     */
+    public function partiesToFormState(Event $event): array
+    {
+        if (! Schema::hasTable('event_contractor')) {
+            return [];
+        }
+
+        $event->loadMissing('orderingContractors');
+
+        if ($event->orderingContractors->isNotEmpty()) {
+            return $event->orderingContractors
+                ->map(fn (Contractor $contractor): array => [
+                    'contact_id' => Schema::hasColumn('event_contractor', 'contact_id')
+                        ? ($contractor->pivot->contact_id ? (int) $contractor->pivot->contact_id : null)
+                        : null,
+                    'contractor_id' => (int) $contractor->id,
+                    'department_label' => Schema::hasColumn('event_contractor', 'department_label')
+                        ? ($contractor->pivot->department_label ?: null)
+                        : null,
+                ])
+                ->values()
+                ->all();
+        }
+
+        if (filled($event->client_name)) {
+            return [[
+                'contact_id' => null,
+                'contractor_id' => $event->contractor_id ? (int) $event->contractor_id : null,
+                'department_label' => null,
+            ]];
+        }
+
+        return [];
+    }
+
+    /**
+     * @param  array<int, array<string, mixed>>|null  $parties
+     */
+    public function syncForEvent(Event $event, ?array $parties): void
+    {
+        if (! Schema::hasTable('event_contractor')) {
+            return;
+        }
+
+        $normalized = $this->normalizeParties($parties);
+
+        app(ContactContractorLinkService::class)->linkParties($normalized);
+
+        $event->orderingContractors()->detach();
+
+        foreach ($normalized as $index => $party) {
+            $pivot = ['sort_order' => $index + 1];
+
+            if (Schema::hasColumn('event_contractor', 'contact_id')) {
+                $pivot['contact_id'] = $party['contact_id'];
+            }
+
+            if (Schema::hasColumn('event_contractor', 'department_label')) {
+                $pivot['department_label'] = $party['department_label'];
+            }
+
+            $event->orderingContractors()->attach($party['contractor_id'], $pivot);
+        }
+
+        $event->syncPrimaryClientFromOrderingParties();
+    }
+
+    /**
+     * @return array<int, string>
+     */
+    public function contactOptions(string $search = ''): array
+    {
+        if (! Schema::hasTable('contacts')) {
+            return [];
+        }
+
+        $query = Contact::query()->orderBy('last_name')->orderBy('first_name');
+
+        if ($search !== '') {
+            $query->where(function ($builder) use ($search): void {
+                $builder
+                    ->where('first_name', 'like', '%'.$search.'%')
+                    ->orWhere('last_name', 'like', '%'.$search.'%')
+                    ->orWhere('email', 'like', '%'.$search.'%')
+                    ->orWhere('phone', 'like', '%'.$search.'%');
+            });
+        }
+
+        return $query
+            ->limit(50)
+            ->get()
+            ->mapWithKeys(fn (Contact $contact): array => [
+                $contact->id => $this->formatContactLabel($contact),
+            ])
+            ->all();
+    }
+
+    /**
+     * @return array<int, string>
+     */
+    public function contractorOptionsForContact(?int $contactId, string $search = ''): array
+    {
+        $query = Contractor::query()->orderBy('name');
+
+        if ($contactId && Contractor::hasContactPivotTable()) {
+            $linkedIds = Contact::query()
+                ->whereKey($contactId)
+                ->first()
+                ?->contractors()
+                ->pluck('contractors.id') ?? collect();
+
+            if ($linkedIds->isNotEmpty()) {
+                $query->whereIn('id', $linkedIds);
+            }
+        }
+
+        if ($search !== '') {
+            $query->where(function ($builder) use ($search): void {
+                $builder
+                    ->where('name', 'like', '%'.$search.'%')
+                    ->orWhere('nip', 'like', '%'.$search.'%')
+                    ->orWhere('city', 'like', '%'.$search.'%')
+                    ->orWhere('email', 'like', '%'.$search.'%')
+                    ->orWhere('phone', 'like', '%'.$search.'%');
+            });
+        }
+
+        return $query
+            ->limit(50)
+            ->get()
+            ->mapWithKeys(fn (Contractor $contractor): array => [
+                $contractor->id => $this->formatContractorLabel($contractor),
+            ])
+            ->all();
+    }
+
+    public function createContact(array $data, ?int $contractorId = null): int
+    {
+        $contact = Contact::create([
+            'first_name' => $data['first_name'],
+            'last_name' => $data['last_name'],
+            'phone' => $data['phone'] ?? null,
+            'email' => $data['email'] ?? null,
+            'notes' => $data['notes'] ?? null,
+        ]);
+
+        app(ContactContractorLinkService::class)->link((int) $contact->id, $contractorId);
+
+        return (int) $contact->id;
+    }
+
+    public function formatPartyLabel(?int $contactId, ?int $contractorId, ?string $departmentLabel = null): string
+    {
+        $contact = $contactId ? Contact::find($contactId) : null;
+        $contractor = $contractorId ? Contractor::find($contractorId) : null;
+
+        return $this->formatPartyLabelFromModels($contact, $contractor, $departmentLabel);
+    }
+
+    public function formatPartyLabelFromModels(?Contact $contact, ?Contractor $contractor, ?string $departmentLabel = null): string
+    {
+        $parts = [];
+
+        if ($contact) {
+            $parts[] = $contact->displayName();
+        }
+
+        if (filled($departmentLabel)) {
+            $parts[] = (string) $departmentLabel;
+        }
+
+        if ($contractor) {
+            $parts[] = $contractor->name;
+        }
+
+        return $parts !== [] ? implode(' · ', $parts) : 'Nowy zamawiający';
+    }
+
+    /**
+     * @param  array<int, array<string, mixed>>|null  $parties
+     * @return array<int, array{contact_id: int|null, contractor_id: int, department_label: string|null}>
+     */
+    public function normalizeParties(?array $parties): array
+    {
+        return collect($parties ?? [])
+            ->map(function (array $party): ?array {
+                $contractorId = isset($party['contractor_id']) ? (int) $party['contractor_id'] : null;
+
+                if (! $contractorId) {
+                    return null;
+                }
+
+                return [
+                    'contact_id' => filled($party['contact_id'] ?? null) ? (int) $party['contact_id'] : null,
+                    'contractor_id' => $contractorId,
+                    'department_label' => filled($party['department_label'] ?? null)
+                        ? trim((string) $party['department_label'])
+                        : null,
+                ];
+            })
+            ->filter()
+            ->values()
+            ->all();
+    }
+
+    /**
+     * Walidacja przy tworzeniu imprezy: zamawiający z lifesearcha lub ręcznie z telefonem / e-mailem.
+     *
+     * @param  array<int, array<string, mixed>>|null  $parties
+     * @return array<string, string>
+     */
+    public function validateForEventCreation(
+        ?array $parties,
+        ?string $clientName,
+        ?string $clientPhone,
+        ?string $clientEmail,
+    ): array {
+        $errors = [];
+        $normalized = $this->normalizeParties($parties);
+
+        if ($normalized === []) {
+            $errors['ordering_parties'] = 'Wybierz zamawiającego z wyszukiwarki lub użyj szybkiego wprowadzenia.';
+        }
+
+        if (blank($clientName)) {
+            $errors['client_name'] = 'Podaj dane zamawiającego przed zapisem imprezy.';
+        }
+
+        $phone = trim((string) ($clientPhone ?? ''));
+        $email = trim((string) ($clientEmail ?? ''));
+
+        if ($phone === '' && $email === '') {
+            $errors['client_contact'] = 'Podaj telefon lub e-mail zamawiającego.';
+        }
+
+        return $errors;
+    }
+
+    /**
+     * @param  array<int, array<string, mixed>>|null  $parties
+     */
+    public function primaryClientAttributes(?array $parties): array
+    {
+        $first = $this->normalizeParties($parties)[0] ?? null;
+
+        if (! $first) {
+            return [];
+        }
+
+        $contractor = Contractor::find($first['contractor_id']);
+        $contact = $first['contact_id'] ? Contact::find($first['contact_id']) : null;
+
+        if (! $contractor && ! $contact) {
+            return [];
+        }
+
+        $companyName = $contractor?->name ?? '';
+        $department = $first['department_label'];
+
+        $clientName = match (true) {
+            $contact && filled($department) => $contact->displayName().' · '.$department.' ('.$companyName.')',
+            $contact && filled($companyName) => $contact->displayName().' · '.$companyName,
+            $contact => $contact->displayName(),
+            filled($department) && filled($companyName) => $department.' · '.$companyName,
+            default => $companyName,
+        };
+
+        $payload = [
+            'client_name' => $clientName,
+            'client_email' => $contact?->email ?? $contractor?->email,
+            'client_phone' => $contact?->phone ?? $contractor?->phone,
+        ];
+
+        if (Schema::hasColumn('events', 'contractor_id') && $contractor) {
+            $payload['contractor_id'] = $contractor->id;
+        }
+
+        return $payload;
+    }
+
+    public function formatContactLabel(Contact $contact): string
+    {
+        $details = collect([$contact->phone, $contact->email])
+            ->filter()
+            ->map(fn ($value): string => trim((string) $value))
+            ->implode(' · ');
+
+        return $details !== ''
+            ? $contact->displayName().' · '.$details
+            : $contact->displayName();
+    }
+
+    public function formatContractorLabel(Contractor $contractor): string
+    {
+        $details = collect(\App\Support\ContractorContactDetails::displayLines($contractor))->implode(' · ');
+
+        return $details !== ''
+            ? $contractor->displayLabel().' · '.$details
+            : $contractor->displayLabel();
+    }
+}

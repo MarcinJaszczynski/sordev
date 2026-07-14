@@ -193,8 +193,8 @@
                         <div class="card-wrapper">
                             @foreach($chunk as $item)
                                 <div class="card">
-                                    <div class="image-wrapper">
-                                        <img src="{{ $item->preview_image_url ?: asset('uploads/default.png') }}" class="card-img-top" alt="{{ $item->name }}" loading="lazy" decoding="async" onerror="this.onerror=null;this.src='{{ $item->full_image_url ?: asset('uploads/default.png') }}';">
+                                    <div class="image-wrapper" style="width: 100%; aspect-ratio: 4 / 3; overflow: hidden;">
+                                        <img src="{{ $item->preview_image_url ?: asset('uploads/default.png') }}" class="card-img-top" alt="{{ $item->name }}" style="width: 100%; height: 100%; object-fit: cover; object-position: center; display: block;" loading="lazy" decoding="async" onerror="this.onerror=null;this.src='{{ $item->full_image_url ?: asset('uploads/default.png') }}';">
                                     </div>
                                     <div class="card-body">
                                         <h5 class="card-title">{{ $item->name }}</h5>

@@ -167,14 +167,15 @@ npm install
 ### 2. Problemy z Kompresją
 ```bash
 # Sprawdź czy pliki .gz/.br są generowane
-ls -la public/build/assets/
+ls -la public/vite-dist/assets/
 
 # Sprawdź headers w przeglądarce
 curl -H "Accept-Encoding: gzip,br" -I http://twoja-domena.com/build/assets/app.js
 ```
 
 ### 3. Filament nie ładuje się
-- Sprawdź czy `buildDirectory: 'build'` jest ustawione w vite.config.js
+- Sprawdź czy `buildDirectory: 'vite-dist'` jest ustawione w vite.config.js
+- Manifest: `public/vite-dist/manifest.json` (po `npm run build`)
 - Upewnij się że `@vite` direktywy są w blade templates
 
 ## Monitoring

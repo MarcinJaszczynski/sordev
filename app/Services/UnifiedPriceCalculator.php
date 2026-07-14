@@ -266,17 +266,7 @@ class UnifiedPriceCalculator
      */
     public function recalculateForTemplate(EventTemplate $template, bool $deleteExisting = false): void
     {
-        $availability = EventTemplateStartingPlaceAvailability::where('event_template_id', $template->id)
-            ->where('available', true)
-            ->pluck('start_place_id')
-            ->filter()
-            ->unique()
-            ->values();
-
-        if ($availability->isEmpty()) {
-            // fallback: wszystkie starting places
-            $availability = \App\Models\Place::where('starting_place', true)->pluck('id');
-        }
+        $availability = $template->resolveAvailableStartPlaceIds();
 
         foreach ($availability as $spid) {
             $this->calculateAndPersist($template, (int) $spid, $deleteExisting);

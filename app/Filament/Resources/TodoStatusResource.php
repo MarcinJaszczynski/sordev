@@ -4,6 +4,7 @@ namespace App\Filament\Resources;
 
 use App\Filament\Resources\TodoStatusResource\Pages;
 use App\Models\TodoStatus;
+use App\Support\FilamentNavigation;
 use Filament\Forms;
 use Filament\Forms\Form;
 use Filament\Resources\Resource;
@@ -29,11 +30,16 @@ class TodoStatusResource extends Resource
 
     protected static ?string $navigationLabel = 'Statusy zadań';
 
-    protected static ?string $navigationGroup = 'Ustawienia ogólne';
+    protected static ?string $navigationGroup = FilamentNavigation::GROUP_CONFIG;
 
     protected static ?string $modelLabel = 'status zadania';
 
     protected static ?string $pluralModelLabel = 'statusy zadań';
+
+    public static function shouldRegisterNavigation(): bool
+    {
+        return false;
+    }
 
     /**
      * Zwraca etykietę pojedynczą modelu

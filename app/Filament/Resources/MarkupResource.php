@@ -4,6 +4,7 @@ namespace App\Filament\Resources;
 
 use App\Filament\Resources\MarkupResource\Pages;
 use App\Models\Markup;
+use App\Support\FilamentNavigation;
 use Filament\Forms;
 use Filament\Forms\Form;
 use Filament\Resources\Resource;
@@ -18,7 +19,7 @@ class MarkupResource extends Resource
 
     protected static ?string $navigationLabel = 'Narzuty';
 
-    protected static ?string $navigationGroup = 'Ustawienia kalkulacji';
+    protected static ?string $navigationGroup = FilamentNavigation::GROUP_CONFIG;
 
     public static function form(Form $form): Form
     {
@@ -42,7 +43,7 @@ class MarkupResource extends Resource
                         Forms\Components\Toggle::make('is_default')
                             ->label('Domyślny narzut')
                             ->inline(false),
-                        Forms\Components\RichEditor::make('description')
+                        \FilamentTiptapEditor\TiptapEditor::make('description')
                             ->columnSpanFull(),
                     ]),
 

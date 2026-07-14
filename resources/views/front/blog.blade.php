@@ -79,7 +79,7 @@
                                     </div>
                                     <div class="card-body p-3">
                                         <h5 class="card-title mb-2">{{ $post->title }}</h5>
-                                        <p class="card-text text-muted small mb-3">{{ $post->excerpt ?: Str::limit(strip_tags($post->content), 120) }}</p>
+                                        <p class="card-text text-muted small mb-3">{{ $post->excerpt ?: \Illuminate\Support\Str::limit(strip_tags($post->content), 120) }}</p>
                                         <div class="d-flex justify-content-between align-items-center pt-2 border-top">
                                             <small class="text-muted">
                                                 <i class="far fa-calendar-alt me-1"></i>

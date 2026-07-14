@@ -5,6 +5,7 @@ namespace App\Filament\Resources;
 use App\Filament\Resources\DocumentResource\Pages;
 use App\Filament\Resources\DocumentResource\RelationManagers;
 use App\Models\Document;
+use App\Support\FilamentNavigation;
 use Filament\Forms;
 use Filament\Forms\Form;
 use Filament\Resources\Resource;
@@ -21,7 +22,7 @@ class DocumentResource extends Resource
 
     protected static ?string $navigationLabel = 'Dokumenty';
 
-    protected static ?string $navigationGroup = 'Narzędzia';
+    protected static ?string $navigationGroup = FilamentNavigation::GROUP_SYSTEM;
 
     protected static ?int $navigationSort = 20;
 
@@ -36,7 +37,7 @@ class DocumentResource extends Resource
             Forms\Components\TextInput::make('title')->required()->maxLength(255),
             Forms\Components\TextInput::make('slug')->required()->maxLength(255),
             Forms\Components\Textarea::make('excerpt')->rows(3),
-            Forms\Components\RichEditor::make('content')->label('Treść'),
+            \FilamentTiptapEditor\TiptapEditor::make('content')->label('Treść'),
             Forms\Components\Toggle::make('is_published')->label('Opublikowany')->default(true),
             Forms\Components\TextInput::make('order_number')->label('Kolejność')->numeric()->default(0),
         ]);

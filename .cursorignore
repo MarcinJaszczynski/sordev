@@ -1,0 +1,25 @@
+# Zależności i build — nie indeksuj w Cursor
+vendor/
+node_modules/
+public/build/
+public/dist-front/
+public/hot
+public/storage/
+
+# Runtime Laravel
+storage/
+bootstrap/cache/
+
+# Cache testów i raporty
+.phpunit.result.cache
+database/merge_reports/
+
+# Plany i transkrypty agenta (historia, nie kontekst roboczy)
+.cursor/plans/
+agent-transcripts/
+
+# Duże artefakty lokalne
+*.sql
+*.sql.gz
+*.zip
+*.tar.gz

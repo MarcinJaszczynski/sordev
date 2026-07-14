@@ -2,6 +2,7 @@
 
 namespace App\Filament\Resources\EventTemplateResource\RelationManagers;
 
+use App\Support\FilamentNavigation;
 use Filament\Forms;
 use Filament\Resources\RelationManagers\RelationManager;
 use Filament\Tables;
@@ -19,7 +20,7 @@ class QtyVariantsRelationManager extends RelationManager
 
     protected static ?string $navigationLabel = 'Warianty ilości uczestników';
 
-    protected static ?string $navigationGroup = 'Ustawienia';
+    protected static ?string $navigationGroup = FilamentNavigation::GROUP_CONFIG;
 
     public static function getTitle(\Illuminate\Database\Eloquent\Model $ownerRecord, string $pageClass): string
     {

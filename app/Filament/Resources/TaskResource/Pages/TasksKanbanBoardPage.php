@@ -2,6 +2,10 @@
 
 namespace App\Filament\Resources\TaskResource\Pages;
 
+use App\Enums\TaskPriority;
+use App\Filament\Concerns\InteractsWithTaskEditModal;
+use App\Filament\Concerns\InteractsWithTaskOwnershipScope;
+use App\Filament\Concerns\MarksTaskInboxAsSeen;
 use App\Filament\Resources\ContractorResource;
 use App\Filament\Resources\EventResource;
 use App\Filament\Resources\EventSettlementResource;
@@ -20,115 +24,141 @@ use App\Models\EventTemplateProgramPoint;
 use App\Models\PilotCashPreparation;
 use App\Models\Task;
 use App\Models\TaskStatus;
-use App\Models\TaskComment;
 use App\Models\User;
 use Filament\Actions;
-use Filament\Forms\Components\DateTimePicker;
-use Filament\Forms\Components\Select;
-use Filament\Forms\Components\TextInput;
-use Filament\Forms\Components\Textarea;
+use Filament\Forms\Concerns\InteractsWithForms;
+use Filament\Forms\Contracts\HasForms;
+use Filament\Notifications\Notification;
 use Filament\Resources\Pages\Page;
+use App\Support\Tasks\TaskAuthorization;
+use App\Support\Tasks\TaskQueryFilters;
 use Illuminate\Support\Arr;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Validation\Rule;
-use Filament\Notifications\Notification;
 use Livewire\Attributes\Computed;
-use Filament\Forms\Concerns\InteractsWithForms;
-use Filament\Forms\Contracts\HasForms;
-use Filament\Forms\Form;
 
 class TasksKanbanBoardPage extends Page implements HasForms
 {
     use InteractsWithForms;
+    use InteractsWithTaskEditModal;
+    use InteractsWithTaskOwnershipScope;
+    use MarksTaskInboxAsSeen;
 
     protected static string $resource = TaskResource::class;
+
     protected static string $view = 'filament.resources.task-resource.pages.tasks-kanban-board-page';
-    protected static ?string $slug = '/';
+
+    protected static ?string $slug = 'board';
+
     protected static ?string $title = 'Kanban - Zarządzanie zadaniami';
+
     protected ?string $maxContentWidth = 'full';
 
     // Właściwości filtrowania
-    public $filterBy = '';
     public $priorityFilter = '';
+
     public $contextFilter = '';
+
     public $searchTerm = '';
+
     public $dueFilter = '';
-    
+
+    public bool $showFinishedTasks = false;
+
+    public ?int $eventFilter = null;
+
     // Sortowanie kolumn
     public $columnSorts = [];
 
-    // Modal editing
-    public $editingTask = null;
-    public $editModalData = [];
+    // Ukryte kolumny (tablica ID statusów)
+    public array $hiddenColumns = [];
 
-    // Modal states for additional features
-    public $showingSubtasks = false;
-    public $showingComments = false;
-    public $showingAttachments = false;
-    public $currentTaskForDetails = null;
-    public $newComment = '';
-    public $newSubtaskTitle = '';
-    public $newSubtaskAssigneeId = null;
-    
     // Quick add task
     public $showingQuickAdd = false;
-    public $quickAddStatusId = null;
-    public $quickTaskTitle = '';
-    public $quickTaskDescription = '';
-    public $quickTaskPriority = 'medium';
-    public $quickTaskAssigneeId = null;
-    public $quickTaskDueDate = null;
-    public $quickTaskableType = null;
-    public $quickTaskableId = null;
 
-    // --- Subtask editing ---
-    public $editingSubtask = false;
-    public $editSubtaskId = null;
-    public $editSubtaskData = [
-        'title' => '',
-        'description' => '',
-        'priority' => 'medium',
-        'assignee_id' => null,
-        'status_id' => null,
-        'due_date' => null,
-    ];
+    public $quickAddStatusId = null;
+
+    public $quickTaskTitle = '';
+
+    public $quickTaskDescription = '';
+
+    public $quickTaskPriority = 'normal';
+
+    public $quickTaskAssigneeId = null;
+
+    public $quickTaskDueDate = null;
+
+    public $quickTaskableType = null;
+
+    public $quickTaskableId = null;
 
     public function mount(): void
     {
         static::authorizeResourceAccess();
+
+        $this->eventFilter = request()->integer('event') ?: null;
+
+        if ($this->eventFilter) {
+            $this->quickTaskableType = Event::class;
+            $this->quickTaskableId = $this->eventFilter;
+        }
+
+        $this->mountInteractsWithTaskEditModal();
     }
 
     protected function getHeaderActions(): array
     {
-        return [
-            Actions\Action::make('create')
-                ->label('Dodaj zadanie')
-                ->icon('heroicon-m-plus')
-                ->color('primary')
-                ->url(TaskResource::getUrl('create')),
-            
-            Actions\Action::make('refresh')
-                ->label('Odśwież')
-                ->icon('heroicon-m-arrow-path')
+        $actions = [];
+
+        if ($this->eventFilter) {
+            $actions[] = Actions\Action::make('back_to_event_tasks')
+                ->label('Zadania imprezy')
+                ->icon('heroicon-m-arrow-left')
                 ->color('gray')
-                ->action(fn () => $this->refreshBoard()),
-        ];
+                ->url(EventResource::getUrl('tasks', ['record' => $this->eventFilter]));
+        }
+
+        $actions[] = Actions\Action::make('list')
+            ->label('Widok Listy')
+            ->icon('heroicon-m-list-bullet')
+            ->color('gray')
+            ->url(TaskResource::getUrl('index'));
+
+        $actions[] = $this->makeCreateTaskAction(
+            defaultFormData: fn (): array => $this->eventFilter
+                ? ['taskable_type' => Event::class, 'taskable_id' => $this->eventFilter]
+                : [],
+        );
+
+        return $actions;
+    }
+
+    protected function afterTaskModalSaved(Task $task): void
+    {
+        unset($this->tasks);
     }
 
     #[Computed]
     public function tasks()
     {
         $query = Task::query()
-            ->with(['status', 'assignee', 'author', 'subtasks', 'attachments', 'comments.author', 'taskable']);
+            ->with(['status', 'assignee', 'author', 'parent', 'subtasks', 'attachments', 'comments.author', 'taskable']);
 
-        // Apply filters
-        if ($this->filterBy === 'author') {
-            $query->where('author_id', Auth::id());
-        } elseif ($this->filterBy === 'assignee') {
-            $query->where('assignee_id', Auth::id());
+        TaskQueryFilters::officeOnly($query);
+        TaskQueryFilters::excludeArchived($query);
+
+        if ($this->eventFilter) {
+            $query->where('taskable_type', Event::class)
+                ->where('taskable_id', $this->eventFilter);
         }
+
+        if (! $this->showFinishedTasks) {
+            TaskQueryFilters::excludeFinished($query);
+        }
+
+        $this->applyTasksScopeTo($query);
 
         if ($this->priorityFilter) {
             $query->where('priority', $this->priorityFilter);
@@ -142,8 +172,8 @@ class TasksKanbanBoardPage extends Page implements HasForms
 
         if ($this->searchTerm) {
             $query->where(function ($q) {
-                $q->where('title', 'like', '%' . $this->searchTerm . '%')
-                  ->orWhere('description', 'like', '%' . $this->searchTerm . '%');
+                $q->where('title', 'like', '%'.$this->searchTerm.'%')
+                    ->orWhere('description', 'like', '%'.$this->searchTerm.'%');
             });
         }
 
@@ -156,16 +186,16 @@ class TasksKanbanBoardPage extends Page implements HasForms
         }
 
         $tasks = $query->get();
-        
+
         // Apply column-specific sorting
         $sortedTasks = collect();
-        
+
         foreach ($this->statuses() as $status) {
             $statusTasks = $tasks->where('status_id', $status->id);
-            
+
             if (isset($this->columnSorts[$status->id])) {
                 $sortType = $this->columnSorts[$status->id];
-                
+
                 switch ($sortType) {
                     case 'activity_desc':
                         $statusTasks = $statusTasks->sortByDesc(fn (Task $task) => $this->getTaskActivityTimestamp($task));
@@ -174,14 +204,10 @@ class TasksKanbanBoardPage extends Page implements HasForms
                         $statusTasks = $statusTasks->sortBy(fn (Task $task) => $this->getTaskActivityTimestamp($task));
                         break;
                     case 'priority_desc':
-                        $statusTasks = $statusTasks->sortByDesc(function ($task) {
-                            return ['high' => 3, 'medium' => 2, 'low' => 1][$task->priority] ?? 0;
-                        });
+                        $statusTasks = $statusTasks->sortByDesc(fn (Task $task) => TaskPriority::sortWeight($task->priority));
                         break;
                     case 'priority_asc':
-                        $statusTasks = $statusTasks->sortBy(function ($task) {
-                            return ['high' => 3, 'medium' => 2, 'low' => 1][$task->priority] ?? 0;
-                        });
+                        $statusTasks = $statusTasks->sortBy(fn (Task $task) => TaskPriority::sortWeight($task->priority));
                         break;
                     case 'due_date_asc':
                         $statusTasks = $statusTasks->sortBy('due_date');
@@ -202,17 +228,16 @@ class TasksKanbanBoardPage extends Page implements HasForms
                         $statusTasks = $statusTasks->sortBy('created_at');
                         break;
                     default:
-                        $statusTasks = $statusTasks->sortByDesc(fn (Task $task) => $this->getTaskActivityTimestamp($task));
+                        $statusTasks = $statusTasks->sortByDesc('created_at');
                         break;
                 }
             } else {
-                // Domyślnie pokazuj najnowszą aktywność: komentarz, załącznik, podzadanie lub aktualizacja zadania.
-                $statusTasks = $statusTasks->sortByDesc(fn (Task $task) => $this->getTaskActivityTimestamp($task));
+                $statusTasks = $statusTasks->sortByDesc('created_at');
             }
-            
+
             $sortedTasks = $sortedTasks->merge($statusTasks->values());
         }
-        
+
         return $sortedTasks;
     }
 
@@ -228,106 +253,45 @@ class TasksKanbanBoardPage extends Page implements HasForms
         return User::orderBy('name')->get();
     }
 
-    public function editTask($taskId)
-    {
-        $task = Task::with(['status', 'assignee', 'author', 'attachments', 'comments.author', 'subtasks', 'taskable'])
-            ->findOrFail($taskId);
-        
-        if (!$this->canModifyTask($task)) {
-            Notification::make()
-                ->title('Brak uprawnień')
-                ->body('Nie masz uprawnień do edycji tego zadania.')
-                ->danger()
-                ->send();
-            return;
-        }
-
-        $this->editingTask = $task;
-        $this->editModalData = Arr::only($task->toArray(), [
-            'title',
-            'description',
-            'priority',
-            'status_id',
-            'assignee_id',
-            'due_date',
-            'taskable_type',
-            'taskable_id',
-        ]);
-        $this->editModalData['due_date'] = $task->due_date?->format('Y-m-d\TH:i');
-        $this->dispatch('open-modal', id: 'edit-task-modal');
-    }
-
-    public function saveTask()
-    {
-        if (!$this->editingTask || !$this->canModifyTask($this->editingTask)) {
-            return;
-        }
-
-        try {
-            $this->validate([
-                'editModalData.title' => 'required|string|max:255',
-                'editModalData.description' => 'nullable|string',
-                'editModalData.priority' => 'required|in:low,medium,high',
-                'editModalData.status_id' => 'required|exists:task_statuses,id',
-                'editModalData.assignee_id' => 'nullable|exists:users,id',
-                'editModalData.due_date' => 'nullable|date',
-                'editModalData.taskable_type' => ['nullable', Rule::in(Task::getSupportedTaskableTypes())],
-                'editModalData.taskable_id' => 'nullable|integer|required_with:editModalData.taskable_type',
-            ]);
-
-            $this->editingTask->update($this->sanitizeTaskData($this->editModalData));
-            $this->editingTask->refresh();
-            $this->editingTask->load(['status', 'assignee', 'author', 'attachments', 'comments.author', 'subtasks', 'taskable']);
-
-            Notification::make()
-                ->title('Zadanie zaktualizowane')
-                ->body('Zmiany zostały pomyślnie zapisane.')
-                ->success()
-                ->send();
-
-            $this->editingTask = null;
-            $this->editModalData = [];
-            $this->dispatch('close-modal', id: 'edit-task-modal');
-
-        } catch (\Exception $e) {
-            Log::error('Error updating task: ' . $e->getMessage());
-            
-            Notification::make()
-                ->title('Błąd podczas aktualizacji')
-                ->body('Wystąpił błąd podczas zapisywania zmian.')
-                ->danger()
-                ->send();
-        }
-    }
-
-    public function updateTaskStatus($taskId, $statusId, $order = null)
+    public function updateTaskStatus(int|string $taskId, int|string $statusId, int|string|null $order = null): void
     {
         try {
-            $task = Task::findOrFail($taskId);
-            
-            if (!$this->canModifyTask($task)) {
+            $validated = validator([
+                'task_id' => $taskId,
+                'status_id' => $statusId,
+                'order' => $order,
+            ], [
+                'task_id' => 'required|integer|exists:tasks,id',
+                'status_id' => 'required|integer|exists:task_statuses,id',
+                'order' => 'nullable|integer|min:0',
+            ])->validate();
+
+            $task = Task::findOrFail($validated['task_id']);
+
+            if (! $this->canModifyTask($task)) {
+                Notification::make()
+                    ->title('Brak uprawnień')
+                    ->body('Nie możesz zmienić statusu tego zadania.')
+                    ->warning()
+                    ->send();
+
                 return;
             }
 
             $oldStatusId = $task->status_id;
-            $task->status_id = $statusId;
-            
-            if ($order !== null) {
-                $task->order = $order;
+            $task->status_id = (int) $validated['status_id'];
+
+            if (array_key_exists('order', $validated) && $validated['order'] !== null) {
+                $task->order = (int) $validated['order'];
             }
-            
+
             $task->save();
 
-            // Clear cached tasks to refresh counters
             unset($this->tasks);
 
-            // Log the change
-            if ($oldStatusId != $statusId) {
-                $oldStatus = TaskStatus::find($oldStatusId);
-                $newStatus = TaskStatus::find($statusId);
-                
-                Log::info("Task {$task->id} moved from {$oldStatus?->name} to {$newStatus?->name} by user " . Auth::id());
-                
+            if ($oldStatusId != $task->status_id) {
+                $newStatus = TaskStatus::find($task->status_id);
+
                 Notification::make()
                     ->title('Status zadania zmieniony')
                     ->body("Zadanie przeniesiono do kolumny: {$newStatus?->name}")
@@ -335,9 +299,15 @@ class TasksKanbanBoardPage extends Page implements HasForms
                     ->send();
             }
 
+        } catch (\Illuminate\Validation\ValidationException $e) {
+            Notification::make()
+                ->title('Nieprawidłowy status')
+                ->body('Wybrane zadanie lub status nie istnieje.')
+                ->danger()
+                ->send();
         } catch (\Exception $e) {
-            Log::error('Error updating task status: ' . $e->getMessage());
-            
+            Log::error('Error updating task status: '.$e->getMessage());
+
             Notification::make()
                 ->title('Błąd podczas przenoszenia')
                 ->body('Wystąpił błąd podczas zmiany statusu zadania.')
@@ -350,17 +320,20 @@ class TasksKanbanBoardPage extends Page implements HasForms
     {
         try {
             $task = Task::findOrFail($taskId);
-            
-            if (!$this->canDeleteTask($task)) {
+
+            if (! $this->canDeleteTask($task)) {
                 Notification::make()
                     ->title('Brak uprawnień')
                     ->body('Nie masz uprawnień do usunięcia tego zadania.')
                     ->danger()
                     ->send();
+
                 return;
             }
 
             $task->delete();
+
+            unset($this->tasks);
 
             Notification::make()
                 ->title('Zadanie usunięte')
@@ -369,8 +342,8 @@ class TasksKanbanBoardPage extends Page implements HasForms
                 ->send();
 
         } catch (\Exception $e) {
-            Log::error('Error deleting task: ' . $e->getMessage());
-            
+            Log::error('Error deleting task: '.$e->getMessage());
+
             Notification::make()
                 ->title('Błąd podczas usuwania')
                 ->body('Wystąpił błąd podczas usuwania zadania.')
@@ -381,11 +354,14 @@ class TasksKanbanBoardPage extends Page implements HasForms
 
     public function refreshBoard()
     {
-        $this->reset(['filterBy', 'priorityFilter', 'contextFilter', 'searchTerm', 'dueFilter', 'columnSorts']);
-        
+        $this->tasksScope = 'assigned';
+        $this->showFinishedTasks = false;
+        $this->reset(['priorityFilter', 'contextFilter', 'searchTerm', 'dueFilter', 'columnSorts']);
+
         // Clear computed properties
         unset($this->tasks);
-        
+        unset($this->boardStats);
+
         Notification::make()
             ->title('Tablica odświeżona')
             ->body('Filtry i sortowanie zostały zresetowane.')
@@ -395,29 +371,99 @@ class TasksKanbanBoardPage extends Page implements HasForms
 
     public function applyQuickFilter(string $filter): void
     {
+        $this->reset(['priorityFilter', 'contextFilter', 'searchTerm', 'dueFilter']);
+
         match ($filter) {
-            'all' => $this->reset(['filterBy', 'priorityFilter', 'contextFilter', 'searchTerm', 'dueFilter']),
-            'assigned_to_me' => $this->filterBy = 'assignee',
-            'high_priority' => $this->priorityFilter = 'high',
+            'high_priority' => $this->priorityFilter = TaskPriority::Urgent->value,
             'overdue' => $this->dueFilter = 'overdue',
             default => null,
         };
 
         unset($this->tasks);
+        unset($this->boardStats);
+    }
+
+    protected function afterTasksScopeChanged(): void
+    {
+        unset($this->tasks);
+        unset($this->boardStats);
+    }
+
+    #[Computed]
+    public function boardStats(): array
+    {
+        $baseQuery = Task::query();
+        TaskQueryFilters::officeOnly($baseQuery);
+        TaskQueryFilters::excludeArchived($baseQuery);
+
+        if ($this->eventFilter) {
+            $baseQuery->where('taskable_type', Event::class)
+                ->where('taskable_id', $this->eventFilter);
+        }
+
+        if (! $this->showFinishedTasks) {
+            TaskQueryFilters::excludeFinished($baseQuery);
+        }
+
+        $this->applyTasksScopeTo($baseQuery);
+
+        $tasks = $baseQuery->get();
+
+        return [
+            'total' => $tasks->count(),
+            'assigned_to_me' => $tasks->where('assignee_id', Auth::id())->count(),
+            'urgent' => $tasks->where('priority', TaskPriority::Urgent->value)->count(),
+            'overdue' => $tasks->filter(fn (Task $task): bool => $task->due_date && $task->due_date->isPast())->count(),
+        ];
+    }
+
+    public function updatedSearchTerm(): void
+    {
+        unset($this->tasks);
+    }
+
+    public function updatedPriorityFilter(): void
+    {
+        unset($this->tasks);
+    }
+
+    public function updatedContextFilter(): void
+    {
+        unset($this->tasks);
+    }
+
+    public function updatedShowFinishedTasks(): void
+    {
+        unset($this->tasks);
+        unset($this->boardStats);
+    }
+
+    public function updatedDueFilter(): void
+    {
+        unset($this->tasks);
+    }
+
+    public function toggleColumn(int $statusId): void
+    {
+        if (in_array($statusId, $this->hiddenColumns)) {
+            $this->hiddenColumns = array_values(array_filter($this->hiddenColumns, fn ($id) => $id !== $statusId));
+        } else {
+            $this->hiddenColumns[] = $statusId;
+        }
     }
 
     public function sortColumn($statusId, $sortType)
     {
         $this->columnSorts[$statusId] = $sortType;
-        
+
         // Clear computed property to force refresh
         unset($this->tasks);
-        
+
         $sortNames = [
             'activity_desc' => 'Najnowsza aktywność',
             'activity_asc' => 'Najstarsza aktywność',
             'priority_desc' => 'Priorytet (wysoki-niski)',
-            'priority_asc' => 'Priorytet (niski-wysoki)', 
+            'priority_asc' => 'Priorytet (niski-wysoki)',
             'due_date_asc' => 'Data (najwcześniej)',
             'due_date_desc' => 'Data (najpóźniej)',
             'title_asc' => 'Tytuł (A-Z)',
@@ -425,12 +471,12 @@ class TasksKanbanBoardPage extends Page implements HasForms
             'created_desc' => 'Najnowsze',
             'created_asc' => 'Najstarsze',
         ];
-        
+
         $status = TaskStatus::find($statusId);
-        
+
         Notification::make()
             ->title('Sortowanie zastosowane')
-            ->body("Kolumna '{$status->name}' posortowana według: " . ($sortNames[$sortType] ?? $sortType))
+            ->body("Kolumna '{$status->name}' posortowana według: ".($sortNames[$sortType] ?? $sortType))
             ->success()
             ->send();
     }
@@ -447,7 +493,7 @@ class TasksKanbanBoardPage extends Page implements HasForms
             'quickTaskableType',
             'quickTaskableId',
         ]);
-        $this->quickTaskPriority = 'medium';
+        $this->quickTaskPriority = TaskPriority::Normal->value;
 
         if (filled($selectedDate)) {
             try {
@@ -464,7 +510,7 @@ class TasksKanbanBoardPage extends Page implements HasForms
         }
 
         $this->showingQuickAdd = true;
-        
+
         $this->dispatch('open-modal', id: 'quick-add-modal');
     }
 
@@ -473,7 +519,7 @@ class TasksKanbanBoardPage extends Page implements HasForms
         $this->validate([
             'quickTaskTitle' => 'required|string|max:255',
             'quickTaskDescription' => 'nullable|string',
-            'quickTaskPriority' => 'required|in:low,medium,high',
+            'quickTaskPriority' => 'required|in:'.TaskPriority::Normal->value.','.TaskPriority::Urgent->value,
             'quickTaskAssigneeId' => 'nullable|exists:users,id',
             'quickTaskDueDate' => 'nullable|date',
             'quickTaskableType' => ['nullable', Rule::in(Task::getSupportedTaskableTypes())],
@@ -498,10 +544,10 @@ class TasksKanbanBoardPage extends Page implements HasForms
 
             $this->showingQuickAdd = false;
             $this->dispatch('close-modal', id: 'quick-add-modal');
-            
+
             // Refresh tasks
             unset($this->tasks);
-            
+
             Notification::make()
                 ->title('Zadanie utworzone')
                 ->body("Zadanie '{$task->title}' zostało pomyślnie utworzone.")
@@ -509,8 +555,8 @@ class TasksKanbanBoardPage extends Page implements HasForms
                 ->send();
 
         } catch (\Exception $e) {
-            Log::error('Error creating quick task: ' . $e->getMessage());
-            
+            Log::error('Error creating quick task: '.$e->getMessage());
+
             Notification::make()
                 ->title('Błąd podczas tworzenia zadania')
                 ->body('Wystąpił błąd podczas tworzenia zadania.')
@@ -525,179 +571,20 @@ class TasksKanbanBoardPage extends Page implements HasForms
         $this->dispatch('close-modal', id: 'quick-add-modal');
     }
 
-    public function showSubtasks($taskId)
-    {
-        $this->currentTaskForDetails = $this->loadDetailsTask($taskId);
-        $this->prepareSubtaskFormDefaults();
-        $this->showingSubtasks = true;
-        $this->dispatch('open-modal', id: 'subtasks-modal');
-    }
-
-    public function showComments($taskId)
-    {
-        $this->currentTaskForDetails = Task::with(['comments.author'])->findOrFail($taskId);
-        $this->showingComments = true;
-        $this->dispatch('open-modal', id: 'comments-modal');
-    }
-
-    public function showAttachments($taskId)
-    {
-        $this->currentTaskForDetails = Task::with('attachments.user')->findOrFail($taskId);
-        $this->showingAttachments = true;
-        $this->dispatch('open-modal', id: 'attachments-modal');
-    }
-
-    public function addComment()
-    {
-        if (!$this->currentTaskForDetails || !$this->newComment) {
-            return;
-        }
-
-        try {
-            $this->currentTaskForDetails->comments()->create([
-                'content' => $this->newComment,
-                'author_id' => Auth::id(),
-            ]);
-
-            $this->newComment = '';
-            $this->currentTaskForDetails->refresh();
-            $this->currentTaskForDetails->load(['comments.author']);
-
-            Notification::make()
-                ->title('Komentarz dodany')
-                ->body('Komentarz został pomyślnie dodany.')
-                ->success()
-                ->send();
-
-        } catch (\Exception $e) {
-            Log::error('Error adding comment: ' . $e->getMessage());
-            
-            Notification::make()
-                ->title('Błąd')
-                ->body('Wystąpił błąd podczas dodawania komentarza.')
-                ->danger()
-                ->send();
-        }
-    }
-
-    public function addSubtask()
-    {
-        if (! $this->currentTaskForDetails) {
-            return;
-        }
-
-        $this->validate([
-            'editSubtaskData.title' => 'required|string|max:255',
-            'editSubtaskData.description' => 'nullable|string',
-            'editSubtaskData.priority' => 'required|in:low,medium,high',
-            'editSubtaskData.status_id' => 'required|exists:task_statuses,id',
-            'editSubtaskData.assignee_id' => 'nullable|exists:users,id',
-            'editSubtaskData.due_date' => 'nullable|date',
-        ]);
-
-        try {
-            $this->currentTaskForDetails->subtasks()->create([
-                'title' => $this->editSubtaskData['title'],
-                'description' => $this->editSubtaskData['description'] ?? null,
-                'status_id' => $this->editSubtaskData['status_id'],
-                'author_id' => Auth::id(),
-                'assignee_id' => filled($this->editSubtaskData['assignee_id'] ?? null)
-                    ? $this->editSubtaskData['assignee_id']
-                    : $this->currentTaskForDetails->assignee_id,
-                'priority' => $this->editSubtaskData['priority'],
-                'due_date' => $this->editSubtaskData['due_date'] ?? null,
-                'taskable_type' => $this->currentTaskForDetails->taskable_type,
-                'taskable_id' => $this->currentTaskForDetails->taskable_id,
-            ]);
-
-            $this->currentTaskForDetails = $this->loadDetailsTask($this->currentTaskForDetails->getKey());
-            $this->prepareSubtaskFormDefaults();
-
-            Notification::make()
-                ->title('Podzadanie dodane')
-                ->body('Podzadanie zostało pomyślnie dodane z pełnym zestawem pól.')
-                ->success()
-                ->send();
-
-        } catch (\Exception $e) {
-            Log::error('Error adding subtask: ' . $e->getMessage());
-            
-            Notification::make()
-                ->title('Błąd')
-                ->body('Wystąpił błąd podczas dodawania podzadania.')
-                ->danger()
-                ->send();
-        }
-    }
-
-    public function updateSubtaskStatus($subtaskId, $statusId)
-    {
-        try {
-            $subtask = Task::findOrFail($subtaskId);
-            $subtask->status_id = $statusId;
-            $subtask->save();
-
-            $this->currentTaskForDetails->refresh();
-            $this->currentTaskForDetails->load(['subtasks.status', 'subtasks.assignee']);
-
-            Notification::make()
-                ->title('Status podzadania zmieniony')
-                ->success()
-                ->send();
-
-        } catch (\Exception $e) {
-            Log::error('Error updating subtask status: ' . $e->getMessage());
-        }
-    }
-
-    public function deleteComment($commentId)
-    {
-        try {
-            $comment = \App\Models\TaskComment::findOrFail($commentId);
-            
-            if ($comment->author_id !== Auth::id() && !Auth::user()->roles->contains('name', 'admin')) {
-                Notification::make()
-                    ->title('Brak uprawnień')
-                    ->body('Nie możesz usunąć tego komentarza.')
-                    ->danger()
-                    ->send();
-                return;
-            }
-
-            $comment->delete();
-            $this->currentTaskForDetails->refresh();
-            $this->currentTaskForDetails->load(['comments.author']);
-
-            Notification::make()
-                ->title('Komentarz usunięty')
-                ->success()
-                ->send();
-
-        } catch (\Exception $e) {
-            Log::error('Error deleting comment: ' . $e->getMessage());
-        }
-    }
-
     protected function canModifyTask(Task $task): bool
     {
         $user = Auth::user();
-        
-        if ($user->roles && $user->roles->contains('name', 'admin')) {
+
+        if ($user?->hasRole(['admin', 'super_admin'])) {
             return true;
         }
-        
-        return $task->author_id === $user->id || $task->assignee_id === $user->id;
+
+        return $task->author_id === $user?->id || $task->assignee_id === $user?->id;
     }
 
     protected function canDeleteTask(Task $task): bool
     {
-        $user = Auth::user();
-        
-        if ($user->roles && $user->roles->contains('name', 'admin')) {
-            return true;
-        }
-        
-        return $task->author_id === $user->id;
+        return TaskAuthorization::canDelete(Auth::user(), $task);
     }
 
     protected function getViewData(): array
@@ -710,66 +597,16 @@ class TasksKanbanBoardPage extends Page implements HasForms
             $task->id => $this->resolveTaskContextTree($task),
         ])->all();
 
-        $editingTaskContextUrl = $this->editingTask instanceof Task
-            ? $this->resolveTaskContextUrl($this->editingTask)
-            : null;
-
-        $currentTaskContextUrl = $this->currentTaskForDetails instanceof Task
-            ? $this->resolveTaskContextUrl($this->currentTaskForDetails)
-            : null;
-
-        $editingTaskContextTree = $this->editingTask instanceof Task
-            ? $this->resolveTaskContextTree($this->editingTask)
-            : [];
-
-        $currentTaskContextTree = $this->currentTaskForDetails instanceof Task
-            ? $this->resolveTaskContextTree($this->currentTaskForDetails)
-            : [];
-
-        $currentTaskHierarchy = $this->currentTaskForDetails instanceof Task
-            ? $this->resolveTaskHierarchy($this->currentTaskForDetails)
-            : [];
-
         return [
             'tasks' => $tasks,
             'statuses' => $this->statuses(),
+            'boardStats' => $this->boardStats(),
             'currentUser' => Auth::user(),
-            'users' => \App\Models\User::all(), // Dodano przekazywanie użytkowników
+            'users' => \App\Models\User::all(),
             'taskableTypes' => Task::getTaskableTypeOptions(),
             'quickTaskableRecords' => Task::getTaskableRecordOptions($this->quickTaskableType),
-            'editTaskableRecords' => Task::getTaskableRecordOptions($this->editModalData['taskable_type'] ?? null),
             'taskContextUrls' => $taskContextUrls,
             'taskContextTrees' => $taskContextTrees,
-            'editingTaskContextUrl' => $editingTaskContextUrl,
-            'editingTaskContextTree' => $editingTaskContextTree,
-            'currentTaskContextUrl' => $currentTaskContextUrl,
-            'currentTaskContextTree' => $currentTaskContextTree,
-            'currentTaskHierarchy' => $currentTaskHierarchy,
-            'calendarEvents' => $tasks
-                ->filter(fn (Task $task) => !empty($task->due_date))
-                ->map(function (Task $task): array {
-                    return [
-                        'id' => (string) $task->id,
-                        'title' => $task->title,
-                        'start' => optional($task->due_date)->toIso8601String(),
-                        'url' => TaskResource::getUrl('edit', ['record' => $task]),
-                        'backgroundColor' => match ($task->priority) {
-                            'high' => '#dc2626',
-                            'medium' => '#d97706',
-                            'low' => '#16a34a',
-                            default => '#2563eb',
-                        },
-                        'borderColor' => match ($task->priority) {
-                            'high' => '#991b1b',
-                            'medium' => '#92400e',
-                            'low' => '#166534',
-                            default => '#1d4ed8',
-                        },
-                        'textColor' => '#ffffff',
-                    ];
-                })
-                ->values()
-                ->all(),
         ];
     }
 
@@ -832,13 +669,13 @@ class TasksKanbanBoardPage extends Page implements HasForms
                     'url' => EventResource::getUrl('edit-program', ['record' => $context->event_id]),
                 ] : null,
                 $context->event_id ? [
-                    'label' => 'Punkt programu #' . $context->getKey(),
+                    'label' => 'Punkt programu #'.$context->getKey(),
                     'url' => EventResource::getUrl('edit-program', ['record' => $context->event_id]),
                 ] : null,
             ])),
 
             $context instanceof EventTemplate => [[
-                'label' => 'Szablon: ' . ($context->name ?: ('#' . $context->getKey())),
+                'label' => 'Szablon: '.($context->name ?: ('#'.$context->getKey())),
                 'url' => EventTemplateResource::getUrl('edit', ['record' => $context]),
             ]],
 
@@ -848,13 +685,13 @@ class TasksKanbanBoardPage extends Page implements HasForms
                     'url' => EventTemplateResource::getUrl('edit', ['record' => $context->event_template_id]),
                 ] : null,
                 [
-                    'label' => 'Punkt szablonu #' . $context->getKey(),
+                    'label' => 'Punkt szablonu #'.$context->getKey(),
                     'url' => EventTemplateProgramPointResource::getUrl('edit', ['record' => $context]),
                 ],
             ])),
 
             $context instanceof Contractor => [[
-                'label' => 'Kontrahent: ' . ($context->name ?: ('#' . $context->getKey())),
+                'label' => 'Kontrahent: '.($context->name ?: ('#'.$context->getKey())),
                 'url' => ContractorResource::getUrl('edit', ['record' => $context]),
             ]],
 
@@ -864,7 +701,7 @@ class TasksKanbanBoardPage extends Page implements HasForms
                     'url' => EventResource::getUrl('edit', ['record' => $context->event_id]),
                 ] : null,
                 $context->event_id ? [
-                    'label' => 'Dokument imprezy #' . $context->getKey(),
+                    'label' => 'Dokument imprezy #'.$context->getKey(),
                     'url' => EventResource::getUrl('edit', ['record' => $context->event_id]),
                 ] : null,
             ])),
@@ -875,11 +712,11 @@ class TasksKanbanBoardPage extends Page implements HasForms
                     'url' => EventResource::getUrl('edit', ['record' => $context->settlement->event_id]),
                 ] : null,
                 $context->settlement_id ? [
-                    'label' => 'Rozliczenie #' . $context->settlement_id,
+                    'label' => 'Rozliczenie #'.$context->settlement_id,
                     'url' => EventSettlementResource::getUrl('edit', ['record' => $context->settlement_id]),
                 ] : null,
                 $context->settlement_id ? [
-                    'label' => 'Pozycja kosztu #' . $context->getKey(),
+                    'label' => 'Pozycja kosztu #'.$context->getKey(),
                     'url' => $this->appendQuery(
                         EventSettlementResource::getUrl('edit', ['record' => $context->settlement_id]),
                         ['activeRelationManager' => 0]
@@ -893,11 +730,11 @@ class TasksKanbanBoardPage extends Page implements HasForms
                     'url' => EventResource::getUrl('edit', ['record' => $context->settlement->event_id]),
                 ] : null,
                 $context->settlement_id ? [
-                    'label' => 'Rozliczenie #' . $context->settlement_id,
+                    'label' => 'Rozliczenie #'.$context->settlement_id,
                     'url' => EventSettlementResource::getUrl('edit', ['record' => $context->settlement_id]),
                 ] : null,
                 $context->settlement_id ? [
-                    'label' => 'Dokument rozliczenia #' . $context->getKey(),
+                    'label' => 'Dokument rozliczenia #'.$context->getKey(),
                     'url' => $this->appendQuery(
                         EventSettlementResource::getUrl('edit', ['record' => $context->settlement_id]),
                         ['activeRelationManager' => 1]
@@ -911,11 +748,11 @@ class TasksKanbanBoardPage extends Page implements HasForms
                     'url' => EventResource::getUrl('edit', ['record' => $context->settlement->event_id]),
                 ] : null,
                 $context->settlement_id ? [
-                    'label' => 'Rozliczenie #' . $context->settlement_id,
+                    'label' => 'Rozliczenie #'.$context->settlement_id,
                     'url' => EventSettlementResource::getUrl('edit', ['record' => $context->settlement_id]),
                 ] : null,
                 $context->settlement_id ? [
-                    'label' => 'Wpłata uczestnika #' . $context->getKey(),
+                    'label' => 'Wpłata uczestnika #'.$context->getKey(),
                     'url' => $this->appendQuery(
                         EventSettlementResource::getUrl('edit', ['record' => $context->settlement_id]),
                         ['activeRelationManager' => 2]
@@ -929,11 +766,11 @@ class TasksKanbanBoardPage extends Page implements HasForms
                     'url' => EventResource::getUrl('edit', ['record' => $context->settlement->event_id]),
                 ] : null,
                 $context->settlement_id ? [
-                    'label' => 'Rozliczenie #' . $context->settlement_id,
+                    'label' => 'Rozliczenie #'.$context->settlement_id,
                     'url' => EventSettlementResource::getUrl('edit', ['record' => $context->settlement_id]),
                 ] : null,
                 $context->settlement_id ? [
-                    'label' => 'Gotówka pilota #' . $context->getKey(),
+                    'label' => 'Gotówka pilota #'.$context->getKey(),
                     'url' => $this->appendQuery(
                         EventSettlementResource::getUrl('edit', ['record' => $context->settlement_id]),
                         ['activeRelationManager' => 3]
@@ -950,7 +787,7 @@ class TasksKanbanBoardPage extends Page implements HasForms
 
     protected function formatEventContextLabel(?Event $event, ?int $fallbackId = null): string
     {
-        $eventName = $event?->name ?: ($fallbackId ? ('#' . $fallbackId) : 'Brak imprezy');
+        $eventName = $event?->name ?: ($fallbackId ? ('#'.$fallbackId) : 'Brak imprezy');
         $eventDate = $event?->start_date?->format('d.m.Y') ?? 'brak daty';
         $orderingParty = $event?->contractor?->name ?: ($event?->client_name ?: 'brak zamawiającego');
 
@@ -977,232 +814,12 @@ class TasksKanbanBoardPage extends Page implements HasForms
     {
         $separator = str_contains($url, '?') ? '&' : '?';
 
-        return $url . $separator . http_build_query($query);
+        return $url.$separator.http_build_query($query);
     }
 
     public function updatedQuickTaskableType(): void
     {
         $this->quickTaskableId = null;
-    }
-
-    public function updatedEditModalDataTaskableType(): void
-    {
-        $this->editModalData['taskable_id'] = null;
-    }
-
-    // --- Subtask editing ---
-    public function editSubtask($subtaskId)
-    {
-        $subtask = Task::findOrFail($subtaskId);
-        $this->editSubtaskId = $subtaskId;
-        $this->editSubtaskData = [
-            'title' => $subtask->title,
-            'description' => $subtask->description,
-            'priority' => $subtask->priority,
-            'assignee_id' => $subtask->assignee_id,
-            'status_id' => $subtask->status_id,
-            'due_date' => $subtask->due_date ? $subtask->due_date->format('Y-m-d\TH:i') : null,
-        ];
-        $this->editingSubtask = true;
-        $this->showAdvancedSubtaskForm = false;
-    }
-
-    public function cancelEditSubtask()
-    {
-        $this->editingSubtask = false;
-        $this->editSubtaskId = null;
-        $this->prepareSubtaskFormDefaults();
-    }
-
-    public function saveSubtask()
-    {
-        $this->validate([
-            'editSubtaskData.title' => 'required|string|max:255',
-            'editSubtaskData.priority' => 'required|in:low,medium,high',
-            'editSubtaskData.status_id' => 'required|exists:task_statuses,id',
-            'editSubtaskData.assignee_id' => 'nullable|exists:users,id',
-            'editSubtaskData.due_date' => 'nullable|date',
-        ]);
-        $subtask = Task::findOrFail($this->editSubtaskId);
-        $subtask->update([
-            'title' => $this->editSubtaskData['title'],
-            'description' => $this->editSubtaskData['description'],
-            'priority' => $this->editSubtaskData['priority'],
-            'assignee_id' => $this->editSubtaskData['assignee_id'],
-            'status_id' => $this->editSubtaskData['status_id'],
-            'due_date' => $this->editSubtaskData['due_date'],
-        ]);
-        $this->editingSubtask = false;
-        $this->editSubtaskId = null;
-        $this->currentTaskForDetails = $this->loadDetailsTask($this->currentTaskForDetails->getKey());
-        $this->prepareSubtaskFormDefaults();
-        \Filament\Notifications\Notification::make()
-            ->title('Podzadanie zapisane')
-            ->success()
-            ->send();
-    }
-
-    public function openSubtaskDetails(int $taskId): void
-    {
-        $this->currentTaskForDetails = $this->loadDetailsTask($taskId);
-        $this->prepareSubtaskFormDefaults();
-    }
-
-    public function goToParentTaskDetails(): void
-    {
-        if (! $this->currentTaskForDetails?->parent_id) {
-            return;
-        }
-
-        $this->currentTaskForDetails = $this->loadDetailsTask($this->currentTaskForDetails->parent_id);
-        $this->prepareSubtaskFormDefaults();
-    }
-
-    public function deleteSubtask(int $subtaskId): void
-    {
-        $subtask = Task::findOrFail($subtaskId);
-
-        if (! $this->canDeleteTask($subtask)) {
-            Notification::make()
-                ->title('Brak uprawnień')
-                ->body('Nie masz uprawnień do usunięcia tego podzadania.')
-                ->danger()
-                ->send();
-
-            return;
-        }
-
-        $subtask->delete();
-
-        if ($this->currentTaskForDetails) {
-            $this->currentTaskForDetails = $this->loadDetailsTask($this->currentTaskForDetails->getKey());
-        }
-
-        Notification::make()
-            ->title('Podzadanie usunięte')
-            ->success()
-            ->send();
-    }
-
-    // Dodajemy przełącznik do pełnego formularza dodawania podzadania
-    public $showAdvancedSubtaskForm = false;
-    public function showAdvancedSubtaskForm()
-    {
-        $this->showAdvancedSubtaskForm = true;
-        $this->editingSubtask = false;
-        $this->editSubtaskId = null;
-        $this->editSubtaskData = [
-            'title' => '',
-            'description' => '',
-            'priority' => 'medium',
-            'assignee_id' => null,
-            'status_id' => null,
-            'due_date' => null,
-        ];
-    }
-    public function cancelAdvancedSubtaskForm()
-    {
-        $this->showAdvancedSubtaskForm = false;
-        $this->editSubtaskData = [
-            'title' => '',
-            'description' => '',
-            'priority' => 'medium',
-            'assignee_id' => null,
-            'status_id' => null,
-            'due_date' => null,
-        ];
-    }
-    public function addAdvancedSubtask()
-    {
-        $this->validate([
-            'editSubtaskData.title' => 'required|string|max:255',
-            'editSubtaskData.priority' => 'required|in:low,medium,high',
-            'editSubtaskData.status_id' => 'required|exists:task_statuses,id',
-            'editSubtaskData.assignee_id' => 'nullable|exists:users,id',
-            'editSubtaskData.due_date' => 'nullable|date',
-        ]);
-        $this->currentTaskForDetails->subtasks()->create([
-            'title' => $this->editSubtaskData['title'],
-            'description' => $this->editSubtaskData['description'],
-            'priority' => $this->editSubtaskData['priority'],
-            'assignee_id' => $this->editSubtaskData['assignee_id'],
-            'status_id' => $this->editSubtaskData['status_id'],
-            'due_date' => $this->editSubtaskData['due_date'],
-            'author_id' => Auth::id(),
-            'taskable_type' => $this->currentTaskForDetails->taskable_type,
-            'taskable_id' => $this->currentTaskForDetails->taskable_id,
-        ]);
-        $this->showAdvancedSubtaskForm = false;
-        $this->editSubtaskData = [
-            'title' => '',
-            'description' => '',
-            'priority' => 'medium',
-            'assignee_id' => null,
-            'status_id' => null,
-            'due_date' => null,
-        ];
-        $this->currentTaskForDetails->refresh();
-        $this->currentTaskForDetails->load(['subtasks.status', 'subtasks.assignee']);
-        \Filament\Notifications\Notification::make()
-            ->title('Podzadanie dodane')
-            ->success()
-            ->send();
-    }
-
-    protected function prepareSubtaskFormDefaults(): void
-    {
-        $defaultStatusId = Task::getDefaultStatusId();
-
-        $this->editSubtaskData = [
-            'title' => '',
-            'description' => '',
-            'priority' => 'medium',
-            'assignee_id' => $this->currentTaskForDetails?->assignee_id,
-            'status_id' => $defaultStatusId,
-            'due_date' => null,
-        ];
-    }
-
-    protected function loadDetailsTask(int|string $taskId): Task
-    {
-        return Task::with([
-            'parent:id,title,parent_id',
-            'subtasks' => fn ($query) => $query
-                ->with(['status:id,name', 'assignee:id,name'])
-                ->withCount(['subtasks', 'comments', 'attachments'])
-                ->orderByDesc('updated_at'),
-            'comments.author:id,name',
-            'attachments.user:id,name',
-            'status:id,name',
-            'assignee:id,name',
-            'taskable',
-        ])->findOrFail($taskId);
-    }
-
-    protected function resolveTaskHierarchy(Task $task): array
-    {
-        $chain = [];
-        $current = $task;
-        $guard = 0;
-
-        while ($current && $guard < 20) {
-            $chain[] = [
-                'id' => $current->getKey(),
-                'title' => $current->title ?: ('Zadanie #' . $current->getKey()),
-            ];
-
-            if (! $current->parent_id) {
-                break;
-            }
-
-            $current = Task::query()
-                ->select(['id', 'title', 'parent_id'])
-                ->find($current->parent_id);
-
-            $guard++;
-        }
-
-        return array_reverse($chain);
     }
 
     protected function sanitizeTaskData(array $data): array

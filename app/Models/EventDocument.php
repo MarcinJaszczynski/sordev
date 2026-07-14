@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use App\Models\Concerns\HasStickyNotes;
 use App\Models\Concerns\HasTasks;
 use App\Support\StoragePath;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
@@ -11,7 +12,7 @@ use Illuminate\Support\Facades\Auth;
 
 class EventDocument extends Model
 {
-    use HasFactory, HasTasks;
+    use HasFactory, HasStickyNotes, HasTasks;
 
     protected $fillable = [
         'event_id',
@@ -29,6 +30,7 @@ class EventDocument extends Model
         'sort_order',
         'approval_status',
         'is_offer',
+        'is_invoice',
         'offer_status',
         'offer_sent_at',
         'offer_response_at',
@@ -46,6 +48,7 @@ class EventDocument extends Model
         'attach_to_driver_pdf' => 'boolean',
         'attach_to_folder_pdf' => 'boolean',
         'is_offer' => 'boolean',
+        'is_invoice' => 'boolean',
         'file_size' => 'integer',
         'sort_order' => 'integer',
         'settlement_cost_id' => 'integer',

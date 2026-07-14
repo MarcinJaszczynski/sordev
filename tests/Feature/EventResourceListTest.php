@@ -7,8 +7,10 @@ use App\Models\Event;
 use App\Models\EventTemplate;
 use App\Models\Place;
 use App\Models\User;
+use App\Support\EventListFinanceColumn;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Schema;
 use Tests\TestCase;
 
 class EventResourceListTest extends TestCase
@@ -47,22 +49,28 @@ class EventResourceListTest extends TestCase
             'driver' => 1,
         ]);
 
-        DB::table('event_agreements')->insert([
+        $table = Schema::hasTable('contracts') ? 'contracts' : 'event_agreements';
+        $numberCol = $table === 'contracts' ? 'contract_number' : 'agreement_number';
+        $dateCol = $table === 'contracts' ? 'contract_date' : 'agreement_date';
+        $typeCol = $table === 'contracts' ? 'contract_type' : 'agreement_type';
+        $priceCol = $table === 'contracts' ? 'total_price' : 'amount_due';
+
+        DB::table($table)->insert([
             [
                 'event_id' => $event->id,
                 'title' => 'Umowa 1',
-                'agreement_number' => 'UM/2026/00001',
-                'agreement_date' => '2026-04-01',
+                $numberCol => 'UM/2026/00001',
+                $dateCol => '2026-04-01',
                 'event_name' => $event->name,
                 'event_start_date' => $event->start_date,
                 'event_end_date' => $event->end_date,
                 'participant_count' => 10,
-                'amount_due' => 1000,
+                $priceCol => 1000,
                 'amount_paid' => 1000,
                 'currency' => 'PLN',
                 'status' => 'completed',
                 'payment_status' => 'paid',
-                'agreement_type' => 'group',
+                $typeCol => 'group',
                 'public_token' => 'token-paid-00001',
                 'created_by' => $user->id,
                 'created_at' => now(),
@@ -71,18 +79,18 @@ class EventResourceListTest extends TestCase
             [
                 'event_id' => $event->id,
                 'title' => 'Umowa 2',
-                'agreement_number' => 'UM/2026/00002',
-                'agreement_date' => '2026-04-02',
+                $numberCol => 'UM/2026/00002',
+                $dateCol => '2026-04-02',
                 'event_name' => $event->name,
                 'event_start_date' => $event->start_date,
                 'event_end_date' => $event->end_date,
                 'participant_count' => 5,
-                'amount_due' => 500,
+                $priceCol => 500,
                 'amount_paid' => 250,
                 'currency' => 'PLN',
                 'status' => 'sent',
                 'payment_status' => 'pending',
-                'agreement_type' => 'group',
+                $typeCol => 'group',
                 'public_token' => 'token-pending-00002',
                 'created_by' => $user->id,
                 'created_at' => now(),
@@ -143,5 +151,99 @@ class EventResourceListTest extends TestCase
         $this->assertNotNull($settlement);
         $this->assertSame(7800.0, (float) $settlement->participant_due_pln);
         $this->assertSame(7500.0, (float) $settlement->participant_paid_pln);
+    }
+
+    public function test_upcoming_and_completed_scopes_filter_by_trip_dates(): void
+    {
+        $user = User::factory()->create();
+
+        $place = Place::factory()->starting()->create();
+        $template = EventTemplate::factory()->create([
+            'start_place_id' => $place->id,
+        ]);
+
+        $upcoming = Event::create([
+            'event_template_id' => $template->id,
+            'start_place_id' => $place->id,
+            'name' => 'Nadchodząca',
+            'client_name' => 'Klient',
+            'start_date' => now()->addDays(3)->toDateString(),
+            'end_date' => now()->addDays(5)->toDateString(),
+            'duration_days' => 3,
+            'participant_count' => 10,
+            'total_cost' => 1000,
+            'status' => Event::STATUS_CONFIRMED,
+            'created_by' => $user->id,
+        ]);
+
+        $inProgress = Event::create([
+            'event_template_id' => $template->id,
+            'start_place_id' => $place->id,
+            'name' => 'W trakcie',
+            'client_name' => 'Klient',
+            'start_date' => now()->subDay()->toDateString(),
+            'end_date' => now()->addDay()->toDateString(),
+            'duration_days' => 3,
+            'participant_count' => 10,
+            'total_cost' => 1000,
+            'status' => Event::STATUS_CONFIRMED,
+            'created_by' => $user->id,
+        ]);
+
+        $completed = Event::create([
+            'event_template_id' => $template->id,
+            'start_place_id' => $place->id,
+            'name' => 'Zakończona',
+            'client_name' => 'Klient',
+            'start_date' => now()->subDays(10)->toDateString(),
+            'end_date' => now()->subDays(7)->toDateString(),
+            'duration_days' => 3,
+            'participant_count' => 10,
+            'total_cost' => 1000,
+            'status' => Event::STATUS_SETTLED,
+            'created_by' => $user->id,
+        ]);
+
+        $upcomingIds = Event::query()->upcoming()->pluck('id')->all();
+        $completedIds = Event::query()->completed()->pluck('id')->all();
+
+        $this->assertContains($upcoming->id, $upcomingIds);
+        $this->assertContains($inProgress->id, $upcomingIds);
+        $this->assertNotContains($completed->id, $upcomingIds);
+
+        $this->assertContains($completed->id, $completedIds);
+        $this->assertNotContains($upcoming->id, $completedIds);
+        $this->assertNotContains($inProgress->id, $completedIds);
+    }
+
+    public function test_finance_column_uses_total_cost_without_price_table(): void
+    {
+        $user = User::factory()->create();
+        $this->actingAs($user);
+
+        $place = Place::factory()->starting()->create();
+        $template = EventTemplate::factory()->create([
+            'start_place_id' => $place->id,
+        ]);
+
+        $event = Event::create([
+            'event_template_id' => $template->id,
+            'start_place_id' => $place->id,
+            'name' => 'Impreza finanse',
+            'client_name' => 'Klient',
+            'start_date' => '2026-06-01',
+            'end_date' => '2026-06-03',
+            'duration_days' => 3,
+            'participant_count' => 25,
+            'total_cost' => 12345.67,
+            'status' => Event::STATUS_INQUIRY,
+        ]);
+
+        $record = EventResource::getEloquentQuery()->findOrFail($event->id);
+        $html = EventListFinanceColumn::html($record, 'PLN');
+
+        $this->assertStringContainsString('12', $html);
+        $this->assertStringContainsString('345', $html);
+        $this->assertStringNotContainsString('EventPriceTable', $html);
     }
 }

@@ -8,7 +8,7 @@ set -euo pipefail
 #   ./scripts/db_switch.sh mysql "php artisan migrate:status"
 #
 # Environment for mysql mode can be overridden:
-#   MYSQL_DB=sor2026_mysql MYSQL_USER=sor2026 MYSQL_PASS=secret ./scripts/db_switch.sh mysql "php artisan tinker"
+#   MYSQL_DB=host378742_sor26 MYSQL_USER=sor MYSQL_PASS=sor_secret ./scripts/db_switch.sh mysql "php artisan tinker"
 
 MODE="${1:-status}"
 CMD="${2:-}"
@@ -16,9 +16,9 @@ CMD="${2:-}"
 SQLITE_DB_PATH="${SQLITE_DB_PATH:-database/database.sqlite}"
 MYSQL_HOST="${MYSQL_HOST:-127.0.0.1}"
 MYSQL_PORT="${MYSQL_PORT:-3306}"
-MYSQL_DB="${MYSQL_DB:-sor2026_mysql}"
-MYSQL_USER="${MYSQL_USER:-sor2026}"
-MYSQL_PASS="${MYSQL_PASS:-sor2026_local_pass}"
+MYSQL_DB="${MYSQL_DB:-host378742_sor26}"
+MYSQL_USER="${MYSQL_USER:-sor}"
+MYSQL_PASS="${MYSQL_PASS:-sor_secret}"
 
 if [[ "$MODE" == "status" ]]; then
   echo "Available modes: sqlite, mysql"

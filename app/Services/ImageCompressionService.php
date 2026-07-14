@@ -2,19 +2,23 @@
 
 namespace App\Services;
 
-use Intervention\Image\ImageManager;
-use Intervention\Image\Drivers\Gd\Driver;
-use Illuminate\Support\Facades\Storage;
 use Illuminate\Http\UploadedFile;
+use Illuminate\Support\Facades\Storage;
+use Intervention\Image\Drivers\Gd\Driver;
+use Intervention\Image\ImageManager;
 
 class ImageCompressionService
 {
     public const JPEG_QUALITY = 85;
+
     public const WEBP_QUALITY = 85;
+
     public const MAX_WIDTH = 1920;
+
     public const MAX_HEIGHT = 1080;
+
     public const THUMBNAIL_SIZE = 300;
-    
+
     /**
      * Kompresuje i optymalizuje uploadowany obraz
      */
@@ -23,31 +27,31 @@ class ImageCompressionService
         $originalName = pathinfo($file->getClientOriginalName(), PATHINFO_FILENAME);
         $extension = strtolower($file->getClientOriginalExtension());
         $safeName = self::transliterateFilename($originalName);
-        $filename = uniqid($safeName . '_') . '.' . $extension;
-        
+        $filename = uniqid($safeName.'_').'.'.$extension;
+
         // Załaduj obraz
-        $manager = new ImageManager(new Driver());
+        $manager = new ImageManager(new Driver);
         $image = $manager->read($file->getRealPath());
-        
+
         // Optymalizuj rozmiar
         $image = self::resizeIfNeeded($image);
-        
+
         // Zapisz oryginalny format (skompresowany)
-        $originalPath = $directory . '/' . $filename;
+        $originalPath = $directory.'/'.$filename;
         $compressedData = self::compressImage($image, $extension);
         Storage::disk($disk)->put($originalPath, $compressedData);
-        
+
         // Utwórz WebP wersję (jeśli nie jest już WebP)
         $webpPath = null;
         if ($extension !== 'webp') {
-            $webpFilename = pathinfo($filename, PATHINFO_FILENAME) . '.webp';
-            $webpPath = $directory . '/' . $webpFilename;
+            $webpFilename = pathinfo($filename, PATHINFO_FILENAME).'.webp';
+            $webpPath = $directory.'/'.$webpFilename;
             $webpData = $image->toWebp(self::WEBP_QUALITY);
             Storage::disk($disk)->put($webpPath, $webpData);
         }
-        
+
         // Utwórz miniaturę
-        $thumbnailPath = $directory . '/thumbs/' . $filename;
+        $thumbnailPath = $directory.'/thumbs/'.$filename;
         $thumbnail = clone $image;
         $thumbnail->resize(self::THUMBNAIL_SIZE, self::THUMBNAIL_SIZE, function ($constraint) {
             $constraint->aspectRatio();
@@ -56,11 +60,11 @@ class ImageCompressionService
         $thumbnail->crop(self::THUMBNAIL_SIZE, self::THUMBNAIL_SIZE, 0, 0);
         $thumbnailData = self::compressImage($thumbnail, $extension);
         Storage::disk($disk)->put($thumbnailPath, $thumbnailData);
-        
+
         $originalSize = $file->getSize();
         $compressedSize = Storage::disk($disk)->size($originalPath);
         $compressionRatio = round((1 - $compressedSize / $originalSize) * 100, 1);
-        
+
         return [
             'original' => $originalPath,
             'webp' => $webpPath,
@@ -75,7 +79,7 @@ class ImageCompressionService
             ],
         ];
     }
-    
+
     /**
      * Kompresuje istniejące obrazy w storage
      */
@@ -100,7 +104,7 @@ class ImageCompressionService
 
         return $results;
     }
-    
+
     /**
      * Kompresuje pojedynczy istniejący obraz
      */
@@ -111,7 +115,7 @@ class ImageCompressionService
 
         // Załaduj obraz z storage
         $imageData = $storage->get($filePath);
-        $manager = new ImageManager(new Driver());
+        $manager = new ImageManager(new Driver);
         $image = $manager->read($imageData);
 
         // Optymalizuj
@@ -123,7 +127,7 @@ class ImageCompressionService
         $storage->put($filePath, $compressedData);
 
         $thumbnailPath = self::thumbnailPathFor($filePath);
-        if ($force || !$storage->exists($thumbnailPath)) {
+        if ($force || ! $storage->exists($thumbnailPath)) {
             $thumbnail = clone $image;
             $thumbnail->resize(self::THUMBNAIL_SIZE, self::THUMBNAIL_SIZE, function ($constraint) {
                 $constraint->aspectRatio();
@@ -137,7 +141,7 @@ class ImageCompressionService
         $webpPath = null;
         if ($extension !== 'webp') {
             $webpPath = self::webpPathFor($filePath);
-            if ($force || !$storage->exists($webpPath)) {
+            if ($force || ! $storage->exists($webpPath)) {
                 $storage->put($webpPath, $image->toWebp(self::WEBP_QUALITY));
             }
         }
@@ -155,7 +159,7 @@ class ImageCompressionService
             'webp' => $webpPath,
         ];
     }
-    
+
     /**
      * Zmienia rozmiar obrazu jeśli jest za duży
      */
@@ -163,17 +167,17 @@ class ImageCompressionService
     {
         $width = $image->width();
         $height = $image->height();
-        
+
         if ($width > self::MAX_WIDTH || $height > self::MAX_HEIGHT) {
             $image->resize(self::MAX_WIDTH, self::MAX_HEIGHT, function ($constraint) {
                 $constraint->aspectRatio();
                 $constraint->upsize();
             });
         }
-        
+
         return $image;
     }
-    
+
     /**
      * Kompresuje obraz do odpowiedniego formatu
      */
@@ -187,25 +191,26 @@ class ImageCompressionService
             default => $image->toJpeg(self::JPEG_QUALITY),
         };
     }
-    
+
     /**
      * Sprawdza czy plik jest obrazem
      */
     private static function isImageFile(string $filePath): bool
     {
         $extension = strtolower(pathinfo($filePath, PATHINFO_EXTENSION));
+
         return in_array($extension, ['jpg', 'jpeg', 'png', 'gif', 'webp']);
     }
 
     private static function isProcessableSourceImage(string $filePath): bool
     {
-        if (!self::isImageFile($filePath)) {
+        if (! self::isImageFile($filePath)) {
             return false;
         }
 
         $normalized = str_replace('\\', '/', $filePath);
 
-        return !str_contains($normalized, '/thumbs/');
+        return ! str_contains($normalized, '/thumbs/');
     }
 
     private static function thumbnailPathFor(string $filePath): string
@@ -213,23 +218,23 @@ class ImageCompressionService
         $directory = pathinfo($filePath, PATHINFO_DIRNAME);
         $filename = pathinfo($filePath, PATHINFO_BASENAME);
 
-        if (!$directory || $directory === '.') {
-            return 'thumbs/' . $filename;
+        if (! $directory || $directory === '.') {
+            return 'thumbs/'.$filename;
         }
 
-        return trim($directory, '/') . '/thumbs/' . $filename;
+        return trim($directory, '/').'/thumbs/'.$filename;
     }
 
     private static function webpPathFor(string $filePath): string
     {
         $directory = pathinfo($filePath, PATHINFO_DIRNAME);
-        $filename = pathinfo($filePath, PATHINFO_FILENAME) . '.webp';
+        $filename = pathinfo($filePath, PATHINFO_FILENAME).'.webp';
 
-        if (!$directory || $directory === '.') {
+        if (! $directory || $directory === '.') {
             return $filename;
         }
 
-        return trim($directory, '/') . '/' . $filename;
+        return trim($directory, '/').'/'.$filename;
     }
 
     /**
@@ -243,18 +248,18 @@ class ImageCompressionService
 
         return $transliterated;
     }
-    
+
     /**
      * Formatuje bajty do czytelnej postaci
      */
     public static function formatBytes(int $bytes, int $precision = 2): string
     {
         $units = ['B', 'KB', 'MB', 'GB', 'TB'];
-        
+
         for ($i = 0; $bytes > 1024 && $i < count($units) - 1; $i++) {
             $bytes /= 1024;
         }
-        
-        return round($bytes, $precision) . ' ' . $units[$i];
+
+        return round($bytes, $precision).' '.$units[$i];
     }
 }

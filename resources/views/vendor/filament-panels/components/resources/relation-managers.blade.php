@@ -100,12 +100,15 @@
                 @php
                     $manager = $managers[$activeManager];
                     $normalizedManagerClass = $normalizeRelationManagerClass($manager);
+                    $managerConfigurationKey = $manager instanceof \Filament\Resources\RelationManagers\RelationManagerConfiguration
+                        ? md5(json_encode($manager->getProperties()))
+                        : '';
                 @endphp
 
                 @livewire(
                     $normalizedManagerClass,
                     [...$managerLivewireProperties, ...(($manager instanceof \Filament\Resources\RelationManagers\RelationManagerConfiguration) ? [...$manager->relationManager::getDefaultProperties(), ...$manager->getProperties()] : $manager::getDefaultProperties())],
-                    key($normalizedManagerClass),
+                    key("{$normalizedManagerClass}-{$ownerRecord->getKey()}-{$managerConfigurationKey}"),
                 )
             @endif
         </div>

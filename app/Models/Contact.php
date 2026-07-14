@@ -42,6 +42,11 @@ class Contact extends Model
      */
     public function contractors()
     {
-        return $this->belongsToMany(Contractor::class, 'contractor_contact');
+        return $this->belongsToMany(Contractor::class, Contractor::contactPivotTable());
+    }
+
+    public function displayName(): string
+    {
+        return trim($this->first_name.' '.$this->last_name);
     }
 }

@@ -1,5 +1,6 @@
 <?php
 
+use Illuminate\Console\Scheduling\Schedule;
 use Illuminate\Foundation\Application;
 use Illuminate\Foundation\Configuration\Exceptions;
 use Illuminate\Foundation\Configuration\Middleware;
@@ -17,9 +18,44 @@ return Application::configure(basePath: dirname(__DIR__))
 
         // Web middleware additions
         $middleware->web(append: [
+            \App\Http\Middleware\EnsureApplicationInstalled::class,
             \App\Http\Middleware\ServeCompressedAssets::class,
             \App\Http\Middleware\ResolveRegionSlug::class,
         ]);
+    })
+    ->withSchedule(function (Schedule $schedule): void {
+        if (! config('backup.schedule_enabled', true)) {
+            return;
+        }
+
+        $schedule->command('app:backup', [
+            '--components' => config('backup.scheduled_components', 'db,storage'),
+        ])
+            ->cron(config('backup.schedule_cron', '0 2 * * *'))
+            ->withoutOverlapping()
+            ->onOneServer()
+            ->appendOutputTo(storage_path('logs/backup-schedule.log'));
+
+        $schedule->command('app:backup-prune')
+            ->cron(config('backup.schedule_cron', '0 2 * * *'))
+            ->withoutOverlapping();
+
+        $schedule->command('app:notify-margin-discrepancies')
+            ->dailyAt('07:00')
+            ->withoutOverlapping();
+
+        $schedule->command('tfg:notify-monthly-reminder')
+            ->dailyAt(config('tfg.scheduler.reminder_hour', '06:00'))
+            ->when(fn () => (int) now()->format('j') <= 14)
+            ->withoutOverlapping();
+
+        $schedule->job(new \App\Jobs\Tfg\BuildMonthlyTfgFeedJob)
+            ->monthlyOn((int) config('tfg.scheduler.monthly_submit_day', 10), '06:30')
+            ->withoutOverlapping();
+
+        $schedule->command('tfg:notify-correction-deadlines')
+            ->dailyAt('08:00')
+            ->withoutOverlapping();
     })
     ->withExceptions(function (Exceptions $exceptions) {
         //

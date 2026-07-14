@@ -3,6 +3,7 @@
 namespace App\Filament\Resources;
 
 use App\Filament\Resources\RoleResource\Pages;
+use App\Support\FilamentNavigation;
 use Filament\Forms;
 use Filament\Forms\Form;
 use Filament\Resources\Resource;
@@ -27,7 +28,7 @@ class RoleResource extends Resource
 
     protected static ?string $navigationLabel = 'Role i uprawnienia';
 
-    protected static ?string $navigationGroup = 'Admin';
+    protected static ?string $navigationGroup = FilamentNavigation::GROUP_SYSTEM;
 
     protected static ?string $modelLabel = 'rola';
 

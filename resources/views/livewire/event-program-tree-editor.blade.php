@@ -1152,7 +1152,7 @@
                                     placeholder="Wpisz min. 3 znaki. Użyj przecinków dla warunków AND (np. 'kraków, warsztat')..." 
                                     class="block w-full mb-2 rounded-md border-gray-300 shadow-sm focus:border-primary-500 focus:ring-primary-500" 
                                     autocomplete="off" />
-                                <input type="hidden" wire:model.defer="modalData.program_point_id" id="program_point_id" />
+                                <input type="hidden" wire:model.live.debounce.500ms="modalData.program_point_id" id="program_point_id" />
                                 
                                 {{-- Debug info --}}
                                 @if(config('app.debug'))
@@ -1239,20 +1239,20 @@
                             <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
                                 <div>
                                     <label for="start_time" class="block text-sm font-medium text-gray-700 mb-1">Godzina startu (opcjonalnie)</label>
-                                    <input type="time" wire:model.defer="modalData.start_time" id="start_time"
+                                    <input type="time" wire:model.live.debounce.500ms="modalData.start_time" id="start_time"
                                         class="block w-full rounded-md border-gray-300 shadow-sm focus:border-primary-500 focus:ring-primary-500">
                                     @error('modalData.start_time') <span class="text-red-500 text-sm">{{ $message }}</span> @enderror
                                 </div>
                                 <div>
                                     <label for="end_time" class="block text-sm font-medium text-gray-700 mb-1">Godzina końca (opcjonalnie)</label>
-                                    <input type="time" wire:model.defer="modalData.end_time" id="end_time"
+                                    <input type="time" wire:model.live.debounce.500ms="modalData.end_time" id="end_time"
                                         class="block w-full rounded-md border-gray-300 shadow-sm focus:border-primary-500 focus:ring-primary-500">
                                     @error('modalData.end_time') <span class="text-red-500 text-sm">{{ $message }}</span> @enderror
                                 </div>
                             </div>
                             <div>
                                 <label for="notes" class="block text-sm font-medium text-gray-700 mb-1">Notatki</label>
-                                <textarea wire:model.defer="modalData.notes" id="notes"
+                                <textarea wire:model.live.debounce.500ms="modalData.notes" id="notes"
                                     class="block w-full rounded-md border-gray-300 shadow-sm focus:border-primary-500 focus:ring-primary-500"
                                     rows="3"></textarea>
                                 @error('modalData.notes') <span class="text-red-500 text-sm">{{ $message }}</span>
@@ -1260,19 +1260,19 @@
                             </div>
                             <div class="grid grid-cols-1 sm:grid-cols-3 gap-4 pt-2">
                                 <label class="flex items-center">
-                                    <input type="checkbox" wire:model.defer="modalData.include_in_program"
+                                    <input type="checkbox" wire:model.live.debounce.500ms="modalData.include_in_program"
                                         id="include_in_program"
                                         class="rounded border-gray-300 text-primary-600 shadow-sm focus:border-primary-500 focus:ring-primary-500">
                                     <span class="ml-2 text-sm text-gray-700">Uwzględnij w programie</span>
                                 </label>
                                 <label class="flex items-center">
-                                    <input type="checkbox" wire:model.defer="modalData.include_in_calculation"
+                                    <input type="checkbox" wire:model.live.debounce.500ms="modalData.include_in_calculation"
                                         id="include_in_calculation"
                                         class="rounded border-gray-300 text-primary-600 shadow-sm focus:border-primary-500 focus:ring-primary-500">
                                     <span class="ml-2 text-sm text-gray-700">Uwzględnij w kalkulacji</span>
                                 </label>
                                 <label class="flex items-center">
-                                    <input type="checkbox" wire:model.defer="modalData.active" id="active"
+                                    <input type="checkbox" wire:model.live.debounce.500ms="modalData.active" id="active"
                                         class="rounded border-gray-300 text-primary-600 shadow-sm focus:border-primary-500 focus:ring-primary-500">
                                     <span class="ml-2 text-sm text-gray-700">Aktywny</span>
                                 </label>
@@ -1295,7 +1295,7 @@
     </div>
 
 @push('scripts')
-<script src="https://cdn.jsdelivr.net/npm/sortablejs@1.15.0/Sortable.min.js"></script>
+@include('filament.components.filament-sortable-boot')
 <script>
     window.sortableInstances = window.sortableInstances || [];
 
@@ -1360,7 +1360,10 @@
     }
 
     function initializeSortable() {
-        if (typeof Sortable === 'undefined') return;
+        if (typeof Sortable === 'undefined') {
+            setTimeout(initializeSortable, 50);
+            return;
+        }
 
         const daysContainer = document.getElementById('program-days-container');
         if (!daysContainer) return;

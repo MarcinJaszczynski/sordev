@@ -45,11 +45,15 @@ class AgreementPaymentSyncService
         }
 
         $participantPayment->settlement()->associate($settlement);
+        $effectivePaidAmount = $participantPayment->exists
+            ? app(ParticipantPaymentLedgerService::class)->resolvedPaidAmount($participantPayment)
+            : (float) $agreement->amount_paid;
+
         $participantPayment->fill([
             'participant_name' => $participantName,
             'booking_reference' => $bookingReference,
             'due_amount_pln' => (float) $agreement->amount_due,
-            'paid_amount_pln' => (float) $agreement->amount_paid,
+            'paid_amount_pln' => $effectivePaidAmount,
             'payment_date' => $agreement->paid_at,
             'payment_method' => $paymentMethod,
             'document_number' => $agreement->agreement_number,

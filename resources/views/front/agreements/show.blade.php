@@ -1,5 +1,8 @@
 @php
     $insuranceSelection = old('travel_insurance', data_get($flow ?? [], 'travel_insurance'));
+    $isContractAnnex = ($agreement ?? null) instanceof \App\Models\Contract
+        && method_exists($agreement, 'isAnnex')
+        && $agreement->isAnnex();
 @endphp
 
 <!doctype html>
@@ -23,7 +26,7 @@
                 <div class="alert alert-success">{{ session('success') }}</div>
             @endif
 
-            @if($errors->any())
+            @if(isset($errors) && $errors->any())
                 <div class="alert alert-danger">
                     <ul class="mb-0 ps-3">
                         @foreach($errors->all() as $error)
@@ -48,17 +51,101 @@
                                 </div>
                                 <div><strong>Impreza:</strong> {{ $agreement->event_name ?: ($agreement->event?->name ?? '—') }}</div>
                                 <div><strong>Termin:</strong> {{ optional($agreement->event_start_date)->format('d.m.Y') ?: '—' }} - {{ optional($agreement->event_end_date)->format('d.m.Y') ?: '—' }}</div>
-                                <div><strong>Klient:</strong> {{ $agreement->customer_name ?: '—' }}</div>
-                                <div><strong>Email:</strong> {{ $agreement->customer_email ?: '—' }}</div>
+                                @php($orderingPartyService = app(\App\Services\ContractOrderingPartyService::class))
+                                @php($orderingParties = $orderingPartyService->partiesForTemplatePayload($agreement))
+                                <div><strong>Zamawiający:</strong>
+                                    @if(count($orderingParties) > 1)
+                                        <ul class="mb-0 mt-1">
+                                            @foreach($orderingParties as $party)
+                                                <li>
+                                                    {{ $party['name'] }}
+                                                    @if(filled($party['email']) || filled($party['phone']))
+                                                        <span class="text-muted">({{ collect([$party['email'] ?? null, $party['phone'] ?? null])->filter()->implode(', ') }})</span>
+                                                    @endif
+                                                </li>
+                                            @endforeach
+                                        </ul>
+                                    @else
+                                        {{ $orderingPartyService->formattedPartyNames($agreement) }}
+                                    @endif
+                                </div>
+                                @if(filled($agreement->ordering_party_notes))
+                                    <div><strong>Uwagi do zamawiających:</strong> {{ $agreement->ordering_party_notes }}</div>
+                                @endif
                                 @if($agreement->isIndividual())
                                     <div><strong>Uczestnik:</strong> {{ $agreement->participant_name ?: ($agreement->participantPayment?->participant_name ?? '—') }}</div>
                                 @endif
-                                <div><strong>Kwota do zapłaty:</strong> {{ number_format((float) $agreement->amount_due, 2, ',', ' ') }} {{ strtoupper((string) ($agreement->currency ?: 'PLN')) }}</div>
+                                @php($groupPricing = app(\App\Services\ContractGroupPricingService::class)->presentationFor($agreement))
+                                @if($groupPricing['is_group'] ?? false)
+                                    <div><strong>Liczba uczestników:</strong> {{ $groupPricing['participant_count'] }}</div>
+                                    <div><strong>Cena za osobę:</strong> {{ number_format((float) $groupPricing['unit_price'], 2, ',', ' ') }} {{ strtoupper((string) ($agreement->currency ?: 'PLN')) }}</div>
+                                    <div><strong>Schemat płatności:</strong> {{ $groupPricing['payment_scheme_label'] }}</div>
+                                @endif
+                                <div><strong>Kwota do zapłaty:</strong> {{ number_format((float) ($groupPricing['total_amount'] ?? $agreement->amount_due), 2, ',', ' ') }} {{ strtoupper((string) ($agreement->currency ?: 'PLN')) }}</div>
+                                @if(($groupPricing['is_group'] ?? false) && !empty($groupPricing['payment_schedules']))
+                                    <div class="mt-2">
+                                        <strong>Harmonogram płatności:</strong>
+                                        <ul class="mb-0 mt-1">
+                                            @foreach($groupPricing['payment_schedules'] as $schedule)
+                                                <li>
+                                                    {{ $schedule['label'] ?: 'Transza' }}:
+                                                    {{ number_format((float) $schedule['amount'], 2, ',', ' ') }} PLN
+                                                    @if(filled($schedule['due_date']))
+                                                        <span class="text-muted">(termin: {{ $schedule['due_date'] }})</span>
+                                                    @endif
+                                                </li>
+                                            @endforeach
+                                        </ul>
+                                    </div>
+                                @endif
                             </div>
 
                             <div class="white_box">
-                                <h4 class="mb-3">Treść umowy</h4>
-                                <div class="border rounded p-3 bg-white" style="white-space: pre-wrap; max-height: 360px; overflow:auto;">{{ $agreement->agreement_body }}</div>
+                                @php
+                                    $annexService = app(\App\Services\ContractAnnexService::class);
+                                @endphp
+                                <h4 class="mb-3">{{ $isContractAnnex ? 'Treść aneksu' : 'Treść umowy' }}</h4>
+
+                                @if($isContractAnnex)
+                                    <div class="mb-3 small">
+                                        @if($agreement->parentContract?->agreement_number)
+                                            <div><strong>Umowa pierwotna:</strong> {{ $agreement->parentContract->agreement_number }}</div>
+                                        @endif
+                                        @if(!empty($agreement->annex_change_types))
+                                            <div><strong>Rodzaje zmian:</strong> {{ $annexService->formatChangeTypesLabels((array) $agreement->annex_change_types) }}</div>
+                                        @endif
+                                    </div>
+                                @endif
+
+                                @if($agreement->usesUploadedAgreementDocument())
+                                    <div class="border rounded bg-white overflow-hidden" style="max-height: 480px;">
+                                        <iframe
+                                            src="{{ $agreement->custom_agreement_document_url }}#toolbar=0"
+                                            title="Dokument umowy"
+                                            class="w-100"
+                                            style="min-height: 420px; border: 0;"
+                                        ></iframe>
+                                    </div>
+                                    <p class="mt-2 mb-0">
+                                        <a href="{{ $agreement->custom_agreement_document_url }}" target="_blank" rel="noopener">
+                                            Pobierz dokument PDF
+                                        </a>
+                                    </p>
+                                @elseif(filled($agreement->agreement_body))
+                                    <div class="border rounded p-3 bg-white agreement-body-preview">{!! $agreement->agreement_body !!}</div>
+                                @else
+                                    <p class="text-muted mb-0">Treść {{ $isContractAnnex ? 'aneksu' : 'umowy' }} nie została jeszcze przygotowana.</p>
+                                @endif
+
+                                @if($isContractAnnex && $agreement->hasAnnexProgramChange())
+                                    <div class="mt-3 border rounded p-3 bg-white">
+                                        <h5 class="mb-2">Program imprezy po zmianie</h5>
+                                        @if(filled($agreement->annex_program_change_notes))
+                                            <p class="small text-muted">{{ $agreement->annex_program_change_notes }}</p>
+                                        @endif
+                                        {!! $annexService->formatProgramSnapshotHtml($agreement->annex_program_snapshot) !!}
+                                    </div>
+                                @endif
 
                                 @if(!empty($agreement->attachments))
                                     <div class="mt-3">

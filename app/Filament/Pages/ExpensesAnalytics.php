@@ -3,6 +3,7 @@
 namespace App\Filament\Pages;
 
 use App\Models\EventSettlementCost;
+use App\Support\FilamentNavigation;
 use Filament\Forms;
 use Filament\Pages\Page;
 use Filament\Tables;
@@ -32,9 +33,9 @@ class ExpensesAnalytics extends Page implements HasTable
 
     protected static string $view = 'filament.pages.expenses-analytics';
 
-    protected static ?string $navigationGroup = 'Finanse';
+    protected static ?string $navigationGroup = FilamentNavigation::GROUP_FINANCE;
 
-    protected static ?int $navigationSort = 13;
+    protected static ?int $navigationSort = 8;
 
     public ?string $selectedDateFrom = null;
 
@@ -104,6 +105,7 @@ class ExpensesAnalytics extends Page implements HasTable
     public function getStats(): array
     {
         $query = EventSettlementCost::query()
+            ->paymentsOnly()
             ->when($this->selectedDateFrom, fn ($q) => $q->whereDate('event_settlement_costs.created_at', '>=', $this->selectedDateFrom))
             ->when($this->selectedDateTo, fn ($q) => $q->whereDate('event_settlement_costs.created_at', '<=', $this->selectedDateTo))
             ->when($this->selectedPaymentStatus, fn ($q) => $q->where('payment_status', $this->selectedPaymentStatus))
@@ -282,6 +284,7 @@ class ExpensesAnalytics extends Page implements HasTable
         $counts = [];
 
         $query = EventSettlementCost::query()
+            ->paymentsOnly()
             ->when($this->selectedDateFrom, fn ($q) => $q->whereDate('event_settlement_costs.created_at', '>=', $this->selectedDateFrom))
             ->when($this->selectedDateTo, fn ($q) => $q->whereDate('event_settlement_costs.created_at', '<=', $this->selectedDateTo))
             ->when($this->selectedContractor, fn ($q) => $q->where('contractor_id', $this->selectedContractor))
@@ -340,6 +343,7 @@ class ExpensesAnalytics extends Page implements HasTable
         $data = [];
 
         $query = EventSettlementCost::query()
+            ->paymentsOnly()
             ->when($this->selectedDateFrom, fn ($q) => $q->whereDate('event_settlement_costs.created_at', '>=', $this->selectedDateFrom))
             ->when($this->selectedDateTo, fn ($q) => $q->whereDate('event_settlement_costs.created_at', '<=', $this->selectedDateTo))
             ->when($this->selectedPaymentStatus, fn ($q) => $q->where('payment_status', $this->selectedPaymentStatus))

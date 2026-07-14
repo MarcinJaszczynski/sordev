@@ -12,6 +12,8 @@ use App\Models\EventSettlementParticipantPayment;
 use App\Models\EventTemplate;
 use App\Models\EventTemplateProgramPoint;
 use App\Models\PilotCashPreparation;
+use App\Models\Task;
+use App\Support\Calendar\CalendarEventLinks;
 use Illuminate\Database\Eloquent\Model;
 
 class TaskContextRegistry
@@ -236,4 +238,162 @@ class TaskContextRegistry
 
         return trim('Gotówka pilota'.($currency ? ' '.$currency : '').($eventName ? ' • '.$eventName : '').' (#'.$cash->getKey().')');
     }
+
+    public static function urlForRecord(?Model $record): ?string
+    {
+        $links = static::linksForRecord($record);
+
+        return $links[0]['url'] ?? null;
+    }
+
+    /**
+     * @return array<int, array{label: string, url: string, icon: string}>
+     */
+    public static function linksForTask(?Task $task): array
+    {
+        $contextTask = static::resolveEffectiveContextTask($task);
+
+        if (! $contextTask) {
+            return [];
+        }
+
+        $contextTask->loadMissing('taskable');
+
+        return static::linksForRecord($contextTask->taskable);
+    }
+
+    public static function resolveEffectiveContextTask(?Task $task): ?Task
+    {
+        if (! $task) {
+            return null;
+        }
+
+        $seen = [];
+        $cursor = $task;
+
+        while ($cursor) {
+            if (isset($seen[$cursor->id])) {
+                break;
+            }
+
+            $seen[$cursor->id] = true;
+
+            if ($cursor->taskable_type && $cursor->taskable_id) {
+                return $cursor;
+            }
+
+            if (! $cursor->parent_id) {
+                break;
+            }
+
+            $cursor->loadMissing('parent');
+            $cursor = $cursor->parent;
+        }
+
+        return null;
+    }
+
+    /**
+     * @return array<int, array{label: string, url: string, icon: string}>
+     */
+    public static function linksForRecord(?Model $record): array
+    {
+        if (! $record) {
+            return [];
+        }
+
+        try {
+            return CalendarEventLinks::compact(match (true) {
+                $record instanceof Event => [
+                    CalendarEventLinks::event($record->getKey()),
+                ],
+                $record instanceof EventTemplate => [
+                    CalendarEventLinks::link(
+                        \App\Filament\Resources\EventTemplateResource::getUrl('edit', ['record' => $record]),
+                        'Szablon imprezy',
+                        'heroicon-o-document-duplicate',
+                    ),
+                ],
+                $record instanceof Contractor => [
+                    CalendarEventLinks::contractor($record->getKey()),
+                ],
+                $record instanceof EventProgramPoint => static::eventProgramPointLinks($record),
+                $record instanceof EventTemplateProgramPoint => [
+                    CalendarEventLinks::link(
+                        $record->event_template_id
+                            ? \App\Filament\Resources\EventTemplateResource::getUrl('edit', ['record' => $record->event_template_id])
+                            : null,
+                        'Szablon imprezy',
+                        'heroicon-o-document-duplicate',
+                    ),
+                ],
+                $record instanceof EventDocument => [
+                    CalendarEventLinks::event($record->event_id),
+                    CalendarEventLinks::eventDocuments($record->event_id),
+                ],
+                $record instanceof EventSettlementCost => static::settlementContextLinks(
+                    $record->settlement_id,
+                    \App\Filament\Resources\EventSettlementResource::getUrl('costs', ['record' => $record->settlement_id]),
+                    'Koszty rozliczenia',
+                    'heroicon-o-receipt-percent',
+                ),
+                $record instanceof EventSettlementDocument => static::settlementContextLinks(
+                    $record->settlement_id,
+                    \App\Filament\Resources\EventSettlementResource::getUrl('documents', ['record' => $record->settlement_id]),
+                    'Dokumenty rozliczenia',
+                    'heroicon-o-document',
+                ),
+                $record instanceof EventSettlementParticipantPayment => static::settlementContextLinks(
+                    $record->settlement_id,
+                    \App\Filament\Resources\EventSettlementResource::getUrl('payments', ['record' => $record->settlement_id]),
+                    'Wpłaty uczestników',
+                    'heroicon-o-banknotes',
+                ),
+                $record instanceof PilotCashPreparation => static::settlementContextLinks(
+                    $record->settlement_id,
+                    \App\Filament\Resources\EventSettlementResource::getUrl('pilot-cash', ['record' => $record->settlement_id]),
+                    'Gotówka pilota',
+                    'heroicon-o-wallet',
+                ),
+                default => [],
+            });
+        } catch (\Exception $e) {
+            return [];
+        }
+    }
+
+    /**
+     * @return array<int, array{label: string, url: string, icon?: string}|null>
+     */
+    protected static function eventProgramPointLinks(EventProgramPoint $programPoint): array
+    {
+        $programPoint->loadMissing(['event:id', 'contractor:id']);
+
+        return [
+            CalendarEventLinks::event($programPoint->event_id),
+            CalendarEventLinks::eventProgram($programPoint->event_id),
+            CalendarEventLinks::contractor($programPoint->contractor_id),
+        ];
+    }
+
+    /**
+     * @return array<int, array{label: string, url: string, icon?: string}|null>
+     */
+    protected static function settlementContextLinks(?int $settlementId, ?string $detailUrl, string $detailLabel, string $detailIcon): array
+    {
+        if (! $settlementId) {
+            return [];
+        }
+
+        $settlement = \App\Models\EventSettlement::query()
+            ->select(['id', 'event_id'])
+            ->find($settlementId);
+
+        return [
+            CalendarEventLinks::event($settlement?->event_id),
+            CalendarEventLinks::settlement($settlementId),
+            CalendarEventLinks::link($detailUrl, $detailLabel, $detailIcon),
+        ];
+    }
+
 }

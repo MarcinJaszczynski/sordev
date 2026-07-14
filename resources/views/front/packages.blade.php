@@ -272,19 +272,31 @@ document.addEventListener('DOMContentLoaded', function() {
                                 </div>
                             </div>
                             @endif
+                            @php
+                                $selectedTransportTypeIds = array_map(
+                                    'strval',
+                                    array_filter((array) request('transport_type_id', []))
+                                );
+                            @endphp
                             <div class="widget">
                                 <h2>Środek transportu</h2>
                                 <div class="box">
-                                    <select name="transport_type_id" class="form-select">
-                                        <option value="">Wszystkie środki transportu</option>
-                                        @if(isset($transportTypes))
-                                            @foreach($transportTypes as $transportType)
-                                                <option value="{{ $transportType->id }}" @if((string)request('transport_type_id') === (string)$transportType->id) selected @endif>
-                                                    {{ $transportType->name }}
-                                                </option>
-                                            @endforeach
-                                        @endif
-                                    </select>
+                                    @if(isset($transportTypes))
+                                        @foreach($transportTypes as $transportType)
+                                            <label class="d-block mb-1">
+                                                <input
+                                                    type="checkbox"
+                                                    name="transport_type_id[]"
+                                                    value="{{ $transportType->id }}"
+                                                    @checked(in_array((string) $transportType->id, $selectedTransportTypeIds, true))
+                                                >
+                                                {{ $transportType->name }}
+                                            </label>
+                                        @endforeach
+                                    @endif
+                                    <small class="text-muted d-block mt-2">
+                                        Zaznacz jeden lub więcej — np. sam autokar albo autokar i pociąg razem.
+                                    </small>
                                 </div>
                             </div>
                         <div class="filter-button">

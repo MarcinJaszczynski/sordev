@@ -2,6 +2,10 @@
 
 namespace App\Filament\Resources\EventSettlementResource\RelationManagers;
 
+use App\Filament\Forms\CurrencyConversionFields;
+use App\Filament\Forms\ParticipantPricingFields;
+use App\Filament\Forms\ReservationFormFields;
+use App\Filament\Forms\ReservationFormOptions;
 use App\Filament\Resources\EventResource;
 use App\Filament\Resources\EventSettlementResource\Traits\DispatchesSettlementDataChanged;
 use App\Filament\Resources\TaskResource;
@@ -9,14 +13,18 @@ use App\Models\Contractor;
 use App\Models\Currency;
 use App\Models\CurrencyRateSnapshot;
 use App\Models\EventDocument;
+use App\Models\EventProgramPoint;
 use App\Models\EventSettlementCost;
 use App\Models\Reservation;
+use App\Services\SettlementPaymentHealthService;
 use App\Support\StoragePath;
 use Filament\Forms;
 use Filament\Forms\Form;
 use Filament\Resources\RelationManagers\RelationManager;
 use Filament\Tables;
 use Filament\Tables\Table;
+use Illuminate\Database\Eloquent\Builder;
+use Illuminate\Database\Eloquent\SoftDeletingScope;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Storage;
 
@@ -26,7 +34,7 @@ class SettlementCostsRelationManager extends RelationManager
 
     protected static string $relationship = 'costs';
 
-    protected static ?string $title = 'Koszty (plan vs rzeczywiste)';
+    protected static ?string $title = 'Koszty';
 
     protected static ?string $recordTitleAttribute = 'name';
 
@@ -44,7 +52,11 @@ class SettlementCostsRelationManager extends RelationManager
 
                     Forms\Components\Select::make('source_type')
                         ->label('Źródło')
-                        ->options(['manual' => 'Ręczny wpis', 'program_point' => 'Punkt programu'])
+                        ->options([
+                            'manual' => 'Ręczny wpis',
+                            'program_point' => 'Punkt programu',
+                            'program_point_payment' => 'Wpłata punktu programu',
+                        ])
                         ->default('manual')
                         ->required(),
 
@@ -111,44 +123,73 @@ class SettlementCostsRelationManager extends RelationManager
             Forms\Components\Section::make('Koszt planowany')
                 ->columns(3)
                 ->schema([
+                    ParticipantPricingFields::settlementAmountBasisSelect(),
+                    ParticipantPricingFields::settlementPlannedScopeSelect(),
+
+                    Forms\Components\TextInput::make('planned_unit_amount')
+                        ->label(fn (Forms\Get $get): string => $get('planned_amount_basis') === 'per_person'
+                            ? 'Stawka za osobę'
+                            : 'Kwota łączna za grupę')
+                        ->numeric()
+                        ->nullable()
+                        ->live(onBlur: true)
+                        ->helperText(fn (Forms\Get $get): string => $get('planned_amount_basis') === 'per_person'
+                            ? 'Mnożone przez liczbę uczestników/płacących z imprezy.'
+                            : 'Kwota za całą grupę — bez mnożenia.')
+                        ->afterStateUpdated(function ($state, Forms\Set $set, Forms\Get $get): void {
+                            $count = max(1, (int) ($this->getOwnerRecord()->event?->participant_count ?? 1));
+                            $unit = (float) ($state ?? 0);
+                            $basis = (string) ($get('planned_amount_basis') ?? 'per_person');
+
+                            if ($unit <= 0) {
+                                return;
+                            }
+
+                            $total = $basis === 'per_person' ? round($unit * $count, 2) : round($unit, 2);
+                            $set('planned_amount', $total);
+                            CurrencyConversionFields::recalculatePlannedPln($set, $get);
+                        }),
+
                     Forms\Components\TextInput::make('planned_amount')
                         ->label('Kwota planowana')
                         ->numeric()
                         ->required()
                         ->default(0)
                         ->live(onBlur: true)
-                        ->afterStateUpdated(function ($state, Forms\Set $set, Forms\Get $get) {
-                            $rate = (float) ($get('planned_rate') ?: 1);
-                            $set('planned_amount_pln', round($state * $rate, 2));
-                        }),
+                        ->afterStateUpdated(fn ($state, Forms\Set $set, Forms\Get $get) => CurrencyConversionFields::recalculatePlannedPln($set, $get)),
 
-                    Forms\Components\Select::make('planned_currency_id')
-                        ->label('Waluta')
-                        ->options(fn () => Currency::orderBy('name')->pluck('name', 'id'))
-                        ->searchable()
+                    CurrencyConversionFields::currencySelect('planned_currency_id')
                         ->live()
-                        ->afterStateUpdated(function ($state, Forms\Set $set) {
+                        ->afterStateUpdated(function ($state, Forms\Set $set, Forms\Get $get): void {
                             if ($state) {
                                 $c = Currency::find($state);
                                 $set('planned_rate', $c?->exchange_rate ?? 1);
                             }
+
+                            CurrencyConversionFields::recalculatePlannedPln($set, $get);
                         }),
+
+                    CurrencyConversionFields::convertToggle('planned_convert_to_pln', 'planned_currency_id')
+                        ->live()
+                        ->afterStateUpdated(fn ($state, Forms\Set $set, Forms\Get $get) => CurrencyConversionFields::recalculatePlannedPln($set, $get)),
 
                     Forms\Components\TextInput::make('planned_rate')
                         ->label('Kurs do PLN')
                         ->numeric()
                         ->default(1)
                         ->live(onBlur: true)
-                        ->afterStateUpdated(function ($state, Forms\Set $set, Forms\Get $get) {
-                            $amount = (float) ($get('planned_amount') ?: 0);
-                            $set('planned_amount_pln', round($amount * $state, 2));
-                        }),
+                        ->afterStateUpdated(fn ($state, Forms\Set $set, Forms\Get $get) => CurrencyConversionFields::recalculatePlannedPln($set, $get)),
 
                     Forms\Components\TextInput::make('planned_amount_pln')
-                        ->label('= PLN')
+                        ->label(fn (Forms\Get $get): string => self::isForeignCurrency($get('planned_currency_id')) && ! (bool) ($get('planned_convert_to_pln') ?? true)
+                            ? 'Suma w PLN'
+                            : '= PLN')
                         ->numeric()
                         ->readOnly()
-                        ->suffix('PLN'),
+                        ->suffix('PLN')
+                        ->placeholder(fn (Forms\Get $get): ?string => self::isForeignCurrency($get('planned_currency_id')) && ! (bool) ($get('planned_convert_to_pln') ?? true)
+                            ? 'Bez przeliczenia'
+                            : null),
 
                     Forms\Components\DateTimePicker::make('advance_due_date')
                         ->label('Termin zaliczki/rezerwacji')
@@ -242,8 +283,16 @@ class SettlementCostsRelationManager extends RelationManager
                         ->options(EventSettlementCost::$paymentMethods)
                         ->nullable(),
 
+                    Forms\Components\TextInput::make('invoice_number')
+                        ->label('Numer faktury')
+                        ->nullable(),
+
+                    Forms\Components\TextInput::make('receipt_number')
+                        ->label('Numer paragonu')
+                        ->nullable(),
+
                     Forms\Components\TextInput::make('document_number')
-                        ->label('Nr dokumentu')
+                        ->label('Nr dokumentu (legacy)')
                         ->nullable(),
 
                     Forms\Components\DateTimePicker::make('paid_at')
@@ -257,7 +306,7 @@ class SettlementCostsRelationManager extends RelationManager
                         ->nullable(),
                 ]),
 
-            Forms\Components\RichEditor::make('notes')
+            \FilamentTiptapEditor\TiptapEditor::make('notes')
                 ->columnSpanFull(),
         ]);
     }
@@ -265,7 +314,11 @@ class SettlementCostsRelationManager extends RelationManager
     public function table(Table $table): Table
     {
         return $table
-            ->modifyQueryUsing(fn ($query) => $query->withCount('documents'))
+            ->modifyQueryUsing(fn (Builder $query) => $query
+                ->withCount('documents')
+                ->withoutGlobalScopes([
+                    SoftDeletingScope::class,
+                ]))
             ->columns([
                 Tables\Columns\TextColumn::make('name')
                     ->label('Pozycja')
@@ -275,6 +328,7 @@ class SettlementCostsRelationManager extends RelationManager
                     ->state(function (EventSettlementCost $record): string {
                         $source = match ($record->source_type) {
                             'program_point' => 'Punkt programu',
+                            'program_point_payment' => 'Wpłata punktu programu',
                             'insurance_day' => 'Ubezpieczenie',
                             'transport' => 'Transport',
                             'accommodation' => 'Nocleg',
@@ -423,6 +477,25 @@ class SettlementCostsRelationManager extends RelationManager
                             .'</div>';
                     }),
 
+                Tables\Columns\TextColumn::make('coverage_status')
+                    ->label('Semafor')
+                    ->html()
+                    ->state(function (EventSettlementCost $record): string {
+                        $health = app(SettlementPaymentHealthService::class);
+                        $settlement = $record->settlement ?? $this->getOwnerRecord();
+                        $allCosts = $settlement?->relationLoaded('costs')
+                            ? $settlement->costs
+                            : ($settlement?->costs()->get() ?? collect());
+
+                        if (! $health->isEvaluablePlanCost($record)) {
+                            return "<span class='admin-table-pill' style='background:#f3f4f6;color:#6b7280'>—</span>";
+                        }
+
+                        $evaluation = $health->evaluatePlanCost($record, $allCosts);
+
+                        return $health->statusBadgeHtml((string) ($evaluation['coverage_status'] ?? SettlementPaymentHealthService::STATUS_SHORTFALL));
+                    }),
+
                 Tables\Columns\BadgeColumn::make('approval_status')
                     ->label('Kontrola')
                     ->formatStateUsing(fn (?string $state) => EventSettlementCost::$approvalStatuses[$state ?? 'pending'] ?? $state)
@@ -454,6 +527,35 @@ class SettlementCostsRelationManager extends RelationManager
                     ->multiple()
                     ->searchable(),
 
+                Tables\Filters\SelectFilter::make('coverage_status')
+                    ->label('Semafor')
+                    ->options(SettlementPaymentHealthService::$statusLabels)
+                    ->query(function (Builder $query, array $data): Builder {
+                        $status = $data['value'] ?? null;
+
+                        if (blank($status)) {
+                            return $query;
+                        }
+
+                        $settlement = $this->getOwnerRecord();
+                        $health = app(SettlementPaymentHealthService::class);
+                        $allCosts = $settlement->costs()->get();
+                        $ids = $health->listPlanCosts($allCosts)
+                            ->filter(function (EventSettlementCost $cost) use ($health, $allCosts, $status): bool {
+                                $evaluation = $health->evaluatePlanCost($cost, $allCosts);
+
+                                return ($evaluation['coverage_status'] ?? '') === $status;
+                            })
+                            ->pluck('id')
+                            ->all();
+
+                        if ($ids === []) {
+                            return $query->whereRaw('1 = 0');
+                        }
+
+                        return $query->whereIn('id', $ids);
+                    }),
+
                 Tables\Filters\SelectFilter::make('approval_status')
                     ->label('Kontrola')
                     ->options(EventSettlementCost::$approvalStatuses)
@@ -465,8 +567,9 @@ class SettlementCostsRelationManager extends RelationManager
                     ->multiple(),
 
                 Tables\Filters\SelectFilter::make('paid_by')
-                    ->label('Płaci')
-                    ->options(EventSettlementCost::$paidByOptions),
+                    ->label('Płatnik')
+                    ->options(EventSettlementCost::$paidByOptions)
+                    ->placeholder('Wszyscy'),
 
                 Tables\Filters\SelectFilter::make('contractor_id')
                     ->label('Kontrahent')
@@ -523,6 +626,9 @@ class SettlementCostsRelationManager extends RelationManager
                 Tables\Filters\Filter::make('has_documents')
                     ->label('Tylko z dokumentami')
                     ->query(fn ($query) => $query->whereHas('documents')),
+
+                Tables\Filters\TrashedFilter::make()
+                    ->label('Usunięte pozycje'),
             ])
             ->headerActions([
                 Tables\Actions\Action::make('open_event')
@@ -543,60 +649,49 @@ class SettlementCostsRelationManager extends RelationManager
                     ->button()
                     ->size('sm')
                     ->modalHeading(fn (EventSettlementCost $record) => 'Nowa rezerwacja: '.$record->name)
-                    ->modalWidth('2xl')
-                    ->form([
-                        Forms\Components\TextInput::make('booking_reference')
-                            ->label('Numer rezerwacji')
-                            ->maxLength(255)
-                            ->nullable(),
+                    ->modalWidth(ReservationFormFields::MODAL_WIDTH)
+                    ->form(function (EventSettlementCost $record): array {
+                        $fromProgramPoint = $record->source_type === 'program_point' && $record->source_id;
 
-                        Forms\Components\Select::make('contractor_id')
-                            ->label('Kontrahent')
-                            ->options(fn () => \App\Models\Contractor::orderBy('name')->pluck('name', 'id'))
-                            ->searchable()
-                            ->preload()
-                            ->nullable(),
-
-                        Forms\Components\TextInput::make('participant_count')
-                            ->label('Liczba uczestników')
-                            ->numeric()
-                            ->default(1)
-                            ->required(),
-
-                        Forms\Components\TextInput::make('reserved_amount')
-                            ->label('Kwota rezerwacji (PLN)')
-                            ->numeric()
-                            ->suffix('PLN')
-                            ->nullable(),
-
-                        Forms\Components\Select::make('status')
-                            ->label('Status')
-                            ->options(Reservation::$statuses)
-                            ->default('pending')
-                            ->required(),
-
-                        Forms\Components\DateTimePicker::make('reserved_at')
-                            ->label('Data rezerwacji')
-                            ->default(now())
-                            ->required(),
-
-                        Forms\Components\DateTimePicker::make('expires_at')
-                            ->label('Wygasa')
-                            ->nullable(),
-
-                        Forms\Components\RichEditor::make('notes')
-                            ->columnSpanFull()
-                            ->nullable(),
-                    ])
+                        return ReservationFormFields::schema(new ReservationFormOptions(
+                            eventId: $this->getOwnerRecord()->event_id,
+                            event: $this->getOwnerRecord()->event,
+                            settlementId: $this->getOwnerRecord()->id,
+                            defaultContractorId: $record->contractor_id,
+                            defaultProgramPointId: $fromProgramPoint ? $record->source_id : null,
+                            defaultSettlementCostId: $record->id,
+                            isHotelContext: $fromProgramPoint
+                                && (bool) EventProgramPoint::query()->whereKey($record->source_id)->value('is_hotel'),
+                            showHotelNotes: $fromProgramPoint
+                                && (bool) EventProgramPoint::query()->whereKey($record->source_id)->value('is_hotel'),
+                            simplified: (bool) $fromProgramPoint,
+                            lockContractor: (bool) $fromProgramPoint,
+                        ));
+                    })
+                    ->fillForm(fn (EventSettlementCost $record): array => ReservationFormFields::defaultModalData(new ReservationFormOptions(
+                        eventId: $this->getOwnerRecord()->event_id,
+                        event: $this->getOwnerRecord()->event,
+                        defaultContractorId: $record->contractor_id,
+                        defaultProgramPointId: $record->source_type === 'program_point' ? $record->source_id : null,
+                        defaultSettlementCostId: $record->id,
+                        defaultAmount: $record->planned_amount,
+                        defaultCurrencyId: $record->planned_currency_id,
+                    )))
                     ->action(function (array $data, EventSettlementCost $record): void {
-                        Reservation::create([
-                            ...$data,
+                        $fromProgramPoint = $record->source_type === 'program_point' && $record->source_id;
+
+                        $reservation = Reservation::create([
+                            ...ReservationFormFields::normalizeSaveData($data),
                             'event_id' => $this->getOwnerRecord()->event_id,
-                            'program_point_id' => $record->source_type === 'program_point' ? $record->source_id : null,
+                            'program_point_id' => $fromProgramPoint ? $record->source_id : null,
                             'settlement_cost_id' => $record->id,
-                            'contractor_id' => $data['contractor_id'] ?? $record->contractor_id,
+                            'contractor_id' => $fromProgramPoint
+                                ? EventProgramPoint::query()->whereKey($record->source_id)->value('contractor_id')
+                                : ($data['contractor_id'] ?? $record->contractor_id),
                             'created_by' => auth()->id(),
                         ]);
+
+                        ReservationFormFields::persistAttachments($reservation, $data);
 
                         $this->dispatchSettlementDataChanged();
                     }),
@@ -682,7 +777,7 @@ class SettlementCostsRelationManager extends RelationManager
                         ->icon('heroicon-o-x-circle')
                         ->color('danger')
                         ->form([
-                            Forms\Components\RichEditor::make('notes')
+                            \FilamentTiptapEditor\TiptapEditor::make('notes')
                                 ->required(),
                         ])
                         ->action(function (EventSettlementCost $record, array $data) {
@@ -748,6 +843,7 @@ class SettlementCostsRelationManager extends RelationManager
                                     'name' => $item['name'],
                                     'file_path' => $finalFilePath,
                                     'notes' => $item['notes'] ?? null,
+                                    'is_invoice' => (bool) ($item['is_invoice'] ?? false),
                                     'attach_to_pilot_pdf' => in_array('attach_to_pilot_pdf', $targets, true),
                                     'attach_to_hotel_pdf' => in_array('attach_to_hotel_pdf', $targets, true),
                                     'attach_to_driver_pdf' => in_array('attach_to_driver_pdf', $targets, true),
@@ -810,6 +906,7 @@ class SettlementCostsRelationManager extends RelationManager
                             'file_path' => null,
                             'name' => $doc->name,
                             'notes' => $doc->notes,
+                            'is_invoice' => (bool) $doc->is_invoice,
                             'pdf_targets' => array_keys(array_filter([
                                 'attach_to_pilot_pdf' => $doc->attach_to_pilot_pdf,
                                 'attach_to_hotel_pdf' => $doc->attach_to_hotel_pdf,
@@ -858,7 +955,13 @@ class SettlementCostsRelationManager extends RelationManager
                                         ->maxSize(20480)
                                         ->columnSpan(2),
 
-                                    Forms\Components\RichEditor::make('notes')
+                                    \FilamentTiptapEditor\TiptapEditor::make('notes')
+                                        ->columnSpan(2),
+
+                                    Forms\Components\Toggle::make('is_invoice')
+                                        ->label('To jest faktura')
+                                        ->inline(false)
+                                        ->default(false)
                                         ->columnSpan(2),
 
                                     Forms\Components\CheckboxList::make('pdf_targets')
@@ -900,6 +1003,7 @@ class SettlementCostsRelationManager extends RelationManager
                                 'name' => $item['name'],
                                 'file_path' => $finalFilePath,
                                 'notes' => $item['notes'] ?? null,
+                                'is_invoice' => (bool) ($item['is_invoice'] ?? false),
                                 'attach_to_pilot_pdf' => in_array('attach_to_pilot_pdf', $targets, true),
                                 'attach_to_hotel_pdf' => in_array('attach_to_hotel_pdf', $targets, true),
                                 'attach_to_driver_pdf' => in_array('attach_to_driver_pdf', $targets, true),
@@ -940,6 +1044,10 @@ class SettlementCostsRelationManager extends RelationManager
                     ->after(fn () => $this->dispatchSettlementDataChanged()),
 
                 Tables\Actions\DeleteAction::make()
+                    ->after(fn () => $this->dispatchSettlementDataChanged()),
+                Tables\Actions\RestoreAction::make()
+                    ->after(fn () => $this->dispatchSettlementDataChanged()),
+                Tables\Actions\ForceDeleteAction::make()
                     ->after(fn () => $this->dispatchSettlementDataChanged()),
             ]);
     }

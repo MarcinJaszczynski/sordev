@@ -2,13 +2,17 @@
 
 namespace App\Models;
 
+use App\Models\Concerns\HasStickyNotes;
 use App\Models\Concerns\HasTasks;
 use App\Support\Region;
 use App\Support\StoragePath;
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\SoftDeletes;
+use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Schema;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Str;
 
@@ -33,7 +37,7 @@ use Illuminate\Support\Str;
  */
 class EventTemplate extends Model
 {
-    use HasFactory, HasTasks, SoftDeletes;
+    use HasFactory, HasStickyNotes, HasTasks, SoftDeletes;
 
     /**
      * Automatyczne zapewnienie unikalności slugów przy tworzeniu/aktualizacji.
@@ -155,12 +159,17 @@ class EventTemplate extends Model
 
     public function getFullImageUrlAttribute(): ?string
     {
-        return $this->publicStorageUrlIfExists($this->full_image_path);
+        return $this->publicStorageUrlIfExists($this->full_image_path)
+            ?: $this->resolveImageUrlFromFeaturedName(false)
+            ?: $this->resolveImageUrlFromSlug(false);
     }
 
     public function getPreviewImageUrlAttribute(): ?string
     {
-        return $this->publicStorageUrlIfExists($this->preview_image_path) ?: $this->full_image_url;
+        return $this->publicStorageUrlIfExists($this->preview_image_path)
+            ?: $this->resolveImageUrlFromFeaturedName(true)
+            ?: $this->resolveImageUrlFromSlug(true)
+            ?: $this->full_image_url;
     }
 
     private function publicStorageUrlIfExists(?string $path): ?string
@@ -174,6 +183,216 @@ class EventTemplate extends Model
         return Storage::disk('public')->exists($normalized)
             ? StoragePath::publicUrl($normalized)
             : null;
+    }
+
+    private function resolveImageUrlFromSlug(bool $preferThumb): ?string
+    {
+        $slug = Str::slug((string) ($this->slug ?: $this->name));
+
+        if ($slug === '') {
+            return null;
+        }
+
+        return $this->resolveImageUrlFromCandidates([$slug], $preferThumb, true);
+    }
+
+    private function resolveImageUrlFromFeaturedName(bool $preferThumb): ?string
+    {
+        $normalized = StoragePath::normalize($this->featured_image);
+
+        if (! $normalized) {
+            return null;
+        }
+
+        $filenameSlug = Str::slug((string) pathinfo($normalized, PATHINFO_FILENAME));
+
+        if ($filenameSlug === '') {
+            return null;
+        }
+
+        return $this->resolveImageUrlFromCandidates([$filenameSlug], $preferThumb, true);
+    }
+
+    private function resolveImageUrlFromCandidates(array $candidateSlugs, bool $preferThumb, bool $allowTokenMatch): ?string
+    {
+        $directories = $this->imageSearchDirectories($preferThumb);
+
+        foreach ($candidateSlugs as $candidateSlug) {
+            if (! is_string($candidateSlug) || $candidateSlug === '') {
+                continue;
+            }
+
+            foreach ($directories as $directory) {
+                $index = $this->directorySlugIndex($directory);
+
+                if (isset($index[$candidateSlug])) {
+                    return StoragePath::publicUrl($index[$candidateSlug]);
+                }
+            }
+        }
+
+        if (! $allowTokenMatch) {
+            return null;
+        }
+
+        foreach ($candidateSlugs as $candidateSlug) {
+            if (! is_string($candidateSlug) || $candidateSlug === '') {
+                continue;
+            }
+
+            $matchedPath = $this->resolveTokenMatchedPath($candidateSlug, $directories);
+
+            if ($matchedPath) {
+                return StoragePath::publicUrl($matchedPath);
+            }
+        }
+
+        foreach ($candidateSlugs as $candidateSlug) {
+            if (! is_string($candidateSlug) || $candidateSlug === '') {
+                continue;
+            }
+
+            $matchedPath = $this->resolveLooseOverlapPath($candidateSlug, $directories);
+
+            if ($matchedPath) {
+                return StoragePath::publicUrl($matchedPath);
+            }
+        }
+
+        return null;
+    }
+
+    private function imageSearchDirectories(bool $preferThumb): array
+    {
+        return $preferThumb
+            ? ['event-templates/thumbs', 'event-templates/gallery/thumbs', 'event-templates', 'event-templates/gallery']
+            : ['event-templates', 'event-templates/gallery', 'event-templates/thumbs', 'event-templates/gallery/thumbs'];
+    }
+
+    private function directorySlugIndex(string $directory): array
+    {
+        static $directorySlugIndex = [];
+
+        if (! array_key_exists($directory, $directorySlugIndex)) {
+            $directorySlugIndex[$directory] = [];
+
+            foreach (Storage::disk('public')->files($directory) as $filePath) {
+                $name = pathinfo($filePath, PATHINFO_FILENAME);
+                $fileSlug = Str::slug($name);
+
+                if ($fileSlug !== '' && ! isset($directorySlugIndex[$directory][$fileSlug])) {
+                    $directorySlugIndex[$directory][$fileSlug] = $filePath;
+                }
+            }
+        }
+
+        return $directorySlugIndex[$directory];
+    }
+
+    private function resolveTokenMatchedPath(string $candidateSlug, array $directories): ?string
+    {
+        $candidateTokens = $this->slugTokens($candidateSlug);
+        $candidateAlphaTokens = array_values(array_filter($candidateTokens, static fn (string $token): bool => ! ctype_digit($token)));
+
+        if ($candidateAlphaTokens === []) {
+            return null;
+        }
+
+        $bestPath = null;
+        $bestDistance = PHP_INT_MAX;
+        $bestTokenCount = PHP_INT_MAX;
+
+        foreach ($directories as $directory) {
+            foreach ($this->directorySlugIndex($directory) as $fileSlug => $filePath) {
+                $fileTokens = $this->slugTokens($fileSlug);
+                $fileAlphaTokens = array_values(array_filter($fileTokens, static fn (string $token): bool => ! ctype_digit($token)));
+
+                if ($fileAlphaTokens === []) {
+                    continue;
+                }
+
+                if (array_diff($candidateAlphaTokens, $fileAlphaTokens) !== []) {
+                    continue;
+                }
+
+                $distance = levenshtein($candidateSlug, $fileSlug);
+                $tokenCount = count($fileTokens);
+
+                if ($distance < $bestDistance || ($distance === $bestDistance && $tokenCount < $bestTokenCount)) {
+                    $bestDistance = $distance;
+                    $bestTokenCount = $tokenCount;
+                    $bestPath = $filePath;
+
+                    continue;
+                }
+            }
+        }
+
+        return $bestPath;
+    }
+
+    private function resolveLooseOverlapPath(string $candidateSlug, array $directories): ?string
+    {
+        $candidateTokens = array_values(array_filter(
+            $this->slugTokens($candidateSlug),
+            static fn (string $token): bool => ! ctype_digit($token) && strlen($token) >= 4
+        ));
+
+        if ($candidateTokens === []) {
+            return null;
+        }
+
+        $bestPath = null;
+        $bestOverlap = 0;
+        $bestRatio = 0.0;
+        $bestDistance = PHP_INT_MAX;
+        $bestTokenCount = PHP_INT_MAX;
+
+        foreach ($directories as $directory) {
+            foreach ($this->directorySlugIndex($directory) as $fileSlug => $filePath) {
+                $fileTokens = array_values(array_filter(
+                    $this->slugTokens($fileSlug),
+                    static fn (string $token): bool => ! ctype_digit($token) && strlen($token) >= 4
+                ));
+
+                if ($fileTokens === []) {
+                    continue;
+                }
+
+                $overlap = count(array_intersect($candidateTokens, $fileTokens));
+
+                if ($overlap === 0) {
+                    continue;
+                }
+
+                $ratio = $overlap / count($candidateTokens);
+                $distance = levenshtein($candidateSlug, $fileSlug);
+                $tokenCount = count($fileTokens);
+
+                if (
+                    $overlap > $bestOverlap
+                    || ($overlap === $bestOverlap && $ratio > $bestRatio)
+                    || ($overlap === $bestOverlap && $ratio === $bestRatio && $distance < $bestDistance)
+                    || ($overlap === $bestOverlap && $ratio === $bestRatio && $distance === $bestDistance && $tokenCount < $bestTokenCount)
+                ) {
+                    $bestPath = $filePath;
+                    $bestOverlap = $overlap;
+                    $bestRatio = $ratio;
+                    $bestDistance = $distance;
+                    $bestTokenCount = $tokenCount;
+                }
+            }
+        }
+
+        return $bestPath;
+    }
+
+    private function slugTokens(string $slug): array
+    {
+        return array_values(array_filter(
+            explode('-', Str::slug($slug)),
+            static fn (string $token): bool => $token !== ''
+        ));
     }
 
     /**
@@ -192,6 +411,30 @@ class EventTemplate extends Model
     public function transportTypes()
     {
         return $this->belongsToMany(TransportType::class);
+    }
+
+    /**
+     * Szablon ma dokładnie wskazane rodzaje transportu — bez dodatkowych.
+     *
+     * @param  array<int, int|string>  $transportTypeIds
+     */
+    public function scopeWithExactTransportTypes(Builder $query, array $transportTypeIds): Builder
+    {
+        $transportTypeIds = array_values(array_unique(array_filter(array_map('intval', $transportTypeIds))));
+
+        if ($transportTypeIds === []) {
+            return $query;
+        }
+
+        foreach ($transportTypeIds as $transportTypeId) {
+            $query->whereHas('transportTypes', function (Builder $relationQuery) use ($transportTypeId): void {
+                $relationQuery->where('transport_types.id', $transportTypeId);
+            });
+        }
+
+        return $query->whereDoesntHave('transportTypes', function (Builder $relationQuery) use ($transportTypeIds): void {
+            $relationQuery->whereNotIn('transport_types.id', $transportTypeIds);
+        });
     }
 
     public function startPlace()
@@ -312,11 +555,16 @@ class EventTemplate extends Model
     }
 
     /**
-     * Relacja jeden-do-wielu z wariantami ilości uczestników
+     * Warianty ilości powiązane z szablonem przez cennik (event_template_price_per_person).
      */
-    public function qtyVariants()
+    public function qtyVariants(): \Illuminate\Database\Eloquent\Relations\BelongsToMany
     {
-        return $this->hasMany(EventTemplateQty::class);
+        return $this->belongsToMany(
+            EventTemplateQty::class,
+            'event_template_price_per_person',
+            'event_template_id',
+            'event_template_qty_id',
+        )->distinct();
     }
 
     /**
@@ -403,6 +651,35 @@ class EventTemplate extends Model
             'pricesPerPerson.currency',
             'pricesPerPerson.startPlace',
         ]);
+    }
+
+    /**
+     * Identyfikatory punktów startowych (podstawienia) dostępnych dla tego szablonu.
+     * Gdy brak wpisów availability — wszystkie miejsca z flagą starting_place.
+     *
+     * @return Collection<int, int>
+     */
+    public function resolveAvailableStartPlaceIds(): Collection
+    {
+        $baseQuery = Place::query()->startingPlaces();
+
+        if (! Schema::hasTable('event_template_starting_place_availability')) {
+            return $baseQuery->pluck('id');
+        }
+
+        $configured = $this->startingPlaceAvailabilities()
+            ->where('available', true)
+            ->pluck('start_place_id')
+            ->map(fn ($id) => (int) $id)
+            ->filter()
+            ->unique()
+            ->values();
+
+        if ($configured->isEmpty()) {
+            return $baseQuery->pluck('id');
+        }
+
+        return $baseQuery->whereIn('id', $configured)->pluck('id');
     }
 
     /**

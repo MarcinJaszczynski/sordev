@@ -5,6 +5,7 @@ namespace App\Filament\Resources;
 use App\Filament\Resources\PlaceDistanceResource\Pages;
 use App\Models\Place;
 use App\Models\PlaceDistance;
+use App\Support\FilamentNavigation;
 use Filament\Forms\Components\Select;
 use Filament\Forms\Components\TextInput;
 use Filament\Forms\Form;
@@ -27,17 +28,25 @@ class PlaceDistanceResource extends Resource
 
     protected static ?string $navigationLabel = 'Odległości między miejscami';
 
-    protected static ?string $navigationGroup = 'Ustawienia ogólne';
+    protected static ?string $navigationGroup = FilamentNavigation::GROUP_CONFIG;
+
+    public static function shouldRegisterNavigation(): bool
+    {
+        return false;
+    }
 
     public static function form(Form $form): Form
     {
         return $form
             ->schema([
                 Select::make('from_place_id')
-                    ->label('Miejsce początkowe')
-                    ->options(Place::pluck('name', 'id'))
+                    ->label('Miejsce początkowe (podstawienia)')
+                    ->options(fn (?PlaceDistance $record) => Place::startingPlaceSelectOptions(
+                        (int) ($record?->from_place_id ?? 0) ?: null
+                    ))
                     ->searchable()
-                    ->required(),
+                    ->required()
+                    ->helperText('Tylko punkty startowe imprez.'),
                 Select::make('to_place_id')
                     ->label('Miejsce docelowe')
                     ->options(Place::pluck('name', 'id'))
@@ -66,8 +75,8 @@ class PlaceDistanceResource extends Resource
             ])
             ->filters([
                 Tables\Filters\SelectFilter::make('from_place_id')
-                    ->label('Miejsce początkowe')
-                    ->options(Place::orderBy('name')->pluck('name', 'id')->toArray()),
+                    ->label('Miejsce początkowe (podstawienia)')
+                    ->options(fn () => Place::startingPlaceSelectOptions()),
 
                 Tables\Filters\SelectFilter::make('to_place_id')
                     ->label('Miejsce docelowe')

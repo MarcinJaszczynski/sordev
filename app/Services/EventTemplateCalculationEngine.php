@@ -342,7 +342,7 @@ class EventTemplateCalculationEngine
                 // Dodaj do ogólnej sumy kosztów noclegów
                 if ($dayTotalPln > 0) {
                     $plnPoints[] = [
-                        'name' => 'Noclegi - dzień '.$hotelDay->day,
+                        'name' => 'Hotel - dzień '.$hotelDay->day,
                         'unit_price' => null,
                         'group_size' => null,
                         'cost' => $dayTotalPln,
@@ -353,7 +353,7 @@ class EventTemplateCalculationEngine
                 }
                 foreach ($dayTotalForeign as $cur => $val) {
                     $currenciesPoints[$cur][] = [
-                        'name' => 'Noclegi - dzień '.$hotelDay->day,
+                        'name' => 'Hotel - dzień '.$hotelDay->day,
                         'unit_price' => null,
                         'group_size' => null,
                         'cost' => $val,
@@ -618,11 +618,11 @@ class EventTemplateCalculationEngine
 
     private function calculatePointCost($qty, $groupSize, $unitPrice)
     {
-        if ($groupSize <= 0) {
-            $groupSize = 1;
-        }
-
-        return ceil($qty / $groupSize) * $unitPrice;
+        return ProgramPointPricingCalculator::totalPrice(
+            (float) $unitPrice,
+            (int) $qty,
+            (int) ($groupSize ?? 0) > 0 ? (int) $groupSize : 1,
+        );
     }
 
     private function calculateTotalInPLN(array $tempCalculation): float

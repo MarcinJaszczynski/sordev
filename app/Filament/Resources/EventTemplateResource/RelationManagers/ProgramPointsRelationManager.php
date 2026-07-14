@@ -22,7 +22,6 @@ class ProgramPointsRelationManager extends RelationManager
     {
         return $table
             ->reorderable('order')
-            ->deferLoading()
             ->columns([
                 Tables\Columns\TextColumn::make('event_template_event_template_program_point.day')
                     ->label('Dzień')
@@ -107,7 +106,7 @@ class ProgramPointsRelationManager extends RelationManager
                             ->required(),
                         Forms\Components\TextInput::make('day')->label('Dzień')->numeric()->required(),
                         Forms\Components\TextInput::make('order')->label('Kolejność')->numeric()->required(),
-                        Forms\Components\RichEditor::make('notes')->label('Uwagi'),
+                        \FilamentTiptapEditor\TiptapEditor::make('notes')->label('Uwagi'),
                         Forms\Components\Toggle::make('include_in_program')
                             ->label('Uwzględniaj w programie')
                             ->default(false)
@@ -190,7 +189,7 @@ class ProgramPointsRelationManager extends RelationManager
                             ->required(),
                         Forms\Components\TextInput::make('day')->label('Dzień')->numeric()->required(),
                         Forms\Components\TextInput::make('order')->label('Kolejność')->numeric()->required(),
-                        Forms\Components\RichEditor::make('notes')->label('Uwagi'),
+                        \FilamentTiptapEditor\TiptapEditor::make('notes')->label('Uwagi'),
                         Forms\Components\Toggle::make('include_in_program')
                             ->label('Uwzględniaj w programie')
                             ->default(true)

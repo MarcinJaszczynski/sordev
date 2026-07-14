@@ -14,9 +14,9 @@ class TaskFactory extends Factory
     public function definition(): array
     {
         return [
-            'title'     => $this->faker->sentence(4),
-            'priority'  => $this->faker->randomElement(['low', 'medium', 'high']),
-            'order'     => 0,
+            'title' => $this->faker->sentence(4),
+            'priority' => $this->faker->randomElement(['normal', 'urgent']),
+            'order' => 0,
             'status_id' => TaskStatus::factory(),
             'author_id' => User::factory(),
         ];

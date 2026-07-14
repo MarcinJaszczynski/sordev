@@ -1,108 +1,55 @@
 <x-filament-widgets::widget>
 <div class="overflow-x-auto mt-2">
-    <div class="mb-4 flex items-center justify-between">
-        <h3 class="text-lg font-bold">Kalkulacja imprezy — algorytm jak w kalkulacji szablonu</h3>
-        <x-filament::button wire:click="refreshCalculations" color="primary" size="sm">
-            Odśwież kalkulacje
-        </x-filament::button>
+    <div class="mb-4 flex flex-wrap items-center justify-between gap-2">
+        <h3 class="text-lg font-bold">Kalkulacja imprezy</h3>
+        <div class="flex flex-wrap items-center gap-2">
+            @if($record)
+                <a href="{{ route('admin.events.calculation.pdf', $record) }}" target="_blank" class="fi-btn relative grid-flow-col items-center justify-center font-semibold outline-none transition duration-75 focus-visible:ring-2 rounded-lg fi-btn-size-sm fi-btn-color-gray px-3 py-2 text-sm inline-flex gap-1.5">
+                    PDF
+                </a>
+                <a href="{{ route('admin.events.calculation.excel', $record) }}" target="_blank" class="fi-btn relative grid-flow-col items-center justify-center font-semibold outline-none transition duration-75 focus-visible:ring-2 rounded-lg fi-btn-size-sm fi-btn-color-gray px-3 py-2 text-sm inline-flex gap-1.5">
+                    Excel
+                </a>
+            @endif
+            <x-filament::button wire:click="refreshCalculations" color="primary" size="sm">
+                Odśwież kalkulacje
+            </x-filament::button>
+        </div>
     </div>
 
+
+
     @if($record)
-        <div class="mb-6 border border-gray-200 rounded-lg overflow-hidden">
-            <div class="px-4 py-3 bg-gray-100 border-b border-gray-200 flex items-center justify-between gap-3">
-                <div>
-                    <h4 class="text-md font-semibold">Kalkulacja — pozycje cenowe</h4>
-                    <p class="text-xs text-gray-600 mt-1">Dodawaj i edytuj ceny oraz koszty bezpośrednio w tej zakładce.</p>
-                    <p class="text-xs text-gray-600 mt-1">
-                        @if($currentVariant)
-                            Grupa bieżąca: {{ $currentVariant['qty'] }} uczestników, {{ $currentVariant['gratis'] }} gratis, {{ $currentVariant['staff'] }} obsługa, {{ $currentVariant['driver'] }} kierowcy.
-                        @else
-                            Grupa bieżąca: {{ (int) ($record->participant_count ?? 0) }} uczestników.
-                        @endif
-                    </p>
-                </div>
-            </div>
+        <div class="mb-6 rounded-lg border border-amber-200 bg-amber-50 p-4 dark:border-amber-500/30 dark:bg-amber-500/10">
+            <label class="flex items-center gap-3">
+                <input type="checkbox" wire:model.live="useManualPricePerPerson"
+                       class="h-5 w-5 rounded border-gray-300 text-amber-600 focus:ring-amber-500">
+                <span class="text-sm font-semibold text-gray-900 dark:text-gray-100">Ustal ręcznie cenę za płacącego uczestnika</span>
+            </label>
+            <p class="mt-1 text-xs text-gray-600 dark:text-gray-400">
+                Cena dotyczy uczestników płacących (bez gratisów, pilota i obsługi). Działa analogicznie do ręcznego kosztu transportu —
+                wpisana kwota zastępuje cenę z kalkulacji i nie zostanie nadpisana przy „Przelicz”.
+                @if(!empty($authoritativeCalc['current']['paying']))
+                    Liczba płacących w bieżącej kalkulacji: <strong>{{ (int) $authoritativeCalc['current']['paying'] }}</strong>.
+                @endif
+            </p>
 
-            <div class="overflow-x-auto">
-                <table class="min-w-full bg-white text-sm">
-                    <thead>
-                        <tr class="bg-gray-50">
-                            <th class="px-3 py-2 border-b text-left">ID</th>
-                            <th class="px-3 py-2 border-b text-right">Ucz.</th>
-                            <th class="px-3 py-2 border-b text-right">Gratis</th>
-                            <th class="px-3 py-2 border-b text-right">Obsł.</th>
-                            <th class="px-3 py-2 border-b text-right">Kier.</th>
-                            <th class="px-3 py-2 border-b text-right">Cena/os</th>
-                            <th class="px-3 py-2 border-b text-right">Transport</th>
-                            <th class="px-3 py-2 border-b text-right">Baza</th>
-                            <th class="px-3 py-2 border-b text-right">Narzut</th>
-                            <th class="px-3 py-2 border-b text-right">Podatek</th>
-                            <th class="px-3 py-2 border-b text-right">Cena z VAT</th>
-                            <th class="px-3 py-2 border-b text-center">Akcje</th>
-                        </tr>
-                    </thead>
-                    <tbody>
-                        @forelse($priceRows as $priceRow)
-                            @php
-                                $isEditing = is_array($editingPrice) && (int) ($editingPrice['id'] ?? 0) === (int) $priceRow->id;
-                                $variantQty = (int) ($priceRow->eventTemplateQty->qty ?? $currentVariant['qty'] ?? $record->participant_count ?? 0);
-                                $variantGratis = (int) ($priceRow->eventTemplateQty->gratis ?? $currentVariant['gratis'] ?? 0);
-                                $variantStaff = (int) ($priceRow->eventTemplateQty->staff ?? $currentVariant['staff'] ?? 0);
-                                $variantDriver = (int) ($priceRow->eventTemplateQty->driver ?? $currentVariant['driver'] ?? 0);
-                            @endphp
-                            <tr>
-                                <td class="px-3 py-2 border-b">{{ $priceRow->id }}</td>
-                                <td class="px-3 py-2 border-b text-right">{{ $variantQty }}</td>
-                                <td class="px-3 py-2 border-b text-right">{{ $variantGratis }}</td>
-                                <td class="px-3 py-2 border-b text-right">{{ $variantStaff }}</td>
-                                <td class="px-3 py-2 border-b text-right">{{ $variantDriver }}</td>
-
-                                @if($isEditing)
-                                    <td class="px-3 py-2 border-b"><input type="number" step="0.01" class="w-28 rounded border-gray-300" wire:model.defer="editingPrice.price_per_person"></td>
-                                    <td class="px-3 py-2 border-b"><input type="number" step="0.01" class="w-28 rounded border-gray-300" wire:model.defer="editingPrice.transport_cost"></td>
-                                    <td class="px-3 py-2 border-b"><input type="number" step="0.01" class="w-28 rounded border-gray-300" wire:model.defer="editingPrice.price_base"></td>
-                                    <td class="px-3 py-2 border-b"><input type="number" step="0.01" class="w-28 rounded border-gray-300" wire:model.defer="editingPrice.markup_amount"></td>
-                                    <td class="px-3 py-2 border-b"><input type="number" step="0.01" class="w-28 rounded border-gray-300" wire:model.defer="editingPrice.tax_amount"></td>
-                                    <td class="px-3 py-2 border-b"><input type="number" step="0.01" class="w-28 rounded border-gray-300" wire:model.defer="editingPrice.price_with_tax"></td>
-                                    <td class="px-3 py-2 border-b text-center">
-                                        <div class="inline-flex items-center gap-1">
-                                            <x-filament::button wire:click="saveEditingPrice" color="success" size="xs">Zapisz</x-filament::button>
-                                            <x-filament::button wire:click="$set('editingPrice', null)" color="gray" size="xs">Anuluj</x-filament::button>
-                                        </div>
-                                    </td>
-                                @else
-                                    <td class="px-3 py-2 border-b text-right">{{ number_format((float) ($priceRow->price_per_person ?? 0), 2) }}</td>
-                                    <td class="px-3 py-2 border-b text-right">{{ $priceRow->transport_cost !== null ? number_format((float) $priceRow->transport_cost, 2) : '—' }}</td>
-                                    <td class="px-3 py-2 border-b text-right">{{ $priceRow->price_base !== null ? number_format((float) $priceRow->price_base, 2) : '—' }}</td>
-                                    <td class="px-3 py-2 border-b text-right">{{ $priceRow->markup_amount !== null ? number_format((float) $priceRow->markup_amount, 2) : '—' }}</td>
-                                    <td class="px-3 py-2 border-b text-right">{{ $priceRow->tax_amount !== null ? number_format((float) $priceRow->tax_amount, 2) : '—' }}</td>
-                                    <td class="px-3 py-2 border-b text-right font-semibold">{{ $priceRow->price_with_tax !== null ? number_format((float) $priceRow->price_with_tax, 2) : '—' }}</td>
-                                    <td class="px-3 py-2 border-b text-center">
-                                        <div class="inline-flex items-center gap-1">
-                                            <x-filament::button wire:click="editPrice({{ $priceRow->id }})" color="warning" size="xs">Edytuj</x-filament::button>
-                                            <x-filament::button wire:click="deletePrice({{ $priceRow->id }})" color="danger" size="xs">Usuń</x-filament::button>
-                                        </div>
-                                    </td>
-                                @endif
-                            </tr>
-
-                            @if($isEditing)
-                                <tr>
-                                    <td colspan="12" class="px-3 py-2 border-b bg-gray-50">
-                                        <label class="text-xs font-medium text-gray-600">Rozbicie VAT (JSON)</label>
-                                        <textarea rows="2" class="w-full rounded border-gray-300 mt-1" wire:model.defer="editingPrice.tax_breakdown"></textarea>
-                                    </td>
-                                </tr>
-                            @endif
-                        @empty
-                            <tr>
-                                <td colspan="12" class="px-3 py-4 border-b text-center text-gray-500">Brak pozycji kalkulacji.</td>
-                            </tr>
-                        @endforelse
-                    </tbody>
-                </table>
+            <div class="mt-3 flex flex-wrap items-end gap-3">
+                @if($useManualPricePerPerson)
+                    <div>
+                        <label class="block text-xs font-medium text-gray-600 dark:text-gray-400">Cena za płacącego uczestnika (PLN)</label>
+                        <input type="number" step="0.01" min="0" wire:model.live.debounce.500ms="manualPricePerPerson"
+                               class="mt-1 w-40 rounded-lg border-gray-300 text-sm shadow-sm focus:border-amber-500 focus:ring-amber-500"
+                               placeholder="np. 499.99">
+                    </div>
+                @endif
+                <x-filament::button wire:click="saveManualPricePerPerson" color="warning" size="sm">
+                    {{ $useManualPricePerPerson ? 'Zapisz cenę ręczną' : 'Przywróć cenę z kalkulacji' }}
+                </x-filament::button>
             </div>
         </div>
+
+
 
         @php
             $includedEventPoints = ($programPoints ?? collect())
@@ -125,12 +72,18 @@
 
         @if(!empty($detailedCalculations))
             <div class="mb-8">
-                <h4 class="text-md font-semibold mb-4">Szczegółowa kalkulacja kosztów</h4>
-                <div class="mb-4 p-3 bg-blue-50 border border-blue-200 rounded text-xs text-blue-900">
-                    <b>Wyjaśnienie:</b> Koszt całkowity liczony jest dla sumy: <b>uczestnicy + gratis + obsługa + kierowcy</b>.<br>
-                    <b>Cena za osobę</b> to koszt całkowity podzielony przez liczbę uczestników (bez gratis, obsługi i kierowców).<br>
-                    <b>Wielkość grupy</b> oznacza ile osób przypada na jedną jednostkę ceny punktu programu.
-                </div>
+                <h4 class="text-md font-semibold mb-1">Szczegółowa kalkulacja kosztów (poglądowo, wg szablonu)</h4>
+                <p class="mb-4 text-xs text-gray-500 dark:text-gray-400">
+                    Rozbicie na dni/pozycje na bazie cen szablonu. Wiążąca jest „Kalkulacja (oficjalna)" na górze
+                    oraz pozycje cennika — uwzględniają ceny ustalone dla tej imprezy i plan hotelowy.
+                </p>
+                @include('partials.event-calculation-explanation')
+
+                @include('partials.event-transport-summary', [
+                    'record' => $record,
+                    'transportCost' => $transportCost,
+                    'eventTransportKm' => $eventTransportKm,
+                ])
 
                 @foreach($detailedCalculations as $qty => $currencies)
                     @php
@@ -153,7 +106,7 @@
 
                         @if(isset($currencies['hotel_structure']))
                             <div class="mb-4">
-                                <h6 class="font-medium text-green-700 mb-2">Noclegi:</h6>
+                                <h6 class="font-medium text-green-700 mb-2">Hotele:</h6>
                                 @foreach($currencies['hotel_structure'] as $hotelDay)
                                     <div class="mb-2">
                                         <b>Nocleg {{ $hotelDay['day'] }}:</b>
@@ -162,10 +115,10 @@
                                                 <thead>
                                                     <tr class="bg-green-100">
                                                         <th class="px-3 py-2 border-b text-left">Pokój</th>
-                                                        <th class="px-3 py-2 border-b text-right">Uczestnicy</th>
-                                                        <th class="px-3 py-2 border-b text-right">Gratis</th>
-                                                        <th class="px-3 py-2 border-b text-right">Obsługa</th>
-                                                        <th class="px-3 py-2 border-b text-right">Kierowcy</th>
+                                                        <th class="px-3 py-2 border-b text-right">Pokoje (ucz.)</th>
+                                                        <th class="px-3 py-2 border-b text-right">Pokoje (gratis)</th>
+                                                        <th class="px-3 py-2 border-b text-right">Pokoje (obsługa)</th>
+                                                        <th class="px-3 py-2 border-b text-right">Pokoje (kier.)</th>
                                                         <th class="px-3 py-2 border-b text-right">Cena (za pokój)</th>
                                                         <th class="px-3 py-2 border-b text-right">Łącznie</th>
                                                         <th class="px-3 py-2 border-b text-right">Waluta</th>
@@ -180,10 +133,15 @@
                                                                 $warnings[] = $roomInfo['warning'] . ' Liczba osób: ' . $roomInfo['total_people'];
                                                                 continue;
                                                             }
-                                                            $key = $roomInfo['room']->name . '|' . $roomInfo['room']->people_count . '|' . $roomInfo['cost'] . '|' . $roomInfo['currency'];
+                                                            $roomModel = $roomInfo['room'] ?? null;
+                                                            if (! $roomModel) {
+                                                                $warnings[] = 'Brak typu pokoju (hotel_rooms) dla pozycji w strukturze noclegów. Liczba osób: ' . ($roomInfo['total_people'] ?? '?');
+                                                                continue;
+                                                            }
+                                                            $key = $roomModel->name . '|' . $roomModel->people_count . '|' . $roomInfo['cost'] . '|' . $roomInfo['currency'];
                                                             if (!isset($roomSummary[$key])) {
                                                                 $roomSummary[$key] = [
-                                                                    'room' => $roomInfo['room'],
+                                                                    'room' => $roomModel,
                                                                     'qty' => 0,
                                                                     'gratis' => 0,
                                                                     'staff' => 0,
@@ -192,10 +150,10 @@
                                                                     'currency' => $roomInfo['currency'],
                                                                 ];
                                                             }
-                                                            if (($roomInfo['alloc']['qty'] ?? 0) > 0) $roomSummary[$key]['qty']++;
-                                                            if (($roomInfo['alloc']['gratis'] ?? 0) > 0) $roomSummary[$key]['gratis']++;
-                                                            if (($roomInfo['alloc']['staff'] ?? 0) > 0) $roomSummary[$key]['staff']++;
-                                                            if (($roomInfo['alloc']['driver'] ?? 0) > 0) $roomSummary[$key]['driver']++;
+                                                            $roomSummary[$key]['qty'] += (int) ($roomInfo['alloc']['qty'] ?? 0);
+                                                            $roomSummary[$key]['gratis'] += (int) ($roomInfo['alloc']['gratis'] ?? 0);
+                                                            $roomSummary[$key]['staff'] += (int) ($roomInfo['alloc']['staff'] ?? 0);
+                                                            $roomSummary[$key]['driver'] += (int) ($roomInfo['alloc']['driver'] ?? 0);
                                                         }
                                                     @endphp
 
@@ -205,7 +163,7 @@
                                                             $totalCost = $totalRooms * $room['cost'];
                                                         @endphp
                                                         <tr>
-                                                            <td class="px-3 py-2 border-b">{{ $room['room']->name }} ({{ $room['room']->people_count }} os.)</td>
+                                                            <td class="px-3 py-2 border-b">{{ $room['room']->name ?? '—' }} ({{ $room['room']->people_count ?? '?' }} os.)</td>
                                                             <td class="px-3 py-2 border-b text-right">{{ $room['qty'] }}</td>
                                                             <td class="px-3 py-2 border-b text-right">{{ $room['gratis'] }}</td>
                                                             <td class="px-3 py-2 border-b text-right">{{ $room['staff'] }}</td>
@@ -269,13 +227,22 @@
                                                             {{ $point['name'] }}
                                                         </td>
                                                         <td class="px-3 py-2 border-b text-right">
-                                                            @if(is_numeric($point['unit_price']))
-                                                                {{ number_format($point['unit_price'], 2) }} {{ $point['currency_symbol'] ?? $currencyCode }}
+                                                            @php $unitPrice = $point['unit_price'] ?? null; @endphp
+                                                            @if($unitPrice !== null && $unitPrice !== '' && is_numeric($unitPrice))
+                                                                {{ number_format((float) $unitPrice, 2) }} {{ $point['currency_symbol'] ?? $currencyCode }}
+                                                            @elseif($unitPrice !== null && $unitPrice !== '')
+                                                                {{ $unitPrice }}
                                                             @else
-                                                                {{ $point['unit_price'] }}
+                                                                —
                                                             @endif
                                                         </td>
-                                                        <td class="px-3 py-2 border-b text-right">{{ $point['group_size'] }} osób</td>
+                                                        <td class="px-3 py-2 border-b text-right">
+                                                            @if(isset($point['group_size']) && $point['group_size'] !== null && $point['group_size'] !== '')
+                                                                {{ $point['group_size'] }} osób
+                                                            @else
+                                                                —
+                                                            @endif
+                                                        </td>
                                                         <td class="px-3 py-2 border-b text-right font-semibold">
                                                             {{ number_format($point['cost'], 2) }} {{ $point['currency_symbol'] ?? $currencyCode }}
                                                         </td>

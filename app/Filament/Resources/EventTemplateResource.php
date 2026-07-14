@@ -2,11 +2,13 @@
 
 namespace App\Filament\Resources;
 
+use App\Filament\Concerns\AuthorizesWithShield;
 use App\Filament\Resources\EventTemplateResource\Pages;
 use App\Filament\Resources\TaskResource\RelationManagers\TasksRelationManager;
 use App\Models\EventTemplate;
 use App\Models\EventTemplatePricePerPerson;
 use App\Models\Media;
+use App\Support\FilamentNavigation;
 use Filament\Forms;
 use Filament\Forms\Components\Actions\Action as FormAction;
 use Filament\Forms\Components\Actions as FormActions;
@@ -15,6 +17,8 @@ use Filament\Forms\Components\View as ViewComponent;
 use Filament\Forms\Form;
 use Filament\Forms\Get;
 use Filament\Forms\Set;
+use Filament\Pages\SubNavigationPosition;
+use Filament\Resources\Pages\Page;
 use Filament\Resources\Resource;
 use Filament\Tables;
 use Filament\Tables\Table;
@@ -26,15 +30,19 @@ use Illuminate\Support\Str;
  */
 class EventTemplateResource extends Resource
 {
+    use AuthorizesWithShield;
+
     protected static ?string $model = EventTemplate::class;
+
+    protected static SubNavigationPosition $subNavigationPosition = SubNavigationPosition::Top;
 
     protected static ?string $navigationIcon = 'heroicon-o-rectangle-stack';
 
-    protected static ?string $navigationGroup = 'Szablony imprez';
+    protected static ?string $navigationGroup = FilamentNavigation::GROUP_EVENT_TEMPLATES;
 
-    protected static ?string $navigationLabel = 'Szablony imprez';
+    protected static ?string $navigationLabel = 'Szablony';
 
-    protected static ?int $navigationSort = 10;
+    protected static ?int $navigationSort = 1;
 
     /**
      * Definicja formularza do edycji/dodawania szablonu wydarzenia
@@ -139,14 +147,10 @@ class EventTemplateResource extends Resource
                 ->schema([
                     Forms\Components\Grid::make(2)
                         ->schema([
-                            Forms\Components\RichEditor::make('event_description')
-                                ->toolbarButtons([
-                                    'bold', 'italic', 'underline', 'strike', 'link', 'bulletList', 'orderedList', 'blockquote', 'codeBlock', 'h2', 'h3', 'color', 'highlight', 'undo', 'redo',
-                                ]),
-                            Forms\Components\RichEditor::make('office_description')
-                                ->toolbarButtons([
-                                    'bold', 'italic', 'underline', 'strike', 'link', 'bulletList', 'orderedList', 'blockquote', 'codeBlock', 'h2', 'h3', 'color', 'highlight', 'undo', 'redo',
-                                ]),
+                            \FilamentTiptapEditor\TiptapEditor::make('event_description')
+                                ,
+                            \FilamentTiptapEditor\TiptapEditor::make('office_description')
+                                ,
                         ]),
                     Forms\Components\Grid::make(2)
                         ->schema([
@@ -383,10 +387,8 @@ class EventTemplateResource extends Resource
                                 ->label('Tytuł SEO')
                                 ->maxLength(70)
                                 ->helperText('Tytuł strony widoczny w Google (max 70 znaków)'),
-                            Forms\Components\RichEditor::make('seo_description')
-                                ->toolbarButtons([
-                                    'bold', 'italic', 'underline', 'strike', 'link', 'bulletList', 'orderedList', 'blockquote', 'codeBlock', 'h2', 'h3', 'color', 'highlight', 'undo', 'redo',
-                                ])
+                            \FilamentTiptapEditor\TiptapEditor::make('seo_description')
+                                
                                 ->helperText('Opis strony widoczny w Google (max 350 znaków)'),
                             Forms\Components\TextInput::make('seo_keywords')
                                 ->label('Słowa kluczowe')
@@ -518,7 +520,7 @@ class EventTemplateResource extends Resource
                     ->default(),
                 Tables\Filters\SelectFilter::make('start_place')
                     ->label('Możliwe miejsce wyjazdu')
-                    ->options(fn () => \App\Models\Place::orderBy('name')->pluck('name', 'id')->all())
+                    ->options(fn () => \App\Models\Place::startingPlaceSelectOptions())
                     ->searchable()
                     ->native(false)
                     ->query(function ($query, $data) {
@@ -535,6 +537,18 @@ class EventTemplateResource extends Resource
                     ->multiple()
                     ->preload()
                     ->searchable(),
+                Tables\Filters\SelectFilter::make('transport_types')
+                    ->label('Rodzaj transportu')
+                    ->multiple()
+                    ->relationship('transportTypes', 'name')
+                    ->searchable()
+                    ->preload()
+                    ->query(function ($query, array $data) {
+                        $values = $data['values'] ?? [];
+                        if (! empty($values)) {
+                            $query->withExactTransportTypes($values);
+                        }
+                    }),
                 Tables\Filters\SelectFilter::make('tags')
                     ->label('Tagi')
                     ->relationship('tags', 'name')
@@ -608,24 +622,56 @@ class EventTemplateResource extends Resource
             'create' => Pages\CreateEventTemplate::route('/create'),
             'edit' => Pages\EditEventTemplate::route('/{record}/edit'),
             'edit-program' => Pages\EditEventTemplateProgram::route('/{record}/program'),
+            'hotel-planning' => Pages\EventTemplateHotelPlanning::route('/{record}/hotel-planning'),
             'calculation' => Pages\EventTemplateCalculation::route('/{record}/calculation'),
             'transport' => Pages\EventTemplateTransport::route('/{record}/transport'),
+            'qty-variants' => Pages\ManageTemplateQtyVariants::route('/{record}/qty-variants'),
         ];
     }
 
-    /**
-     * Uprawnienia do widoczności resource w panelu
-     */
+    public static function getRecordSubNavigation(Page $page): array
+    {
+        $pages = array_values(array_filter([
+            Pages\EditEventTemplate::class,
+            Pages\EditEventTemplateProgram::class,
+            Pages\EventTemplateHotelPlanning::class,
+            Pages\EventTemplateTransport::class,
+            Pages\EventTemplateCalculation::class,
+            Pages\ManageTemplateQtyVariants::class,
+        ], fn (string $pageClass): bool => $pageClass::canAccess()));
+
+        return $page->generateNavigationItems($pages);
+    }
+
     public static function canViewAny(): bool
     {
-        $user = \Illuminate\Support\Facades\Auth::user();
-        if ($user && $user->roles && $user->roles->contains('name', 'admin')) {
-            return true;
+        $user = auth()->user();
+        if (! $user) {
+            return false;
         }
-        if ($user && $user->roles && $user->roles->flatMap->permissions->contains('name', 'view eventtemplate')) {
+
+        if ($user->hasRole(['admin', 'super_admin'])) {
             return true;
         }
 
-        return false;
+        if ($user->can('view event_template')) {
+            return true;
+        }
+
+        return $user->can(static::shieldPermission('view_any'));
+    }
+
+    public static function canCreate(): bool
+    {
+        $user = auth()->user();
+        if (! $user) {
+            return false;
+        }
+
+        if ($user->hasRole(['admin', 'super_admin'])) {
+            return true;
+        }
+
+        return $user->can('edit event_template') || $user->can(static::shieldPermission('create'));
     }
 }

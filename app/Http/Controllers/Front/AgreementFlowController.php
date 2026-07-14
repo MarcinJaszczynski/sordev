@@ -3,9 +3,10 @@
 namespace App\Http\Controllers\Front;
 
 use App\Http\Controllers\Controller;
+use App\Models\Contract;
 use App\Models\EventAgreement;
-use App\Services\AgreementPaymentSyncService;
-use Barryvdh\DomPDF\Facade\Pdf;
+use App\Services\ClientPortalProvisioningService;
+use App\Services\PublicAgreementResolver;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Mail;
@@ -15,6 +16,10 @@ use Illuminate\Validation\Rule;
 
 class AgreementFlowController extends Controller
 {
+    public function __construct(
+        protected PublicAgreementResolver $agreements,
+    ) {}
+
     public function show(string $token)
     {
         $agreement = $this->findAgreement($token);
@@ -38,33 +43,9 @@ class AgreementFlowController extends Controller
         ]);
     }
 
-    protected function cloneTemplateForParticipant(EventAgreement $template): \Illuminate\Http\RedirectResponse
+    protected function cloneTemplateForParticipant(Contract|EventAgreement $template): \Illuminate\Http\RedirectResponse
     {
-        // Utwórz draft dla uczestnika na podstawie szablonu
-        $agreement = EventAgreement::create([
-            'event_id' => $template->event_id,
-            'contract_template_id' => $template->contract_template_id,
-            'agreement_type' => $template->agreement_type,
-            'title' => $template->title,
-            'agreement_date' => now()->toDateString(),
-            'event_name' => $template->event_name,
-            'event_start_date' => $template->event_start_date,
-            'event_end_date' => $template->event_end_date,
-            'customer_name' => $template->customer_name,
-            'customer_email' => $template->customer_email,
-            'customer_phone' => $template->customer_phone,
-            'participant_count' => $template->participant_count,
-            'amount_due' => $template->amount_due,
-            'currency' => $template->currency,
-            'status' => 'draft',
-            'payment_status' => 'pending',
-            'attachments' => $template->attachments,
-            'admin_notes' => $template->admin_notes,
-            'contract_template_id' => $template->contract_template_id,
-            'meta' => array_merge($template->meta ?? [], ['parent_template_id' => $template->id]),
-        ]);
-
-        $agreement->regenerateAgreementBody();
+        $agreement = $this->agreements->createFromTemplate($template);
 
         return redirect()->route('agreement.flow.show', ['token' => $agreement->public_token]);
     }
@@ -300,6 +281,8 @@ class AgreementFlowController extends Controller
         $agreement->refresh();
         $agreement->regenerateAgreementBody();
 
+        app(ClientPortalProvisioningService::class)->provisionFromAgreement($agreement->fresh());
+
         return redirect()
             ->route('agreement.flow.payment', ['token' => $agreement->public_token])
             ->with('success', 'Umowa została zawarta. Przejdź do płatności.');
@@ -327,7 +310,7 @@ class AgreementFlowController extends Controller
 
         return view('front.agreements.payment', [
             'agreement' => $agreement,
-            'methods' => EventAgreement::$paymentMethods,
+            'methods' => Contract::$paymentMethods,
             'flow' => $this->flowMeta($agreement),
         ]);
     }
@@ -345,7 +328,7 @@ class AgreementFlowController extends Controller
         }
 
         $payload = $request->validate([
-            'payment_method' => ['required', Rule::in(array_keys(EventAgreement::$paymentMethods))],
+            'payment_method' => ['required', Rule::in(array_keys(Contract::$paymentMethods))],
             'accept_demo' => ['accepted'],
         ], [
             'accept_demo.accepted' => 'Potwierdź realizację płatności demo.',
@@ -366,8 +349,9 @@ class AgreementFlowController extends Controller
             ],
         ]);
 
-        app(AgreementPaymentSyncService::class)->sync($agreement->fresh());
+        $this->agreements->syncPayment($agreement);
         $this->sendConfirmationEmail($agreement->fresh());
+        app(ClientPortalProvisioningService::class)->provisionFromAgreement($agreement->fresh());
 
         return redirect()->route('agreement.flow.success', ['token' => $agreement->public_token]);
     }
@@ -388,46 +372,38 @@ class AgreementFlowController extends Controller
         return view('front.agreements.success', [
             'agreement' => $agreement,
             'flow' => $this->flowMeta($agreement),
+            'portalLoginUrl' => url('/portal/login'),
         ]);
     }
 
-    protected function findAgreement(string $token): EventAgreement
+    protected function findAgreement(string $token): Contract|EventAgreement
     {
-        $agreement = EventAgreement::query()
-            ->with(['event', 'contractTemplate', 'participantPayment'])
-            ->where('public_token', $token)
-            ->firstOrFail();
-
-        if ($agreement->public_token_expires_at && $agreement->public_token_expires_at->isPast()) {
-            abort(410, 'Link do umowy wygasł.');
-        }
-
-        return $agreement;
+        return $this->agreements->findByToken($token);
     }
 
-    protected function flowMeta(EventAgreement $agreement): array
+    protected function flowMeta(Contract|EventAgreement $agreement): array
     {
         return (array) data_get($agreement->meta, 'flow', []);
     }
 
-    protected function mergeMeta(EventAgreement $agreement, array $patch): void
+    protected function mergeMeta(Contract|EventAgreement $agreement, array $patch): void
     {
         $current = (array) ($agreement->meta ?? []);
         $agreement->meta = array_replace_recursive($current, $patch);
         $agreement->saveQuietly();
     }
 
-    protected function isPlanConfirmed(EventAgreement $agreement): bool
+    protected function isPlanConfirmed(Contract|EventAgreement $agreement): bool
     {
         return filled(data_get($agreement->meta, 'flow.plan_confirmed_at'));
     }
 
-    protected function hasConsents(EventAgreement $agreement): bool
+    protected function hasConsents(Contract|EventAgreement $agreement): bool
     {
         return (bool) data_get($agreement->meta, 'flow.consents.accepted', false);
     }
 
-    protected function sendConfirmationEmail(EventAgreement $agreement): void
+    protected function sendConfirmationEmail(Contract|EventAgreement $agreement): void
     {
         $recipient = $agreement->signer_email ?: $agreement->customer_email;
 
@@ -499,20 +475,9 @@ class AgreementFlowController extends Controller
         }
     }
 
-    protected function renderAgreementPdf(EventAgreement $agreement): ?string
+    protected function renderAgreementPdf(Contract|EventAgreement $agreement): ?string
     {
-        if (blank($agreement->agreement_body)) {
-            return null;
-        }
-
-        $html = view('pdf.agreement', [
-            'agreement' => $agreement,
-            'agreementBody' => (string) $agreement->agreement_body,
-        ])->render();
-
-        return Pdf::loadHTML($html)
-            ->setPaper('a4')
-            ->output();
+        return app(\App\Services\AgreementDocumentService::class)->renderPdfBytes($agreement);
     }
 
     protected function resolveAgreementAttachmentAbsolutePath(string $path): ?string

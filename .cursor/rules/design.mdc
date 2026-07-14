@@ -1,0 +1,30 @@
+---
+description: Design UI — panel admin, pilot, Blade, CSS
+globs: resources/views/**/*.blade.php,resources/css/**/*,resources/js/**/*
+alwaysApply: false
+---
+
+# Design i UI
+
+## Cel wizualny
+
+Profesjonalny dashboard: duży spacing, zaokrąglenia, subtelne cienie, czytelna typografia. Inspiracja: Stripe, Linear, Notion.
+
+## Panel
+
+- Style globalne admin: `admin-readability-styles.blade.php`.
+- Tabele na mobile: `overflow-x: auto`, min. wysokość przycisków w pilot.
+- Pieniądze: klasa `money-nowrap` / `MoneyFormatter::html()`.
+
+## Stany UI
+
+Każda większa strona: loading, błąd, pusty stan — nie zostawiaj pustego ekranu bez komunikatu.
+
+## Animacje
+
+Krótkie (150–250 ms), bez przesady — panel biurowy, nie marketing.
+
+## Front publiczny
+
+- `resources/views/front/` — zachowaj spójność z istniejącym CSS.
+- Responsywność — test na ~768px (tablet).

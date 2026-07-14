@@ -25,7 +25,8 @@ return new class extends Migration
             Schema::table('event_templates', function (Blueprint $table) {
                 try {
                     $table->dropColumn('transport_notes');
-                } catch (\Throwable $e) {}
+                } catch (\Throwable $e) {
+                }
             });
         }
     }

@@ -57,14 +57,16 @@ trait SearchContractorTrait
                     $q->where('phone', 'like', '%'.$phone.'%');
                 }
 
-                if ($hasPhoneColumn) {
-                    $q->orWhereHas('contacts', function ($contactQuery) use ($phone) {
-                        $contactQuery->where('phone', 'like', '%'.$phone.'%');
-                    });
-                } else {
-                    $q->whereHas('contacts', function ($contactQuery) use ($phone) {
-                        $contactQuery->where('phone', 'like', '%'.$phone.'%');
-                    });
+                if (Contractor::hasContactPivotTable()) {
+                    if ($hasPhoneColumn) {
+                        $q->orWhereHas('contacts', function ($contactQuery) use ($phone) {
+                            $contactQuery->where('phone', 'like', '%'.$phone.'%');
+                        });
+                    } else {
+                        $q->whereHas('contacts', function ($contactQuery) use ($phone) {
+                            $contactQuery->where('phone', 'like', '%'.$phone.'%');
+                        });
+                    }
                 }
             });
         }
@@ -89,8 +91,9 @@ trait SearchContractorTrait
      */
     public static function mapContractorToEventData(Contractor $contractor): array
     {
-        // Pobierz główny kontakt (email i telefon)
-        $mainContact = $contractor->contacts()->first();
+        $mainContact = Contractor::hasContactPivotTable()
+            ? $contractor->contacts()->first()
+            : null;
 
         return [
             'client_name' => $contractor->name,

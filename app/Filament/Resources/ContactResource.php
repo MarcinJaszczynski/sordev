@@ -2,8 +2,10 @@
 
 namespace App\Filament\Resources;
 
+use App\Filament\Forms\PhoneInput;
 use App\Filament\Resources\ContactResource\Pages;
 use App\Models\Contact;
+use App\Support\FilamentNavigation;
 use Filament\Forms;
 use Filament\Forms\Form;
 use Filament\Resources\Resource;
@@ -28,7 +30,9 @@ class ContactResource extends Resource
 
     protected static ?string $navigationLabel = 'Kontakty';
 
-    protected static ?string $navigationGroup = 'Kontakty';
+    protected static ?string $navigationGroup = FilamentNavigation::GROUP_CONTACTS;
+
+    protected static ?int $navigationSort = 2;
 
     protected static ?string $modelLabel = 'kontakt';
 
@@ -65,13 +69,12 @@ class ContactResource extends Resource
                     Forms\Components\TextInput::make('last_name')
                         ->label('Nazwisko')
                         ->required(),
-                    Forms\Components\TextInput::make('phone')
-                        ->label('Telefon')
-                        ->tel(),
+                    PhoneInput::make('phone')
+                        ->label('Telefon'),
                     Forms\Components\TextInput::make('email')
                         ->label('Email')
                         ->email(),
-                    Forms\Components\RichEditor::make('notes')
+                    \FilamentTiptapEditor\TiptapEditor::make('notes')
                         ->columnSpanFull(),
                 ]),
         ]);

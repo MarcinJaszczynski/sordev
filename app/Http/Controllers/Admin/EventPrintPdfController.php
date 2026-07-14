@@ -6,12 +6,17 @@ use App\Http\Controllers\Controller;
 use App\Models\Event;
 use App\Models\EventSettlementDocument;
 use App\Models\HotelRoom;
+use App\Services\EventFolderPdfService;
 use App\Support\StoragePath;
 use Barryvdh\DomPDF\Facade\Pdf;
+use Carbon\Carbon;
 use Illuminate\Support\Facades\File;
 use Illuminate\Support\Facades\Storage;
 use ZipArchive;
 
+/**
+ * PDF-y pakietów imprezy — szablony w resources/views/pdf/packages (wizualnie wg makiety w pliki/raporty).
+ */
 class EventPrintPdfController extends Controller
 {
     private const AUDIENCES = [
@@ -20,23 +25,47 @@ class EventPrintPdfController extends Controller
         'driver' => 'Pakiet dla kierowcy',
         'folder' => 'Teczka imprezy',
         'all' => 'Komplet pakietów',
+        'program_with_times' => 'Program imprezy (z godzinami)',
+        'program_without_times' => 'Program imprezy (bez godzin)',
     ];
 
     public function download(Event $event, string $audience)
     {
         abort_unless(array_key_exists($audience, self::AUDIENCES), 404);
 
+        if (in_array($audience, ['program_with_times', 'program_without_times'], true)) {
+            $event->load([
+                'programPoints' => fn ($query) => $query->with('templatePoint')->orderBy('day')->orderBy('order'),
+            ]);
+
+            $showTimes = $audience === 'program_with_times';
+            $data = $this->buildProgramDocumentData($event, $showTimes);
+
+            return Pdf::loadView('pdf.packages.program', $data)
+                ->setPaper('a4')
+                ->download($this->filename($event, $audience));
+        }
+
         $event->load([
             'eventTemplate.hotelDays',
+            'hotelStays.roomLines.occupants',
+            'hotelStays.roomLines.hotelRoom',
+            'hotelStays.roomLines.currency',
+            'hotelStays.contractor',
+            'hotelStays.contractorLocation',
             'startPlace',
             'bus',
             'assignedUser',
             'creator',
             'contractor',
+            'transportContractor',
             'activeSettlement.documents',
             'documents',
-            'programPoints' => fn ($query) => $query->orderBy('day')->orderBy('order'),
-            'agreements' => fn ($query) => $query->orderByDesc('agreement_date'),
+            'hotelProgramPoints.contractor',
+            'hotelProgramPoints.contractorLocation',
+            'hotelProgramPoints.templatePoint',
+            'programPoints' => fn ($query) => $query->with(['templatePoint', 'contractor', 'contractorLocation'])->orderBy('day')->orderBy('order'),
+            'agreements',
         ]);
 
         if ($audience === 'all') {
@@ -45,7 +74,7 @@ class EventPrintPdfController extends Controller
 
         $data = $this->buildDocumentData($event, $audience);
 
-        $pdf = Pdf::loadView('pdf.event-document', $data)
+        $pdf = Pdf::loadView($this->pdfViewForAudience($audience), $data)
             ->setPaper('a4');
 
         $attachmentFiles = collect($data['attachedFiles'] ?? []);
@@ -67,54 +96,63 @@ class EventPrintPdfController extends Controller
             ->orderByRaw('ABS(qty - ?)', [max(1, $participantCount)])
             ->first();
 
-        $staffCount = (int) ($qtyVariant->staff ?? 0);
-        $driverCount = max(1, (int) ($qtyVariant->driver ?? 1));
-        $gratisCount = (int) ($qtyVariant->gratis ?? 0);
+        $staffCount = (int) (optional($qtyVariant)->staff ?? 0);
+        $driverCount = max(1, (int) (optional($qtyVariant)->driver ?? 1));
+        $gratisCount = (int) (optional($qtyVariant)->gratis ?? 0);
 
-        $programPoints = $event->programPoints
-            ->where('include_in_program', true)
-            ->values();
+        $programByDay = $this->buildProgramByDay($event);
 
-        $programByDay = $programPoints
-            ->groupBy(fn ($point) => (int) ($point->day ?? 1))
-            ->sortKeys();
+        $pilotSetFinanceCards = [];
+        if (in_array($audience, ['pilot', 'folder'], true)) {
+            $pilotSetFinanceCards = array_values(
+                app(\App\Services\PilotSetFinanceDisplay::class)->cardsForEvent($event)
+            );
+        }
 
-        $hotelDays = collect($event->eventTemplate?->hotelDays ?? [])->sortBy('day')->values();
-        $allRoomIds = $hotelDays
-            ->flatMap(fn ($day) => $day->getAllAssignedRoomIds())
-            ->filter()
-            ->unique()
-            ->values();
+        $hotelPlanService = app(\App\Services\EventHotelPlanService::class);
+        $usesEventHotelPlan = $event->hotelStays()->exists();
 
-        $roomsById = HotelRoom::query()
-            ->whereIn('id', $allRoomIds)
-            ->get(['id', 'name', 'people_count'])
-            ->keyBy('id');
+        if ($usesEventHotelPlan) {
+            $hotelPlan = $hotelPlanService->buildHotelPlanForPdf($event);
+        } else {
+            $hotelDays = collect($event->eventTemplate?->hotelDays ?? [])->sortBy('day')->values();
+            $allRoomIds = $hotelDays
+                ->flatMap(fn ($day) => $day->getAllAssignedRoomIds())
+                ->filter()
+                ->unique()
+                ->values();
 
-        $hotelPlan = $hotelDays->map(function ($day) use ($roomsById) {
-            $resolve = function (?array $ids) use ($roomsById) {
-                return collect($ids ?? [])
-                    ->map(function ($id) use ($roomsById) {
-                        $room = $roomsById->get((int) $id);
+            $roomsById = HotelRoom::query()
+                ->whereIn('id', $allRoomIds)
+                ->get(['id', 'name', 'people_count'])
+                ->keyBy('id');
 
-                        return [
-                            'id' => (int) $id,
-                            'name' => $room?->name ?? ('Pokój #'.$id),
-                            'people_count' => $room?->people_count,
-                        ];
-                    })
-                    ->values();
-            };
+            $hotelPlan = $hotelDays->map(function ($day) use ($roomsById) {
+                $resolve = function (?array $ids) use ($roomsById) {
+                    return collect($ids ?? [])
+                        ->map(function ($id) use ($roomsById) {
+                            $room = $roomsById->get((int) $id);
 
-            return [
-                'day' => (int) ($day->day ?? 1),
-                'qty' => $resolve($day->hotel_room_ids_qty),
-                'gratis' => $resolve($day->hotel_room_ids_gratis),
-                'staff' => $resolve($day->hotel_room_ids_staff),
-                'driver' => $resolve($day->hotel_room_ids_driver),
-                'notes' => $day->notes,
-            ];
-        });
+                            return [
+                                'id' => (int) $id,
+                                'name' => $room?->name ?? ('Pokój #'.$id),
+                                'people_count' => $room?->people_count,
+                            ];
+                        })
+                        ->values();
+                };
+
+                return [
+                    'day' => (int) ($day->day ?? 1),
+                    'qty' => $resolve($day->hotel_room_ids_qty),
+                    'gratis' => $resolve($day->hotel_room_ids_gratis),
+                    'staff' => $resolve($day->hotel_room_ids_staff),
+                    'driver' => $resolve($day->hotel_room_ids_driver),
+                    'notes' => $day->notes,
+                    'uses_event_plan' => false,
+                ];
+            });
+        }
 
         $individualAgreementReport = $event->buildIndividualAgreementReport($event->agreements);
         $agreements = $individualAgreementReport['agreements'];
@@ -243,15 +281,64 @@ class EventPrintPdfController extends Controller
             'driverCount' => $driverCount,
             'gratisCount' => $gratisCount,
             'hotelNotes' => trim(strip_tags((string) ($event->hotel_notes ?? ''))),
+            'hotelProgramPoints' => $event->hotelProgramPoints,
             'programByDay' => $programByDay,
+            'pilotSetFinanceCards' => $pilotSetFinanceCards,
             'hotelPlan' => $hotelPlan,
+            'usesEventHotelPlan' => $usesEventHotelPlan ?? false,
             'agreements' => $agreements,
             'individualAgreementRows' => $individualAgreementRows,
             'agreementsSummary' => $agreementsSummary,
             'documentFocus' => $documentFocus[$audience] ?? [],
             'selectedSettlementDocuments' => $selectedDocumentsForView,
             'attachedFiles' => $attachedFiles,
+            'travelLegends' => app(EventFolderPdfService::class)->buildTravelLegends($event),
+            'participantSummaryLine' => sprintf(
+                '%d uczestników + %d gratisów; obsługa: %d; kierowca(y): %d',
+                max(0, $participantCount),
+                $gratisCount,
+                $staffCount,
+                $driverCount
+            ),
         ];
+    }
+
+    private function buildProgramByDay(Event $event): \Illuminate\Support\Collection
+    {
+        return $event->programPoints
+            ->where('include_in_program', true)
+            ->values()
+            ->groupBy(fn ($point) => (int) ($point->day ?? 1))
+            ->sortKeys();
+    }
+
+    /**
+     * @return array<string, mixed>
+     */
+    private function buildProgramDocumentData(Event $event, bool $showTimes): array
+    {
+        $company = config('company', []);
+
+        return [
+            'audienceLabel' => $showTimes
+                ? self::AUDIENCES['program_with_times']
+                : self::AUDIENCES['program_without_times'],
+            'event' => $event,
+            'company' => $company,
+            'logoDataUri' => $this->resolveLogoDataUri((string) ($company['logo_path'] ?? 'uploads/logo.png')),
+            'generatedAt' => now(),
+            'programByDay' => $this->buildProgramByDay($event),
+            'showTimes' => $showTimes,
+        ];
+    }
+
+    private function pdfViewForAudience(string $audience): string
+    {
+        return match ($audience) {
+            'pilot', 'driver', 'hotel', 'folder' => 'pdf.packages.'.$audience,
+            'program_with_times', 'program_without_times' => 'pdf.packages.program',
+            default => 'pdf.event-document',
+        };
     }
 
     private function attachmentFlagForAudience(string $audience): string
@@ -350,7 +437,7 @@ class EventPrintPdfController extends Controller
 
         foreach (['pilot', 'hotel', 'driver', 'folder'] as $singleAudience) {
             $data = $this->buildDocumentData($event, $singleAudience);
-            $pdf = Pdf::loadView('pdf.event-document', $data)
+            $pdf = Pdf::loadView($this->pdfViewForAudience($singleAudience), $data)
                 ->setPaper('a4')
                 ->output();
 
@@ -409,6 +496,12 @@ class EventPrintPdfController extends Controller
             ->trim('-')
             ->value();
 
-        return sprintf('%s-%s-%d.pdf', $safeName ?: 'impreza', $audience, $event->id);
+        $audienceSlug = match ($audience) {
+            'program_with_times' => 'program-z-godzinami',
+            'program_without_times' => 'program-bez-godzin',
+            default => $audience,
+        };
+
+        return sprintf('%s-%s-%d.pdf', $safeName ?: 'impreza', $audienceSlug, $event->id);
     }
 }

@@ -5,6 +5,7 @@ namespace App\Filament\Resources;
 use App\Filament\Resources\ConversationResource\Pages;
 use App\Models\Conversation;
 use App\Models\User;
+use App\Support\FilamentNavigation;
 use Filament\Forms;
 use Filament\Forms\Form;
 use Filament\Resources\Resource;
@@ -20,7 +21,7 @@ class ConversationResource extends Resource
 
     protected static ?string $navigationLabel = 'Czat';
 
-    protected static ?string $navigationGroup = 'Komunikacja';
+    protected static ?string $navigationGroup = FilamentNavigation::GROUP_CONTACTS;
 
     protected static ?string $modelLabel = 'rozmowa';
 

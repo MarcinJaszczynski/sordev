@@ -4,6 +4,7 @@ namespace App\Filament\Resources;
 
 use App\Filament\Resources\KategoriaSzablonuResource\Pages;
 use App\Models\KategoriaSzablonu;
+use App\Support\FilamentNavigation;
 use Filament\Forms;
 use Filament\Forms\Form;
 use Filament\Resources\Resource;
@@ -27,7 +28,7 @@ class KategoriaSzablonuResource extends Resource
 
     protected static ?string $navigationLabel = 'Kategorie szablonów';
 
-    protected static ?string $navigationGroup = 'Szablony imprez';
+    protected static ?string $navigationGroup = FilamentNavigation::GROUP_SETTINGS;
 
     protected static ?int $navigationSort = 45;
 
@@ -87,10 +88,10 @@ class KategoriaSzablonuResource extends Resource
                         ->preload()
                         ->nullable()
                         ->columnSpanFull(),
-                    Forms\Components\RichEditor::make('opis')
+                    \FilamentTiptapEditor\TiptapEditor::make('opis')
                         ->nullable()
                         ->columnSpanFull(),
-                    Forms\Components\RichEditor::make('uwagi')
+                    \FilamentTiptapEditor\TiptapEditor::make('uwagi')
                         ->nullable()
                         ->columnSpanFull(),
                 ]),

@@ -2,6 +2,10 @@
 
 To jest podstawowa polska dokumentacja projektu oraz krótki przewodnik po najważniejszych komponentach aplikacji.
 
+## Środowisko deweloperskie
+
+Instrukcja uruchomienia lokalnego (bez Dockera): **[docs/DEV.md](../DEV.md)**.
+
 ## Cel projektu
 System służy do zarządzania i prezentacji ofert wycieczek (EventTemplate). Aplikacja udostępnia frontend z listą ofert, szczegółami oferty oraz mechanizmami obliczania cen (wielowalutowo) i dostępności dla miejsc startowych.
 

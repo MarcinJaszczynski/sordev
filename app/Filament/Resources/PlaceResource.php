@@ -4,6 +4,7 @@ namespace App\Filament\Resources;
 
 use App\Filament\Resources\PlaceResource\Pages;
 use App\Models\Place;
+use App\Support\FilamentNavigation;
 use Filament\Forms;
 use Filament\Forms\Components\TagsInput;
 use Filament\Forms\Components\TextInput;
@@ -23,7 +24,7 @@ class PlaceResource extends Resource
 
     protected static ?string $navigationLabel = 'Miejsca';
 
-    protected static ?string $navigationGroup = 'Ustawienia ogólne';
+    protected static ?string $navigationGroup = FilamentNavigation::GROUP_CONFIG;
 
     protected static ?string $pluralLabel = 'Miejsca';
 
@@ -51,7 +52,7 @@ class PlaceResource extends Resource
                                     }
                                 }
                             }),
-                        \Filament\Forms\Components\RichEditor::make('description')
+                        \FilamentTiptapEditor\TiptapEditor::make('description')
                             ->label('Opis')
                             ->nullable()
                             ->columnSpan(2)

@@ -2,6 +2,9 @@
 
 namespace App\Filament\Resources\EventResource\RelationManagers;
 
+use App\Filament\Forms\ReservationFormFields;
+use App\Filament\Forms\ReservationFormOptions;
+use App\Models\EventProgramPoint;
 use App\Models\Reservation;
 use Filament\Forms;
 use Filament\Forms\Form;
@@ -20,49 +23,16 @@ class ReservationsRelationManager extends RelationManager
 
     public function form(Form $form): Form
     {
+        $event = $this->getOwnerRecord();
+
         return $form
-            ->schema([
-                Forms\Components\TextInput::make('booking_reference')
-                    ->label('Nr rezerwacji')
-                    ->maxLength(255),
-
-                Forms\Components\Select::make('contractor_id')
-                    ->label('Kontrahent')
-                    ->relationship('contractor', 'name')
-                    ->searchable()
-                    ->preload(),
-
-                Forms\Components\Select::make('program_point_id')
-                    ->label('Punkt programu')
-                    ->relationship('programPoint', 'name')
-                    ->searchable()
-                    ->preload(),
-
-                Forms\Components\Select::make('status')
-                    ->label('Status')
-                    ->options(Reservation::$statuses)
-                    ->required(),
-
-                Forms\Components\TextInput::make('participant_count')
-                    ->label('Liczba uczestników')
-                    ->numeric()
-                    ->minValue(0),
-
-                Forms\Components\TextInput::make('reserved_amount')
-                    ->label('Kwota rezerwacji')
-                    ->numeric()
-                    ->prefix('PLN'),
-
-                Forms\Components\DateTimePicker::make('reserved_at')
-                    ->label('Data rezerwacji'),
-
-                Forms\Components\DatePicker::make('expires_at')
-                    ->label('Wygasa'),
-
-                Forms\Components\RichEditor::make('notes')
-                    ->label('Uwagi')
-                    ->columnSpanFull(),
-            ])
+            ->schema(ReservationFormFields::schema(new ReservationFormOptions(
+                eventId: $event->id,
+                event: $event,
+                showProgramPoint: true,
+                showHotelNotes: true,
+                allowContractorCreate: true,
+            )))
             ->columns(2);
     }
 
@@ -86,11 +56,24 @@ class ReservationsRelationManager extends RelationManager
                     ->sortable()
                     ->searchable(),
 
-                Tables\Columns\TextColumn::make('programPoint.name')
+                Tables\Columns\TextColumn::make('program_point_summary')
                     ->label('Punkt programu')
-                    ->sortable()
-                    ->searchable()
-                    ->placeholder('—'),
+                    ->state(function (Reservation $record): string {
+                        $point = $record->programPoint;
+                        if (! $point) {
+                            return '—';
+                        }
+
+                        $prefix = $point->is_hotel ? '🏨 ' : '';
+
+                        return $prefix.'Dz.'.(int) ($point->day ?? 1).': '.($point->name ?? '—');
+                    })
+                    ->searchable(query: function (Builder $query, string $search): Builder {
+                        return $query->whereHas(
+                            'programPoint',
+                            fn (Builder $pointQuery): Builder => $pointQuery->where('name', 'like', '%'.$search.'%'),
+                        );
+                    }),
 
                 Tables\Columns\TextColumn::make('participant_count')
                     ->label('Uczestnicy')
@@ -99,18 +82,20 @@ class ReservationsRelationManager extends RelationManager
 
                 Tables\Columns\TextColumn::make('reserved_amount')
                     ->label('Kwota')
-                    ->money('PLN')
+                    ->formatStateUsing(fn (Reservation $record): string => \App\Support\ReservationPricingLabel::format($record))
                     ->sortable()
                     ->alignEnd(),
 
                 Tables\Columns\BadgeColumn::make('status')
                     ->label('Status')
+                    ->sortable()
                     ->formatStateUsing(fn ($state) => Reservation::$statuses[$state] ?? $state)
                     ->colors([
                         'gray' => 'pending',
                         'warning' => 'partially_confirmed',
                         'success' => ['confirmed', 'completed'],
                         'danger' => 'cancelled',
+                        'info' => 'not_required',
                     ]),
 
                 Tables\Columns\TextColumn::make('reserved_at')
@@ -122,7 +107,8 @@ class ReservationsRelationManager extends RelationManager
                     ->label('Wygasa')
                     ->date('d.m.Y')
                     ->sortable()
-                    ->placeholder('—'),
+                    ->placeholder('—')
+                    ->color(fn (Reservation $record): ?string => $record->expires_at?->isPast() ? 'danger' : null),
             ])
             ->filters([
                 Tables\Filters\SelectFilter::make('status')
@@ -132,6 +118,27 @@ class ReservationsRelationManager extends RelationManager
                 Tables\Filters\SelectFilter::make('contractor_id')
                     ->label('Kontrahent')
                     ->relationship('contractor', 'name'),
+
+                Tables\Filters\SelectFilter::make('program_point_id')
+                    ->label('Punkt programu')
+                    ->options(fn (): array => $this->programPointOptions()),
+
+                Tables\Filters\TernaryFilter::make('hotel_only')
+                    ->label('Tylko hotele')
+                    ->placeholder('Wszystkie')
+                    ->trueLabel('Hotele')
+                    ->falseLabel('Pozostałe')
+                    ->queries(
+                        true: fn (Builder $query) => $query->whereHas(
+                            'programPoint',
+                            fn (Builder $pointQuery): Builder => $pointQuery->where('is_hotel', true),
+                        ),
+                        false: fn (Builder $query) => $query->whereHas(
+                            'programPoint',
+                            fn (Builder $pointQuery): Builder => $pointQuery->where('is_hotel', false),
+                        ),
+                        blank: fn (Builder $query) => $query,
+                    ),
 
                 Tables\Filters\Filter::make('reserved_at')
                     ->label('Data rezerwacji')
@@ -154,10 +161,24 @@ class ReservationsRelationManager extends RelationManager
                     }),
             ])
             ->headerActions([
-                Tables\Actions\CreateAction::make(),
+                Tables\Actions\CreateAction::make()
+                    ->label('Dodaj rezerwację')
+                    ->modalWidth(ReservationFormFields::MODAL_WIDTH)
+                    ->mutateFormDataUsing(function (array $data): array {
+                        $data['event_id'] = $this->getOwnerRecord()->id;
+
+                        return ReservationFormFields::normalizeSaveData($data);
+                    })
+                    ->using(function (array $data): Reservation {
+                        $reservation = Reservation::query()->create($data);
+                        ReservationFormFields::persistAttachments($reservation, $data);
+
+                        return $reservation;
+                    }),
             ])
             ->actions([
-                Tables\Actions\EditAction::make(),
+                Tables\Actions\EditAction::make()
+                    ->modalWidth(ReservationFormFields::MODAL_WIDTH),
                 Tables\Actions\DeleteAction::make(),
             ])
             ->bulkActions([
@@ -167,5 +188,26 @@ class ReservationsRelationManager extends RelationManager
             ])
             ->defaultSort('reserved_at', 'desc')
             ->paginated([10, 25, 50]);
+    }
+
+    /**
+     * @return array<int, string>
+     */
+    protected function programPointOptions(): array
+    {
+        return EventProgramPoint::query()
+            ->where('event_id', $this->getOwnerRecord()->id)
+            ->where('active', true)
+            ->orderBy('day')
+            ->orderBy('order')
+            ->get()
+            ->mapWithKeys(function (EventProgramPoint $point): array {
+                $prefix = $point->is_hotel ? '🏨 ' : '';
+
+                return [
+                    $point->id => $prefix.'Dz.'.(int) ($point->day ?? 1).': '.($point->name ?? 'Punkt #'.$point->id),
+                ];
+            })
+            ->all();
     }
 }

@@ -34,7 +34,7 @@ class SettlementsRelationManager extends RelationManager
                 ->searchable()
                 ->nullable(),
 
-            Forms\Components\RichEditor::make('notes')
+            \FilamentTiptapEditor\TiptapEditor::make('notes')
                 ->columnSpanFull(),
         ]);
     }
@@ -80,7 +80,8 @@ class SettlementsRelationManager extends RelationManager
                         $data['created_by'] = auth()->id();
 
                         return $data;
-                    }),
+                    })
+                    ->successRedirectUrl(fn ($record) => EventSettlementResource::getUrl('edit', ['record' => $record])),
             ])
             ->actions([
                 Tables\Actions\Action::make('import')

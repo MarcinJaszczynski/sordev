@@ -4,6 +4,7 @@ namespace App\Filament\Resources;
 
 use App\Filament\Resources\PayerResource\Pages;
 use App\Models\Payer;
+use App\Support\FilamentNavigation;
 use Filament\Forms;
 use Filament\Forms\Form;
 use Filament\Resources\Resource;
@@ -26,7 +27,7 @@ class PayerResource extends Resource
      */
     protected static ?string $model = Payer::class;
 
-    protected static ?string $navigationGroup = 'Ustawienia kalkulacji';
+    protected static ?string $navigationGroup = FilamentNavigation::GROUP_SETTINGS;
 
     protected static ?string $navigationIcon = 'heroicon-o-credit-card';
 
@@ -35,6 +36,11 @@ class PayerResource extends Resource
     protected static ?string $modelLabel = 'Płatnik';
 
     protected static ?string $pluralModelLabel = 'Płatnicy';
+
+    public static function shouldRegisterNavigation(): bool
+    {
+        return false;
+    }
 
     /**
      * Uprawnienia do widoczności resource w panelu
@@ -95,7 +101,7 @@ class PayerResource extends Resource
                 ->label('Nazwa płatnika')
                 ->required()
                 ->columnSpanFull(),
-            Forms\Components\RichEditor::make('description')
+            \FilamentTiptapEditor\TiptapEditor::make('description')
                 ->nullable()
                 ->columnSpanFull(),
         ])->columns(1);

@@ -2,15 +2,41 @@
 
 namespace App\Models;
 
+use App\Models\Concerns\HasStickyNotes;
 use App\Models\Concerns\HasTasks;
+use App\Services\ProgramPointPricingCalculator;
+use App\Services\ProgramPointContractorSync;
+use App\Support\CurrencyAmountDisplay;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
+use Illuminate\Database\Eloquent\SoftDeletes;
+use Illuminate\Support\Facades\Schema;
 
 class EventProgramPoint extends Model
 {
-    use HasFactory, HasTasks;
+    use HasFactory, HasStickyNotes, HasTasks, SoftDeletes;
+
+    public static bool $suppressSideEffects = false;
+
+    /**
+     * @template TReturn
+     *
+     * @param  callable(): TReturn  $callback
+     * @return TReturn
+     */
+    public static function runWithoutSideEffects(callable $callback): mixed
+    {
+        $previous = static::$suppressSideEffects;
+        static::$suppressSideEffects = true;
+
+        try {
+            return $callback();
+        } finally {
+            static::$suppressSideEffects = $previous;
+        }
+    }
 
     protected $fillable = [
         'event_id',
@@ -23,12 +49,17 @@ class EventProgramPoint extends Model
         'order',
         'start_time',
         'end_time',
+        'start_date',
+        'end_date',
+        'hide_times',
+        'times_manually_locked',
         'duration_hours',
         'duration_minutes',
         'featured_image',
         'gallery_images',
         'unit_price',
         'quantity',
+        'unit',
         'total_price',
         'calculated_price',
         'planned_price',
@@ -44,6 +75,10 @@ class EventProgramPoint extends Model
         'convert_to_pln',
         'parent_id',
         'contractor_id',
+        'contractor_location_id',
+        'is_hotel',
+        'is_transport',
+        'is_hotel_service',
     ];
 
     protected $casts = [
@@ -57,8 +92,15 @@ class EventProgramPoint extends Model
         'active' => 'boolean',
         'show_title_style' => 'boolean',
         'show_description' => 'boolean',
+        'is_hotel' => 'boolean',
+        'is_transport' => 'boolean',
+        'is_hotel_service' => 'boolean',
         'gallery_images' => 'array',
         'convert_to_pln' => 'boolean',
+        'hide_times' => 'boolean',
+        'times_manually_locked' => 'boolean',
+        'start_date' => 'date',
+        'end_date' => 'date',
     ];
 
     /**
@@ -80,25 +122,19 @@ class EventProgramPoint extends Model
     protected static function booted()
     {
         static::saving(function ($point) {
-            $storedQuantity = max(1, (int) ($point->quantity ?? 1));
-            $groupSize = max(1, (int) ($point->group_size ?? 1));
+            $groupSize = (int) ($point->group_size ?? 0);
             $participants = max(1, (int) ($point->event?->participant_count ?? 1));
 
-            if (($point->group_size ?? null) !== null && $storedQuantity <= 1) {
-                $point->quantity = max(1, (int) ceil($participants / $groupSize));
+            if ($groupSize > 0) {
+                $point->quantity = ProgramPointPricingCalculator::billableUnits($participants, $groupSize);
             }
 
             // Automatycznie oblicz total_price
-            $point->total_price = ($point->unit_price ?? 0) * ($point->quantity ?? 1);
+            $point->total_price = $point->resolveEffectiveTotalPrice($participants);
 
-            // Wylicz cenę kalkulacji na podstawie szablonu (jeśli istnieje)
-            if ($point->templatePoint) {
-                $templateUnit = (float) ($point->templatePoint->unit_price ?? 0);
-                $templateQty = max(1, (int) ($point->quantity ?? 1));
-                $point->calculated_price = $templateUnit * $templateQty;
-            } else {
-                $point->calculated_price = null;
-            }
+            // Kalkulacja punktu ma używać tego samego algorytmu co w szablonie:
+            // cena jednostkowa × liczba osób / grup.
+            $point->calculated_price = $point->resolveCalculationTotal($participants);
 
             // Domyślnie planned_price = calculated_price jeśli nie nadpisano
             if (is_null($point->planned_price) || $point->planned_price == 0) {
@@ -107,6 +143,10 @@ class EventProgramPoint extends Model
         });
 
         static::updated(function ($point) {
+            if (static::$suppressSideEffects) {
+                return;
+            }
+
             $event = $point->event;
             if (! $event) {
                 return;
@@ -126,12 +166,26 @@ class EventProgramPoint extends Model
                 );
             }
 
+            if (array_key_exists('contractor_id', $changes)) {
+                if (Schema::hasColumn('event_program_points', 'contractor_location_id')) {
+                    $point->contractor_location_id = null;
+                    $point->saveQuietly();
+                }
+
+                app(ProgramPointContractorSync::class)->sync($point);
+            }
+
             // Przelicz całkowity koszt imprezy
             $event->calculateTotalCost();
             $event->refreshActiveSettlementCosts();
+            $event->syncTransportFromProgramPoints();
         });
 
         static::created(function ($point) {
+            if (static::$suppressSideEffects) {
+                return;
+            }
+
             $event = $point->event;
             if (! $event) {
                 return;
@@ -148,9 +202,15 @@ class EventProgramPoint extends Model
             // Przelicz całkowity koszt imprezy
             $event->calculateTotalCost();
             $event->refreshActiveSettlementCosts();
+            $event->syncTransportFromProgramPoints();
         });
 
         static::deleted(function ($point) {
+            EventSettlementCost::query()
+                ->whereIn('source_type', ['program_point', 'program_point_payment'])
+                ->where('source_id', $point->id)
+                ->delete();
+
             $event = $point->event;
             if (! $event) {
                 return;
@@ -167,6 +227,7 @@ class EventProgramPoint extends Model
             // Przelicz całkowity koszt imprezy
             $event->calculateTotalCost();
             $event->refreshActiveSettlementCosts();
+            $event->syncTransportFromProgramPoints();
         });
     }
 
@@ -176,6 +237,12 @@ class EventProgramPoint extends Model
     public function event(): BelongsTo
     {
         return $this->belongsTo(Event::class);
+    }
+
+    public function settlementCosts(): HasMany
+    {
+        return $this->hasMany(EventSettlementCost::class, 'source_id')
+            ->where('source_type', 'program_point');
     }
 
     /**
@@ -202,6 +269,16 @@ class EventProgramPoint extends Model
         return $this->belongsTo(Contractor::class);
     }
 
+    public function contractorLocation(): BelongsTo
+    {
+        return $this->belongsTo(ContractorLocation::class, 'contractor_location_id');
+    }
+
+    public function vendorInvoices(): HasMany
+    {
+        return $this->hasMany(VendorInvoice::class, 'event_program_point_id');
+    }
+
     /**
      * Rezerwacje dla tego punktu programu
      */
@@ -221,35 +298,84 @@ class EventProgramPoint extends Model
 
     public function resolveCalculatedQuantity(?int $participantCount = null): int
     {
-        $storedQuantity = max(1, (int) ($this->quantity ?? 1));
-        $groupSize = max(1, (int) ($this->group_size ?? 1));
         $count = max(1, (int) ($participantCount ?? $this->event?->participant_count ?? 1));
-        $calculatedQuantity = max(1, (int) ceil($count / $groupSize));
 
-        if ($storedQuantity > 1) {
-            return $storedQuantity;
-        }
-
-        return $calculatedQuantity;
+        return ProgramPointPricingCalculator::billableUnits(
+            $count,
+            $this->group_size,
+            max(1, (int) ($this->quantity ?? 1)),
+        );
     }
 
     public function resolveEffectiveTotalPrice(?int $participantCount = null): float
     {
-        $unitPrice = (float) ($this->unit_price ?? 0);
-        $storedQuantity = max(1, (int) ($this->quantity ?? 1));
-        $storedTotal = (float) ($this->total_price ?? ($unitPrice * $storedQuantity));
-        $calculatedQuantity = $this->resolveCalculatedQuantity($participantCount);
-        $isTemplateBasedPoint = ! blank($this->event_template_program_point_id);
-        $looksLikeLegacySingleUnit = $isTemplateBasedPoint
-            && $storedQuantity <= 1
-            && abs($storedTotal - $unitPrice) < 0.01
-            && $calculatedQuantity > 1;
+        $count = max(1, (int) ($participantCount ?? $this->event?->participant_count ?? 1));
 
-        if ($looksLikeLegacySingleUnit) {
-            return round($unitPrice * $calculatedQuantity, 2);
-        }
+        return ProgramPointPricingCalculator::totalPrice(
+            (float) ($this->unit_price ?? 0),
+            $count,
+            $this->group_size,
+            max(1, (int) ($this->quantity ?? 1)),
+        );
+    }
 
-        return round($storedTotal, 2);
+    public function resolveCalculationTotal(?int $participantCount = null): float
+    {
+        $count = max(1, (int) ($participantCount ?? $this->event?->participant_count ?? 1));
+        $templateUnitPrice = (float) ($this->templatePoint?->unit_price ?? $this->unit_price ?? 0);
+
+        return ProgramPointPricingCalculator::totalPrice(
+            $templateUnitPrice,
+            $count,
+            $this->group_size,
+            max(1, (int) ($this->quantity ?? 1)),
+        );
+    }
+
+    public function formatAmount(float|int|string|null $amount, int $decimals = 2): string
+    {
+        return CurrencyAmountDisplay::format(
+            (float) ($amount ?? 0),
+            $this->currency,
+            (bool) ($this->convert_to_pln ?? false),
+            $decimals,
+        );
+    }
+
+    public function resolvedDescription(): ?string
+    {
+        return filled($this->description)
+            ? $this->description
+            : ($this->templatePoint?->description ?: null);
+    }
+
+    public function resolvedPilotNotes(): ?string
+    {
+        return filled($this->pilot_notes)
+            ? $this->pilot_notes
+            : ($this->templatePoint?->pilot_notes ?: null);
+    }
+
+    public function resolvedOfficeNotes(): ?string
+    {
+        return filled($this->office_notes)
+            ? $this->office_notes
+            : ($this->templatePoint?->office_notes ?: null);
+    }
+
+    public function hasResolvedPilotNotes(): bool
+    {
+        return filled(trim(strip_tags((string) ($this->resolvedPilotNotes() ?? ''))));
+    }
+
+    public function hasResolvedOfficeNotes(): bool
+    {
+        return filled(trim(strip_tags((string) ($this->resolvedOfficeNotes() ?? ''))));
+    }
+
+    public function hasPilotPortalDetails(): bool
+    {
+        return filled($this->resolvedDescription()) || filled($this->resolvedPilotNotes());
     }
 
     /**
@@ -260,19 +386,29 @@ class EventProgramPoint extends Model
         return self::create([
             'event_id' => $this->event_id,
             'event_template_program_point_id' => $this->event_template_program_point_id,
+            'parent_id' => $this->parent_id,
+            'name' => $this->name,
             'day' => $this->day,
             'order' => $this->getNextOrderInDay(),
             'start_time' => $this->start_time,
             'end_time' => $this->end_time,
+            'start_date' => $this->start_date,
+            'end_date' => $this->end_date,
+            'hide_times' => $this->hide_times,
             'unit_price' => $this->unit_price,
             'quantity' => $this->quantity,
             'total_price' => $this->total_price,
+            'currency_id' => $this->currency_id,
+            'contractor_id' => $this->contractor_id,
             'notes' => $this->notes,
             'include_in_program' => $this->include_in_program,
             'include_in_calculation' => $this->include_in_calculation,
             'active' => $this->active,
             'show_title_style' => $this->show_title_style,
             'show_description' => $this->show_description,
+            'is_hotel' => $this->is_hotel,
+            'is_transport' => $this->is_transport,
+            'is_hotel_service' => $this->is_hotel_service,
         ]);
     }
 

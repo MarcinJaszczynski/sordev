@@ -2,15 +2,18 @@
 
 namespace App\Models;
 
+use App\Models\Concerns\HasStickyNotes;
 use App\Models\Concerns\HasTasks;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
+use Illuminate\Database\Eloquent\Relations\HasOne;
+use Illuminate\Support\Facades\Schema;
 
 class EventSettlementParticipantPayment extends Model
 {
-    use HasFactory, HasTasks;
+    use HasFactory, HasStickyNotes, HasTasks;
 
     protected $fillable = [
         'settlement_id',
@@ -72,6 +75,57 @@ class EventSettlementParticipantPayment extends Model
     public function agreements(): HasMany
     {
         return $this->hasMany(EventAgreement::class, 'participant_payment_id');
+    }
+
+    public function contracts(): HasMany
+    {
+        return $this->hasMany(Contract::class, 'participant_payment_id');
+    }
+
+    public function resignations(): HasMany
+    {
+        return $this->hasMany(EventParticipantResignation::class, 'participant_payment_id');
+    }
+
+    public function entries(): HasMany
+    {
+        return $this->hasMany(EventSettlementParticipantPaymentEntry::class, 'participant_payment_id')
+            ->orderBy('paid_at')
+            ->orderBy('id');
+    }
+
+    public function eventParticipant(): HasOne
+    {
+        return $this->hasOne(EventParticipant::class, 'participant_payment_id');
+    }
+
+    public function hasLinkedAgreementsBesides(int $excludeContractId = 0, int $excludeEventAgreementId = 0): bool
+    {
+        if (Schema::hasTable('contracts')) {
+            $contractsQuery = $this->contracts();
+
+            if ($excludeContractId > 0) {
+                $contractsQuery->whereKeyNot($excludeContractId);
+            }
+
+            if ($contractsQuery->exists()) {
+                return true;
+            }
+        }
+
+        if (Schema::hasTable('event_agreements')) {
+            $agreementsQuery = $this->agreements();
+
+            if ($excludeEventAgreementId > 0) {
+                $agreementsQuery->whereKeyNot($excludeEventAgreementId);
+            }
+
+            if ($agreementsQuery->exists()) {
+                return true;
+            }
+        }
+
+        return false;
     }
 
     public function reviewer(): BelongsTo

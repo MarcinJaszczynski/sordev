@@ -1,13 +1,25 @@
 <?php
 
+use App\Http\Controllers\Admin\AgreementPdfDownloadController;
+use App\Http\Controllers\Admin\BackupDownloadController;
+use App\Http\Controllers\Admin\EventCalculationExportController;
+use App\Http\Controllers\Admin\EventHotelOccupantsTemplateController;
 use App\Http\Controllers\Admin\EventIndividualAgreementReportExportController;
 use App\Http\Controllers\Admin\EventOfferWordController;
+use App\Http\Controllers\Admin\EventParticipantInsuranceExportController;
+use App\Http\Controllers\Admin\EventParticipantListTemplateController;
+use App\Http\Controllers\Admin\EventInvoicePdfController;
 use App\Http\Controllers\Admin\EventPrintPdfController;
 use App\Http\Controllers\Admin\NotificationController;
 use App\Http\Controllers\EventCsvController;
 use App\Http\Controllers\EventPriceDescriptionController;
 use App\Http\Controllers\Front\AgreementFlowController;
 use App\Http\Controllers\Front\FrontController;
+use App\Http\Controllers\InstallController;
+use App\Http\Controllers\Client\ClientContractPdfController;
+use App\Http\Controllers\Pilot\PilotEventPdfController;
+use App\Http\Middleware\EnsureApplicationNotInstalled;
+use App\Livewire\PilotTripSettlementForm;
 use App\Models\Conversation;
 use App\Models\EventTemplate;
 use App\Models\Place;
@@ -17,6 +29,21 @@ use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Route;
+
+Route::middleware(['web', EnsureApplicationNotInstalled::class])
+    ->prefix('install')
+    ->name('install.')
+    ->group(function () {
+        Route::get('/', [InstallController::class, 'index'])->name('index');
+        Route::get('/database', [InstallController::class, 'databaseForm'])->name('database');
+        Route::post('/database', [InstallController::class, 'databaseStore'])->name('database.store');
+        Route::get('/application', [InstallController::class, 'applicationForm'])->name('application');
+        Route::post('/application', [InstallController::class, 'applicationStore'])->name('application.store');
+        Route::get('/admin', [InstallController::class, 'adminForm'])->name('admin');
+        Route::post('/admin', [InstallController::class, 'adminStore'])->name('admin.store');
+    });
+
+Route::middleware('web')->get('/install/complete', [InstallController::class, 'complete'])->name('install.complete');
 
 // Redirect old root to canonical region root using cookie (handled by middleware later)
 Route::get('/', function () {
@@ -230,17 +257,61 @@ Route::get('/auto-login', function () {
     }
 });
 
+// Portal pilota — rozliczenie mobilne i PDF teczki
+Route::middleware(['auth', 'web'])->prefix('pilot')->group(function () {
+    Route::get('/trip/{event}/settle', PilotTripSettlementForm::class)
+        ->name('pilot.trip.settle');
+    Route::get('/events/{event}/pdf/{audience}', [PilotEventPdfController::class, 'download'])
+        ->where('audience', 'pilot|folder')
+        ->name('pilot.events.pdf');
+});
+
+// Portal klienta — PDF umowy
+Route::middleware(['auth', 'web'])->prefix('portal')->group(function () {
+    Route::get('/events/{event}/contract-pdf', ClientContractPdfController::class)
+        ->name('portal.contract.pdf');
+});
+
 // Admin notifications API endpoint
 Route::middleware(['auth', 'web'])->prefix('admin')->group(function () {
     Route::get('/notifications/counts', [NotificationController::class, 'getCounts'])->name('admin.notifications.counts');
+    Route::post('/notifications/mark-read', [NotificationController::class, 'markRead'])->name('admin.notifications.mark-read');
+    Route::get('/contracts/{contract}/agreement-pdf', AgreementPdfDownloadController::class)
+        ->name('admin.contracts.agreement-pdf');
     Route::get('/events/{event}/pdf/{audience}', [EventPrintPdfController::class, 'download'])
-        ->where('audience', 'pilot|hotel|driver|folder|all')
+        ->where('audience', 'pilot|hotel|driver|folder|all|program_with_times|program_without_times')
         ->name('admin.events.pdf');
+    Route::get('/events/{event}/invoices/pdf', [EventInvoicePdfController::class, 'download'])
+        ->name('admin.events.invoices.pdf');
+    Route::get('/events/{event}/calculation/pdf', [EventCalculationExportController::class, 'pdf'])
+        ->name('admin.events.calculation.pdf');
+    Route::get('/events/{event}/calculation/excel', [EventCalculationExportController::class, 'excel'])
+        ->name('admin.events.calculation.excel');
+    Route::get('/events/{event}/hotel-occupants/import-template/{format?}', EventHotelOccupantsTemplateController::class)
+        ->where('format', 'csv|xlsx')
+        ->defaults('format', 'xlsx')
+        ->name('admin.events.hotel-occupants.import-template');
+    Route::get('/events/{event}/participants/import-template/{format?}', EventParticipantListTemplateController::class)
+        ->where('format', 'csv|xlsx')
+        ->defaults('format', 'csv')
+        ->name('admin.events.participants.import-template');
+    Route::get('/events/{event}/participants/insurance-export/{format?}', EventParticipantInsuranceExportController::class)
+        ->where('format', 'csv|xlsx')
+        ->defaults('format', 'xlsx')
+        ->name('admin.events.participants.insurance-export');
     Route::get('/events/{event}/individual-agreements-export/{format}', EventIndividualAgreementReportExportController::class)
         ->where('format', 'csv|xlsx')
         ->name('admin.events.individual-agreements.export');
     Route::get('/events/{event}/offer/word', EventOfferWordController::class)
         ->name('admin.events.offer.word');
+    Route::get('/task-attachments/{attachment}/download', \App\Http\Controllers\Admin\TaskAttachmentDownloadController::class)
+        ->name('admin.task-attachments.download');
+    Route::get('/backups/{filename}/download', [BackupDownloadController::class, 'download'])
+        ->name('admin.backups.download');
+    Route::get('/tfg-feed-logs/{feedLog}/download', \App\Http\Controllers\Admin\TfgFeedLogDownloadController::class)
+        ->name('tfg.feed-log.download');
+    Route::get('/tfg-csv-exports/{feedLog}/download', \App\Http\Controllers\Admin\TfgCsvExportDownloadController::class)
+        ->name('tfg.csv-export.download');
     Route::post('/sitemap/generate', function () {
         try {
             \Illuminate\Support\Facades\Artisan::call('sitemap:generate');
@@ -252,7 +323,7 @@ Route::middleware(['auth', 'web'])->prefix('admin')->group(function () {
     })->name('sitemap.generate');
 });
 
-Route::get('/admin/conversations', function () {
+Route::get('/admin/conversations/open', function () {
     $user = Auth::user();
     if (! $user) {
         return redirect('/login');

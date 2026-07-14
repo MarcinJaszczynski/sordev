@@ -2,10 +2,19 @@
 
 namespace App\Filament\Resources\EventResource\RelationManagers;
 
+use App\Filament\Forms\ContractCustomAgreementFields;
+use App\Filament\Forms\ContractGroupPricingFields;
+use App\Filament\Forms\ContractOrderingPartyFields;
+use App\Filament\Resources\EventResource\RelationManagers\Concerns\ManagesContractAttachments;
+use App\Filament\Resources\EventResource\RelationManagers\Concerns\ManagesContractOrderingParties;
+use App\Filament\Resources\EventResource\RelationManagers\Concerns\ManagesContractPaymentSchedules;
 use App\Models\ContractTemplate;
+use App\Models\Event;
 use App\Models\EventAgreement;
 use App\Models\EventSettlementParticipantPayment;
 use App\Services\AgreementPaymentSyncService;
+use App\Services\ContractOrderingPartyService;
+use App\Services\NotificationService;
 use Filament\Forms;
 use Filament\Forms\Form;
 use Filament\Forms\Get;
@@ -15,13 +24,14 @@ use Filament\Notifications\Notification;
 use Filament\Resources\RelationManagers\RelationManager;
 use Filament\Tables;
 use Filament\Tables\Table;
-use Illuminate\Support\Arr;
-use Illuminate\Support\Facades\File;
-use Illuminate\Support\Facades\Storage;
-use Illuminate\Support\Str;
+use Illuminate\Support\Facades\Schema;
 
 class AgreementsRelationManager extends RelationManager
 {
+    use ManagesContractAttachments;
+    use ManagesContractOrderingParties;
+    use ManagesContractPaymentSchedules;
+
     protected static string $relationship = 'agreements';
 
     protected static ?string $title = 'Umowy i płatności';
@@ -38,7 +48,15 @@ class AgreementsRelationManager extends RelationManager
                         ->label('Szablon umowy')
                         ->options(fn () => ContractTemplate::orderBy('name')->pluck('name', 'id')->all())
                         ->searchable()
-                        ->nullable(),
+                        ->nullable()
+                        ->live()
+                        ->visible(fn (Get $get): bool => ($get('agreement_type') ?? EventAgreement::TYPE_GROUP) !== EventAgreement::TYPE_CUSTOM)
+                        ->afterStateUpdated(function (Set $set, ?string $state): void {
+                            $set('selected_attachments', $this->resolveSelectedAttachmentDefaults(
+                                null,
+                                filled($state) ? (int) $state : null,
+                            ));
+                        }),
 
                     Forms\Components\Select::make('agreement_type')
                         ->label('Typ umowy')
@@ -46,6 +64,15 @@ class AgreementsRelationManager extends RelationManager
                         ->default(EventAgreement::TYPE_GROUP)
                         ->live()
                         ->afterStateUpdated(function (Set $set, ?string $state): void {
+                            if ($state === EventAgreement::TYPE_CUSTOM) {
+                                $set('body_edit_mode', EventAgreement::BODY_EDIT_UPLOAD);
+                                $set('contract_template_id', null);
+
+                                return;
+                            }
+
+                            $set('body_edit_mode', EventAgreement::BODY_EDIT_TEMPLATE);
+
                             $event = $this->getOwnerRecord();
                             $participantCount = max(1, (int) ($event->participant_count ?? 1));
                             $pricePerPerson = $event->resolvedPricePerPerson($participantCount);
@@ -56,6 +83,7 @@ class AgreementsRelationManager extends RelationManager
                             } else {
                                 $set('amount_due', $pricePerPerson * $participantCount);
                                 $set('participant_count', $participantCount);
+                                $set('unit_price', $pricePerPerson);
                             }
                         })
                         ->required(),
@@ -83,7 +111,7 @@ class AgreementsRelationManager extends RelationManager
                         ->default(now()),
                 ]),
 
-            Forms\Components\Section::make('Dane imprezy i klienta')
+            Forms\Components\Section::make('Dane imprezy')
                 ->columns(2)
                 ->schema([
                     Forms\Components\TextInput::make('event_name')
@@ -94,7 +122,9 @@ class AgreementsRelationManager extends RelationManager
                         ->label('Liczba uczestników')
                         ->numeric()
                         ->minValue(1)
-                        ->default(fn () => (int) ($this->getOwnerRecord()->participant_count ?? 1)),
+                        ->default(fn () => (int) ($this->getOwnerRecord()->participant_count ?? 1))
+                        ->live(onBlur: true)
+                        ->afterStateUpdated(fn (Set $set, Get $get) => ContractGroupPricingFields::syncGroupTotal($set, $get, fn () => $this->getOwnerRecord())),
 
                     Forms\Components\DatePicker::make('event_start_date')
                         ->label('Data rozpoczęcia')
@@ -104,19 +134,6 @@ class AgreementsRelationManager extends RelationManager
                         ->label('Data zakończenia')
                         ->native(false),
 
-                    Forms\Components\TextInput::make('customer_name')
-                        ->label('Klient / osoba kontaktowa')
-                        ->maxLength(255),
-
-                    Forms\Components\TextInput::make('customer_email')
-                        ->label('Email klienta')
-                        ->email()
-                        ->maxLength(255),
-
-                    Forms\Components\TextInput::make('customer_phone')
-                        ->label('Telefon klienta')
-                        ->maxLength(64),
-
                     Forms\Components\TextInput::make('participant_name')
                         ->label('Uczestnik (indywidualna)')
                         ->maxLength(255),
@@ -125,6 +142,9 @@ class AgreementsRelationManager extends RelationManager
                         ->label('Data urodzenia uczestnika')
                         ->native(false),
                 ]),
+
+            Forms\Components\Section::make('Zamawiający')
+                ->schema(ContractOrderingPartyFields::schema()),
 
             Forms\Components\Section::make('Płatność')
                 ->columns(2)
@@ -140,7 +160,24 @@ class AgreementsRelationManager extends RelationManager
                         })())
                         ->required()
                         ->suffix('PLN')
-                        ->helperText(fn (Get $get) => (function (): string {
+                        ->helperText(fn (Get $get) => (function () use ($get): string {
+                            if (ContractGroupPricingFields::isGroupType($get('agreement_type'))) {
+                                $participantCount = max(1, (int) ($get('participant_count') ?? 1));
+                                $unitPrice = (float) ($get('unit_price') ?? 0);
+
+                                if ($unitPrice <= 0) {
+                                    $event = $this->getOwnerRecord();
+                                    $unitPrice = $event->resolvedPricePerPerson($participantCount);
+                                }
+
+                                return sprintf(
+                                    'Kalkulacja grupowa: %s PLN/os. × %d os. = %s PLN',
+                                    number_format($unitPrice, 2, ',', ' '),
+                                    $participantCount,
+                                    number_format($unitPrice * $participantCount, 2, ',', ' ')
+                                );
+                            }
+
                             $event = $this->getOwnerRecord();
                             $participantCount = max(1, (int) ($event->participant_count ?? 1));
                             $pricePerPerson = $event->resolvedPricePerPerson($participantCount);
@@ -153,6 +190,8 @@ class AgreementsRelationManager extends RelationManager
                                 number_format($totalAmount, 2, ',', ' ')
                             );
                         })()),
+
+                    ...ContractGroupPricingFields::schema(fn () => $this->getOwnerRecord()),
 
                     Forms\Components\TextInput::make('amount_paid')
                         ->label('Kwota opłacona')
@@ -198,17 +237,17 @@ class AgreementsRelationManager extends RelationManager
 
             Forms\Components\Section::make('Treść i załączniki')
                 ->schema([
-                    Forms\Components\Textarea::make('agreement_body')
-                        ->label('Treść umowy')
-                        ->rows(12)
-                        ->columnSpanFull(),
+                    ...ContractCustomAgreementFields::contentSchema(),
 
                     Forms\Components\CheckboxList::make('selected_attachments')
                         ->label('Wybierz gotowe załączniki')
                         ->options(fn (): array => $this->getSelectableAttachmentOptions())
                         ->columns(1)
-                        ->helperText('Możesz wybrać gotowe pliki z systemu i katalogu pliki oraz jednocześnie dodać własne pliki poniżej.')
-                        ->default(fn (?EventAgreement $record): array => $this->resolveSelectedAttachmentDefaults($record?->attachments ?? [])),
+                        ->helperText('Domyślnie zaznaczane są załączniki globalne lub przypisane do wybranego szablonu.')
+                        ->default(fn (?EventAgreement $record, Get $get): array => $this->resolveSelectedAttachmentDefaults(
+                            $record?->attachments,
+                            filled($get('contract_template_id')) ? (int) $get('contract_template_id') : $record?->contract_template_id,
+                        )),
 
                     Forms\Components\FileUpload::make('attachments')
                         ->label('Załączniki do umowy')
@@ -219,7 +258,7 @@ class AgreementsRelationManager extends RelationManager
                         ->downloadable()
                         ->openable(),
 
-                    Forms\Components\RichEditor::make('admin_notes')
+                    \FilamentTiptapEditor\TiptapEditor::make('admin_notes')
                         ->label('Uwagi administratora')
                         ->columnSpanFull(),
                 ]),
@@ -233,11 +272,13 @@ class AgreementsRelationManager extends RelationManager
                 $event = $this->getOwnerRecord();
                 $report = $event->buildIndividualAgreementReport($event->agreements()->get());
                 $summary = $report['summary'];
+                $insuranceLabel = $event->insuranceChecklistLabel();
 
                 return sprintf(
-                    'Umowy i płatności • Indywidualne opłacone: %s • Pozostało: %s PLN',
+                    'Umowy i płatności • Indywidualne opłacone: %s • Pozostało: %s PLN • Ubezpieczenie: %s',
                     $summary['payment_progress_label'],
-                    number_format((float) $summary['amount_remaining'], 2, ',', ' ')
+                    number_format((float) $summary['amount_remaining'], 2, ',', ' '),
+                    $insuranceLabel
                 );
             })
             ->columns([
@@ -261,11 +302,12 @@ class AgreementsRelationManager extends RelationManager
                         'primary' => EventAgreement::TYPE_INDIVIDUAL,
                     ]),
 
-                Tables\Columns\TextColumn::make('paid_user')
-                    ->label('Użytkownik')
-                    ->state(fn (EventAgreement $record) => $record->signer_name ?: $record->participant_name ?: $record->customer_name ?: '—')
-                    ->description(fn (EventAgreement $record) => $record->signer_email ?: $record->customer_email ?: null)
-                    ->searchable(['signer_name', 'participant_name', 'customer_name', 'signer_email', 'customer_email']),
+                Tables\Columns\TextColumn::make('ordering_parties_label')
+                    ->label('Zamawiający')
+                    ->state(fn (EventAgreement $record) => app(ContractOrderingPartyService::class)->formattedPartyNames($record))
+                    ->description(fn (EventAgreement $record) => $record->ordering_party_notes)
+                    ->wrap()
+                    ->searchable(['customer_name', 'customer_email']),
 
                 Tables\Columns\TextColumn::make('amount_due')
                     ->label('Do zapłaty')
@@ -305,6 +347,70 @@ class AgreementsRelationManager extends RelationManager
                     ->placeholder('—'),
             ])
             ->headerActions([
+                Tables\Actions\Action::make('edit_event_insurance')
+                    ->label('Ubezpieczenie imprezy')
+                    ->icon('heroicon-o-shield-check')
+                    ->color(fn (): string => $this->getOwnerRecord()->hasInsuranceDataSaved() ? 'success' : 'danger')
+                    ->visible(fn (): bool => Schema::hasColumn('events', 'insurance_policy_number'))
+                    ->form([
+                        Forms\Components\TextInput::make('insurance_policy_number')
+                            ->label('Nr polisy')
+                            ->maxLength(255),
+
+                        Forms\Components\Select::make('insurance_status')
+                            ->label('Status ubezpieczenia')
+                            ->options(Event::getInsuranceStatusOptions())
+                            ->default('pending')
+                            ->required(),
+
+                        Forms\Components\Select::make('insurance_payment_status')
+                            ->label('Status płatności ubezpieczenia')
+                            ->options(Event::getInsurancePaymentStatusOptions())
+                            ->default('pending')
+                            ->required(),
+
+                        Forms\Components\TextInput::make('insurance_amount')
+                            ->label('Kwota ubezpieczenia')
+                            ->numeric()
+                            ->suffix('PLN')
+                            ->nullable(),
+
+                        Forms\Components\DateTimePicker::make('insurance_paid_at')
+                            ->label('Data płatności')
+                            ->native(false)
+                            ->nullable(),
+
+                        Forms\Components\FileUpload::make('insurance_document_path')
+                            ->label('Dokument ubezpieczenia do wgrania')
+                            ->disk('public')
+                            ->directory('event-insurance')
+                            ->downloadable()
+                            ->openable()
+                            ->acceptedFileTypes(['application/pdf', 'image/png', 'image/jpeg', 'image/webp'])
+                            ->nullable(),
+
+                        Forms\Components\Textarea::make('insurance_terms')
+                            ->label('Warunki ubezpieczenia')
+                            ->rows(4)
+                            ->columnSpanFull(),
+                    ])
+                    ->fillForm(fn (): array => $this->resolveInsuranceFormDefaults())
+                    ->action(function (array $data): void {
+                        $event = $this->getOwnerRecord();
+                        $event->updateInsuranceFromFormData($data);
+                        $event->refresh();
+
+                        if ($userId = auth()->id()) {
+                            NotificationService::clearCacheForUser($userId);
+                        }
+
+                        Notification::make()
+                            ->title('Zapisano dane ubezpieczenia')
+                            ->body($event->insuranceSaveSummary())
+                            ->success()
+                            ->send();
+                    }),
+
                 Tables\Actions\Action::make('individual_agreements_report')
                     ->label('Raport umów indywidualnych')
                     ->icon('heroicon-o-chart-bar-square')
@@ -392,11 +498,16 @@ class AgreementsRelationManager extends RelationManager
                             ->label('Załączniki do dołączenia')
                             ->options(fn (): array => $this->getSelectableAttachmentOptions())
                             ->columns(1)
+                            ->default(fn (Get $get): array => $this->resolveSelectedAttachmentDefaults(
+                                null,
+                                filled($get('contract_template_id')) ? (int) $get('contract_template_id') : null,
+                            ))
                             ->helperText('Zaznaczone pliki z systemu lub katalogu pliki będą dostępne klientowi razem z umową.'),
                     ])
                     ->action(function (array $data): void {
                         $event = $this->getOwnerRecord();
-                        $attachments = $this->resolveAttachmentsFromData($data);
+                        $data = $this->attachmentCatalogService()->mergeSelectedAttachmentsIntoFormData($data);
+                        $attachments = $data['attachments'] ?? [];
 
                         $agreement = EventAgreement::create([
                             'event_id' => $event->id,
@@ -420,6 +531,11 @@ class AgreementsRelationManager extends RelationManager
                         ]);
 
                         $agreement->regenerateAgreementBody();
+
+                        $this->syncOrderingPartiesForEventAgreement(
+                            $agreement,
+                            app(ContractOrderingPartyService::class)->partiesFromEvent($event),
+                        );
 
                         Notification::make()
                             ->title('Umowa wygenerowana')
@@ -462,13 +578,18 @@ class AgreementsRelationManager extends RelationManager
                             ->label('Załączniki do dołączenia')
                             ->options(fn (): array => $this->getSelectableAttachmentOptions())
                             ->columns(1)
+                            ->default(fn (Get $get): array => $this->resolveSelectedAttachmentDefaults(
+                                null,
+                                filled($get('contract_template_id')) ? (int) $get('contract_template_id') : null,
+                            ))
                             ->helperText('Zaznaczone pliki z systemu lub katalogu pliki trafią do szablonu umowy indywidualnej i do każdego klonu.'),
                     ])
                     ->action(function (array $data): void {
                         $event = $this->getOwnerRecord();
                         $payingParticipantsCount = max(1, (int) ($data['paying_participants_count'] ?? $event->participant_count ?? 1));
                         $amountPerPerson = $this->resolveIndividualAmountDueForEvent($payingParticipantsCount);
-                        $attachments = $this->resolveAttachmentsFromData($data);
+                        $data = $this->attachmentCatalogService()->mergeSelectedAttachmentsIntoFormData($data);
+                        $attachments = $data['attachments'] ?? [];
 
                         if ($amountPerPerson <= 0) {
                             Notification::make()
@@ -520,6 +641,11 @@ class AgreementsRelationManager extends RelationManager
 
                         $agreement->regenerateAgreementBody();
 
+                        $this->syncOrderingPartiesForEventAgreement(
+                            $agreement,
+                            app(ContractOrderingPartyService::class)->partiesFromEvent($event),
+                        );
+
                         Notification::make()
                             ->title('Szablon umowy indywidualnej wygenerowany')
                             ->body("Wysyłaj poniższy link do {$payingParticipantsCount} uczestników. Każdy wypełni formularz i zapłaci indywidualnie. Cena za osobę: ".number_format($amountPerPerson, 2, ',', ' ').' PLN.')
@@ -538,10 +664,12 @@ class AgreementsRelationManager extends RelationManager
 
                 Tables\Actions\CreateAction::make()
                     ->label('Nowa umowa')
+                    ->fillForm(fn (): array => $this->resolveAgreementDefaultsFromEvent())
                     ->mutateFormDataUsing(function (array $data): array {
                         $event = $this->getOwnerRecord();
 
                         $data = $this->mergeSelectedAttachmentsIntoData($data);
+                        $data = $this->mergeOrderingPartiesIntoFormData($data);
 
                         $data['event_id'] = $event->id;
                         $data['created_by'] = auth()->id();
@@ -577,18 +705,21 @@ class AgreementsRelationManager extends RelationManager
                             );
                         }
 
-                        if (($data['agreement_type'] ?? null) === EventAgreement::TYPE_GROUP && (! isset($data['amount_due']) || (float) $data['amount_due'] <= 0)) {
-                            $participantCount = max(1, (int) ($data['participant_count'] ?? $event->participant_count ?? 1));
-                            $data['amount_due'] = $event->resolvedPricePerPerson($participantCount) * $participantCount;
-                        }
-
                         $data['status'] = $data['status'] ?? 'sent';
                         $data['payment_status'] = $data['payment_status'] ?? 'pending';
 
-                        return $data;
+                        return $this->mergeGroupPricingIntoFormData($data);
                     })
-                    ->after(function (EventAgreement $record): void {
-                        if (blank($record->agreement_body)) {
+                    ->after(function (EventAgreement $record, array $data): void {
+                        $this->syncOrderingPartiesForEventAgreement(
+                            $record,
+                            $data['ordering_parties'] ?? [],
+                            $data['ordering_party_notes'] ?? null,
+                        );
+
+                        $this->syncPaymentSchedulesForEventAgreement($record->fresh(), $data);
+
+                        if (blank($record->agreement_body) && $record->shouldAutoGenerateAgreementBody()) {
                             $record->regenerateAgreementBody();
                         }
 
@@ -610,6 +741,7 @@ class AgreementsRelationManager extends RelationManager
                     ->label('Regeneruj treść')
                     ->icon('heroicon-o-arrow-path')
                     ->color('gray')
+                    ->visible(fn (EventAgreement $record): bool => $record->shouldAutoGenerateAgreementBody())
                     ->action(function (EventAgreement $record): void {
                         $record->regenerateAgreementBody();
 
@@ -642,7 +774,27 @@ class AgreementsRelationManager extends RelationManager
                     }),
 
                 Tables\Actions\EditAction::make()
-                    ->mutateFormDataUsing(fn (array $data): array => $this->mergeSelectedAttachmentsIntoData($data)),
+                    ->fillForm(fn (EventAgreement $record): array => array_merge(
+                        $record->toArray(),
+                        [
+                            'ordering_parties' => app(ContractOrderingPartyService::class)->partiesToFormState($record),
+                            'payment_schedules' => $this->groupPricingService()->schedulesToFormState($record),
+                        ],
+                    ))
+                    ->mutateFormDataUsing(function (array $data): array {
+                        $data = $this->mergeSelectedAttachmentsIntoData($data);
+
+                        return $this->mergeOrderingPartiesIntoFormData($data);
+                    })
+                    ->after(function (EventAgreement $record, array $data): void {
+                        $this->syncOrderingPartiesForEventAgreement(
+                            $record,
+                            $data['ordering_parties'] ?? [],
+                            $data['ordering_party_notes'] ?? null,
+                        );
+
+                        $this->syncPaymentSchedulesForEventAgreement($record->fresh(), $data);
+                    }),
                 Tables\Actions\DeleteAction::make(),
             ])
             ->defaultSort('id', 'desc');
@@ -653,152 +805,6 @@ class AgreementsRelationManager extends RelationManager
         $event = $this->getOwnerRecord();
 
         return $event->resolvedPricePerPerson($payingParticipantsCount);
-    }
-
-    protected function getSelectableAttachmentOptions(): array
-    {
-        return collect($this->getSelectableAttachmentCatalog())
-            ->mapWithKeys(fn (array $item, string $path): array => [$path => $item['label']])
-            ->all();
-    }
-
-    protected function resolveSelectedAttachmentDefaults(array $attachments): array
-    {
-        $selectable = array_keys($this->getSelectableAttachmentOptions());
-
-        return array_values(array_intersect($attachments, $selectable));
-    }
-
-    protected function resolveAttachmentsFromData(array $data): array
-    {
-        $selected = $this->materializeSelectedAttachments(Arr::wrap($data['selected_attachments'] ?? []));
-
-        return $this->mergeAttachmentLists(
-            Arr::wrap($data['attachments'] ?? []),
-            $selected,
-        );
-    }
-
-    protected function mergeSelectedAttachmentsIntoData(array $data): array
-    {
-        $data['attachments'] = $this->resolveAttachmentsFromData($data);
-        unset($data['selected_attachments']);
-
-        return $data;
-    }
-
-    protected function mergeAttachmentLists(array $uploaded, array $selected): array
-    {
-        $normalized = array_merge($uploaded, $selected);
-        $normalized = array_filter($normalized, fn ($path) => filled($path));
-
-        return array_values(array_unique($normalized));
-    }
-
-    protected function getSelectableAttachmentCatalog(): array
-    {
-        $catalog = [];
-
-        $publicFiles = [
-            'dokumenty/Warunki-Uczestnictwa-2026.pdf' => 'System / Warunki uczestnictwa 2026',
-            'dokumenty/Standardowy-Formularz.pdf' => 'System / Standardowy formularz informacyjny',
-            'nnw_ow_rp.pdf' => 'System / Warunki ubezpieczenia NNW - kraj',
-            'kl_ow.pdf' => 'System / Warunki ubezpieczenia KL',
-            'kr_ow.pdf' => 'System / Warunki ubezpieczenia kosztów rezygnacji',
-            'dokumenty/regulamin_przewozu_osób.pdf' => 'System / Regulamin przewozu osób',
-            'dokumenty/polityka_rodo.pdf' => 'System / Polityka RODO',
-            'dokumenty/wpis_do_rejestru_organizatorow.pdf' => 'System / Wpis do rejestru organizatorów',
-        ];
-
-        foreach ($publicFiles as $path => $label) {
-            if (Storage::disk('public')->exists($path)) {
-                $catalog[$path] = [
-                    'label' => $label,
-                    'type' => 'public',
-                ];
-            }
-        }
-
-        $workspaceFilesDir = base_path('pliki');
-
-        if (File::isDirectory($workspaceFilesDir)) {
-            foreach (File::allFiles($workspaceFilesDir) as $file) {
-                $extension = strtolower($file->getExtension());
-
-                if (! $this->isAllowedWorkspaceAttachmentExtension($extension)) {
-                    continue;
-                }
-
-                $relativePath = str_replace($workspaceFilesDir.DIRECTORY_SEPARATOR, '', $file->getPathname());
-                $relativePath = str_replace('\\', '/', $relativePath);
-                $publicPath = $this->mapWorkspaceAttachmentToPublicPath($relativePath);
-
-                $catalog[$publicPath] = [
-                    'label' => 'Pliki / '.str_replace('/', ' / ', $relativePath),
-                    'type' => 'workspace',
-                    'source_path' => $file->getPathname(),
-                ];
-            }
-        }
-
-        ksort($catalog);
-
-        return $catalog;
-    }
-
-    protected function materializeSelectedAttachments(array $selected): array
-    {
-        $catalog = $this->getSelectableAttachmentCatalog();
-        $resolved = [];
-
-        foreach ($selected as $path) {
-            if (! is_string($path) || $path === '') {
-                continue;
-            }
-
-            $item = $catalog[$path] ?? null;
-
-            if (($item['type'] ?? null) === 'workspace' && ! empty($item['source_path'])) {
-                $this->copyWorkspaceAttachmentToPublic($item['source_path'], $path);
-            }
-
-            $resolved[] = $path;
-        }
-
-        return $resolved;
-    }
-
-    protected function copyWorkspaceAttachmentToPublic(string $sourcePath, string $destinationPath): void
-    {
-        if (Storage::disk('public')->exists($destinationPath)) {
-            return;
-        }
-
-        Storage::disk('public')->put($destinationPath, File::get($sourcePath));
-    }
-
-    protected function isAllowedWorkspaceAttachmentExtension(string $extension): bool
-    {
-        return in_array($extension, ['pdf', 'doc', 'docx', 'rtf', 'txt', 'jpg', 'jpeg', 'png', 'webp'], true);
-    }
-
-    protected function mapWorkspaceAttachmentToPublicPath(string $relativePath): string
-    {
-        $relativePath = trim($relativePath, '/');
-        $directory = str_replace('\\', '/', dirname($relativePath));
-        $directory = $directory === '.' ? '' : collect(explode('/', $directory))
-            ->filter(fn ($segment) => $segment !== '')
-            ->map(fn ($segment) => Str::slug($segment))
-            ->implode('/');
-
-        $fileName = pathinfo($relativePath, PATHINFO_FILENAME);
-        $extension = strtolower((string) pathinfo($relativePath, PATHINFO_EXTENSION));
-        $slug = Str::slug($fileName);
-        $hash = substr(sha1($relativePath), 0, 8);
-
-        $targetName = trim($slug !== '' ? $slug : 'plik', '-').'-'.$hash.($extension !== '' ? '.'.$extension : '');
-
-        return trim('event-agreements/library/'.($directory !== '' ? $directory.'/' : '').$targetName, '/');
     }
 
     protected function getParticipantPaymentOptions(): array
@@ -820,5 +826,43 @@ class AgreementsRelationManager extends RelationManager
                 return [$payment->id => $label];
             })
             ->all();
+    }
+
+    protected function resolveInsuranceFormDefaults(): array
+    {
+        $event = $this->getOwnerRecord();
+
+        return [
+            'insurance_policy_number' => $event->insurance_policy_number,
+            'insurance_status' => $event->insurance_status ?: 'pending',
+            'insurance_payment_status' => $event->insurance_payment_status ?: 'pending',
+            'insurance_amount' => $event->insurance_amount,
+            'insurance_paid_at' => $event->insurance_paid_at,
+            'insurance_document_path' => $event->insurance_document_path,
+            'insurance_terms' => $event->insurance_terms,
+        ];
+    }
+
+    protected function resolveAgreementDefaultsFromEvent(): array
+    {
+        $event = $this->getOwnerRecord();
+
+        return array_merge($this->groupPricingService()->defaultsFromEvent($event), [
+            'agreement_type' => EventAgreement::TYPE_GROUP,
+            'title' => 'Umowa — '.$event->name,
+            'agreement_date' => now()->toDateString(),
+            'event_name' => $event->name,
+            'event_start_date' => optional($event->start_date)?->toDateString(),
+            'event_end_date' => optional($event->end_date)?->toDateString(),
+            'ordering_parties' => app(ContractOrderingPartyService::class)->partiesFromEvent($event),
+            'customer_name' => $event->client_name,
+            'customer_email' => $event->client_email,
+            'customer_phone' => $event->client_phone,
+            'amount_paid' => 0,
+            'currency' => 'PLN',
+            'status' => 'sent',
+            'payment_status' => 'pending',
+            'selected_attachments' => $this->resolveSelectedAttachmentDefaults(),
+        ]);
     }
 }

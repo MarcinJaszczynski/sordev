@@ -2,15 +2,25 @@
 
 namespace App\Filament\Resources;
 
+use App\Filament\Forms\PhoneInput;
+use App\Filament\Forms\ContractorLocationFields;
 use App\Filament\Resources\ContractorResource\Pages;
 use App\Filament\Resources\ContractorResource\RelationManagers\ContactsRelationManager;
+use App\Filament\Resources\ContractorResource\RelationManagers\LocationsRelationManager;
+use App\Filament\Resources\ContractorResource\RelationManagers\VendorInvoicesRelationManager;
 use App\Filament\Resources\TaskResource\RelationManagers\TasksRelationManager;
 use App\Models\Contractor;
+use App\Models\ContractorType;
+use App\Support\ContractorContactDetails;
+use App\Support\FilamentNavigation;
+use App\Support\PilotIdentityValidation;
 use Filament\Forms;
 use Filament\Forms\Form;
+use Filament\Forms\Get;
 use Filament\Resources\Resource;
 use Filament\Tables;
 use Filament\Tables\Table;
+use Illuminate\Database\Eloquent\Builder;
 
 /**
  * Resource Filament dla modelu Contractor.
@@ -30,7 +40,9 @@ class ContractorResource extends Resource
 
     protected static ?string $navigationLabel = 'Kontrahenci';
 
-    protected static ?string $navigationGroup = 'Kontakty';
+    protected static ?string $navigationGroup = FilamentNavigation::GROUP_CONTACTS;
+
+    protected static ?int $navigationSort = 1;
 
     protected static ?string $modelLabel = 'kontrahent';
 
@@ -79,6 +91,7 @@ class ContractorResource extends Resource
                         ->relationship('types', 'name')
                         ->searchable()
                         ->preload()
+                        ->live()
                         ->createOptionForm([
                             Forms\Components\TextInput::make('name')
                                 ->label('Nazwa typu')
@@ -89,10 +102,8 @@ class ContractorResource extends Resource
             Forms\Components\Section::make('Dane kontaktowe')
                 ->columns(2)
                 ->schema([
-                    Forms\Components\TextInput::make('phone')
-                        ->label('Telefon')
-                        ->tel()
-                        ->maxLength(50),
+                    PhoneInput::make('phone')
+                        ->label('Telefon'),
                     Forms\Components\TextInput::make('email')
                         ->label('E-mail')
                         ->email()
@@ -116,11 +127,34 @@ class ContractorResource extends Resource
                     Forms\Components\TextInput::make('surname')
                         ->label('Nazwisko')
                         ->maxLength(100),
+                    Forms\Components\DatePicker::make('birth_date')
+                        ->label('Data urodzenia (pilot)')
+                        ->displayFormat('d.m.Y')
+                        ->native(false)
+                        ->nullable()
+                        ->visible(fn (Get $get): bool => static::formTypesIncludePilot($get('types'))),
+                    Forms\Components\TextInput::make('pesel')
+                        ->label('PESEL (pilot)')
+                        ->maxLength(11)
+                        ->nullable()
+                        ->rules(PilotIdentityValidation::optionalPeselRules())
+                        ->visible(fn (Get $get): bool => static::formTypesIncludePilot($get('types')))
+                        ->helperText('Widoczne tylko, gdy w typach wybrano „pilot”.'),
                 ]),
 
-            Forms\Components\Section::make('Adres')
+            Forms\Components\Section::make('Adres rozliczeniowy / siedziba')
+                ->description(fn (Get $get): string => (bool) $get('uses_business_locations')
+                    ? 'Adres do faktur. Poniżej dodaj oddziały operacyjne z adresami podjazdu.'
+                    : 'Adres do faktur i rozliczeń. Włącz „Wiele miejsc prowadzenia”, aby dodać oddziały operacyjne.')
                 ->columns(4)
                 ->schema([
+                    Forms\Components\Toggle::make('uses_business_locations')
+                        ->label('Wiele miejsc prowadzenia działalności')
+                        ->helperText('Włącz dla sieci hoteli, restauracji itp. Po zapisaniu kontrahenta dodasz oddziały w sekcji poniżej.')
+                        ->default(false)
+                        ->live()
+                        ->columnSpanFull()
+                        ->visible(fn (): bool => \Illuminate\Support\Facades\Schema::hasColumn('contractors', 'uses_business_locations')),
                     Forms\Components\TextInput::make('street')
                         ->label('Ulica')
                         ->columnSpan(2),
@@ -140,20 +174,58 @@ class ContractorResource extends Resource
                         ->label('Kraj')
                         ->default('Polska')
                         ->columnSpan(1),
+
+                    Forms\Components\Placeholder::make('locations_create_hint')
+                        ->label('Miejsca prowadzenia')
+                        ->content('Zapisz kontrahenta (przycisk u góry), a następnie wróć do edycji — pod adresem rozliczeniowym pojawi się lista oddziałów do dodania.')
+                        ->columnSpanFull()
+                        ->visible(fn (Get $get, string $operation): bool => $operation === 'create'
+                            && (bool) $get('uses_business_locations')
+                            && \Illuminate\Support\Facades\Schema::hasTable('contractor_locations')),
+
+                    Forms\Components\Repeater::make('locations')
+                        ->label('Miejsca prowadzenia działalności')
+                        ->relationship()
+                        ->schema(ContractorLocationFields::schema())
+                        ->columns(4)
+                        ->columnSpanFull()
+                        ->visible(fn (Get $get, string $operation): bool => $operation === 'edit'
+                            && (bool) $get('uses_business_locations')
+                            && \Illuminate\Support\Facades\Schema::hasTable('contractor_locations'))
+                        ->addActionLabel('Dodaj oddział')
+                        ->collapsible()
+                        ->cloneable()
+                        ->itemLabel(fn (array $state): ?string => filled($state['name'] ?? null)
+                            ? (string) $state['name']
+                            : 'Nowy oddział'),
                 ]),
 
             Forms\Components\Section::make('Opis i uwagi')
                 ->columns(1)
                 ->collapsed()
                 ->schema([
-                    Forms\Components\RichEditor::make('description')
+                    \FilamentTiptapEditor\TiptapEditor::make('description')
                         ->label('Opis')
                         ->columnSpanFull(),
-                    Forms\Components\RichEditor::make('office_notes')
+                    \FilamentTiptapEditor\TiptapEditor::make('office_notes')
                         ->label('Uwagi dla biura')
                         ->columnSpanFull(),
                 ]),
+
+            Forms\Components\Section::make('Karteczki')
+                ->description('Operacyjne notatki zespołu — stos z historią, edycja tylko własnej najnowszej.')
+                ->visible(fn (string $operation): bool => $operation === 'edit')
+                ->schema([
+                    Forms\Components\View::make('filament.components.sticky-notes-contractor-section')
+                        ->columnSpanFull(),
+                ]),
         ]);
+    }
+
+    public static function getEloquentQuery(): Builder
+    {
+        return parent::getEloquentQuery()
+            ->with(['contacts', 'types', 'locations']);
     }
 
     /**
@@ -183,9 +255,10 @@ class ContractorResource extends Resource
                     ->placeholder('—')
                     ->toggleable(isToggledHiddenByDefault: true),
                 Tables\Columns\TextColumn::make('city')
-                    ->label('Miejscowość')
-                    ->searchable()
-                    ->description(fn ($record) => implode(' ', array_filter([$record->postal_code, $record->street, $record->house_number]))),
+                    ->label('Adres')
+                    ->searchable(['city', 'street', 'postal_code'])
+                    ->formatStateUsing(fn (Contractor $record): string => ContractorContactDetails::formatAddress($record) ?? '—')
+                    ->wrap(),
                 Tables\Columns\BadgeColumn::make('status')
                     ->label('Status')
                     ->formatStateUsing(fn ($state) => $state === 'active' ? 'Aktywny' : 'Nieaktywny')
@@ -200,8 +273,20 @@ class ContractorResource extends Resource
                     ->toggleable(isToggledHiddenByDefault: true),
                 Tables\Columns\TextColumn::make('contacts')
                     ->label('Kontakty')
-                    ->formatStateUsing(fn ($state, $record) => $record->contacts->map(fn ($contact) => $contact->first_name.' '.$contact->last_name)->join(', ')
-                    )
+                    ->formatStateUsing(function ($state, Contractor $record): string {
+                        return $record->contacts
+                            ->map(function ($contact): string {
+                                $details = collect([$contact->phone, $contact->email])
+                                    ->filter()
+                                    ->implode(' · ');
+
+                                return $details !== ''
+                                    ? $contact->displayName().' · '.$details
+                                    : $contact->displayName();
+                            })
+                            ->join('; ');
+                    })
+                    ->wrap()
                     ->toggleable(isToggledHiddenByDefault: true),
             ])
             ->filters([
@@ -220,6 +305,7 @@ class ContractorResource extends Resource
                 Tables\Filters\TrashedFilter::make()
                     ->label('Kosz'),
             ])
+            ->defaultSort('updated_at', 'desc')
             ->actions([
                 Tables\Actions\EditAction::make(),
             ])
@@ -235,10 +321,17 @@ class ContractorResource extends Resource
      */
     public static function getRelations(): array
     {
-        return [
+        $relations = [
             ContactsRelationManager::class,
+            LocationsRelationManager::class,
             TasksRelationManager::class,
         ];
+
+        if (\Illuminate\Support\Facades\Schema::hasTable('vendor_invoices')) {
+            $relations[] = VendorInvoicesRelationManager::class;
+        }
+
+        return $relations;
     }
 
     /**
@@ -248,6 +341,7 @@ class ContractorResource extends Resource
     {
         return [
             'index' => Pages\ListContractors::route('/'),
+            'create' => Pages\CreateContractor::route('/create'),
             'edit' => Pages\EditContractor::route('/{record}/edit'),
         ];
     }
@@ -266,5 +360,22 @@ class ContractorResource extends Resource
         }
 
         return false;
+    }
+
+    /**
+     * Czy w stanie formularza (pole types) wybrano typ pilota.
+     *
+     * @param  array<int|string>|null  $types
+     */
+    public static function formTypesIncludePilot(mixed $types): bool
+    {
+        $pilotId = ContractorType::pilotTypeId();
+        if ($pilotId === null) {
+            return false;
+        }
+
+        $ids = is_array($types) ? $types : [];
+
+        return in_array((string) $pilotId, array_map('strval', $ids), true);
     }
 }

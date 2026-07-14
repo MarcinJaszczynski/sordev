@@ -4,6 +4,7 @@ namespace App\Filament\Resources;
 
 use App\Filament\Resources\TransportTypeResource\Pages;
 use App\Models\TransportType;
+use App\Support\FilamentNavigation;
 use Filament\Forms;
 use Filament\Forms\Form;
 use Filament\Resources\Resource;
@@ -18,7 +19,7 @@ class TransportTypeResource extends Resource
 
     protected static ?string $navigationLabel = 'Rodzaj transportu';
 
-    protected static ?string $navigationGroup = 'Szablony imprez';
+    protected static ?string $navigationGroup = FilamentNavigation::GROUP_SETTINGS;
 
     protected static ?int $navigationSort = 50;
 
@@ -30,7 +31,7 @@ class TransportTypeResource extends Resource
                     ->label('Nazwa')
                     ->required()
                     ->maxLength(255),
-                Forms\Components\RichEditor::make('description')
+                \FilamentTiptapEditor\TiptapEditor::make('description')
                     ->label('Opis')
                     ->maxLength(1000),
                 Forms\Components\FileUpload::make('icon_path')

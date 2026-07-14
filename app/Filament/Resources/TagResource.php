@@ -6,6 +6,7 @@ use App\Enums\Status;
 use App\Enums\Visibility;
 use App\Filament\Resources\TagResource\Pages;
 use App\Models\Tag;
+use App\Support\FilamentNavigation;
 use Filament\Forms;
 use Filament\Forms\Form;
 use Filament\Resources\Resource;
@@ -29,11 +30,16 @@ class TagResource extends Resource
 
     protected static ?string $navigationLabel = 'Tagi';
 
-    protected static ?string $navigationGroup = 'Ustawienia ogólne';
+    protected static ?string $navigationGroup = FilamentNavigation::GROUP_CONFIG;
 
     protected static ?string $modelLabel = 'tag';
 
     protected static ?string $pluralModelLabel = 'tagi';
+
+    public static function shouldRegisterNavigation(): bool
+    {
+        return false;
+    }
 
     /**
      * Zwraca etykietę pojedynczą modelu
@@ -61,7 +67,7 @@ class TagResource extends Resource
                 Forms\Components\TextInput::make('name')
                     ->label('Nazwa')
                     ->required(),
-                Forms\Components\RichEditor::make('description'),
+                \FilamentTiptapEditor\TiptapEditor::make('description'),
                 Forms\Components\Select::make('visibility')
                     ->label('Widoczność')
                     ->options(array_combine(

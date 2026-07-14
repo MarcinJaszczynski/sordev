@@ -2,7 +2,10 @@
 
 namespace App\Filament\Resources\EventTemplateResource\Pages;
 
+use App\Filament\Concerns\AuthorizesEventTemplatePages;
 use App\Filament\Resources\EventTemplateResource;
+use App\Filament\Resources\EventTemplateResource\Concerns\HasEventTemplateWorkflowContext;
+use App\Filament\Resources\EventTemplateResource\Concerns\HasGenerateEventAction;
 use App\Models\EventTemplate;
 use App\Services\UnifiedPriceCalculator;
 use App\Traits\CompressesImages;
@@ -13,34 +16,30 @@ use Illuminate\Support\Facades\Log;
 
 class EditEventTemplate extends EditRecord
 {
+    use AuthorizesEventTemplatePages;
     use CompressesImages;
+    use HasEventTemplateWorkflowContext;
+    use HasGenerateEventAction;
 
     protected static string $resource = EventTemplateResource::class;
 
-    public array $hotel_days = [];
+    protected static ?string $navigationLabel = 'Dane';
+
+    protected static ?string $navigationIcon = 'heroicon-o-document-text';
 
     protected static string $view = 'filament.resources.event-template-resource.pages.edit-event-template';
 
     protected function getHeaderActions(): array
     {
         return [
-            Actions\DeleteAction::make(),
-            Actions\ForceDeleteAction::make(),
-            Actions\RestoreAction::make(),
+            $this->makeGenerateEventAction(),
             Actions\Action::make('clone')
                 ->label('Klonuj')
                 ->icon('heroicon-o-document-duplicate')
                 ->action(fn () => $this->cloneEventTemplate()),
-            Actions\Action::make('edit-program')
-                ->label('Edytuj program')
-                ->icon('heroicon-o-bars-3')
-                ->url(fn () => static::getResource()::getUrl('edit-program', ['record' => $this->record->id]))
-                ->color('primary'),
-            Actions\Action::make('transport')
-                ->label('Transport i kalkulacja')
-                ->icon('heroicon-o-truck')
-                ->url(fn () => static::getResource()::getUrl('transport', ['record' => $this->record->id]))
-                ->color('warning'),
+            Actions\DeleteAction::make(),
+            Actions\ForceDeleteAction::make(),
+            Actions\RestoreAction::make(),
         ];
     }
 
@@ -257,112 +256,6 @@ class EditEventTemplate extends EditRecord
     public function mount($record): void
     {
         parent::mount($record);
-
-        Log::info("Mount called for record {$this->record->id}, hotelDays count: ".$this->record->hotelDays->count());
-
-        // Najpierw spróbuj załadować z bazy
-        if ($this->record->hotelDays->count() > 0) {
-            Log::info("Loading hotel days from database for record {$this->record->id}");
-            $this->loadHotelDaysFromDatabase();
-        } else {
-            // Jeśli nie ma w bazie, wygeneruj na podstawie duration_days
-            Log::info("Generating hotel days from duration_days for record {$this->record->id}");
-            $this->refreshHotelDays();
-        }
-
-        Log::info('Mount finished, hotel_days count: '.count($this->hotel_days));
-    }
-
-    private function loadHotelDaysFromDatabase(): void
-    {
-        // Ładuj dane z bazy, posortowane po dniu
-        $this->hotel_days = $this->record->hotelDays()
-            ->orderBy('day')
-            ->get()
-            ->map(function ($day) {
-                return [
-                    'day' => $day->day,
-                    'hotel_room_ids_qty' => $day->hotel_room_ids_qty ?? [],
-                    'hotel_room_ids_gratis' => $day->hotel_room_ids_gratis ?? [],
-                    'hotel_room_ids_staff' => $day->hotel_room_ids_staff ?? [],
-                    'hotel_room_ids_driver' => $day->hotel_room_ids_driver ?? [],
-                ];
-            })->toArray();
-    }
-
-    public function addDay()
-    {
-        $this->hotel_days[] = [
-            'day' => count($this->hotel_days) + 1,
-            'hotel_room_ids_qty' => [],
-            'hotel_room_ids_gratis' => [],
-            'hotel_room_ids_staff' => [],
-            'hotel_room_ids_driver' => [],
-        ];
-    }
-
-    public function addRoom($role, $dayIndex)
-    {
-        if (! isset($this->hotel_days[$dayIndex]["hotel_room_ids_{$role}"])) {
-            $this->hotel_days[$dayIndex]["hotel_room_ids_{$role}"] = [];
-        }
-        $this->hotel_days[$dayIndex]["hotel_room_ids_{$role}"][] = null;
-    }
-
-    public function copyToNextDay($dayIndex)
-    {
-        if (! isset($this->hotel_days[$dayIndex + 1])) {
-            return;
-        }
-        foreach (['qty', 'gratis', 'staff', 'driver'] as $role) {
-            $this->hotel_days[$dayIndex + 1]["hotel_room_ids_{$role}"] =
-                $this->hotel_days[$dayIndex]["hotel_room_ids_{$role}"] ?? [];
-        }
-    }
-
-    public function removeRoomFromDay($dayIndex, $role, $roomId)
-    {
-        if (! isset($this->hotel_days[$dayIndex]["hotel_room_ids_{$role}"])) {
-            return;
-        }
-
-        $rooms = $this->hotel_days[$dayIndex]["hotel_room_ids_{$role}"];
-        $key = array_search($roomId, $rooms);
-
-        if ($key !== false) {
-            unset($rooms[$key]);
-            $this->hotel_days[$dayIndex]["hotel_room_ids_{$role}"] = array_values($rooms);
-        }
-    }
-
-    // Debug method
-    public function debugHotelDays()
-    {
-        Log::info('Hotel days:', $this->hotel_days);
-        dd($this->hotel_days);
-    }
-
-    public function forceRefreshHotelDays()
-    {
-        $this->refreshHotelDays();
-        $this->dispatch('$refresh');
-    }
-
-    // Metoda do manualnego zapisania (przycisk w UI)
-    public function saveHotelDays()
-    {
-        try {
-            $this->saveHotelDaysToDatabase();
-            $this->dispatch('notify', [
-                'type' => 'success',
-                'message' => 'Noclegi zostały zapisane!',
-            ]);
-        } catch (\Exception $e) {
-            $this->dispatch('notify', [
-                'type' => 'error',
-                'message' => 'Błąd podczas zapisywania: '.$e->getMessage(),
-            ]);
-        }
     }
 
     protected function mutateFormDataBeforeSave(array $data): array
@@ -382,12 +275,6 @@ class EditEventTemplate extends EditRecord
         // Debug: Sprawdź co jest w $this->data
         Log::info('EditEventTemplate afterSave - data:', $this->data);
         Log::info('EditEventTemplate afterSave - event_price_description_id:', [$this->data['event_price_description_id'] ?? 'NOT SET']);
-
-        // Nie wykonuj dla nowo utworzonych rekordów podczas klonowania
-        // oraz nie wykonuj jeśli to jest przekierowanie po klonowaniu
-        if (! $this->record->wasRecentlyCreated && ! request()->has('clone')) {
-            $this->saveHotelDaysToDatabase();
-        }
 
         // Zapisz powiązanie z event_price_description do pivot
         $priceDescriptionId = $this->data['event_price_description_id'] ?? null;
@@ -410,68 +297,6 @@ class EditEventTemplate extends EditRecord
         }
     }
 
-    public function updatedData($value, $key)
-    {
-        // Reaguj na zmianę duration_days
-        if ($key === 'duration_days') {
-            Log::info("Duration days changed to: {$value}");
-            $this->refreshHotelDays();
-        }
-    }
-
-    private function saveHotelDaysToDatabase()
-    {
-        try {
-            Log::info('Saving hotel days to database', $this->hotel_days);
-
-            // Optymalizowane zapisywanie - aktualizuj tylko zmienione
-            $existingDays = $this->record->hotelDays()->get()->keyBy('day');
-
-            foreach ($this->hotel_days as $dayData) {
-                $day = $dayData['day'];
-
-                $data = [
-                    'hotel_room_ids_qty' => $dayData['hotel_room_ids_qty'] ?? [],
-                    'hotel_room_ids_gratis' => $dayData['hotel_room_ids_gratis'] ?? [],
-                    'hotel_room_ids_staff' => $dayData['hotel_room_ids_staff'] ?? [],
-                    'hotel_room_ids_driver' => $dayData['hotel_room_ids_driver'] ?? [],
-                ];
-
-                if ($existingDays->has($day)) {
-                    // Aktualizuj istniejący
-                    $existingDays[$day]->update($data);
-                    Log::info("Updated day {$day}");
-                } else {
-                    // Utwórz nowy
-                    $this->record->hotelDays()->create(array_merge($data, ['day' => $day]));
-                    Log::info("Created day {$day}");
-                }
-            }
-
-            // Usuń dni, które już nie istnieją w $this->hotel_days
-            $currentDays = collect($this->hotel_days)->pluck('day');
-            $toDelete = $existingDays->whereNotIn('day', $currentDays);
-            $toDelete->each(function ($day) {
-                Log::info("Deleting day {$day->day}");
-                $day->delete();
-            });
-
-            Log::info('Hotel days saved successfully');
-        } catch (\Exception $e) {
-            Log::error('Error saving hotel days: '.$e->getMessage());
-            throw $e;
-        }
-    }
-
-    public function updated($propertyName)
-    {
-        // Alternatywny hook dla reactywności - sprawdza czy zmieniono duration_days
-        if (str_contains($propertyName, 'duration_days')) {
-            Log::info("Property updated: {$propertyName}");
-            $this->refreshHotelDays();
-        }
-    }
-
     // Hook dla formularza Filament
     protected function mutateFormDataBeforeFill(array $data): array
     {
@@ -490,37 +315,5 @@ class EditEventTemplate extends EditRecord
         // Po załadowaniu danych z bazy nie odświeżaj automatycznie
         // $this->dispatch('$refresh');
         return $data;
-    }
-
-    public function refreshHotelDays()
-    {
-        // Sprawdź kilka źródeł duration_days
-        $days = $this->data['duration_days'] ?? $this->record->duration_days ?? 1;
-        $nights = max(0, $days - 1);
-
-        // Debug
-        Log::info("RefreshHotelDays: days={$days}, nights={$nights}");
-
-        // Zachowaj istniejące dane dla dni, które już istnieją
-        $existingData = $this->hotel_days;
-        $this->hotel_days = [];
-
-        for ($i = 1; $i <= $nights; $i++) {
-            // Jeśli dzień już istniał, zachowaj jego dane
-            if (isset($existingData[$i - 1])) {
-                $this->hotel_days[] = $existingData[$i - 1];
-            } else {
-                // Utwórz nowy dzień z pustymi danymi
-                $this->hotel_days[] = [
-                    'day' => $i,
-                    'hotel_room_ids_qty' => [],
-                    'hotel_room_ids_gratis' => [],
-                    'hotel_room_ids_staff' => [],
-                    'hotel_room_ids_driver' => [],
-                ];
-            }
-        }
-
-        Log::info('RefreshHotelDays result: '.count($this->hotel_days).' nights');
     }
 }

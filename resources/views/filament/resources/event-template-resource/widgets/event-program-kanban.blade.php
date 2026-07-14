@@ -124,7 +124,7 @@
             <div class="mb-4">
                 <label class="block text-sm font-medium text-gray-700">Punkt programu</label>
                 @if(isset($allProgramPoints) && $allProgramPoints->isNotEmpty())
-                    <select wire:model="modalData.program_point_id" class="mt-1 block w-full pl-3 pr-10 py-2 text-base border-gray-300 focus:outline-none focus:ring-primary-500 focus:border-primary-500 sm:text-sm rounded-md">
+                    <select wire:model.live.debounce.500ms="modalData.program_point_id" class="mt-1 block w-full pl-3 pr-10 py-2 text-base border-gray-300 focus:outline-none focus:ring-primary-500 focus:border-primary-500 sm:text-sm rounded-md">
                         <option value="">-- Wybierz punkt programu --</option>
                         @foreach($allProgramPoints as $programPoint)
                             <option value="{{ $programPoint->id }}">{{ $programPoint->name }}</option>
@@ -138,31 +138,31 @@
             </div>
             <div class="mb-4">
                 <label class="block text-sm font-medium text-gray-700">Dzień</label>
-                <input type="number" wire:model="modalData.day" min="1" class="mt-1 block w-full border-gray-300 rounded-md shadow-sm focus:ring-primary-500 focus:border-primary-500 sm:text-sm">
+                <input type="number" wire:model.live.debounce.500ms="modalData.day" min="1" class="mt-1 block w-full border-gray-300 rounded-md shadow-sm focus:ring-primary-500 focus:border-primary-500 sm:text-sm">
             </div>
             <div class="mb-4">
                 <label class="block text-sm font-medium text-gray-700">Kolejność</label>
-                <input type="number" wire:model="modalData.order" min="0" class="mt-1 block w-full border-gray-300 rounded-md shadow-sm focus:ring-primary-500 focus:border-primary-500 sm:text-sm">
+                <input type="number" wire:model.live.debounce.500ms="modalData.order" min="0" class="mt-1 block w-full border-gray-300 rounded-md shadow-sm focus:ring-primary-500 focus:border-primary-500 sm:text-sm">
             </div>
             <div class="mb-4">
                 <label class="block text-sm font-medium text-gray-700">Uwagi</label>
-                <textarea wire:model="modalData.notes" class="mt-1 block w-full border-gray-300 rounded-md shadow-sm focus:ring-primary-500 focus:border-primary-500 sm:text-sm"></textarea>
+                <textarea wire:model.live.debounce.500ms="modalData.notes" class="mt-1 block w-full border-gray-300 rounded-md shadow-sm focus:ring-primary-500 focus:border-primary-500 sm:text-sm"></textarea>
             </div>
             <div class="mb-4">
                 <label class="flex items-center">
-                    <input type="checkbox" wire:model="modalData.include_in_program" class="rounded border-gray-300 text-primary-600 shadow-sm focus:border-primary-300 focus:ring focus:ring-primary-200 focus:ring-opacity-50">
+                    <input type="checkbox" wire:model.live.debounce.500ms="modalData.include_in_program" class="rounded border-gray-300 text-primary-600 shadow-sm focus:border-primary-300 focus:ring focus:ring-primary-200 focus:ring-opacity-50">
                     <span class="ml-2 text-sm text-gray-700">Uwzględnij w programie</span>
                 </label>
             </div>
             <div class="mb-4">
                 <label class="flex items-center">
-                    <input type="checkbox" wire:model="modalData.include_in_calculation" class="rounded border-gray-300 text-primary-600 shadow-sm focus:border-primary-300 focus:ring focus:ring-primary-200 focus:ring-opacity-50">
+                    <input type="checkbox" wire:model.live.debounce.500ms="modalData.include_in_calculation" class="rounded border-gray-300 text-primary-600 shadow-sm focus:border-primary-300 focus:ring focus:ring-primary-200 focus:ring-opacity-50">
                     <span class="ml-2 text-sm text-gray-700">Uwzględnij w kalkulacji</span>
                 </label>
             </div>
             <div class="mb-4">
                 <label class="flex items-center">
-                    <input type="checkbox" wire:model="modalData.active" class="rounded border-gray-300 text-primary-600 shadow-sm focus:border-primary-300 focus:ring focus:ring-primary-200 focus:ring-opacity-50">
+                    <input type="checkbox" wire:model.live.debounce.500ms="modalData.active" class="rounded border-gray-300 text-primary-600 shadow-sm focus:border-primary-300 focus:ring focus:ring-primary-200 focus:ring-opacity-50">
                     <span class="ml-2 text-sm text-gray-700">Aktywny</span>
                 </label>
             </div>
@@ -174,12 +174,16 @@
         </div>
         @endif
 
-        <script src="https://cdn.jsdelivr.net/npm/sortablejs@1.15.6/Sortable.min.js"></script>
+        @include('filament.components.filament-sortable-boot')
         <script>
 document.addEventListener('DOMContentLoaded', function () {
     let sortableInstances = [];
 
     function initializeKanban() {
+        if (typeof Sortable === 'undefined') {
+            setTimeout(initializeKanban, 50);
+            return;
+        }
         // Wyczyść poprzednie instancje
         sortableInstances.forEach(instance => instance.destroy());
         sortableInstances = [];

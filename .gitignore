@@ -9,9 +9,11 @@
 /.env.*
 
 # Build / runtime artifacts
+/build/
 /public/hot
 /public/storage
 /public/build
+/public/vite-dist
 /public/mix-manifest.json
 /public/js/*.js.map
 /public/css/*.css.map
@@ -35,11 +37,15 @@
 /storage/framework/testing
 /storage/framework/views
 /storage/logs
+/storage/console-audit
 !/storage/framework/views/.gitignore
 
 # IDE / editor
 /.idea/
-/.vscode/
+/.vscode/*
+!/.vscode/extensions.json
+!/.vscode/settings.json
+/.cursor/mcp.json
 
 # OS / archive artifacts
 .DS_Store

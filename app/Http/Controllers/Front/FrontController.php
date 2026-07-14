@@ -970,9 +970,7 @@ class FrontController extends Controller
                 });
             })
             ->when(! empty($transportTypeIds), function ($query) use ($transportTypeIds) {
-                $query->whereHas('transportTypes', function ($q) use ($transportTypeIds) {
-                    $q->whereIn('transport_types.id', $transportTypeIds);
-                });
+                $query->withExactTransportTypes($transportTypeIds);
             })
             ->when($tagId, function ($query) use ($tagId) {
                 $query->whereHas('tags', function ($q) use ($tagId) {
@@ -1330,9 +1328,7 @@ class FrontController extends Controller
                 });
             })
             ->when(! empty($transportTypeIds), function ($query) use ($transportTypeIds) {
-                $query->whereHas('transportTypes', function ($q) use ($transportTypeIds) {
-                    $q->whereIn('transport_types.id', $transportTypeIds);
-                });
+                $query->withExactTransportTypes($transportTypeIds);
             })
             ->limit(24) // Limit results to prevent memory exhaustion
             ->get();
@@ -1598,6 +1594,17 @@ class FrontController extends Controller
 
         $priceRanges = collect($this->buildPriceRangesForPlace($eventTemplate->pricesPerPerson, $startPlaceId));
 
+        $eventExtraInfo = null;
+        if (\Illuminate\Support\Facades\Schema::hasColumn('events', 'www_extra_info')) {
+            $eventExtraInfo = \App\Models\Event::query()
+                ->where('event_template_id', $eventTemplate->id)
+                ->whereNotNull('www_extra_info')
+                ->where('www_extra_info', '!=', '')
+                ->whereIn('status', [\App\Models\Event::STATUS_CONFIRMED, \App\Models\Event::STATUS_OFFER, \App\Models\Event::STATUS_PROVISIONAL_RESERVATION])
+                ->latest('updated_at')
+                ->value('www_extra_info');
+        }
+
         return view('front.package', [
             'eventTemplate' => $eventTemplate,
             'item' => $eventTemplate,
@@ -1605,6 +1612,7 @@ class FrontController extends Controller
             'prevPackage' => $prevPackage,
             'nextPackage' => $nextPackage,
             'priceRanges' => $priceRanges,
+            'eventExtraInfo' => $eventExtraInfo,
         ]);
     }
 

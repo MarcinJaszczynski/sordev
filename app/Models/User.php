@@ -6,10 +6,12 @@ use BezhanSalleh\FilamentShield\Traits\HasPanelShield;
 use Filament\Models\Contracts\FilamentUser;
 use Filament\Panel;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
+use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\BelongsToMany;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Foundation\Auth\User as Authenticatable;
 use Illuminate\Notifications\Notifiable;
+use Illuminate\Support\Facades\Schema;
 use Laravel\Sanctum\HasApiTokens;
 use Spatie\Permission\Traits\HasRoles;
 
@@ -25,9 +27,14 @@ class User extends Authenticatable implements FilamentUser
     protected $fillable = [
         'name',
         'email',
+        'phone',
         'password',
         'type',
         'status',
+        'birth_date',
+        'pesel',
+        'pilot_panel_access_sent_at',
+        'pilot_panel_access_sent_by',
     ];
 
     /**
@@ -49,9 +56,12 @@ class User extends Authenticatable implements FilamentUser
     {
         return [
             'email_verified_at' => 'datetime',
+            'tasks_last_seen_at' => 'datetime',
             'password' => 'hashed',
             'type' => 'string',
             'status' => 'string',
+            'birth_date' => 'date',
+            'pilot_panel_access_sent_at' => 'datetime',
         ];
     }
 
@@ -60,18 +70,27 @@ class User extends Authenticatable implements FilamentUser
      */
     public function canAccessPanel(Panel $panel): bool
     {
-        // Check if user is active first
         if ($this->status !== 'active') {
             return false;
         }
 
-        // Allow super_admin or admin roles
-        return $this->hasRole(['super_admin', 'admin']);
+        return match ($panel->getId()) {
+            'admin' => $this->hasRole(['super_admin', 'admin']),
+            'pilot' => $this->hasRole('pilot') || $this->hasRole(['super_admin', 'admin', 'biuro']),
+            'portal' => $this->hasRole(['client_participant', 'client_guardian'])
+                || $this->hasRole(['super_admin', 'admin', 'biuro']),
+            default => false,
+        };
     }
 
     /**
      * Rozmowy użytkownika
      */
+    public function pilotPanelAccessSentByUser(): BelongsTo
+    {
+        return $this->belongsTo(self::class, 'pilot_panel_access_sent_by');
+    }
+
     public function conversations(): BelongsToMany
     {
         return $this->belongsToMany(Conversation::class, 'conversation_participants')
@@ -101,5 +120,40 @@ class User extends Authenticatable implements FilamentUser
     public function isOnline(): bool
     {
         return $this->updated_at?->diffInMinutes() < 5;
+    }
+
+    /**
+     * Zapis daty urodzenia i PESEL w profilu użytkownika (np. pilota z formularza imprezy).
+     *
+     * @param  \DateTimeInterface|string|null  $birthDate
+     */
+    public static function syncPilotDemographics(?int $userId, $birthDate, ?string $pesel, ?string $phone = null): void
+    {
+        if (! $userId || ! Schema::hasColumn('users', 'birth_date')) {
+            return;
+        }
+
+        $payload = [
+            'birth_date' => null,
+            'pesel' => null,
+        ];
+
+        if (Schema::hasColumn('users', 'phone')) {
+            $payload['phone'] = null;
+        }
+
+        if (filled($birthDate)) {
+            $payload['birth_date'] = $birthDate;
+        }
+
+        if (filled($pesel)) {
+            $payload['pesel'] = $pesel;
+        }
+
+        if (Schema::hasColumn('users', 'phone') && filled($phone)) {
+            $payload['phone'] = trim($phone);
+        }
+
+        static::query()->whereKey($userId)->update($payload);
     }
 }

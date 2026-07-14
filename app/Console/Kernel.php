@@ -21,6 +21,11 @@ class Kernel extends ConsoleKernel
             ->dailyAt('03:00')
             ->withoutOverlapping()
             ->onOneServer();
+
+        $schedule->command('app:prune-orphan-settlement-rows')
+            ->weeklyOn(1, '04:30')
+            ->withoutOverlapping()
+            ->onOneServer();
     }
 
     protected function commands(): void

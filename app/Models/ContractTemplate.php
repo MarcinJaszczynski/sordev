@@ -27,5 +27,10 @@ class ContractTemplate extends Model
     protected $fillable = [
         'name',
         'content',
+        'default_attachments',
+    ];
+
+    protected $casts = [
+        'default_attachments' => 'array',
     ];
 }

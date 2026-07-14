@@ -89,14 +89,14 @@
                 <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
                     <div>
                         <label class="block text-sm font-medium mb-1">Nazwa *</label>
-                        <input type="text" wire:model.defer="modalName" class="w-full border rounded px-2 py-1 mb-2" required>
+                        <input type="text" wire:model.live.debounce.500ms="modalName" class="w-full border rounded px-2 py-1 mb-2" required>
                         <label class="block text-sm font-medium mb-1">Opis</label>
-                        <textarea wire:model.defer="modalDescription" class="w-full border rounded px-2 py-1 mb-2"></textarea>
+                        <textarea wire:model.live.debounce.500ms="modalDescription" class="w-full border rounded px-2 py-1 mb-2"></textarea>
                         <label class="block text-sm font-medium mb-1">Uwagi dla biura</label>
-                        <textarea wire:model.defer="modalOfficeNotes" class="w-full border rounded px-2 py-1 mb-2"></textarea>
+                        <textarea wire:model.live.debounce.500ms="modalOfficeNotes" class="w-full border rounded px-2 py-1 mb-2"></textarea>
                         <label class="block text-sm font-medium mb-1">Uwagi dla pilota</label>
-                        <textarea wire:model.defer="modalPilotNotes" class="w-full border rounded px-2 py-1 mb-2"></textarea>                        <label class="block text-sm font-medium mb-1">Tagi</label>
-                        <select wire:model.defer="modalTags" multiple class="w-full border rounded px-2 py-1 mb-2">
+                        <textarea wire:model.live.debounce.500ms="modalPilotNotes" class="w-full border rounded px-2 py-1 mb-2"></textarea>                        <label class="block text-sm font-medium mb-1">Tagi</label>
+                        <select wire:model.live.debounce.500ms="modalTags" multiple class="w-full border rounded px-2 py-1 mb-2">
                             @foreach (\App\Models\Tag::where('status', \App\Enums\Status::ACTIVE)->get() as $tag)
                                 <option value="{{ $tag->id }}">{{ $tag->name }}</option>
                             @endforeach
@@ -104,14 +104,14 @@
                     </div>
                     <div>
                         <label class="block text-sm font-medium mb-1">Czas trwania (godziny) *</label>
-                        <input type="number" wire:model.defer="modalDurationHours" class="w-full border rounded px-2 py-1 mb-2" min="0" required>
+                        <input type="number" wire:model.live.debounce.500ms="modalDurationHours" class="w-full border rounded px-2 py-1 mb-2" min="0" required>
                         <label class="block text-sm font-medium mb-1">Czas trwania (minuty) *</label>
-                        <input type="number" wire:model.defer="modalDurationMinutes" class="w-full border rounded px-2 py-1 mb-2" min="0" max="59" required>
+                        <input type="number" wire:model.live.debounce.500ms="modalDurationMinutes" class="w-full border rounded px-2 py-1 mb-2" min="0" max="59" required>
                         <label class="block text-sm font-medium mb-1">Cena jednostkowa *</label>
-                        <input type="number" wire:model.defer="modalUnitPrice" class="w-full border rounded px-2 py-1 mb-2" min="0" step="0.01" required>
+                        <input type="number" wire:model.live.debounce.500ms="modalUnitPrice" class="w-full border rounded px-2 py-1 mb-2" min="0" step="0.01" required>
                         <label class="block text-sm font-medium mb-1">Wielkość grupy</label>
-                        <input type="number" wire:model.defer="modalGroupSize" class="w-full border rounded px-2 py-1 mb-2" min="1">                        <label class="block text-sm font-medium mb-1">Waluta *</label>
-                        <select wire:model.defer="modalCurrencyId" class="w-full border rounded px-2 py-1 mb-2" required>
+                        <input type="number" wire:model.live.debounce.500ms="modalGroupSize" class="w-full border rounded px-2 py-1 mb-2" min="1">                        <label class="block text-sm font-medium mb-1">Waluta *</label>
+                        <select wire:model.live.debounce.500ms="modalCurrencyId" class="w-full border rounded px-2 py-1 mb-2" required>
                             <option value="">Wybierz walutę</option>
                             @foreach (\App\Models\Currency::all() as $currency)
                                 <option value="{{ $currency->id }}">{{ $currency->name }} ({{ $currency->symbol }})</option>
@@ -119,11 +119,11 @@
                         </select>
                         </select>
                         <label class="block text-sm font-medium mb-1">Przeliczaj na złotówki</label>
-                        <input type="checkbox" wire:model.defer="modalConvertToPln" class="mr-2">Tak
+                        <input type="checkbox" wire:model.live.debounce.500ms="modalConvertToPln" class="mr-2">Tak
                         <label class="block text-sm font-medium mb-1 mt-2">Zdjęcie wyróżniające</label>
-                        <input type="file" wire:model="modalFeaturedImage" class="w-full border rounded px-2 py-1 mb-2">
+                        <input type="file" wire:model.live.debounce.500ms="modalFeaturedImage" class="w-full border rounded px-2 py-1 mb-2">
                         <label class="block text-sm font-medium mb-1">Zdjęcia do galerii</label>
-                        <input type="file" wire:model="modalGalleryImages" multiple class="w-full border rounded px-2 py-1 mb-2">
+                        <input type="file" wire:model.live.debounce.500ms="modalGalleryImages" multiple class="w-full border rounded px-2 py-1 mb-2">
                     </div>
                 </div>
                 <div class="flex gap-2 justify-end mt-4">

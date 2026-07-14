@@ -42,7 +42,16 @@ class TaskAttachment extends Model
 
     public function getPublicUrlAttribute(): ?string
     {
-        return StoragePath::publicUrl($this->file_path);
+        return $this->download_url;
+    }
+
+    public function getDownloadUrlAttribute(): ?string
+    {
+        if (! $this->exists) {
+            return null;
+        }
+
+        return route('admin.task-attachments.download', ['attachment' => $this->getKey()]);
     }
 
     public function getReadableSizeAttribute(): ?string

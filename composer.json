@@ -7,6 +7,7 @@
     "license": "MIT",
     "require": {
         "php": "^8.2",
+        "awcodes/filament-tiptap-editor": "^3.5",
         "barryvdh/laravel-dompdf": "^3.1",
         "bezhansalleh/filament-shield": "^3.3",
         "doctrine/dbal": "^4.3",
@@ -19,6 +20,8 @@
         "mokhosh/filament-kanban": "^2.10",
         "phpoffice/phpword": "^1.4",
         "pxlrbt/filament-excel": "^2.4",
+        "setasign/fpdf": "^1.8",
+        "setasign/fpdi": "^2.6",
         "spatie/eloquent-sortable": "^4.5",
         "spatie/laravel-permission": "^6.17",
         "spatie/laravel-sitemap": "^7.4",
@@ -67,6 +70,11 @@
         "dev": [
             "Composer\\Config::disableProcessTimeout",
             "npx concurrently -c \"#93c5fd,#c4b5fd,#fdba74\" \"php artisan serve\" \"php artisan queue:listen --tries=1\" \"npm run dev\" --names='server,queue,vite'"
+        ],
+        "test": [
+            "@putenv DB_CONNECTION=sqlite",
+            "@putenv DB_DATABASE=:memory:",
+            "@php artisan test"
         ],
         "verify": [
             "@bash scripts/verify.sh"

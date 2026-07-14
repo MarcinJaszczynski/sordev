@@ -5,9 +5,9 @@ import tailwindcss from '@tailwindcss/vite';
 export default defineConfig({
     plugins: [
         laravel({
-            input: ['resources/css/app.css', 'resources/js/app.js'],
+            input: ['resources/css/app.css', 'resources/js/app.js', 'resources/js/filament-calendar.js', 'resources/js/filament-sortable.js', 'resources/js/event-program-tree-sortable.js', 'resources/js/program-point-tree-dnd-entry.js'],
             refresh: true,
-            buildDirectory: 'build',
+            buildDirectory: 'vite-dist',
         }),
         tailwindcss(),
     ],
@@ -17,6 +17,10 @@ export default defineConfig({
         include: [
             'sortablejs',
             'axios',
+            '@fullcalendar/core',
+            '@fullcalendar/daygrid',
+            '@fullcalendar/list',
+            '@fullcalendar/interaction',
         ],
         exclude: ['@vite/client', '@vite/env'],
     },

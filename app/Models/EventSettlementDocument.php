@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use App\Models\Concerns\HasStickyNotes;
 use App\Models\Concerns\HasTasks;
 use App\Support\StoragePath;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
@@ -11,7 +12,7 @@ use Illuminate\Support\Facades\Auth;
 
 class EventSettlementDocument extends Model
 {
-    use HasFactory, HasTasks;
+    use HasFactory, HasStickyNotes, HasTasks;
 
     protected $fillable = [
         'settlement_id',
@@ -60,6 +61,7 @@ class EventSettlementDocument extends Model
 
     public static array $documentTypes = [
         'invoice' => 'Faktura',
+        'wz' => 'WZ (wydanie zewnętrzne)',
         'receipt' => 'Paragon',
         'other' => 'Inny dokument',
     ];

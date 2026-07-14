@@ -14,6 +14,10 @@ class ListEventTemplateProgramPoints extends ListRecords
     protected function getHeaderActions(): array
     {
         return [
+            Action::make('tree')
+                ->label('Drzewo punktów')
+                ->icon('heroicon-o-queue-list')
+                ->url(static::getResource()::getUrl('tree')),
             Action::make('create')
                 ->label('Dodaj nowy punkt programu')
                 ->icon('heroicon-o-plus')

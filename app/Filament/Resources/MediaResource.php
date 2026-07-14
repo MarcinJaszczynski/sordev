@@ -4,6 +4,7 @@ namespace App\Filament\Resources;
 
 use App\Filament\Resources\MediaResource\Pages;
 use App\Models\Media;
+use App\Support\FilamentNavigation;
 use Filament\Forms;
 use Filament\Forms\Form;
 use Filament\Resources\Resource;
@@ -16,7 +17,7 @@ class MediaResource extends Resource
 
     protected static ?string $navigationIcon = 'heroicon-o-photo';
 
-    protected static ?string $navigationGroup = 'Biblioteka mediów';
+    protected static ?string $navigationGroup = FilamentNavigation::GROUP_CONFIG;
 
     protected static ?string $navigationLabel = 'Media';
 
@@ -28,7 +29,7 @@ class MediaResource extends Resource
             Forms\Components\TextInput::make('title')->label('Tytuł'),
             Forms\Components\TextInput::make('alt')->label('Tekst alternatywny'),
             Forms\Components\Textarea::make('caption')->label('Podpis')->rows(2),
-            Forms\Components\RichEditor::make('description'),
+            \FilamentTiptapEditor\TiptapEditor::make('description'),
         ]);
     }
 

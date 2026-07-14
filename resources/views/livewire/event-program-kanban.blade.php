@@ -14,7 +14,7 @@
             <div class="kanban-column bg-gray-50 rounded-lg p-4">
                 <div class="mb-4">
                     <label class="block text-sm font-medium text-gray-700 mb-1">Ubezpieczenie dla dnia</label>
-                    <select wire:model="dayInsurances.{{ $column['day'] }}" class="block w-full border-gray-300 rounded-md shadow-sm">
+                    <select wire:model.live.debounce.500ms="dayInsurances.{{ $column['day'] }}" class="block w-full border-gray-300 rounded-md shadow-sm">
                         <option value="">-- Brak ubezpieczenia --</option>
                         @foreach($allInsurances as $insurance)
                             <option value="{{ $insurance->id }}">{{ $insurance->name }}</option>
@@ -49,7 +49,7 @@
                     <div class="mt-4 space-y-4">
                         <div>
                             <label for="program_point_id" class="block text-sm font-medium text-gray-700">Punkt programu</label>
-                            <select wire:model="modalData.program_point_id" id="program_point_id" class="mt-1 block w-full border-gray-300 rounded-md shadow-sm">
+                            <select wire:model.live.debounce.500ms="modalData.program_point_id" id="program_point_id" class="mt-1 block w-full border-gray-300 rounded-md shadow-sm">
                                 <option value="">Wybierz punkt programu</option>
                                 @foreach ($programPoints as $point)
                                     <option value="{{ $point->id }}">{{ $point->name }}</option>
@@ -58,26 +58,26 @@
                         </div>
                         <div>
                             <label for="day" class="block text-sm font-medium text-gray-700">Dzień</label>
-                            <input type="number" wire:model="modalData.day" id="day" class="mt-1 block w-full border-gray-300 rounded-md shadow-sm">
+                            <input type="number" wire:model.live.debounce.500ms="modalData.day" id="day" class="mt-1 block w-full border-gray-300 rounded-md shadow-sm">
                         </div>
                         <div>
                             <label for="order" class="block text-sm font-medium text-gray-700">Kolejność</label>
-                            <input type="number" wire:model="modalData.order" id="order" class="mt-1 block w-full border-gray-300 rounded-md shadow-sm">
+                            <input type="number" wire:model.live.debounce.500ms="modalData.order" id="order" class="mt-1 block w-full border-gray-300 rounded-md shadow-sm">
                         </div>
                         <div>
                             <label for="notes" class="block text-sm font-medium text-gray-700">Uwagi</label>
-                            <textarea wire:model="modalData.notes" id="notes" rows="3" class="mt-1 block w-full border-gray-300 rounded-md shadow-sm"></textarea>
+                            <textarea wire:model.live.debounce.500ms="modalData.notes" id="notes" rows="3" class="mt-1 block w-full border-gray-300 rounded-md shadow-sm"></textarea>
                         </div>
                         <div class="flex items-center">
-                            <input type="checkbox" wire:model="modalData.include_in_program" id="include_in_program" class="h-4 w-4 text-primary-600 border-gray-300 rounded">
+                            <input type="checkbox" wire:model.live.debounce.500ms="modalData.include_in_program" id="include_in_program" class="h-4 w-4 text-primary-600 border-gray-300 rounded">
                             <label for="include_in_program" class="ml-2 block text-sm text-gray-900">Uwzględnij w programie</label>
                         </div>
                         <div class="flex items-center">
-                            <input type="checkbox" wire:model="modalData.include_in_calculation" id="include_in_calculation" class="h-4 w-4 text-primary-600 border-gray-300 rounded">
+                            <input type="checkbox" wire:model.live.debounce.500ms="modalData.include_in_calculation" id="include_in_calculation" class="h-4 w-4 text-primary-600 border-gray-300 rounded">
                             <label for="include_in_calculation" class="ml-2 block text-sm text-gray-900">Uwzględnij w kalkulacji</label>
                         </div>
                         <div class="flex items-center">
-                            <input type="checkbox" wire:model="modalData.active" id="active" class="h-4 w-4 text-primary-600 border-gray-300 rounded">
+                            <input type="checkbox" wire:model.live.debounce.500ms="modalData.active" id="active" class="h-4 w-4 text-primary-600 border-gray-300 rounded">
                             <label for="active" class="ml-2 block text-sm text-gray-900">Aktywny</label>
                         </div>
                     </div>
@@ -91,11 +91,15 @@
     </div>
 
     @push('scripts')
-    <script src="https://cdn.jsdelivr.net/npm/sortablejs@1.15.0/Sortable.min.js"></script>
+    @include('filament.components.filament-sortable-boot')
     <script>
         document.addEventListener('livewire:initialized', function () {
             const sortableInstances = [];
             function initSortable() {
+                if (typeof Sortable === 'undefined') {
+                    setTimeout(initSortable, 50);
+                    return;
+                }
                 sortableInstances.forEach(instance => { if (instance && typeof instance.destroy === 'function') instance.destroy(); });
                 sortableInstances.length = 0;
                 document.querySelectorAll('.kanban-day').forEach(column => {

@@ -2,6 +2,7 @@
 
 namespace App\Filament\Resources\ContractorResource\RelationManagers;
 
+use App\Filament\Forms\PhoneInput;
 use Filament\Forms;
 use Filament\Forms\Components\Select;
 use Filament\Forms\Form;
@@ -56,13 +57,12 @@ class ContactsRelationManager extends RelationManager
                 Forms\Components\TextInput::make('department')
                     ->label('Dział')
                     ->maxLength(255),
-                Forms\Components\TextInput::make('phone')
-                    ->label('Telefon')
-                    ->tel(),
+                PhoneInput::make('phone')
+                    ->label('Telefon'),
                 Forms\Components\TextInput::make('email')
                     ->label('Email')
                     ->email(),
-                Forms\Components\RichEditor::make('notes'),
+                \FilamentTiptapEditor\TiptapEditor::make('notes'),
             ]);
     }
 

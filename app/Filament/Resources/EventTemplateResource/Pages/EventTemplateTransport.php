@@ -2,9 +2,11 @@
 
 namespace App\Filament\Resources\EventTemplateResource\Pages;
 
+use App\Filament\Concerns\AuthorizesEventTemplatePages;
 use App\Filament\Resources\EventTemplateResource;
+use App\Filament\Resources\EventTemplateResource\Concerns\HasEventTemplateWorkflowContext;
+use App\Filament\Resources\EventTemplateResource\Concerns\HasGenerateEventAction;
 use App\Models\Bus;
-use App\Models\EventTemplate;
 use Filament\Actions;
 use Filament\Forms\Components\Section;
 use Filament\Forms\Components\Select;
@@ -12,12 +14,19 @@ use Filament\Forms\Components\TextInput;
 use Filament\Forms\Concerns\InteractsWithForms;
 use Filament\Forms\Contracts\HasForms;
 use Filament\Forms\Form;
+use Filament\Resources\Pages\Concerns\InteractsWithRecord;
 use Filament\Resources\Pages\Page;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Log;
 
 class EventTemplateTransport extends Page implements HasForms
 {
+    use AuthorizesEventTemplatePages;
+    use HasEventTemplateWorkflowContext;
+    use HasGenerateEventAction;
+    use InteractsWithForms;
+    use InteractsWithRecord;
+
     protected $listeners = ['toggleAvailability', 'updateAvailabilityNote'];
 
     public function toggleAvailability($eventTemplateId, $startPlaceId, $endPlaceId, $available)
@@ -223,25 +232,21 @@ class EventTemplateTransport extends Page implements HasForms
         return $fallbackCurrency;
     }
 
-    use InteractsWithForms;
-
     protected static string $resource = EventTemplateResource::class;
 
     protected static string $view = 'filament.resources.event-template-resource.pages.event-template-transport';
 
-    public EventTemplate $record;
+    protected static ?string $navigationLabel = 'Transport';
+
+    protected static ?string $title = 'Transport i miejsca startowe';
+
+    protected static ?string $navigationIcon = 'heroicon-o-truck';
 
     public ?array $data = [];
 
-    public function mount($record): void
+    public function mount(int|string $record): void
     {
-        if (is_array($record) && isset($record['id'])) {
-            $this->record = EventTemplate::findOrFail($record['id']);
-        } elseif ($record instanceof EventTemplate) {
-            $this->record = $record;
-        } else {
-            $this->record = EventTemplate::findOrFail($record);
-        }
+        $this->record = $this->resolveRecord($record);
 
         // Sprawdź czy są przeliczone ceny, jeśli nie - przelicz je
         $pricesCount = \App\Models\EventTemplatePricePerPerson::where('event_template_id', $this->record->id)->count();
@@ -263,16 +268,7 @@ class EventTemplateTransport extends Page implements HasForms
     protected function getHeaderActions(): array
     {
         return [
-            Actions\Action::make('back')
-                ->label('Wróć do edycji')
-                ->icon('heroicon-o-arrow-left')
-                ->url(fn () => static::getResource()::getUrl('edit', ['record' => $this->record->id]))
-                ->color('gray'),
-            Actions\Action::make('edit-program')
-                ->label('Edytuj program')
-                ->icon('heroicon-o-bars-3')
-                ->url(fn () => static::getResource()::getUrl('edit-program', ['record' => $this->record->id]))
-                ->color('primary'),
+            $this->makeGenerateEventAction(),
             Actions\Action::make('calculate-distances')
                 ->label('Przelicz odległości')
                 ->icon('heroicon-o-arrow-path')
@@ -687,10 +683,8 @@ class EventTemplateTransport extends Page implements HasForms
                             ->nullable()
                             ->placeholder('Wybierz miejsce końcowe'),
 
-                        \Filament\Forms\Components\RichEditor::make('transport_notes')
-                            ->toolbarButtons([
-                                'bold', 'italic', 'underline', 'strike', 'link', 'bulletList', 'orderedList', 'blockquote', 'codeBlock', 'h2', 'h3', 'color', 'highlight', 'undo', 'redo',
-                            ])
+                        \FilamentTiptapEditor\TiptapEditor::make('transport_notes')
+                            
                             ->columnSpanFull(),
                     ])
                     ->columns(2),

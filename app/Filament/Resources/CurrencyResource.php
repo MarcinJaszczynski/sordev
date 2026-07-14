@@ -4,6 +4,7 @@ namespace App\Filament\Resources;
 
 use App\Filament\Resources\CurrencyResource\Pages;
 use App\Models\Currency;
+use App\Support\FilamentNavigation;
 use Filament\Forms;
 use Filament\Forms\Form;
 use Filament\Resources\Resource;
@@ -28,7 +29,7 @@ class CurrencyResource extends Resource
 
     protected static ?string $navigationLabel = 'Waluty';
 
-    protected static ?string $navigationGroup = 'Ustawienia kalkulacji';
+    protected static ?string $navigationGroup = FilamentNavigation::GROUP_CONFIG;
 
     protected static ?string $pluralLabel = 'Waluty';
 
@@ -51,7 +52,7 @@ class CurrencyResource extends Resource
                 ->numeric()
                 ->default(1)
                 ->required()
-                ->step(0.0001),
+                ->step(0.00001),
         ])->columns(3);
     }
 

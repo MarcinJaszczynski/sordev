@@ -4,6 +4,7 @@ namespace App\Filament\Resources;
 
 use App\Filament\Resources\TaxResource\Pages;
 use App\Models\Tax;
+use App\Support\FilamentNavigation;
 use Filament\Forms;
 use Filament\Forms\Form;
 use Filament\Resources\Resource;
@@ -22,7 +23,7 @@ class TaxResource extends Resource
 
     protected static ?string $pluralModelLabel = 'Podatki';
 
-    protected static ?string $navigationGroup = 'Ustawienia kalkulacji';
+    protected static ?string $navigationGroup = FilamentNavigation::GROUP_CONFIG;
 
     protected static ?int $navigationSort = 70;
 
@@ -65,7 +66,7 @@ class TaxResource extends Resource
 
                 Forms\Components\Section::make('Dodatkowe informacje')
                     ->schema([
-                        Forms\Components\RichEditor::make('description')
+                        \FilamentTiptapEditor\TiptapEditor::make('description')
                             ->placeholder('Dodatkowe informacje o podatku...'),
                     ]),
             ]);

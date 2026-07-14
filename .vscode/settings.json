@@ -1,0 +1,36 @@
+{
+  "editor.formatOnSave": true,
+  "editor.defaultFormatter": "esbenp.prettier-vscode",
+  "[php]": {
+    "editor.defaultFormatter": "open-southeners.laravel-pint",
+    "editor.formatOnSave": true
+  },
+  "[blade]": {
+    "editor.formatOnSave": false
+  },
+  "files.associations": {
+    "*.blade.php": "blade"
+  },
+  "php.validate.executablePath": "/usr/bin/php",
+  "intelephense.environment.phpVersion": "8.4.0",
+  "intelephense.files.maxSize": 5000000,
+  "intelephense.files.exclude": [
+    "**/vendor/**",
+    "**/node_modules/**",
+    "**/storage/**"
+  ],
+  "tailwindCSS.experimental.classRegex": [
+    ["class\\s*=\\s*['\"]([^'\"]*)['\"]"]
+  ],
+  "search.exclude": {
+    "**/vendor": true,
+    "**/node_modules": true,
+    "**/storage": true,
+    "**/public/dist-front": true
+  },
+  "files.watcherExclude": {
+    "**/vendor/**": true,
+    "**/node_modules/**": true,
+    "**/storage/**": true
+  }
+}

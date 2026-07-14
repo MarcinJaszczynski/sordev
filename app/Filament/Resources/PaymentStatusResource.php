@@ -4,6 +4,7 @@ namespace App\Filament\Resources;
 
 use App\Filament\Resources\PaymentStatusResource\Pages;
 use App\Models\PaymentStatus;
+use App\Support\FilamentNavigation;
 use Filament\Forms;
 use Filament\Forms\Form;
 use Filament\Resources\Resource;
@@ -31,11 +32,16 @@ class PaymentStatusResource extends Resource
 
     protected static ?string $navigationLabel = 'Statusy płatności';
 
-    protected static ?string $navigationGroup = 'Ustawienia kalkulacji';
+    protected static ?string $navigationGroup = FilamentNavigation::GROUP_CONFIG;
 
     protected static ?string $modelLabel = 'Status płatności';
 
     protected static ?string $pluralModelLabel = 'Statusy płatności';
+
+    public static function shouldRegisterNavigation(): bool
+    {
+        return false;
+    }
 
     /**
      * Uprawnienia do widoczności resource w panelu

@@ -8,7 +8,7 @@ use Tests\TestCase;
 
 class EventHotelPdfViewTest extends TestCase
 {
-    public function test_hotel_pdf_view_renders_hotel_notes(): void
+    public function test_hotel_package_view_renders_hotel_notes(): void
     {
         $event = new Event([
             'id' => 77,
@@ -19,7 +19,7 @@ class EventHotelPdfViewTest extends TestCase
             'status' => Event::STATUS_CONFIRMED,
         ]);
 
-        $html = view('pdf.event-document', [
+        $html = view('pdf.packages.hotel', [
             'audience' => 'hotel',
             'audienceLabel' => 'Pakiet dla hotelu',
             'event' => $event,
@@ -34,8 +34,16 @@ class EventHotelPdfViewTest extends TestCase
             'staffCount' => 2,
             'driverCount' => 1,
             'gratisCount' => 3,
+            'participantSummaryLine' => '30 uczestników + 3 gratisów; obsługa: 2; kierowca(y): 1',
+            'travelLegends' => [
+                'departure' => '—',
+                'destination' => '—',
+                'return' => '—',
+                'return_place' => '—',
+            ],
             'hotelNotes' => 'Późny check-in dla części grupy.',
             'programByDay' => collect(),
+            'hotelProgramPoints' => collect(),
             'hotelPlan' => collect([
                 [
                     'day' => 1,
@@ -63,7 +71,51 @@ class EventHotelPdfViewTest extends TestCase
             'attachedFiles' => collect(),
         ])->render();
 
-        $this->assertStringContainsString('Uwagi dla hotelu:', $html);
+        $this->assertStringContainsString('Uwagi dla hotelu', $html);
         $this->assertStringContainsString('Późny check-in dla części grupy.', $html);
+        $this->assertStringContainsString('Pakiet dla hotelu', $html);
+    }
+
+    public function test_pilot_package_view_contains_program_section(): void
+    {
+        $event = new Event([
+            'id' => 1,
+            'name' => 'Test',
+            'start_date' => Carbon::parse('2026-05-01'),
+            'status' => Event::STATUS_CONFIRMED,
+        ]);
+
+        $html = view('pdf.packages.pilot', [
+            'audience' => 'pilot',
+            'audienceLabel' => 'Pakiet dla pilota',
+            'event' => $event,
+            'company' => ['name' => 'Firma'],
+            'logoDataUri' => null,
+            'generatedAt' => Carbon::now(),
+            'participantCount' => 10,
+            'staffCount' => 0,
+            'driverCount' => 1,
+            'gratisCount' => 0,
+            'participantSummaryLine' => '10 uczestników',
+            'travelLegends' => [
+                'departure' => 'środa, 01.05.2026',
+                'destination' => 'Hotel',
+                'return' => '—',
+                'return_place' => 'Warszawa',
+            ],
+            'hotelNotes' => '',
+            'hotelProgramPoints' => collect(),
+            'programByDay' => collect([1 => collect()]),
+            'hotelPlan' => collect(),
+            'agreements' => collect(),
+            'individualAgreementRows' => [],
+            'agreementsSummary' => ['total' => 0, 'payment_progress_label' => '0/0', 'amount_paid' => 0, 'amount_remaining' => 0],
+            'documentFocus' => [],
+            'selectedSettlementDocuments' => collect(),
+            'attachedFiles' => collect(),
+        ])->render();
+
+        $this->assertStringContainsString('Program imprezy', $html);
+        $this->assertStringContainsString('Pakiet dla pilota', $html);
     }
 }

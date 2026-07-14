@@ -3,7 +3,9 @@
 namespace App\Providers\Filament;
 
 use App\Filament\Pages\ImportExportPanel;
+use App\Support\FilamentNavigation;
 use BezhanSalleh\FilamentShield\FilamentShieldPlugin;
+use Filament\Enums\ThemeMode;
 use Filament\Http\Middleware\Authenticate;
 use Filament\Http\Middleware\AuthenticateSession;
 use Filament\Http\Middleware\DisableBladeIconComponents;
@@ -36,9 +38,19 @@ class AdminPanelProvider extends PanelProvider
             ->path('admin')
             ->login()
             ->brandName('bprafa')
+            ->brandLogo(asset('images/bprafa-logo.svg'))
+            ->brandLogoHeight('2rem')
+            ->font('Inter')
             ->maxContentWidth(MaxWidth::Full)
+            ->darkMode(condition: false, isForced: true)
+            ->defaultThemeMode(ThemeMode::Light)
             ->colors([
-                'primary' => Color::Amber,
+                'primary' => Color::hex('#B45309'),
+                'gray' => Color::Slate,
+                'success' => Color::Emerald,
+                'warning' => Color::Amber,
+                'danger' => Color::Rose,
+                'info' => Color::Sky,
             ])
             ->discoverResources(in: app_path('Filament/Resources'), for: 'App\\Filament\\Resources')
             ->discoverPages(in: app_path('Filament/Pages'), for: 'App\\Filament\\Pages')
@@ -46,55 +58,22 @@ class AdminPanelProvider extends PanelProvider
                 ImportExportPanel::class,
             ])
             ->widgets([
+                \App\Filament\Widgets\SorOverviewWidget::class,
+                \App\Filament\Widgets\ContinueWorkWidget::class,
+                \App\Filament\Widgets\FinanceModuleNavWidget::class,
                 Widgets\AccountWidget::class,
-                \App\Filament\Widgets\TaskCalendarWidget::class,
                 \App\Filament\Widgets\SitemapGeneratorWidget::class,
             ])
             ->plugin(FilamentShieldPlugin::make())
-            ->navigationGroups([
-                NavigationGroup::make('Imprezy')
-                    ->label('Imprezy')
-                    ->collapsed(false),
-                NavigationGroup::make('Szablony imprez')
-                    ->label('Szablony imprez')
-                    ->collapsed(false),
-                NavigationGroup::make('Zadania')
-                    ->label('Zadania')
-                    ->collapsed(false),
-                NavigationGroup::make('Finanse')
-                    ->label('Finanse')
-                    ->collapsed(false),
-                NavigationGroup::make('Kontakty')
-                    ->label('Kontakty')
-                    ->collapsed(),
-                NavigationGroup::make('Komunikacja')
-                    ->label('Komunikacja')
-                    ->collapsed(),
-                NavigationGroup::make('Ustawienia kalkulacji')
-                    ->label('Ustawienia kalkulacji')
-                    ->collapsed(),
-                NavigationGroup::make('Ustawienia ogólne')
-                    ->label('Ustawienia ogólne')
-                    ->collapsed(),
-                NavigationGroup::make('Ustawienia noclegów')
-                    ->label('Ustawienia noclegów')
-                    ->collapsed(),
-                NavigationGroup::make('Ustawienia transportu')
-                    ->label('Ustawienia transportu')
-                    ->collapsed(),
-                NavigationGroup::make('Narzędzia')
-                    ->label('Narzędzia')
-                    ->collapsed(),
-                NavigationGroup::make('Biblioteka mediów')
-                    ->label('Biblioteka mediów')
-                    ->collapsed(),
-                NavigationGroup::make('Ustawienia')
-                    ->label('Ustawienia')
-                    ->collapsed(),
-                NavigationGroup::make('Admin')
-                    ->label('Admin')
-                    ->collapsed(),
-            ])
+            ->navigationGroups(collect(FilamentNavigation::panelGroups())
+                ->map(fn (bool $collapsed, string $label) => NavigationGroup::make($label)
+                    ->label($label)
+                    ->extraSidebarAttributes([
+                        'class' => FilamentNavigation::groupCssClass($label),
+                    ])
+                    ->collapsed($collapsed))
+                ->values()
+                ->all())
             ->middleware([
                 EncryptCookies::class,
                 AddQueuedCookiesToResponse::class,
@@ -145,6 +124,7 @@ class AdminPanelProvider extends PanelProvider
 
                 FilamentTable::configureUsing(function (FilamentTable $table): void {
                     $table
+                        ->striped()
                         ->persistFiltersInSession()
                         ->persistSearchInSession()
                         ->persistColumnSearchesInSession()
@@ -168,27 +148,60 @@ class AdminPanelProvider extends PanelProvider
                 fn (): string => view('filament.components.admin-readability-styles')->render(),
             )
             ->renderHook(
-                PanelsRenderHook::TOPBAR_END,
+                PanelsRenderHook::PAGE_START,
                 function (): string {
-                    $user = Auth::user();
-                    if (! $user) {
+                    $livewire = \Livewire\Livewire::current();
+                    if (! is_object($livewire) || ! method_exists($livewire, 'getWorkflowContext')) {
                         return '';
                     }
 
-                    $notificationData = \App\Services\NotificationService::getTopbarDataForUser($user->id);
-                    $counts = $notificationData['counts'];
+                    $context = $livewire->getWorkflowContext();
+                    if (empty($context)) {
+                        return '';
+                    }
 
-                    return view('filament.components.topbar-notifications', [
-                        'newTasksCount' => $counts['tasks'],
-                        'unreadMessagesCount' => $counts['messages'],
-                        'commentsCount' => $counts['comments'] ?? 0,
-                        'newEventsCount' => $counts['new_events'] ?? 0,
-                        'confirmedEventsCount' => $counts['confirmed_events'] ?? 0,
-                        'pendingCancellationEventsCount' => $counts['pending_cancellation_events'] ?? 0,
-                        'importantCount' => $counts['important'] ?? 0,
-                        'notificationItems' => $notificationData['items'] ?? [],
-                        'notificationItemsByType' => $notificationData['items_by_type'] ?? [],
+                    return view('filament.components.workflow-record-context', [
+                        'context' => $context,
                     ])->render();
+                },
+            )
+            ->renderHook(
+                PanelsRenderHook::TOPBAR_END,
+                function (): string {
+                    try {
+                        $user = Auth::user();
+                        if (! $user) {
+                            return '';
+                        }
+
+                        $notificationData = \App\Services\NotificationService::getTopbarDataForUser(
+                            $user->id,
+                            \App\Services\NotificationService::TOPBAR_LIMIT_PER_TYPE,
+                            \App\Services\NotificationService::TOPBAR_COMBINED_LIMIT,
+                            \App\Services\NotificationService::TOPBAR_TASK_QUERY_LIMIT,
+                        );
+                        $counts = $notificationData['counts'];
+
+                        return view('filament.components.topbar-notifications', [
+                            'newTasksCount' => $counts['tasks'],
+                            'unreadMessagesCount' => $counts['messages'],
+                            'commentsCount' => $counts['comments'] ?? 0,
+                            'newEventsCount' => $counts['new_events'] ?? 0,
+                            'confirmedEventsCount' => $counts['confirmed_events'] ?? 0,
+                            'pendingCancellationEventsCount' => $counts['pending_cancellation_events'] ?? 0,
+                            'invoiceRequestsCount' => $counts['invoice_requests'] ?? 0,
+                            'totalUnread' => $counts['total_unread'] ?? 0,
+                            'canSeeInvoiceRequests' => $user->hasRole(['super_admin', 'admin', 'biuro', 'ksiegowosc']),
+                            'notificationItems' => $notificationData['items'] ?? [],
+                            'notificationItemsByType' => $notificationData['items_by_type'] ?? [],
+                        ])->render();
+                    } catch (\Throwable $e) {
+                        \Illuminate\Support\Facades\Log::warning('Topbar notifications render failed: '.$e->getMessage(), [
+                            'exception' => $e,
+                        ]);
+
+                        return '';
+                    }
                 }
             );
     }

@@ -2,19 +2,28 @@
 
 namespace App\Filament\Resources\EventTemplateResource\Pages;
 
+use App\Filament\Concerns\AuthorizesEventTemplatePages;
 use App\Filament\Resources\EventTemplateResource;
+use App\Filament\Resources\EventTemplateResource\Concerns\HasEventTemplateWorkflowContext;
+use App\Filament\Resources\EventTemplateResource\Concerns\HasGenerateEventAction;
 use App\Filament\Resources\EventTemplateResource\Widgets\EventTemplatePriceTable;
-use App\Models\EventTemplate;
-use Filament\Actions;
+use Filament\Resources\Pages\Concerns\InteractsWithRecord;
 use Filament\Resources\Pages\Page;
 
 class EventTemplateCalculation extends Page
 {
+    use AuthorizesEventTemplatePages;
+    use HasEventTemplateWorkflowContext;
+    use HasGenerateEventAction;
+    use InteractsWithRecord;
+
     protected static string $resource = EventTemplateResource::class;
 
     protected static string $view = 'filament.resources.event-template-resource.pages.event-template-calculation';
 
-    public EventTemplate $record;
+    protected static ?string $navigationLabel = 'Kalkulacja';
+
+    protected static ?string $navigationIcon = 'heroicon-o-calculator';
 
     public ?int $startPlaceId = null;
 
@@ -22,18 +31,11 @@ class EventTemplateCalculation extends Page
 
     public ?float $transportKm = null;
 
-    public function mount($record): void
+    public function mount(int|string $record): void
     {
-        if (is_array($record) && isset($record['id'])) {
-            $this->record = \App\Models\EventTemplate::findOrFail($record['id']);
-        } elseif ($record instanceof \App\Models\EventTemplate) {
-            $this->record = $record;
-        } else {
-            $this->record = \App\Models\EventTemplate::findOrFail($record);
-        }
+        $this->record = $this->resolveRecord($record);
 
-        // Pobierz start_place z parametru URL
-        $this->startPlaceId = request()->get('start_place');
+        $this->startPlaceId = request()->integer('start_place') ?: null;
         if ($this->startPlaceId) {
             $this->startPlace = \App\Models\Place::find($this->startPlaceId);
             $this->calculateTransportKm();
@@ -65,21 +67,7 @@ class EventTemplateCalculation extends Page
     protected function getHeaderActions(): array
     {
         return [
-            Actions\Action::make('back-to-transport')
-                ->label('Wróć do transportu')
-                ->icon('heroicon-o-truck')
-                ->url(fn () => static::getResource()::getUrl('transport', ['record' => $this->record->id]))
-                ->color('gray'),
-            Actions\Action::make('back')
-                ->label('Wróć do edycji')
-                ->icon('heroicon-o-arrow-left')
-                ->url(fn () => static::getResource()::getUrl('edit', ['record' => $this->record->id]))
-                ->color('gray'),
-            Actions\Action::make('edit-program')
-                ->label('Edytuj program')
-                ->icon('heroicon-o-bars-3')
-                ->url(fn () => static::getResource()::getUrl('edit-program', ['record' => $this->record->id]))
-                ->color('primary'),
+            $this->makeGenerateEventAction(),
         ];
     }
 

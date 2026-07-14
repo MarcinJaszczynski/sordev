@@ -23,7 +23,7 @@
                              @click.away="open = false"
                              class="absolute top-full left-0 mt-1 z-30 w-72 bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-lg shadow-xl p-2 space-y-1">
                             @foreach($recentTasks->take(5) as $task)
-                                <a wire:navigate href="{{ url('/admin/tasks/' . $task->id . '/edit') }}"
+                                <a href="{{ \App\Support\Tasks\TaskNavigation::editUrl($task) }}"
                                    class="flex flex-col px-2 py-1.5 rounded hover:bg-orange-50 dark:hover:bg-orange-900/50 text-sm text-gray-900 dark:text-white">
                                     <span class="font-medium truncate">{{ $task->title }}</span>
                                     <span class="text-[11px] text-gray-400">{{ $task->created_at->diffForHumans() }}</span>

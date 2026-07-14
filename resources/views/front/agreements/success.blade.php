@@ -25,6 +25,12 @@
             <h3>Potwierdzenie rezerwacji</h3>
             <p class="lead">Dziękujemy za poprawne opłacenie umowy!</p>
             <p class="small">Potwierdzenie zostało wysłane na adres {{ $agreement->signer_email ?: $agreement->customer_email ?: '—' }}.</p>
+            @if(!empty($portalLoginUrl))
+                <p class="small mt-2">
+                    <a href="{{ $portalLoginUrl }}" class="btn btn-primary btn-sm">Przejdź do portalu klienta</a>
+                    — program, umowa i harmonogram płatności.
+                </p>
+            @endif
         </header>
 
         <div class="row justify-content-center mt-4">

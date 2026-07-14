@@ -2,61 +2,120 @@
 
 namespace App\Services;
 
+use App\Models\Currency;
 use App\Models\Event;
 use App\Models\EventPricePerPerson;
 
 class EventPriceCalculator
 {
     /**
-     * Proste przeliczenie cen per-person dla danej imprezy.
-     * Kopiuje obecne sumy z punktów programu i rozdziela na warianty qty.
+     * Przeliczenie cen per-person dla imprezy w oparciu o jeden autorytatywny
+     * kalkulator (EventCostCalculator): każdy koszt raz, marża, podatki, cena/os.
+     * Wiersze oznaczone is_manual=true nie są nadpisywane.
      */
     public function calculateForEvent(Event $event): void
     {
-        // Kasujemy istniejące wpisy event_price_per_person dla tego eventu
-        EventPricePerPerson::where('event_id', $event->id)->delete();
+        $manualRows = EventPricePerPerson::query()
+            ->where('event_id', $event->id)
+            ->where('is_manual', true)
+            ->get();
 
-        // Load points and sum only those rows that have include_in_calculation=true and active=true
-        $points = $event->programPoints()->where('active', true)->get();
-        $totalProgramCost = \App\Services\ProgramPointHelper::sumIncluded($points, 'total_price');
+        EventPricePerPerson::query()
+            ->where('event_id', $event->id)
+            ->where('is_manual', false)
+            ->delete();
+
+        $plnCurrencyId = $this->plnCurrencyId();
+        $calculator = EventCostCalculator::for($event);
+
+        // Wiersze ręczne zachowują cenę za osobę, ale koszty (baza/marża/podatek/transport)
+        // są zawsze przenoszone z autorytatywnej kalkulacji.
+        $this->syncManualRowCosts($event, $calculator, $manualRows, $plnCurrencyId);
 
         $qtys = $event->qtyVariants()->get();
 
         if ($qtys->isEmpty()) {
-            // jeśli brak wariantów, tworzymy jedną pozycję domyślną
-            EventPricePerPerson::create([
-                'event_id' => $event->id,
-                'event_template_qty_id' => null,
-                'currency_id' => null,
-                'start_place_id' => $event->start_place_id ?? null,
-                'price_per_person' => $totalProgramCost / max(1, $event->participant_count),
-                'transport_cost' => 0,
-                'price_base' => $totalProgramCost,
-                'markup_amount' => 0,
-                'tax_amount' => 0,
-                'price_with_tax' => $totalProgramCost,
-                'tax_breakdown' => null,
-            ]);
+            if ($manualRows->isNotEmpty()) {
+                return;
+            }
+
+            $this->storeRow($event, null, $plnCurrencyId, $calculator->calculate($event->participant_count));
 
             return;
         }
 
         foreach ($qtys as $qty) {
-            $perPerson = $totalProgramCost / max(1, $qty->qty);
+            $hasManualForQty = $manualRows->contains(function (EventPricePerPerson $row) use ($qty) {
+                return (int) ($row->event_template_qty_id ?? 0) === (int) $qty->id
+                    || (int) optional($row->eventTemplateQty)->qty === (int) $qty->qty;
+            });
 
-            EventPricePerPerson::create([
-                'event_id' => $event->id,
-                'event_template_qty_id' => null,
-                'currency_id' => null,
-                'start_place_id' => $event->start_place_id ?? null,
-                'price_per_person' => $perPerson,
-                'transport_cost' => 0,
-                'price_base' => $totalProgramCost,
-                'markup_amount' => 0,
-                'tax_amount' => 0,
-                'price_with_tax' => $perPerson * $qty->qty,
-                'tax_breakdown' => null,
+            if ($hasManualForQty) {
+                continue;
+            }
+
+            $this->storeRow($event, $qty->id, $plnCurrencyId, $calculator->calculate((int) $qty->qty));
+        }
+    }
+
+    /**
+     * Odśwież koszty wierszy ręcznych z autorytatywnej kalkulacji (bez zmiany ceny za osobę).
+     *
+     * @param  \Illuminate\Support\Collection<int, EventPricePerPerson>  $manualRows
+     */
+    private function syncManualRowCosts(Event $event, EventCostCalculator $calculator, $manualRows, ?int $plnCurrencyId): void
+    {
+        foreach ($manualRows as $row) {
+            $qty = (int) (optional($row->eventTemplateQty)->qty ?? $event->participant_count ?? 1);
+            $result = $calculator->calculate($qty);
+
+            $transportCost = (float) collect($result['lines'] ?? [])
+                ->where('category', 'transport')
+                ->sum('cost_pln');
+
+            $row->update([
+                'currency_id' => $row->currency_id ?? $plnCurrencyId,
+                'transport_cost' => round($transportCost, 2),
+                'price_base' => round((float) ($result['base_pln'] ?? 0), 2),
+                'markup_amount' => round((float) ($result['markup_pln'] ?? 0), 2),
+                'tax_amount' => round((float) ($result['tax_pln'] ?? 0), 2),
+                'price_with_tax' => round((float) ($result['total_pln'] ?? 0), 2),
+                'tax_breakdown' => $result['tax_breakdown'] ?? null,
             ]);
         }
+    }
+
+    /**
+     * @param  array<string, mixed>  $result
+     */
+    private function storeRow(Event $event, ?int $qtyId, ?int $currencyId, array $result): void
+    {
+        $transportCost = (float) collect($result['lines'] ?? [])
+            ->where('category', 'transport')
+            ->sum('cost_pln');
+
+        EventPricePerPerson::create([
+            'event_id' => $event->id,
+            'event_template_qty_id' => $qtyId,
+            'currency_id' => $currencyId,
+            'start_place_id' => $event->start_place_id ?? null,
+            'price_per_person' => $result['price_per_person'] ?? 0,
+            'transport_cost' => round($transportCost, 2),
+            'price_base' => $result['base_pln'] ?? 0,
+            'markup_amount' => $result['markup_pln'] ?? 0,
+            'tax_amount' => $result['tax_pln'] ?? 0,
+            'price_with_tax' => $result['total_pln'] ?? 0,
+            'tax_breakdown' => $result['tax_breakdown'] ?? null,
+            'is_manual' => false,
+        ]);
+    }
+
+    private function plnCurrencyId(): ?int
+    {
+        return Currency::query()
+            ->where('code', 'PLN')
+            ->orWhere('symbol', 'PLN')
+            ->orWhere('symbol', 'zł')
+            ->value('id');
     }
 }

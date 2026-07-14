@@ -165,7 +165,7 @@
                         <div class="flex-1">
                             <!-- DEBUG: newMessage value: '{{ $newMessage }}' -->
                             <textarea 
-                                wire:model.defer="newMessage" 
+                                wire:model.live.debounce.500ms="newMessage" 
                                 wire:keydown.enter.prevent="sendMessage" 
                                 wire:keydown.shift.enter.prevent="$set('newMessage', $event.target.value + '\n')" 
                                 placeholder="Napisz wiadomość... (Enter - wyślij, Shift+Enter - nowa linia)" 
@@ -210,7 +210,7 @@
                 <form wire:submit="sendMessage" class="flex items-end gap-3">
                     <div class="flex-1">
                         <textarea 
-                            wire:model.defer="newMessage" 
+                            wire:model.live.debounce.500ms="newMessage" 
                             placeholder="TEST - Napisz wiadomość..." 
                             rows="1" 
                             class="w-full px-4 py-3 text-sm border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 placeholder-gray-500 dark:placeholder-gray-400 focus:ring-2 focus:ring-primary-500 focus:border-primary-500 resize-none overflow-hidden" 
@@ -248,7 +248,7 @@
                         <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Tytuł rozmowy</label>
                         <input 
                             type="text" 
-                            wire:model="newConversationTitle" 
+                            wire:model.live.debounce.500ms="newConversationTitle" 
                             placeholder="Wprowadź tytuł rozmowy..." 
                             class="w-full px-4 py-3 text-sm border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 placeholder-gray-500 dark:placeholder-gray-400 focus:ring-2 focus:ring-primary-500 focus:border-primary-500" 
                         />

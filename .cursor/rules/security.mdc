@@ -1,0 +1,28 @@
+---
+description: Bezpieczeństwo, auth, uprawnienia, dane wrażliwe
+globs: app/**/Policies/**/*.php,app/**/Middleware/**/*.php,routes/**/*.php,.env*
+alwaysApply: false
+---
+
+# Bezpieczeństwo
+
+## Autoryzacja
+
+- Filament Shield — nie omijaj `canAccess()` / `canViewAny()`.
+- Pilot: tylko imprezy `shared_with_pilot` i przypisane do użytkownika.
+- API: middleware auth + walidacja wejścia.
+
+## Dane
+
+- Sekrety tylko w `.env` — nigdy w commitach.
+- Upload: `FileSecurityService`, whitelist typów.
+- SQL: Eloquent / query builder — unikaj surowego SQL z inputu użytkownika.
+
+## Finanse
+
+- Każda operacja finansowa śledzalna.
+- Nie ujawniaj danych innych firm/klientów w logach.
+
+## MCP / AI
+
+- Tokeny GitHub, bazy — tylko lokalnie w `~/.cursor/mcp.json`, nie w repo.

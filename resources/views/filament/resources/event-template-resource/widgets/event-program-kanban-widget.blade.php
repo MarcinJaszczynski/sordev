@@ -1,8 +1,10 @@
 <x-filament-widgets::widget>
+@include('filament.components.filament-sortable-boot')
 <div class="grid grid-cols-1 md:grid-cols-{{ count($columns) }} gap-6" x-data x-init="
     $nextTick(() => {
-        document.querySelectorAll('.kanban-day').forEach(col => {
-            new Sortable(col, {
+        sorRunWhenSortableReady(() => {
+            document.querySelectorAll('.kanban-day').forEach(col => {
+                new Sortable(col, {
                 group: 'program-points',
                 animation: 150,
                 handle: '.drag-handle',
@@ -14,6 +16,7 @@
                     window.livewire.emitTo('event-program-kanban', 'movePoint', pivotId, newDay, newOrder);
                 }
             });
+        });
         });
     });
 ">
@@ -34,5 +37,4 @@
         </div>
     @endforeach
     </div>
-<script src="https://cdn.jsdelivr.net/npm/sortablejs@1.15.0/Sortable.min.js"></script>
 </x-filament-widgets::widget>

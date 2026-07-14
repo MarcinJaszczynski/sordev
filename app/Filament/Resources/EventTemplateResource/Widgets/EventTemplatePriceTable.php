@@ -30,6 +30,11 @@ class EventTemplatePriceTable extends Widget
 
     public ?float $transportKm = null;
 
+    /**
+     * Nadpisanie autokaru (np. autokar przypisany do imprezy, a nie szablonu).
+     */
+    public $busOverride = null;
+
     protected int|string|array $columnSpan = 'full';
 
     public $prices = [];
@@ -282,7 +287,7 @@ class EventTemplatePriceTable extends Widget
             : \App\Models\EventTemplateQty::all();
         $calculations = [];
 
-        $bus = $this->record->bus;
+        $bus = $this->busOverride ?? $this->record->bus;
         $programKm = $this->record->program_km ?? 0;
         $startPlaceId = $this->startPlaceId;
         $templateStartId = $this->record->start_place_id;
@@ -656,7 +661,7 @@ class EventTemplatePriceTable extends Widget
                 // Dodaj do ogólnej sumy kosztów noclegów (PLN + waluty obce)
                 if ($dayTotalPln > 0) {
                     $plnPoints[] = [
-                        'name' => 'Noclegi - dzień '.$hotelDay->day,
+                        'name' => 'Hotel - dzień '.$hotelDay->day,
                         'unit_price' => null,
                         'group_size' => null,
                         'cost' => $dayTotalPln,
@@ -667,7 +672,7 @@ class EventTemplatePriceTable extends Widget
                 }
                 foreach ($dayTotalForeign as $cur => $val) {
                     $currenciesPoints[$cur][] = [
-                        'name' => 'Noclegi - dzień '.$hotelDay->day,
+                        'name' => 'Hotel - dzień '.$hotelDay->day,
                         'unit_price' => null,
                         'group_size' => null,
                         'cost' => $val,
@@ -953,7 +958,7 @@ class EventTemplatePriceTable extends Widget
     private function calculateTransportCost($qty): float
     {
         // Algorytm: (dojazd + program + powrót) * 1.1 + 50 km, liczba autobusów, limity km, nadmiarowe km
-        $bus = $this->record->bus;
+        $bus = $this->busOverride ?? $this->record->bus;
         if (! $bus) {
             return 0;
         }
@@ -990,7 +995,11 @@ class EventTemplatePriceTable extends Widget
 
     public function calculatePointCost($qty, $groupSize, $unitPrice)
     {
-        return ceil($qty / $groupSize) * $unitPrice;
+        return \App\Services\ProgramPointPricingCalculator::totalPrice(
+            (float) $unitPrice,
+            (int) $qty,
+            (int) ($groupSize ?? 0) > 0 ? (int) $groupSize : 1,
+        );
     }
 
     /**

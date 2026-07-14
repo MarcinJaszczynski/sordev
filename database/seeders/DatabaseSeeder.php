@@ -28,14 +28,21 @@ class DatabaseSeeder extends Seeder
             ContractorsSeeder::class,
             ContractorContractorTypeSeeder::class,
             AgreementContractTemplateSeeder::class,
+            TfgDictionarySeeder::class,
+            ChecklistTemplateSeeder::class,
         ]);
 
         \Spatie\Permission\Models\Role::firstOrCreate(['name' => 'admin']);
         \Spatie\Permission\Models\Role::firstOrCreate(['name' => 'user']);
         \Spatie\Permission\Models\Role::firstOrCreate(['name' => 'pilot']);
+        \Spatie\Permission\Models\Role::firstOrCreate(['name' => 'client_participant']);
+        \Spatie\Permission\Models\Role::firstOrCreate(['name' => 'client_guardian']);
         \Spatie\Permission\Models\Role::firstOrCreate(['name' => 'biuro']);
         \Spatie\Permission\Models\Role::firstOrCreate(['name' => 'ksiegowosc']);
+        \Spatie\Permission\Models\Role::firstOrCreate(['name' => 'wlasciciel']);
         \Spatie\Permission\Models\Role::firstOrCreate(['name' => 'super_admin']);
+
+        \Spatie\Permission\Models\Role::firstOrCreate(['name' => 'programista']);
 
         // Tworzenie uprawnień dla wszystkich modeli (w tym role i permission)
         $models = [
@@ -58,12 +65,54 @@ class DatabaseSeeder extends Seeder
             'view user', 'edit user', 'view task', 'edit task', 'view event_template', 'view event_template_qty', 'view kategoria_szablonu', 'view tag', 'view contractor', 'view contact', 'view todo_status', 'view currency', 'view transport_cost',
             'view markup',
         ]);
+        foreach (['view_own_event', 'update_own_settlement'] as $pilotPermission) {
+            \Spatie\Permission\Models\Permission::firstOrCreate(['name' => $pilotPermission]);
+        }
+
+        foreach ([
+            'view_vendor_invoice',
+            'import_vendor_invoice',
+            'approve_vendor_invoice',
+            'manage_vendor_invoice_assignment',
+        ] as $invoicePermission) {
+            \Spatie\Permission\Models\Permission::firstOrCreate(['name' => $invoicePermission]);
+        }
+
+        foreach ([
+            'edit event_template_program',
+            'create event',
+            'edit event',
+            'view event',
+        ] as $eventPermission) {
+            \Spatie\Permission\Models\Permission::firstOrCreate(['name' => $eventPermission]);
+        }
+
         $pilotRole = \Spatie\Permission\Models\Role::where('name', 'pilot')->first();
-        $pilotRole->syncPermissions(['view task', 'view event_template', 'view markup']);
+        $pilotRole->syncPermissions([
+            'view task',
+            'view event_template',
+            'view markup',
+            'view_own_event',
+            'update_own_settlement',
+        ]);
         $biuroRole = \Spatie\Permission\Models\Role::where('name', 'biuro')->first();
-        $biuroRole->syncPermissions(['view user', 'edit user', 'view contractor', 'edit contractor', 'view event_template', 'edit event_template', 'view transport_cost', 'edit transport_cost', 'create transport_cost', 'delete transport_cost', 'view markup', 'edit markup', 'create markup', 'delete markup']);
+        $biuroRole->syncPermissions([
+            'view user', 'edit user', 'view contractor', 'edit contractor',
+            'view event_template',
+            'view event', 'create event', 'edit event',
+            'view transport_cost', 'edit transport_cost', 'create transport_cost', 'delete transport_cost',
+            'view markup', 'edit markup', 'create markup', 'delete markup',
+        ]);
+        $programistaRole = \Spatie\Permission\Models\Role::where('name', 'programista')->first();
+        $programistaRole->syncPermissions([
+            'view event_template',
+            'edit event_template_program',
+        ]);
         $ksiegowoscRole = \Spatie\Permission\Models\Role::where('name', 'ksiegowosc')->first();
-        $ksiegowoscRole->syncPermissions(['view user', 'view contractor', 'view event_template', 'view currency', 'view transport_cost', 'edit transport_cost', 'view markup']);
+        $ksiegowoscRole->syncPermissions([
+            'view user', 'view contractor', 'view event_template', 'view currency', 'view transport_cost', 'edit transport_cost', 'view markup',
+            'view_vendor_invoice', 'import_vendor_invoice', 'approve_vendor_invoice', 'manage_vendor_invoice_assignment',
+        ]);
 
         // Przypisz wszystkie uprawnienia do roli admin i super_admin (na końcu seedera)
         $adminRole = \Spatie\Permission\Models\Role::where('name', 'admin')->first();
@@ -86,6 +135,12 @@ class DatabaseSeeder extends Seeder
         }
         if (! $adminUser->hasRole('admin')) {
             $adminUser->assignRole('admin');
+        }
+
+        $pilotUser = \App\Models\User::where('email', 'piotr.zielinski@example.com')->first();
+
+        if ($pilotUser && ! $pilotUser->hasRole('pilot')) {
+            $pilotUser->assignRole('pilot');
         }
     }
 }

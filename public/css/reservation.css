@@ -29,6 +29,8 @@
     font-size: 14px;
     font-family: inherit;
     box-sizing: border-box;
+    text-align: left;
+    direction: ltr;
 }
 
 .reservation-form .form-control:focus {
@@ -62,6 +64,8 @@
     font-family: inherit;
     transition: border-color 0.3s ease, box-shadow 0.3s ease;
     box-sizing: border-box;
+    text-align: left;
+    direction: ltr;
 }
 
 .form-group input[type="text"]:focus,

@@ -1,0 +1,35 @@
+---
+description: Backend PHP/Laravel — serwisy, modele, migracje
+globs: app/**/*.php,database/**/*.php,routes/**/*.php,tests/**/*.php
+alwaysApply: false
+---
+
+# Backend PHP / Laravel
+
+## Wzorce
+
+- Serwisy w `app/Services/` — jedna odpowiedzialność, wstrzykiwanie zależności.
+- Modele: relacje, casty, stałe statusów — bez logiki UI.
+- Transakcje `DB::transaction()` przy wielu zapisach finansowych.
+- Walidacja: Form Request lub Filament rules — nie ufaj `$request->all()` bez filtra.
+
+## Finanse i imprezy
+
+- Kalkulacja: `UnifiedPriceCalculator`, `EventPriceCalculator` — nie duplikuj w widokach.
+- Rozliczenia: `EventSettlement`, koszty przez `EventSettlementCost`.
+- Agregaty listy imprez: `EventResource::getEloquentQuery()`.
+
+## Testy
+
+- PHPUnit dla serwisów i reguł biznesowych.
+- `RefreshDatabase` w testach feature — nie polegaj na dumpie produkcyjnym.
+
+## Przykład
+
+```php
+// ❌ Logika w Resource
+Tables\Columns\TextColumn::make('x')->state(fn ($r) => /* 80 linii */);
+
+// ✅ Serwis + cienka kolumna
+EventListFinanceColumn::html($record, $currencyCode);
+```

@@ -2,15 +2,18 @@
 
 namespace App\Models;
 
+use App\Models\Concerns\HasStickyNotes;
 use App\Models\Concerns\HasTasks;
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
+use Illuminate\Database\Eloquent\SoftDeletes;
 
 class EventSettlementCost extends Model
 {
-    use HasFactory, HasTasks;
+    use HasFactory, HasStickyNotes, HasTasks, SoftDeletes;
 
     protected $fillable = [
         'settlement_id',
@@ -18,7 +21,11 @@ class EventSettlementCost extends Model
         'source_id',
         'name',
         'planned_amount',
+        'planned_unit_amount',
+        'planned_amount_basis',
+        'planned_participant_scope',
         'planned_currency_id',
+        'planned_convert_to_pln',
         'planned_rate',
         'planned_amount_pln',
         'actual_amount',
@@ -30,6 +37,8 @@ class EventSettlementCost extends Model
         'advance_type',
         'payment_method',
         'document_number',
+        'invoice_number',
+        'receipt_number',
         'paid_at',
         'paid_by_user_id',
         'payment_status',
@@ -46,10 +55,12 @@ class EventSettlementCost extends Model
 
     protected $casts = [
         'planned_amount' => 'decimal:2',
-        'planned_rate' => 'decimal:4',
+        'planned_unit_amount' => 'decimal:2',
+        'planned_convert_to_pln' => 'boolean',
+        'planned_rate' => 'decimal:5',
         'planned_amount_pln' => 'decimal:2',
         'actual_amount' => 'decimal:2',
-        'actual_rate' => 'decimal:4',
+        'actual_rate' => 'decimal:5',
         'actual_amount_pln' => 'decimal:2',
         'advance_amount' => 'decimal:2',
         'paid_at' => 'datetime',
@@ -67,6 +78,14 @@ class EventSettlementCost extends Model
     public static array $paidByOptions = [
         'office' => 'Biuro',
         'pilot' => 'Pilot',
+    ];
+
+    public static array $sourceTypeLabels = [
+        'program_point' => 'Program',
+        'manual' => 'Nieprzewidziany',
+        'transport' => 'Transport',
+        'accommodation' => 'Nocleg',
+        'insurance_day' => 'Ubezpieczenie',
     ];
 
     public static array $advanceTypes = [
@@ -161,6 +180,66 @@ class EventSettlementCost extends Model
         return null;
     }
 
+    /**
+     * Pozycje będące realnymi płatnościami (stos wpłat, ręczne z harmonogramem) — bez linii planu programu.
+     */
+    public function scopePaymentsOnly(Builder $query): Builder
+    {
+        return $query->where(function (Builder $inner): void {
+            $inner->where('source_type', 'like', '%_payment')
+                ->orWhere(function (Builder $manual): void {
+                    $manual->where('source_type', 'manual')
+                        ->whereIn('payment_status', [
+                            'reservation_required',
+                            'advance_required',
+                            'advance_paid',
+                            'partially_paid',
+                            'paid',
+                        ]);
+                });
+        });
+    }
+
+    public static function isPaymentSourceType(?string $sourceType): bool
+    {
+        return is_string($sourceType) && str_ends_with($sourceType, '_payment');
+    }
+
+    public static function isPlanSourceType(?string $sourceType): bool
+    {
+        if (! is_string($sourceType) || self::isPaymentSourceType($sourceType)) {
+            return false;
+        }
+
+        return in_array($sourceType, ['program_point', 'transport', 'accommodation', 'insurance_day', 'manual'], true);
+    }
+
+    public static function isManualPaymentRow(self $cost): bool
+    {
+        if ($cost->source_type !== 'manual') {
+            return false;
+        }
+
+        return in_array((string) $cost->payment_status, [
+            'reservation_required',
+            'advance_required',
+            'advance_paid',
+            'partially_paid',
+            'paid',
+        ], true) || filled($cost->actual_amount_pln);
+    }
+
+    /**
+     * Zaległe płatności do sterty / kalendarza (bez planów informacyjnych).
+     */
+    public function scopePendingPaymentInbox(Builder $query): Builder
+    {
+        return $query
+            ->paymentsOnly()
+            ->whereNotIn('payment_status', ['paid', 'cancelled', 'planned', 'reserved'])
+            ->whereNotNull('advance_due_date');
+    }
+
     // --- Computed ---
 
     /**
@@ -172,7 +251,32 @@ class EventSettlementCost extends Model
             return null;
         }
 
+        if ($this->planned_amount_pln === null) {
+            return null;
+        }
+
         return (float) $this->actual_amount_pln - (float) $this->planned_amount_pln;
+    }
+
+    public function resolvePlannedAmountPln(): ?float
+    {
+        $amount = (float) ($this->planned_amount ?? 0);
+        $currency = $this->relationLoaded('plannedCurrency')
+            ? $this->plannedCurrency
+            : ($this->planned_currency_id ? Currency::find($this->planned_currency_id) : null);
+        $symbol = strtoupper((string) ($currency?->code ?? $currency?->symbol ?? 'PLN'));
+
+        if ($symbol === 'PLN') {
+            return round($amount, 2);
+        }
+
+        if (! (bool) ($this->planned_convert_to_pln ?? true)) {
+            return null;
+        }
+
+        $rate = (float) ($this->planned_rate ?? 1);
+
+        return round($amount * $rate, 2);
     }
 
     public function getLinkedDocumentsLabelAttribute(): string
@@ -237,9 +341,8 @@ class EventSettlementCost extends Model
                 $rate = $model->actual_rate ?? $model->planned_rate ?? 1;
                 $model->actual_amount_pln = $model->actual_amount * $rate;
             }
-            if ($model->isDirty(['planned_amount', 'planned_rate'])) {
-                $rate = $model->planned_rate ?? 1;
-                $model->planned_amount_pln = $model->planned_amount * $rate;
+            if ($model->isDirty(['planned_amount', 'planned_rate', 'planned_convert_to_pln', 'planned_currency_id'])) {
+                $model->planned_amount_pln = $model->resolvePlannedAmountPln();
             }
 
             if ($model->advance_type === 'deposit' && blank($model->payment_status ?: null)) {

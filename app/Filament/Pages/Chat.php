@@ -2,6 +2,7 @@
 
 namespace App\Filament\Pages;
 
+use App\Support\FilamentNavigation;
 use Filament\Pages\Page;
 
 class Chat extends Page
@@ -10,11 +11,11 @@ class Chat extends Page
 
     protected static ?string $navigationLabel = 'Czat';
 
-    protected static ?string $navigationGroup = 'Komunikacja';
+    protected static ?string $navigationGroup = FilamentNavigation::GROUP_CONTACTS;
 
     protected static string $view = 'filament.pages.chat';
 
-    protected static ?int $navigationSort = 1;
+    protected static ?int $navigationSort = 3;
 
     public ?int $conversationId = null;
 

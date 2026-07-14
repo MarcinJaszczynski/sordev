@@ -24,7 +24,6 @@ class EventTemplateQty extends Model
      * @var array<int, string>
      */
     protected $fillable = [
-        'event_template_id',
         'qty',
         'gratis',
         'staff',
