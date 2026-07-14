@@ -5,6 +5,7 @@ namespace App\Support;
 use App\Filament\Pilot\Resources\PilotEventResource;
 use App\Models\Event;
 use App\Models\User;
+use App\Services\PilotAccessService;
 use Filament\Facades\Filament;
 use Filament\Pages\Page;
 use Filament\Panel;
@@ -113,7 +114,7 @@ class ConsoleAuditUrlCollector
             $resourceLabel = $resourceClass::getPluralModelLabel() ?? class_basename($resourceClass);
             $modelClass = $resourceClass::getModel();
             $record = $panel->getId() === 'pilot'
-                ? ($this->samplePilotEvent() ?? $this->sampleRecord($modelClass))
+                ? $this->samplePilotEvent()
                 : $this->sampleRecord($modelClass);
 
             foreach ($resourceClass::getPages() as $pageName => $pageRegistration) {
@@ -131,7 +132,10 @@ class ConsoleAuditUrlCollector
                 }
 
                 if ($this->pageNeedsRecord($resourceClass, $pageName) && $record === null) {
-                    $this->skip($pageLabel, 'brak rekordu w bazie dla '.class_basename($modelClass));
+                    $reason = $panel->getId() === 'pilot'
+                        ? 'brak imprezy dla konta demo pilota (uruchom: php artisan pilot:setup-demo)'
+                        : 'brak rekordu w bazie dla '.class_basename($modelClass);
+                    $this->skip($pageLabel, $reason);
 
                     continue;
                 }
@@ -220,26 +224,27 @@ class ConsoleAuditUrlCollector
 
         $pilot = User::query()
             ->where('email', PilotDemoSeederEmail::DEFAULT)
-            ->orWhere('type', 'pilot')
-            ->orderBy('id')
             ->first();
 
-        if ($pilot !== null) {
-            $event = Event::query()
-                ->forPilot($pilot)
-                ->where('status', '!=', Event::STATUS_CANCELLED)
-                ->orderByDesc('id')
-                ->first();
+        if ($pilot === null) {
+            return null;
+        }
 
-            if ($event !== null) {
+        $access = app(PilotAccessService::class);
+
+        $events = Event::query()
+            ->forPilot($pilot)
+            ->where('status', '!=', Event::STATUS_CANCELLED)
+            ->orderByDesc('id')
+            ->get();
+
+        foreach ($events as $event) {
+            if ($access->hasFullAccess($event, $pilot)) {
                 return $event;
             }
         }
 
-        return Event::query()
-            ->where('status', '!=', Event::STATUS_CANCELLED)
-            ->orderByDesc('id')
-            ->first();
+        return $events->first();
     }
 
     /**

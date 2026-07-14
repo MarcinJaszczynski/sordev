@@ -4,6 +4,7 @@ namespace App\Filament\Concerns;
 
 use App\Models\Task;
 use Filament\Actions\Action;
+use Filament\Tables;
 use Illuminate\Contracts\View\View;
 use Livewire\Attributes\On;
 
@@ -73,19 +74,38 @@ trait InteractsWithTaskEditModal
             ->icon('heroicon-m-plus')
             ->modalHeading('Nowe zadanie')
             ->modalWidth('7xl')
-            ->modalContent(function () use ($defaultDueDate, $defaultFormData): View {
-                $dueDate = $defaultDueDate ? $defaultDueDate() : null;
-                $formDefaults = $defaultFormData ? $defaultFormData() : [];
-
-                return view('filament.tasks.full-editor-modal', [
-                    'taskId' => null,
-                    'defaultDueDate' => $dueDate?->format('Y-m-d H:i:s'),
-                    'defaultFormData' => $formDefaults,
-                    'activeRelationManager' => null,
-                ]);
-            })
+            ->modalContent(fn (): View => $this->createTaskModalView($defaultDueDate, $defaultFormData))
             ->modalSubmitAction(false)
             ->modalCancelActionLabel('Zamknij');
+    }
+
+    protected function makeCreateTaskTableAction(?callable $defaultDueDate = null, ?callable $defaultFormData = null): Tables\Actions\Action
+    {
+        return Tables\Actions\Action::make('createTask')
+            ->label('Dodaj zadanie')
+            ->icon('heroicon-m-plus')
+            ->modalHeading('Nowe zadanie')
+            ->modalWidth('7xl')
+            ->modalContent(fn (): View => $this->createTaskModalView($defaultDueDate, $defaultFormData))
+            ->modalSubmitAction(false)
+            ->modalCancelActionLabel('Zamknij');
+    }
+
+    /**
+     * @param  callable(): mixed|null  $defaultDueDate
+     * @param  callable(): array<string, mixed>|null  $defaultFormData
+     */
+    protected function createTaskModalView(?callable $defaultDueDate = null, ?callable $defaultFormData = null): View
+    {
+        $dueDate = $defaultDueDate ? $defaultDueDate() : null;
+        $formDefaults = $defaultFormData ? $defaultFormData() : [];
+
+        return view('filament.tasks.full-editor-modal', [
+            'taskId' => null,
+            'defaultDueDate' => $dueDate?->format('Y-m-d H:i:s'),
+            'defaultFormData' => $formDefaults,
+            'activeRelationManager' => null,
+        ]);
     }
 
     protected function makeEditTaskAction(): Action

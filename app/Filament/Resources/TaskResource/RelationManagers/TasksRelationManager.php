@@ -113,7 +113,7 @@ class TasksRelationManager extends RelationManager
                     ->options(\App\Enums\TaskPriority::options()),
             ])
             ->headerActions([
-                $this->makeCreateTaskAction(defaultFormData: fn (): array => [
+                $this->makeCreateTaskTableAction(defaultFormData: fn (): array => [
                     'taskable_type' => $owner::class,
                     'taskable_id' => $owner->getKey(),
                 ]),
