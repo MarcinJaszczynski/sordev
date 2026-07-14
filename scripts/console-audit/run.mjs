@@ -73,6 +73,15 @@ function normalizeConsoleMessage(msg) {
   return parts.filter(Boolean).join(' ');
 }
 
+async function fillLivewireField(locator, value) {
+  await locator.waitFor({ state: 'visible', timeout: 20000 });
+  await locator.click();
+  await locator.fill('');
+  await locator.pressSequentially(value, { delay: 20 });
+  // Filament login uses wire:model.live.debounce.500 — wait before submit.
+  await locator.page().waitForTimeout(700);
+}
+
 async function login(page, panel) {
   const loginPath = panel === 'pilot' ? '/pilot/login' : '/admin/login';
   const email = panel === 'pilot' ? pilotEmail : adminEmail;
@@ -87,9 +96,8 @@ async function login(page, panel) {
     '[id="data.password"], input[type="password"], input[name="password"], input[autocomplete="current-password"]',
   ).first();
 
-  await emailField.waitFor({ state: 'visible', timeout: 20000 });
-  await emailField.fill(email);
-  await passwordField.fill(password);
+  await fillLivewireField(emailField, email);
+  await fillLivewireField(passwordField, password);
 
   const submitButton = page.locator(
     'button[type="submit"], form button.fi-btn, button:has-text("Zaloguj"), button:has-text("Sign in")',
