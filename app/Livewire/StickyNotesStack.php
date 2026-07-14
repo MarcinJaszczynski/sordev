@@ -77,7 +77,7 @@ class StickyNotesStack extends Component
                 $this->resolveNotable(),
                 $user,
                 $this->newBody,
-                $this->newCategory,
+                $this->filterCategory ?? StickyNoteCategory::GENERAL,
             );
         } catch (InvalidArgumentException $exception) {
             Notification::make()
@@ -139,7 +139,7 @@ class StickyNotesStack extends Component
                 $note,
                 $user,
                 $this->editBody,
-                $this->editCategory,
+                $this->filterCategory ?? $note->category ?? StickyNoteCategory::GENERAL,
             );
         } catch (InvalidArgumentException $exception) {
             Notification::make()

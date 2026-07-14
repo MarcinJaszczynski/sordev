@@ -84,6 +84,10 @@ class ConsoleAuditUrlCollector
             $label = $pageClass::getNavigationLabel() ?? class_basename($pageClass);
 
             try {
+                if ($panel->getId() === 'pilot' && $this->pilotTripPageNeedsEvent($pageClass)) {
+                    continue;
+                }
+
                 $fullUrl = $pageClass::getUrl(panel: $panel->getId());
                 $urls[] = $this->makeEntry($panel->getId(), $group, $label, $fullUrl, $panel->getId());
             } catch (Throwable $e) {
@@ -176,6 +180,7 @@ class ConsoleAuditUrlCollector
             ['label' => 'Pilot / hotel', 'path' => "/pilot/hotel-plan/{$eventId}"],
             ['label' => 'Pilot / checklist', 'path' => "/pilot/checklist/{$eventId}"],
             ['label' => 'Pilot / rozliczenie', 'path' => "/pilot/settlement/{$eventId}"],
+            ['label' => 'Pilot / zaliczka', 'path' => "/pilot/advance/{$eventId}"],
         ];
 
         $urls = [];
@@ -327,6 +332,17 @@ class ConsoleAuditUrlCollector
         usort($unique, fn (array $a, array $b): int => [$a['panel'], $a['group'], $a['path']] <=> [$b['panel'], $b['group'], $b['path']]);
 
         return $unique;
+    }
+
+    private function pilotTripPageNeedsEvent(string $pageClass): bool
+    {
+        return in_array($pageClass, [
+            \App\Filament\Pilot\Pages\PilotAdvancePage::class,
+            \App\Filament\Pilot\Pages\PilotChecklistPage::class,
+            \App\Filament\Pilot\Pages\PilotHotelPlanPage::class,
+            \App\Filament\Pilot\Pages\PilotProgramPage::class,
+            \App\Filament\Pilot\Pages\PilotSettlementPage::class,
+        ], true);
     }
 
     private function skip(string $label, string $reason): void

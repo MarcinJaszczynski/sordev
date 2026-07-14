@@ -2,6 +2,10 @@
 
 namespace App\Console\Commands;
 
+use App\Models\Currency;
+use App\Models\CurrencyRateSnapshot;
+use App\Models\Media;
+use App\Models\TfgFeedLog;
 use App\Models\User;
 use Database\Seeders\PilotDemoSeeder;
 use Illuminate\Console\Command;
@@ -41,11 +45,51 @@ class ConsoleAuditBootstrapCommand extends Command
 
         $this->info('Konto audytu admin: '.self::ADMIN_EMAIL.' / '.self::ADMIN_PASSWORD);
 
+        $this->ensureAuditSampleRecords($admin);
+
         if (! $this->option('skip-pilot')) {
             $this->call('pilot:setup-demo');
             $this->info('Konto pilota: '.PilotDemoSeeder::DEFAULT_EMAIL.' / '.PilotDemoSeeder::DEFAULT_PASSWORD);
         }
 
         return self::SUCCESS;
+    }
+
+    protected function ensureAuditSampleRecords(User $admin): void
+    {
+        $currencyId = Currency::query()->orderBy('id')->value('id');
+
+        if ($currencyId && CurrencyRateSnapshot::query()->doesntExist()) {
+            CurrencyRateSnapshot::query()->create([
+                'currency_id' => $currencyId,
+                'rate' => 1,
+                'purchase_rate' => 1,
+                'sale_rate' => 1,
+                'source' => 'console-audit',
+                'rate_date' => now()->toDateString(),
+                'created_by' => $admin->id,
+            ]);
+        }
+
+        if (Media::query()->doesntExist()) {
+            Media::query()->create([
+                'disk' => 'public',
+                'path' => 'console-audit/sample.txt',
+                'filename' => 'sample.txt',
+                'extension' => 'txt',
+                'mime' => 'text/plain',
+                'size' => 1,
+                'title' => 'Console audit sample',
+            ]);
+        }
+
+        if (TfgFeedLog::query()->doesntExist()) {
+            TfgFeedLog::query()->create([
+                'feed_identifier' => 'console-audit',
+                'operation_type' => 'export',
+                'contracts_count' => 0,
+                'sync_status' => 'completed',
+            ]);
+        }
     }
 }

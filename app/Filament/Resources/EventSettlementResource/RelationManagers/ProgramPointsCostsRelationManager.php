@@ -3,6 +3,7 @@
 namespace App\Filament\Resources\EventSettlementResource\RelationManagers;
 
 use App\Filament\Resources\EventSettlementResource\Traits\DispatchesSettlementDataChanged;
+use App\Filament\Forms\ParticipantPricingFields;
 use App\Models\Contractor;
 use App\Models\Currency;
 use App\Models\EventProgramPoint;
@@ -255,6 +256,8 @@ class ProgramPointsCostsRelationManager extends RelationManager
                         Forms\Components\Section::make('Pozycja w rozliczeniu')
                             ->columns(3)
                             ->schema([
+                                ParticipantPricingFields::settlementAmountBasisSelect('planned_amount_basis'),
+                                ParticipantPricingFields::settlementPlannedScopeSelect('planned_participant_scope'),
                                 Forms\Components\Select::make('contractor_id')
                                     ->label('Kontrahent')
                                     ->options(fn () => Contractor::orderBy('name')->pluck('name', 'id'))

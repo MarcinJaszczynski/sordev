@@ -88,7 +88,7 @@ class CurrencyRateSnapshotResource extends Resource
                     ->label('Waluta')
                     ->sortable()
                     ->searchable()
-                    ->description(fn ($r) => $r->currency?->symbol),
+                    ->description(fn ($record) => $record->currency?->symbol),
 
                 Tables\Columns\TextColumn::make('rate_date')
                     ->label('Data')

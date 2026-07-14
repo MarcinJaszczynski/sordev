@@ -8,6 +8,7 @@ use Filament\Notifications\Notification;
 use Filament\Pages\Page;
 use Illuminate\Support\Facades\Auth;
 use Livewire\Attributes\Computed;
+use Livewire\Attributes\On;
 
 class NotificationsInboxPage extends Page
 {
@@ -25,6 +26,10 @@ class NotificationsInboxPage extends Page
 
     public bool $unreadOnly = false;
 
+    public int $perPage = 25;
+
+    public int $page = 1;
+
     public static function canAccess(): bool
     {
         return (bool) Auth::user();
@@ -40,21 +45,63 @@ class NotificationsInboxPage extends Page
     {
         $userId = (int) Auth::id();
 
-        return NotificationService::getInboxDataForUser(
+        $data = NotificationService::getInboxDataForUser(
             $userId,
             $this->typeFilter === 'all' ? null : $this->typeFilter,
             $this->unreadOnly,
         );
+
+        $items = collect($data['items'] ?? []);
+        $total = $items->count();
+        $lastPage = max(1, (int) ceil($total / max(1, $this->perPage)));
+
+        if ($this->page > $lastPage) {
+            $this->page = $lastPage;
+        }
+
+        $offset = ($this->page - 1) * $this->perPage;
+
+        $data['items'] = $items->slice($offset, $this->perPage)->values()->all();
+        $data['pagination'] = [
+            'total' => $total,
+            'page' => $this->page,
+            'per_page' => $this->perPage,
+            'last_page' => $lastPage,
+            'from' => $total > 0 ? $offset + 1 : 0,
+            'to' => min($offset + $this->perPage, $total),
+        ];
+
+        return $data;
     }
 
     public function updatedTypeFilter(): void
     {
+        $this->page = 1;
         unset($this->inboxData);
     }
 
     public function updatedUnreadOnly(): void
     {
+        $this->page = 1;
         unset($this->inboxData);
+    }
+
+    public function updatedPerPage(): void
+    {
+        $this->page = 1;
+        unset($this->inboxData);
+    }
+
+    public function goToPage(int $page): void
+    {
+        $this->page = max(1, $page);
+        unset($this->inboxData);
+    }
+
+    #[On('refresh-notifications')]
+    public function handleRefreshNotifications(): void
+    {
+        $this->refreshInbox();
     }
 
     public function markRead(string $fingerprint): void

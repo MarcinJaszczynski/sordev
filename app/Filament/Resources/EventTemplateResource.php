@@ -79,6 +79,21 @@ class EventTemplateResource extends Resource
                                 ->default(1)
                                 ->required()
                                 ->extraInputAttributes(['step' => 1, 'min' => 1]),
+                            Forms\Components\TextInput::make('set_default_child_count')
+                                ->label('Sety — domyślna liczba podpunktów')
+                                ->numeric()
+                                ->minValue(1)
+                                ->maxValue(20)
+                                ->nullable()
+                                ->helperText('Np. Wilno: 3 podpunkty w secie.'),
+                            Forms\Components\TextInput::make('set_default_slot_minutes')
+                                ->label('Sety — minut na podpunkt')
+                                ->numeric()
+                                ->minValue(5)
+                                ->maxValue(480)
+                                ->nullable()
+                                ->suffix('min')
+                                ->helperText('Np. 45 min → okno setu 3×45 min liczone od godziny startu.'),
                         ]),
                     Forms\Components\Grid::make(2)
                         ->schema([

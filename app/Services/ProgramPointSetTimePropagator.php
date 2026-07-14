@@ -17,13 +17,15 @@ class ProgramPointSetTimePropagator
             return 0;
         }
 
-        if (blank($parent->start_time) && blank($parent->end_time)) {
+        $parent->loadMissing(['children', 'event.eventTemplate']);
+
+        if ($parent->children->isEmpty()) {
             return 0;
         }
 
-        $parent->loadMissing('children');
+        $this->applyTemplateSetWindowIfNeeded($parent);
 
-        if ($parent->children->isEmpty()) {
+        if (blank($parent->start_time) && blank($parent->end_time)) {
             return 0;
         }
 
@@ -139,5 +141,34 @@ class ProgramPointSetTimePropagator
         $minutes = max(0, min($minutes, 23 * 60 + 59));
 
         return sprintf('%02d:%02d', intdiv($minutes, 60), $minutes % 60);
+    }
+
+    protected function applyTemplateSetWindowIfNeeded(EventProgramPoint $parent): void
+    {
+        if (blank($parent->start_time) || filled($parent->end_time)) {
+            return;
+        }
+
+        $template = $parent->event?->eventTemplate;
+
+        if ($template === null) {
+            return;
+        }
+
+        $slotMinutes = (int) ($template->set_default_slot_minutes ?? 0);
+        $childCount = (int) ($template->set_default_child_count ?? $parent->children->count());
+
+        if ($slotMinutes <= 0 || $childCount <= 0) {
+            return;
+        }
+
+        $startMin = $this->timeToMinutes((string) $parent->start_time);
+        $endMin = $startMin + ($childCount * $slotMinutes);
+
+        $parent->update([
+            'end_time' => $this->minutesToTime($endMin),
+        ]);
+
+        $parent->refresh();
     }
 }

@@ -461,24 +461,36 @@ Testy automatyczne: `composer test -- --filter=Client`
 
 ## 20. Wymagania operacyjne (plan 7 sekcji)
 
-| # | Obszar | Kroki | Oczekiwany wynik |
-|---|--------|-------|------------------|
-| 20.1 | Wnioski o fakturę | Finanse → Wnioski o fakturę; topbar → Pełna lista | inbox z akcjami Zrealizowany/Odrzuć; topbar linkuje do inbox |
-| 20.2 | Topbar zadań | Utwórz zadanie; odśwież panel | licznik spójny po ~60s i po zapisie (event `refresh-notifications`) |
-| 20.3 | Sort list operacyjnych | Imprezy / Umowy / Rezerwacje / Kontrahenci | domyślnie `updated_at` malejąco |
-| 20.4 | Ledger wpłat | Impreza → Uczestnicy → Zapłacono → + wpłata | pola Płatnik, Opis przelewu, Rodzaj wpłaty; saldo rozliczenia się aktualizuje |
-| 20.5 | Program — płatnik | Impreza → Program → kolumna Płatnik | szybka zmiana Biuro/Pilot bez modala |
-| 20.6 | Rezerwacje imprezy | Impreza → Rezerwacje → Dodaj rezerwację | pełny formularz w modalu (bez redirectu) |
-| 20.7 | WWW per impreza | Impreza → Strona WWW → zapisz; front oferty szablonu | dodatkowy blok informacji gdy impreza ma `www_extra_info` |
-| 20.8 | ACL szablony | Rola `programista` vs `biuro` | programista: tylko program szablonu; biuro: imprezy bez edycji globalnego szablonu |
-| 20.9 | Umowy — płeć/dieta | Impreza → Umowy → edycja / szybkie tworzenie | sekcja Uczestnik: płeć, dokument, dieta + 20 PLN/dzień |
-| 20.10 | Ubezpieczenia dzienne | Impreza → Ubezpieczenia → dodaj polisę dnia | koszt w rozliczeniu (`insurance_day`) odświeża się po zapisie |
-| 20.11 | Zbiórka autokar | Pilot / rozliczenie → Zbiórki w autokarze | kwota za osobę × liczba osób = suma przed zapisem |
-| 20.12 | PDF kierowcy — kolory trasy | Dokumenty PDF → Pakiet kierowcy | odjazd niebieski, hotel zielony, powrót pomarańczowy (wielodniowa), inne miejsce powrotu fioletowe |
-| 20.13 | Program — sety i uwagi | Impreza → Program → dodaj set z szablonu | set rozwija się po dodaniu; godziny propagują się na podpunkty; znaczniki Biuro/Pilot przy nazwie |
-| 20.14 | Cena ręczna | Impreza → edycja → Cena za osobę | toggle „Zablokuj auto-przeliczanie”; cena nie ginie po przeliczeniu kalkulacji |
+Status: **zautomatyzowane testy** `OperationalRequirementsSection20Test` + regresje modułowe; **console-audit 173/173**.
 
-Testy automatyczne: `composer test -- --filter='EventProgramPointCreator|EventProgramPointResolvedNotes|EventManualPrice|EventBusCollection|EventFolderPdf'`
+| # | Obszar | Kroki | Oczekiwany wynik | Auto |
+|---|--------|-------|------------------|------|
+| 20.1 | Wnioski o fakturę | Finanse → Wnioski o fakturę; topbar → Pełna lista | inbox z akcjami Zrealizowany/Odrzuć; topbar linkuje do inbox | `ClientInvoiceRequestAdminTest` |
+| 20.2 | Topbar zadań | Utwórz zadanie; odśwież panel | licznik spójny po ~60s i po zapisie (event `refresh-notifications`) | `NotificationServiceTopbarTest` |
+| 20.3 | Sort list operacyjnych | Imprezy / Umowy / Rezerwacje / Kontrahenci | domyślnie `updated_at` malejąco | `OperationalListSortTest` |
+| 20.4 | Ledger wpłat | Impreza → Uczestnicy → Zapłacono → + wpłata | pola Płatnik, Opis przelewu, Rodzaj wpłaty; saldo rozliczenia się aktualizuje | `ParticipantPaymentLedgerServiceTest` |
+| 20.5 | Program — płatnik | Impreza → Program → kolumna Płatnik | szybka zmiana Biuro/Pilot bez modala | ręcznie / program UI |
+| 20.6 | Rezerwacje imprezy | Impreza → Rezerwacje → Dodaj rezerwację | pełny formularz w modalu (bez redirectu) | ręcznie |
+| 20.7 | WWW per impreza | Impreza → Strona WWW → zapisz; front oferty szablonu | dodatkowy blok informacji gdy impreza ma `www_extra_info` | `OperationalRequirementsSection20Test` |
+| 20.8 | ACL szablony | Rola `programista` vs `biuro` | programista: tylko program szablonu; biuro: imprezy bez edycji globalnego szablonu | `EventTemplateAccessTest` |
+| 20.9 | Umowy — płeć/dieta | Impreza → Umowy → edycja / szybkie tworzenie | sekcja Uczestnik: płeć, dokument, dieta + 20 PLN/dzień | ręcznie |
+| 20.10 | Ubezpieczenia dzienne | Impreza → Ubezpieczenia → dodaj polisę dnia | koszt w rozliczeniu (`insurance_day`) odświeża się po zapisie | `EventDayInsuranceSettlementSyncTest` |
+| 20.11 | Zbiórka autokar | Pilot / rozliczenie → Zbiórki w autokarze | kwota za osobę × liczba osób = suma przed zapisem | `EventBusCollectionTest` |
+| 20.12 | PDF kierowcy — kolory trasy | Dokumenty PDF → Pakiet kierowcy | odjazd niebieski, hotel zielony, powrót pomarańczowy (wielodniowa), inne miejsce powrotu fioletowe | `EventFolderPdfServiceTest` |
+| 20.13 | Program — sety i uwagi | Impreza → Program → dodaj set z szablonu | set rozwija się po dodaniu; godziny propagują się na podpunkty; znaczniki Biuro/Pilot przy nazwie | `EventProgramPointCreatorTest`, `TemplateSetTimingDefaultsTest` |
+| 20.14 | Cena ręczna | Impreza → edycja → Cena za osobę | toggle „Zablokuj auto-przeliczanie”; cena nie ginie po przeliczeniu kalkulacji | `EventManualPriceAndResignationTest` |
+
+### Backlog domknięty w tej iteracji
+
+| Temat | Status |
+|-------|--------|
+| Korespondencja z hotelem | MVP: `EventHotelCorrespondencePanel` (log ręczny) — IMAP poza zakresem |
+| Żółte karteczki | `StickyNotesStack` — stos notatek bez wyboru kategorii w UI |
+| Godziny setów per typ wycieczki | pola szablonu `set_default_child_count` + `set_default_slot_minutes` |
+| Legacy formularze kosztów | `ProgramPointsCostsRelationManager` → `ParticipantPricingFields` |
+| Paginacja / push powiadomień | `NotificationsInboxPage`: paginacja + `wire:poll.60s` + `refresh-notifications` |
+
+Testy automatyczne: `composer test -- --filter='OperationalRequirementsSection20|TemplateSetTimingDefaults|NotificationsInboxPage|EventProgramPointCreator|EventBusCollection|EventFolderPdf'`
 
 ---
 

@@ -27,20 +27,6 @@
                 Nowa notatka
             </label>
             <div class="space-y-2">
-                @if($filterCategory)
-                    <div class="text-sm font-medium text-amber-900 dark:text-amber-100 mb-2">
-                        Kategoria: {{ \App\Support\StickyNotes\StickyNoteCategory::label($filterCategory) }}
-                    </div>
-                @else
-                    <select
-                        wire:model="newCategory"
-                        class="w-full rounded-lg border border-amber-200 bg-white px-3 py-2 text-sm text-gray-900 dark:border-amber-800 dark:bg-gray-900 dark:text-gray-100"
-                    >
-                        @foreach($categoryOptions as $value => $label)
-                            <option value="{{ $value }}">{{ $label }}</option>
-                        @endforeach
-                    </select>
-                @endif
                 <textarea
                     wire:model="newBody"
                     rows="{{ $compact ? 2 : 3 }}"
@@ -114,20 +100,6 @@
 
                         @if($editingNoteId === $note->id)
                             <div class="space-y-2">
-                                @if($filterCategory)
-                                    <div class="text-sm font-medium text-amber-900 dark:text-amber-100 mb-2">
-                                        Kategoria: {{ \App\Support\StickyNotes\StickyNoteCategory::label($filterCategory) }}
-                                    </div>
-                                @else
-                                    <select
-                                        wire:model="editCategory"
-                                        class="w-full rounded-lg border border-amber-200 bg-white px-3 py-2 text-sm dark:border-amber-800 dark:bg-gray-900"
-                                    >
-                                        @foreach($categoryOptions as $value => $label)
-                                            <option value="{{ $value }}">{{ $label }}</option>
-                                        @endforeach
-                                    </select>
-                                @endif
                                 <textarea
                                     wire:model="editBody"
                                     rows="{{ $compact ? 2 : 3 }}"

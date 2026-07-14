@@ -1,4 +1,4 @@
-<x-filament-panels::page>
+<x-filament-panels::page wire:poll.60s="refreshInbox">
     @php
         $data = $this->inboxData;
         $items = $data['items'] ?? [];
@@ -64,6 +64,26 @@
             </label>
         </div>
 
+        @php
+            $pagination = $data['pagination'] ?? ['total' => count($items), 'page' => 1, 'last_page' => 1, 'from' => 0, 'to' => 0, 'per_page' => 25];
+        @endphp
+
+        @if ($pagination['total'] > 0)
+            <div class="flex flex-wrap items-center justify-between gap-2 text-sm text-gray-600 dark:text-gray-400">
+                <span>
+                    Pozycje {{ $pagination['from'] }}–{{ $pagination['to'] }} z {{ $pagination['total'] }}
+                </span>
+                <label class="inline-flex items-center gap-2">
+                    <span>Na stronę</span>
+                    <select wire:model.live="perPage" class="rounded-lg border-gray-300 text-sm dark:border-gray-700 dark:bg-gray-900">
+                        @foreach ([10, 25, 50, 100] as $size)
+                            <option value="{{ $size }}">{{ $size }}</option>
+                        @endforeach
+                    </select>
+                </label>
+            </div>
+        @endif
+
         @if ($items === [])
             <div class="rounded-xl border border-dashed border-gray-300 bg-gray-50 p-10 text-center text-sm text-gray-500 dark:border-gray-700 dark:bg-gray-950 dark:text-gray-400">
                 Brak powiadomień dla wybranych filtrów.
@@ -122,6 +142,20 @@
                     </li>
                 @endforeach
             </ul>
+
+            @if (($pagination['last_page'] ?? 1) > 1)
+                <div class="flex flex-wrap items-center justify-center gap-2 pt-2">
+                    <x-filament::button wire:click="goToPage({{ max(1, $pagination['page'] - 1) }})" size="sm" color="gray" :disabled="$pagination['page'] <= 1">
+                        Poprzednia
+                    </x-filament::button>
+                    <span class="text-sm text-gray-600 dark:text-gray-400">
+                        Strona {{ $pagination['page'] }} / {{ $pagination['last_page'] }}
+                    </span>
+                    <x-filament::button wire:click="goToPage({{ min($pagination['last_page'], $pagination['page'] + 1) }})" size="sm" color="gray" :disabled="$pagination['page'] >= $pagination['last_page']">
+                        Następna
+                    </x-filament::button>
+                </div>
+            @endif
         @endif
     </div>
 </x-filament-panels::page>
