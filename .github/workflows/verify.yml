@@ -24,6 +24,11 @@ jobs:
         run: |
           cp .env.example .env
           php -r "file_exists('database/database.sqlite') || touch('database/database.sqlite');"
+          sed -i 's/^DB_CONNECTION=.*/DB_CONNECTION=sqlite/' .env
+          sed -i 's/^DB_DATABASE=.*/DB_DATABASE=:memory:/' .env
+          sed -i 's/^SESSION_DRIVER=.*/SESSION_DRIVER=file/' .env
+          sed -i 's/^QUEUE_CONNECTION=.*/QUEUE_CONNECTION=sync/' .env
+          sed -i 's/^CACHE_STORE=.*/CACHE_STORE=array/' .env
 
       - name: Install Composer deps
         run: composer install --no-interaction --prefer-dist --optimize-autoloader

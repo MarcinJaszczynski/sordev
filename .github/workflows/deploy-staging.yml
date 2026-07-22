@@ -30,6 +30,15 @@ jobs:
           coverage: none
           tools: composer
 
+      - name: Prepare env for composer
+        run: |
+          cp .env.example .env
+          sed -i 's/^DB_CONNECTION=.*/DB_CONNECTION=sqlite/' .env
+          sed -i 's/^DB_DATABASE=.*/DB_DATABASE=:memory:/' .env
+          sed -i 's/^SESSION_DRIVER=.*/SESSION_DRIVER=file/' .env
+          sed -i 's/^QUEUE_CONNECTION=.*/QUEUE_CONNECTION=sync/' .env
+          sed -i 's/^CACHE_STORE=.*/CACHE_STORE=array/' .env
+
       - name: Install Composer deps (production)
         run: composer install --no-dev --prefer-dist --optimize-autoloader --no-interaction
 
