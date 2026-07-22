@@ -1,0 +1,9 @@
+# SOR41 — ograniczone uprawnienia sudo dla użytkownika deploy
+# Instalacja:
+#   sudo visudo -f /etc/sudoers.d/travel-office-deploy
+#   (wklej poniższą zawartość, zamień deploy jeśli inna nazwa użytkownika)
+
+deploy ALL=(root) NOPASSWD: /bin/systemctl reload php8.4-fpm
+deploy ALL=(root) NOPASSWD: /bin/systemctl restart php8.4-fpm
+deploy ALL=(root) NOPASSWD: /usr/bin/supervisorctl restart travel-office-worker\:*
+deploy ALL=(root) NOPASSWD: /usr/bin/supervisorctl status travel-office-worker\:*

@@ -1,0 +1,47 @@
+name: Verify (reusable)
+
+on:
+  workflow_call:
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup PHP
+        uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.4'
+          extensions: mbstring, intl, pdo_sqlite, sqlite3, gd, fileinfo
+          coverage: none
+
+      - name: Prepare env
+        run: |
+          cp .env.example .env
+          php -r "file_exists('database/database.sqlite') || touch('database/database.sqlite');"
+
+      - name: Install Composer deps
+        run: composer install --no-interaction --prefer-dist --optimize-autoloader
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+
+      - name: Build frontend assets
+        run: |
+          npm ci
+          npm run build
+          test -f public/vite-dist/manifest.json
+
+      - name: Generate app key
+        run: php artisan key:generate --force
+
+      - name: Run verify
+        env:
+          VERIFY_RUN_TESTS: '1'
+        run: composer verify

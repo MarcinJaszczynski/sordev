@@ -1,0 +1,43 @@
+# SOR41 — Fail2Ban (fragment do /etc/fail2ban/jail.local)
+# Instalacja:
+#   sudo apt install fail2ban
+#   sudo cp deploy/config/fail2ban/jail.local /etc/fail2ban/jail.local
+#   sudo systemctl enable fail2ban && sudo systemctl restart fail2ban
+
+[DEFAULT]
+bantime  = 1h
+findtime = 10m
+maxretry = 5
+destemail = ops@example.com
+sender = fail2ban@example.com
+action = %(action_mwl)s
+
+[sshd]
+enabled  = true
+port     = ssh
+filter   = sshd
+logpath  = /var/log/auth.log
+maxretry = 3
+bantime  = 24h
+
+[nginx-http-auth]
+enabled  = true
+filter   = nginx-http-auth
+port     = http,https
+logpath  = /var/log/nginx/*error.log
+
+[nginx-limit-req]
+enabled  = true
+filter   = nginx-limit-req
+port     = http,https
+logpath  = /var/log/nginx/*access.log
+maxretry = 20
+findtime = 60
+bantime  = 1h
+
+[nginx-botsearch]
+enabled  = true
+filter   = nginx-botsearch
+port     = http,https
+logpath  = /var/log/nginx/*access.log
+maxretry = 2

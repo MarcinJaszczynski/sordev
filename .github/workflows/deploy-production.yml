@@ -1,0 +1,133 @@
+name: Deploy Production
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+    inputs:
+      with_migrate:
+        description: 'Uruchom migracje bazy (--with-migrate)'
+        required: false
+        default: 'false'
+        type: choice
+        options:
+          - 'false'
+          - 'true'
+      ref:
+        description: 'SHA lub tag (pusty = GITHUB_SHA z push)'
+        required: false
+        default: ''
+
+concurrency:
+  group: deploy-production
+  cancel-in-progress: false
+
+jobs:
+  verify:
+    uses: ./.github/workflows/verify-reusable.yml
+
+  build-and-deploy:
+    needs: verify
+    runs-on: ubuntu-latest
+    environment: production
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.inputs.ref != '' && github.event.inputs.ref || github.sha }}
+
+      - name: Resolve deploy ref
+        id: meta
+        run: |
+          REF="${{ github.event.inputs.ref != '' && github.event.inputs.ref || github.sha }}"
+          echo "ref=${REF}" >> "$GITHUB_OUTPUT"
+          if [[ "${{ github.event.inputs.with_migrate }}" == "true" ]]; then
+            echo "migrate_flag=--with-migrate" >> "$GITHUB_OUTPUT"
+          else
+            echo "migrate_flag=" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Setup PHP
+        uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.4'
+          extensions: mbstring, intl, pdo_mysql, gd, fileinfo, redis
+          coverage: none
+          tools: composer
+
+      - name: Install Composer deps (production)
+        run: composer install --no-dev --prefer-dist --optimize-autoloader --no-interaction
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+
+      - name: Build frontend assets
+        run: |
+          npm ci
+          npm run build
+          test -f public/vite-dist/manifest.json
+
+      - name: Prepare release bundle
+        run: |
+          mkdir -p /tmp/sor41-release
+          rsync -a \
+            --exclude '.git' \
+            --exclude '.env' \
+            --exclude '.env.*' \
+            --exclude 'node_modules' \
+            --exclude 'storage' \
+            --exclude 'tests' \
+            --exclude 'deploy/incoming' \
+            --exclude '.github' \
+            ./ /tmp/sor41-release/
+
+      - name: Configure SSH known hosts
+        run: |
+          mkdir -p ~/.ssh
+          chmod 700 ~/.ssh
+          echo "${{ secrets.PROD_SSH_KNOWN_HOSTS }}" >> ~/.ssh/known_hosts
+          chmod 600 ~/.ssh/known_hosts
+
+      - name: Rsync release to production server
+        env:
+          SSH_KEY: ${{ secrets.PROD_SSH_KEY }}
+          SSH_HOST: ${{ secrets.PROD_SSH_HOST }}
+          SSH_USER: ${{ secrets.PROD_SSH_USER }}
+          SSH_PORT: ${{ secrets.PROD_SSH_PORT }}
+          APP_PATH: ${{ secrets.PROD_APP_PATH }}
+        run: |
+          echo "${SSH_KEY}" > ~/.ssh/deploy_key
+          chmod 600 ~/.ssh/deploy_key
+          PORT="${SSH_PORT:-22}"
+          REF="${{ steps.meta.outputs.ref }}"
+          INCOMING="${APP_PATH}/incoming/${REF}"
+          ssh -i ~/.ssh/deploy_key -p "${PORT}" -o StrictHostKeyChecking=yes "${SSH_USER}@${SSH_HOST}" \
+            "mkdir -p '${INCOMING}' '${APP_PATH}/deploy'"
+          rsync -az --delete -e "ssh -i ~/.ssh/deploy_key -p ${PORT} -o StrictHostKeyChecking=yes" \
+            /tmp/sor41-release/ "${SSH_USER}@${SSH_HOST}:${INCOMING}/"
+          rsync -az -e "ssh -i ~/.ssh/deploy_key -p ${PORT} -o StrictHostKeyChecking=yes" \
+            deploy/ "${SSH_USER}@${SSH_HOST}:${APP_PATH}/deploy/"
+
+      - name: Run deploy.sh on production
+        env:
+          SSH_KEY: ${{ secrets.PROD_SSH_KEY }}
+          SSH_HOST: ${{ secrets.PROD_SSH_HOST }}
+          SSH_USER: ${{ secrets.PROD_SSH_USER }}
+          SSH_PORT: ${{ secrets.PROD_SSH_PORT }}
+          APP_PATH: ${{ secrets.PROD_APP_PATH }}
+        run: |
+          PORT="${SSH_PORT:-22}"
+          REF="${{ steps.meta.outputs.ref }}"
+          MIGRATE="${{ steps.meta.outputs.migrate_flag }}"
+          ssh -i ~/.ssh/deploy_key -p "${PORT}" -o StrictHostKeyChecking=yes "${SSH_USER}@${SSH_HOST}" \
+            "cd '${APP_PATH}' && chmod +x deploy/*.sh deploy/lib/*.sh deploy/config/monitoring/*.sh && \
+             ./deploy/deploy.sh production --ref '${REF}' --source-dir '${APP_PATH}/incoming/${REF}' ${MIGRATE} && \
+             rm -rf '${APP_PATH}/incoming/${REF}'"
+
+      - name: Cleanup SSH key
+        if: always()
+        run: rm -f ~/.ssh/deploy_key

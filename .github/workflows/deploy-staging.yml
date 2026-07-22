@@ -1,0 +1,104 @@
+name: Deploy Staging
+
+on:
+  push:
+    branches: [develop]
+  workflow_dispatch:
+
+concurrency:
+  group: deploy-staging
+  cancel-in-progress: true
+
+jobs:
+  verify:
+    uses: ./.github/workflows/verify-reusable.yml
+
+  build-and-deploy:
+    needs: verify
+    runs-on: ubuntu-latest
+    environment: staging
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup PHP
+        uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.4'
+          extensions: mbstring, intl, pdo_mysql, gd, fileinfo, redis
+          coverage: none
+          tools: composer
+
+      - name: Install Composer deps (production)
+        run: composer install --no-dev --prefer-dist --optimize-autoloader --no-interaction
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+
+      - name: Build frontend assets
+        run: |
+          npm ci
+          npm run build
+          test -f public/vite-dist/manifest.json
+
+      - name: Prepare release bundle
+        run: |
+          mkdir -p /tmp/sor41-release
+          rsync -a \
+            --exclude '.git' \
+            --exclude '.env' \
+            --exclude '.env.*' \
+            --exclude 'node_modules' \
+            --exclude 'storage' \
+            --exclude 'tests' \
+            --exclude 'deploy/incoming' \
+            --exclude '.github' \
+            ./ /tmp/sor41-release/
+
+      - name: Configure SSH known hosts
+        run: |
+          mkdir -p ~/.ssh
+          chmod 700 ~/.ssh
+          echo "${{ secrets.STAGING_SSH_KNOWN_HOSTS }}" >> ~/.ssh/known_hosts
+          chmod 600 ~/.ssh/known_hosts
+
+      - name: Rsync release to staging server
+        env:
+          SSH_KEY: ${{ secrets.STAGING_SSH_KEY }}
+          SSH_HOST: ${{ secrets.STAGING_SSH_HOST }}
+          SSH_USER: ${{ secrets.STAGING_SSH_USER }}
+          SSH_PORT: ${{ secrets.STAGING_SSH_PORT }}
+          APP_PATH: ${{ secrets.STAGING_APP_PATH }}
+        run: |
+          echo "${SSH_KEY}" > ~/.ssh/deploy_key
+          chmod 600 ~/.ssh/deploy_key
+          PORT="${SSH_PORT:-22}"
+          INCOMING="${APP_PATH}/incoming/${GITHUB_SHA}"
+          ssh -i ~/.ssh/deploy_key -p "${PORT}" -o StrictHostKeyChecking=yes "${SSH_USER}@${SSH_HOST}" \
+            "mkdir -p '${INCOMING}' '${APP_PATH}/deploy'"
+          rsync -az --delete -e "ssh -i ~/.ssh/deploy_key -p ${PORT} -o StrictHostKeyChecking=yes" \
+            /tmp/sor41-release/ "${SSH_USER}@${SSH_HOST}:${INCOMING}/"
+          rsync -az -e "ssh -i ~/.ssh/deploy_key -p ${PORT} -o StrictHostKeyChecking=yes" \
+            deploy/ "${SSH_USER}@${SSH_HOST}:${APP_PATH}/deploy/"
+
+      - name: Run deploy.sh on staging
+        env:
+          SSH_KEY: ${{ secrets.STAGING_SSH_KEY }}
+          SSH_HOST: ${{ secrets.STAGING_SSH_HOST }}
+          SSH_USER: ${{ secrets.STAGING_SSH_USER }}
+          SSH_PORT: ${{ secrets.STAGING_SSH_PORT }}
+          APP_PATH: ${{ secrets.STAGING_APP_PATH }}
+        run: |
+          PORT="${SSH_PORT:-22}"
+          ssh -i ~/.ssh/deploy_key -p "${PORT}" -o StrictHostKeyChecking=yes "${SSH_USER}@${SSH_HOST}" \
+            "cd '${APP_PATH}' && chmod +x deploy/*.sh deploy/lib/*.sh deploy/config/monitoring/*.sh && \
+             ./deploy/deploy.sh staging --ref '${GITHUB_SHA}' --source-dir '${APP_PATH}/incoming/${GITHUB_SHA}' --with-migrate && \
+             rm -rf '${APP_PATH}/incoming/${GITHUB_SHA}'"
+
+      - name: Cleanup SSH key
+        if: always()
+        run: rm -f ~/.ssh/deploy_key
