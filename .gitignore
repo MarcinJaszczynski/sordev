@@ -6,7 +6,9 @@
 
 # Environment
 /.env
-/.env.*
+/.env.backup
+/.env.production
+!/.env.example
 
 # Build / runtime artifacts
 /build/
