@@ -64,6 +64,14 @@ Zrzut*png
 # Project-specific temp or legacy
 mergingSOR/
 sorstary/
+/pliki/
+/.local/
+/storage/backups/
+*.sql
+!database/migrations/*.sql
+!scripts/**/*.sql
+/deploy/*.sql
+/deploy/build-*/
 
 # Keep tracked local sqlite database if used in this repo
 !database/database.sqlite
