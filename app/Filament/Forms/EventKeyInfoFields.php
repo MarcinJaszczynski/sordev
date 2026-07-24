@@ -8,7 +8,6 @@ use App\Models\User;
 use App\Support\PilotIdentityValidation;
 use Filament\Forms;
 use Filament\Forms\Get;
-use Illuminate\Support\Facades\Schema;
 
 class EventKeyInfoFields
 {
@@ -27,7 +26,7 @@ class EventKeyInfoFields
             Forms\Components\Section::make('Impreza')
                 ->icon('heroicon-o-calendar-days')
                 ->description('Nazwa, kod identyfikacyjny i termin wyjazdu.')
-                ->columns(2)
+                ->columns(3)
                 ->schema([
                     Forms\Components\TextInput::make('code')
                         ->label('Kod imprezy')
@@ -59,7 +58,8 @@ class EventKeyInfoFields
                             $start = \Carbon\Carbon::parse($get('start_date'));
                             $set('end_date', $start->copy()->addDays($days - 1)->toDateString());
                         })
-                        ->helperText('Obliczana z dat lub kopiowana z szablonu.'),
+                        ->helperText('Obliczana z dat lub kopiowana z szablonu.')
+                        ->columnSpan(1),
 
                     Forms\Components\DatePicker::make('start_date')
                         ->label('Data rozpoczęcia')
@@ -90,7 +90,8 @@ class EventKeyInfoFields
 
                             $duration = max(1, (int) ($get('duration_days') ?? 1));
                             $set('end_date', $start->copy()->addDays($duration - 1)->toDateString());
-                        }),
+                        })
+                        ->columnSpan(1),
 
                     Forms\Components\DatePicker::make('end_date')
                         ->label('Data zakończenia')
@@ -113,7 +114,8 @@ class EventKeyInfoFields
                             }
 
                             $set('duration_days', max(1, $start->diffInDays($end) + 1));
-                        }),
+                        })
+                        ->columnSpan(1),
                 ]),
         ];
     }
