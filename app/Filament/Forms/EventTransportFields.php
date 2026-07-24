@@ -37,4 +37,35 @@ class EventTransportFields
                 ->helperText('Ta kwota trafia do kalkulacji imprezy zamiast automatycznego liczenia z autokaru.'),
         ];
     }
+
+    /**
+     * @return array<int, Forms\Components\Component>
+     */
+    public static function transportTimeFields(): array
+    {
+        $fields = [];
+
+        if (Schema::hasColumn('events', 'substitution_time')) {
+            $fields[] = Forms\Components\TimePicker::make('substitution_time')
+                ->label('Godzina podstawienia')
+                ->seconds(false)
+                ->columnSpan(1);
+        }
+
+        if (Schema::hasColumn('events', 'departure_time')) {
+            $fields[] = Forms\Components\TimePicker::make('departure_time')
+                ->label('Godzina odjazdu')
+                ->seconds(false)
+                ->columnSpan(1);
+        }
+
+        if (Schema::hasColumn('events', 'return_time')) {
+            $fields[] = Forms\Components\TimePicker::make('return_time')
+                ->label('Godzina powrotu')
+                ->seconds(false)
+                ->columnSpan(1);
+        }
+
+        return $fields;
+    }
 }

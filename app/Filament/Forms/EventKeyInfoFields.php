@@ -28,14 +28,6 @@ class EventKeyInfoFields
                 ->description('Nazwa, kod identyfikacyjny i termin wyjazdu.')
                 ->columns(3)
                 ->schema([
-                    Forms\Components\TextInput::make('code')
-                        ->label('Kod imprezy')
-                        ->readOnly()
-                        ->disabled()
-                        ->dehydrated(false)
-                        ->hiddenOn('create')
-                        ->helperText('Unikalny kod identyfikacyjny — generowany automatycznie.'),
-
                     Forms\Components\TextInput::make('name')
                         ->label('Nazwa imprezy')
                         ->required()
@@ -43,39 +35,77 @@ class EventKeyInfoFields
                         ->columnSpanFull()
                         ->helperText('Nazwa widoczna dla klienta i w dokumentach.'),
 
-                    Forms\Components\TextInput::make('duration_days')
-                        ->label('Liczba dni')
-                        ->numeric()
-                        ->minValue(1)
-                        ->default(1)
-                        ->live()
-                        ->afterStateUpdated(function ($state, Get $get, callable $set): void {
-                            if (empty($get('start_date'))) {
-                                return;
-                            }
+                    Forms\Components\TextInput::make('code')
+                        ->label('Kod imprezy')
+                        ->readOnly()
+                        ->disabled()
+                        ->dehydrated(false)
+                        ->hiddenOn('create')
+                        ->columnSpanFull()
+                        ->helperText('Unikalny kod identyfikacyjny — generowany automatycznie.'),
 
-                            $days = max(1, (int) ($state ?? 1));
-                            $start = \Carbon\Carbon::parse($get('start_date'));
-                            $set('end_date', $start->copy()->addDays($days - 1)->toDateString());
-                        })
-                        ->helperText('Obliczana z dat lub kopiowana z szablonu.')
-                        ->columnSpan(1),
+                    Forms\Components\Group::make([
+                        Forms\Components\TextInput::make('duration_days')
+                            ->label('Liczba dni')
+                            ->numeric()
+                            ->minValue(1)
+                            ->default(1)
+                            ->live()
+                            ->afterStateUpdated(function ($state, Get $get, callable $set): void {
+                                if (empty($get('start_date'))) {
+                                    return;
+                                }
 
-                    Forms\Components\DatePicker::make('start_date')
-                        ->label('Data rozpoczęcia')
-                        ->required()
-                        ->native(false)
-                        ->live()
-                        ->afterStateUpdated(function ($state, Get $get, callable $set): void {
-                            if (empty($state)) {
-                                return;
-                            }
+                                $days = max(1, (int) ($state ?? 1));
+                                $start = \Carbon\Carbon::parse($get('start_date'));
+                                $set('end_date', $start->copy()->addDays($days - 1)->toDateString());
+                            })
+                            ->helperText('Obliczana z dat lub kopiowana z szablonu.'),
 
-                            $start = \Carbon\Carbon::parse($state);
-                            $endDate = $get('end_date');
+                        Forms\Components\DatePicker::make('start_date')
+                            ->label('Data rozpoczęcia')
+                            ->required()
+                            ->native(false)
+                            ->live()
+                            ->afterStateUpdated(function ($state, Get $get, callable $set): void {
+                                if (empty($state)) {
+                                    return;
+                                }
 
-                            if (! empty($endDate)) {
-                                $end = \Carbon\Carbon::parse($endDate);
+                                $start = \Carbon\Carbon::parse($state);
+                                $endDate = $get('end_date');
+
+                                if (! empty($endDate)) {
+                                    $end = \Carbon\Carbon::parse($endDate);
+                                    if ($end->lt($start)) {
+                                        $set('end_date', $start->toDateString());
+                                        $set('duration_days', 1);
+
+                                        return;
+                                    }
+
+                                    $set('duration_days', max(1, $start->diffInDays($end) + 1));
+
+                                    return;
+                                }
+
+                                $duration = max(1, (int) ($get('duration_days') ?? 1));
+                                $set('end_date', $start->copy()->addDays($duration - 1)->toDateString());
+                            }),
+
+                        Forms\Components\DatePicker::make('end_date')
+                            ->label('Data zakończenia')
+                            ->native(false)
+                            ->minDate(fn (Get $get) => $get('start_date'))
+                            ->live()
+                            ->afterStateUpdated(function ($state, Get $get, callable $set): void {
+                                if (empty($state) || empty($get('start_date'))) {
+                                    return;
+                                }
+
+                                $start = \Carbon\Carbon::parse($get('start_date'));
+                                $end = \Carbon\Carbon::parse($state);
+
                                 if ($end->lt($start)) {
                                     $set('end_date', $start->toDateString());
                                     $set('duration_days', 1);
@@ -84,38 +114,17 @@ class EventKeyInfoFields
                                 }
 
                                 $set('duration_days', max(1, $start->diffInDays($end) + 1));
+                            }),
+                    ])
+                        ->columns(3)
+                        ->columnSpanFull(),
 
-                                return;
-                            }
+                    Forms\Components\Group::make([
+                        ...EventTransportFields::transportTimeFields(),
+                    ])
+                        ->columns(3)
+                        ->columnSpanFull(),
 
-                            $duration = max(1, (int) ($get('duration_days') ?? 1));
-                            $set('end_date', $start->copy()->addDays($duration - 1)->toDateString());
-                        })
-                        ->columnSpan(1),
-
-                    Forms\Components\DatePicker::make('end_date')
-                        ->label('Data zakończenia')
-                        ->native(false)
-                        ->minDate(fn (Get $get) => $get('start_date'))
-                        ->live()
-                        ->afterStateUpdated(function ($state, Get $get, callable $set): void {
-                            if (empty($state) || empty($get('start_date'))) {
-                                return;
-                            }
-
-                            $start = \Carbon\Carbon::parse($get('start_date'));
-                            $end = \Carbon\Carbon::parse($state);
-
-                            if ($end->lt($start)) {
-                                $set('end_date', $start->toDateString());
-                                $set('duration_days', 1);
-
-                                return;
-                            }
-
-                            $set('duration_days', max(1, $start->diffInDays($end) + 1));
-                        })
-                        ->columnSpan(1),
                 ]),
         ];
     }

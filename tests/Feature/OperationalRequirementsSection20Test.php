@@ -10,7 +10,6 @@ use App\Models\Event;
 use App\Models\User;
 use App\Support\OperationalListSort;
 use Illuminate\Foundation\Testing\RefreshDatabase;
-use Illuminate\Support\Facades\Schema;
 use Livewire\Livewire;
 use Spatie\Permission\Models\Role;
 use Tests\TestCase;
@@ -67,18 +66,5 @@ class OperationalRequirementsSection20Test extends TestCase
 
         $this->assertStringContainsString('updated_at', $query->toSql());
         $this->assertSame('desc', strtolower((string) collect($query->getQuery()->orders)->firstWhere('column', 'updated_at')['direction'] ?? 'desc'));
-    }
-
-    public function test_event_supports_www_extra_info_column_when_present(): void
-    {
-        if (! Schema::hasColumn('events', 'www_extra_info')) {
-            $this->markTestSkipped('Kolumna www_extra_info nie istnieje w schemacie testowym.');
-        }
-
-        $event = Event::factory()->create([
-            'www_extra_info' => '<p>Dodatkowe informacje WWW</p>',
-        ]);
-
-        $this->assertSame('<p>Dodatkowe informacje WWW</p>', $event->fresh()->www_extra_info);
     }
 }

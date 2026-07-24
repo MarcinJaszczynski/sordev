@@ -55,12 +55,6 @@ class EventResource extends Resource
                 ...EventKeyInfoFields::identitySection(),
                 ...EventKeyInfoFields::basicSection(),
                 ...EventReadinessFields::officeSection(),
-                Forms\Components\Section::make('Strona WWW')
-                    ->icon('heroicon-o-globe-alt')
-                    ->collapsed()
-                    ->schema([
-                        EventNotesFields::wwwExtraInfo(),
-                    ]),
             ]);
     }
 

@@ -142,11 +142,6 @@
                     <div class="description">
                         {!! $item->event_description !!}
                     </div>
-                    @if (! empty($eventExtraInfo ?? null))
-                        <div class="description event-www-extra mt-4 rounded-lg border border-amber-200 bg-amber-50 p-4 text-sm">
-                            {!! $eventExtraInfo !!}
-                        </div>
-                    @endif
                 </div>
                 <div class="specifics">
                     <div class="length-section">

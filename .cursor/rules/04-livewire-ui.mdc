@@ -1,0 +1,35 @@
+---
+description: Livewire and UI rules
+globs:
+    - "**/*.blade.php"
+    - "**/Livewire/**/*.php"
+---
+
+# UI Rules
+
+Interfejs musi być:
+
+- szybki
+- prosty
+- responsywny
+
+Unikaj:
+
+- przeładowania całej strony
+- ciężkich zapytań w widokach
+
+Livewire:
+
+Nie trzymaj dużej logiki w komponencie.
+
+Używaj:
+
+- computed properties
+- actions
+- validation
+
+Tailwind:
+
+Kod ma być czytelny.
+
+Nie twórz przypadkowych klas.
