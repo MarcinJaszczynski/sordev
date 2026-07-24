@@ -1,8 +1,11 @@
-.PHONY: help dev setup setup-fresh test smoke-check console-audit migrate-check ufg-install deploy-package pilot-demo frontend cursor-setup
+.PHONY: help dev setup setup-fresh test smoke-check console-audit migrate-check ufg-install deploy-package pilot-demo frontend cursor-setup php-check install-php84 composer-install
 
 help:
 	@echo "SOR — dev lokalny (bez Dockera)"
 	@echo ""
+	@echo "  make php-check      Wersja PHP używana przez projekt (docelowo 8.4)"
+	@echo "  make install-php84  Instalacja PHP 8.4 obok systemowego (sudo, Remi SCL)"
+	@echo "  make composer-install  composer install z właściwym PHP"
 	@echo "  make setup          Import bazy z deploy/ + migracje + UFG (po: sudo mysql < scripts/mysql-bootstrap.sql)"
 	@echo "  make setup-fresh    Reset bazy i ponowny import dumpu"
 	@echo "  make dev            composer dev (serve + queue + Vite)"
@@ -19,8 +22,21 @@ help:
 	@echo "Pilot: http://127.0.0.1:8000/pilot/login  (make pilot-demo → pilot@test.local / pilot123)"
 	@echo "Dokumentacja: docs/DEV.md"
 
+php-check:
+	@chmod +x scripts/php-bin.sh
+	@echo "PHP_BIN=$$(./scripts/php-bin.sh)"
+	@$$(./scripts/php-bin.sh) -v | head -1
+
+install-php84:
+	@chmod +x scripts/install-php84.sh
+	@./scripts/install-php84.sh
+
+composer-install:
+	@chmod +x scripts/composer-with-php.sh
+	@./scripts/composer-with-php.sh install
+
 dev:
-	composer dev
+	@PATH="$$(dirname $$(./scripts/php-bin.sh)):$$PATH" composer dev
 
 setup:
 	@chmod +x scripts/setup-dev.sh
@@ -34,25 +50,25 @@ test:
 	composer test
 
 smoke-check:
-	@php scripts/smoke-manual-check.php
+	@$$(./scripts/php-bin.sh) scripts/smoke-manual-check.php
 
 console-audit:
-	php artisan app:console-audit-bootstrap
-	php artisan app:console-audit-urls
+	$$(./scripts/php-bin.sh) artisan app:console-audit-bootstrap
+	$$(./scripts/php-bin.sh) artisan app:console-audit-urls
 	node scripts/console-audit/run.mjs
 
 migrate-check:
-	php artisan app:migrate-check
+	$$(./scripts/php-bin.sh) artisan app:migrate-check
 
 ufg-install:
-	php artisan ufg:install
+	$$(./scripts/php-bin.sh) artisan ufg:install
 
 deploy-package:
 	@chmod +x scripts/build_deploy_package.sh
 	@./scripts/build_deploy_package.sh
 
 pilot-demo:
-	php artisan pilot:setup-demo --migrate
+	$$(./scripts/php-bin.sh) artisan pilot:setup-demo --migrate
 
 frontend:
 	npm run build

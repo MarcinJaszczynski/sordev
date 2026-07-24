@@ -39,7 +39,20 @@ fi
 # 4. Weryfikacja dev
 echo ""
 echo "==> Sprawdzenie środowiska"
-php -v | head -1
+chmod +x scripts/php-bin.sh 2>/dev/null || true
+if [[ -x scripts/php-bin.sh ]]; then
+  PHP="$(./scripts/php-bin.sh 2>/dev/null || true)"
+  if [[ -n "$PHP" ]]; then
+    "$PHP" -v | head -1
+  else
+    php -v | head -1
+  fi
+else
+  php -v | head -1
+fi
+if ! command -v php84 >/dev/null 2>&1; then
+  echo "    PHP 8.4: brak php84 — uruchom: sudo make install-php84"
+fi
 composer -V 2>/dev/null | head -1 || true
 node -v 2>/dev/null || echo "    Node: brak"
 echo ""

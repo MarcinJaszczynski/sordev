@@ -4,15 +4,27 @@ Jedna ścieżka dev: **PHP + Vite na hoście**, **MySQL na hoście** — bez Doc
 
 ## Wymagania
 
-- PHP >= 8.2 (rozszerzenia: mbstring, openssl, pdo_mysql, tokenizer, xml, ctype, json, fileinfo)
+- **PHP 8.4** (CI i produkcja; rozszerzenia: mbstring, openssl, pdo_mysql, tokenizer, xml, ctype, json, fileinfo, gd, intl, zip, bcmath)
 - MySQL 8.x lub MariaDB 10.6+ (natywnie na hoście, port `3306`)
 - Composer, Node.js + npm
+
+### PHP 8.5 na hoście (Fedora/Nobara)
+
+Domyślne PHP w Fedorze 44 to 8.5 — `phpspreadsheet` w locku wymaga `<8.5.0`. Zainstaluj **PHP 8.4 obok** (Remi SCL, nie zastępuje systemowego `php`):
+
+```bash
+sudo make install-php84
+make php-check          # powinno pokazać php84 i 8.4.x
+make composer-install
+```
+
+Bez `php84` projekt używa systemowego PHP z ostrzeżeniem; `make composer-install` doda `--ignore-platform-req=php`.
 
 ## Pierwsza konfiguracja
 
 ```bash
 cp .env.example .env
-composer install
+make composer-install
 npm ci
 sudo mysql < scripts/mysql-bootstrap.sql   # jednorazowo: baza + użytkownik sor
 make setup
