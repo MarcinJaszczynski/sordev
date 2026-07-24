@@ -32,20 +32,7 @@ class EditEvent extends EditRecord
     protected function mutateFormDataBeforeFill(array $data): array
     {
         $participantCount = max(1, (int) ($data['participant_count'] ?? 1));
-        $gratisCount = 0;
-
-        try {
-            $variants = $this->record->qtyVariants()->get();
-            if ($variants->isNotEmpty()) {
-                $bestVariant = $variants
-                    ->sortBy(fn ($variant) => abs(((int) ($variant->qty ?? 0)) - $participantCount))
-                    ->first();
-
-                $gratisCount = (int) ($bestVariant->gratis ?? 0);
-            }
-        } catch (\Throwable $e) {
-            $gratisCount = 0;
-        }
+        $gratisCount = $this->record->resolveGratisCountForParticipantCount($participantCount);
 
         try {
             $data['total_cost'] = $this->record->resolvedBaseTotalCost(
@@ -57,7 +44,7 @@ class EditEvent extends EditRecord
             // keep existing total_cost value when recalculation fails
         }
 
-        $data['gratis_count'] = $data['gratis_count'] ?? $gratisCount;
+        $data['gratis_count'] = $gratisCount;
 
         $data['ordering_parties'] = app(\App\Services\EventOrderingPartyService::class)
             ->partiesToFormState($this->record);

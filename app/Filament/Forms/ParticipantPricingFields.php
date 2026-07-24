@@ -3,6 +3,7 @@
 namespace App\Filament\Forms;
 
 use App\Models\Reservation;
+use App\Support\EventParticipantGroupLabels;
 use Filament\Forms;
 use Filament\Forms\Get;
 
@@ -32,7 +33,7 @@ final class ParticipantPricingFields
             ->required()
             ->live(onBlur: true)
             ->helperText(fn (Get $get): string => $get($scopeField) === 'paying'
-                ? 'Tylko osoby, które płacą za tę pozycję (np. bez gratisów).'
+                ? 'Tylko osoby, które płacą za tę pozycję (np. bez '.EventParticipantGroupLabels::GRATIS_GENITIVE.').'
                 : 'Wszyscy uczestnicy objęci tą pozycją.');
     }
 

@@ -793,6 +793,15 @@ class Event extends Model
     {
         $count = max(1, (int) ($participantCount ?? $this->participant_count ?? 1));
 
+        $exactVariant = $this->qtyVariants()
+            ->where('qty', $count)
+            ->orderBy('id')
+            ->first();
+
+        if ($exactVariant) {
+            return max(0, (int) ($exactVariant->gratis ?? 0));
+        }
+
         if ($this->relationLoaded('qtyVariants')) {
             $variant = $this->qtyVariants
                 ->sortBy(fn ($variant) => abs(((int) ($variant->qty ?? 0)) - $count))

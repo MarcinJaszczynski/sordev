@@ -3037,7 +3037,7 @@
         font-weight: 700;
     }
 
-    /* Kompatybilność wsteczna: Tailwind teal/amber w widokach bez sor-lw */
+    /* Kompatybilność wsteczna: Tailwind teal/amber/primary w widokach Livewire w panelu admin */
     .fi-body button.bg-teal-600,
     .fi-body a.bg-teal-600,
     .fi-main button.bg-teal-600,
@@ -3055,6 +3055,85 @@
     .fi-body .hover\:bg-teal-700:hover,
     .fi-main .hover\:bg-teal-700:hover {
         background-color: #0f766e !important;
+    }
+
+    .fi-body button.bg-amber-500,
+    .fi-body button.bg-amber-600,
+    .fi-main button.bg-amber-500,
+    .fi-main button.bg-amber-600,
+    .fi-body a.bg-amber-500,
+    .fi-body a.bg-amber-600,
+    .fi-main a.bg-amber-500,
+    .fi-main a.bg-amber-600 {
+        background-color: var(--sor-warning) !important;
+        color: #fff !important;
+        border: 1px solid color-mix(in srgb, var(--sor-warning) 75%, #000) !important;
+    }
+
+    .fi-body button.bg-amber-500:hover:not(:disabled),
+    .fi-body button.bg-amber-600:hover:not(:disabled),
+    .fi-main button.bg-amber-500:hover:not(:disabled),
+    .fi-main button.bg-amber-600:hover:not(:disabled),
+    .fi-body button.hover\:bg-amber-600:hover,
+    .fi-main button.hover\:bg-amber-600:hover {
+        background-color: var(--sor-brand-primary-hover) !important;
+    }
+
+    .fi-body button.bg-primary-600,
+    .fi-body button.bg-primary-700,
+    .fi-main button.bg-primary-600,
+    .fi-main button.bg-primary-700,
+    .fi-body a.bg-primary-600,
+    .fi-main a.bg-primary-600 {
+        background-color: var(--sor-brand-primary) !important;
+        color: #fff !important;
+        border: 1px solid color-mix(in srgb, var(--sor-brand-primary) 75%, #000) !important;
+    }
+
+    .fi-body button.bg-primary-600:hover:not(:disabled),
+    .fi-main button.bg-primary-600:hover:not(:disabled),
+    .fi-body button.hover\:bg-primary-700:hover,
+    .fi-main button.hover\:bg-primary-700:hover,
+    .fi-body button.hover\:bg-primary-500:hover,
+    .fi-main button.hover\:bg-primary-500:hover {
+        background-color: var(--sor-brand-primary-hover) !important;
+    }
+
+    .fi-body button.bg-orange-600,
+    .fi-main button.bg-orange-600,
+    .fi-body a.bg-orange-600,
+    .fi-main a.bg-orange-600 {
+        background-color: #ea580c !important;
+        color: #fff !important;
+        border: 1px solid #c2410c !important;
+    }
+
+    .fi-body button.bg-orange-600:hover:not(:disabled),
+    .fi-main button.bg-orange-600:hover:not(:disabled),
+    .fi-body button.hover\:bg-orange-700:hover,
+    .fi-main button.hover\:bg-orange-700:hover {
+        background-color: #c2410c !important;
+    }
+
+    .fi-body button.bg-blue-600,
+    .fi-main button.bg-blue-600 {
+        background-color: var(--sor-info) !important;
+        color: #fff !important;
+        border: 1px solid color-mix(in srgb, var(--sor-info) 75%, #000) !important;
+    }
+
+    .fi-body button.bg-red-600,
+    .fi-main button.bg-red-600 {
+        background-color: var(--sor-danger) !important;
+        color: #fff !important;
+        border: 1px solid color-mix(in srgb, var(--sor-danger) 75%, #000) !important;
+    }
+
+    .fi-body button.bg-emerald-600,
+    .fi-main button.bg-emerald-600 {
+        background-color: var(--sor-success) !important;
+        color: #fff !important;
+        border: 1px solid color-mix(in srgb, var(--sor-success) 75%, #000) !important;
     }
 
     .fi-body .text-teal-700,

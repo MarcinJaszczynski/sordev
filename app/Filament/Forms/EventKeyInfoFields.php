@@ -163,85 +163,100 @@ class EventKeyInfoFields
                         ->helperText(fn (string $operation): ?string => $operation === 'create' ? 'Szablon programu i kalkulacji.' : 'Brak możliwości zmiany szablonu po utworzeniu imprezy.')
                         ->columnSpanFull(),
 
-                    Forms\Components\Select::make('status')
-                        ->label('Status imprezy')
-                        ->options(Event::getStatusOptions())
-                        ->default(Event::STATUS_INQUIRY)
-                        ->required(),
+                    Forms\Components\Group::make([
+                        Forms\Components\Select::make('status')
+                            ->label('Status imprezy')
+                            ->options(Event::getStatusOptions())
+                            ->default(Event::STATUS_INQUIRY)
+                            ->required(),
 
-                    Forms\Components\TextInput::make('participant_count')
-                        ->label('Liczba uczestników')
-                        ->numeric()
-                        ->minValue(1)
-                        ->default(1)
-                        ->live(onBlur: true)
-                        ->afterStateUpdated(fn (callable $get, callable $set) => \App\Filament\Resources\EventResource::refreshTotalCostFromTemplateState($set, $get))
-                        ->required(),
+                        Forms\Components\TextInput::make('participant_count')
+                            ->label('Liczba uczestników')
+                            ->numeric()
+                            ->minValue(1)
+                            ->default(1)
+                            ->live(onBlur: true)
+                            ->afterStateUpdated(function (callable $get, callable $set, $livewire): void {
+                                if (isset($livewire->record) && $livewire->record instanceof Event) {
+                                    \App\Filament\Resources\EventResource::syncGratisCountFromQtyVariant($set, $get, $livewire->record);
+                                }
 
-                    Forms\Components\TextInput::make('gratis_count')
-                        ->label('Liczba gratisów')
-                        ->numeric()
-                        ->minValue(0)
-                        ->default(0)
-                        ->live(onBlur: true)
-                        ->afterStateUpdated(fn (callable $get, callable $set) => \App\Filament\Resources\EventResource::refreshTotalCostFromTemplateState($set, $get))
-                        ->helperText('Pole pomocnicze do kalkulacji (nie jest zapisywane w bazie).'),
+                                \App\Filament\Resources\EventResource::refreshTotalCostFromTemplateState($set, $get);
+                            })
+                            ->required(),
+
+                        Forms\Components\TextInput::make('gratis_count')
+                            ->label(\App\Support\EventParticipantGroupLabels::GRATIS)
+                            ->numeric()
+                            ->minValue(0)
+                            ->default(0)
+                            ->dehydrated()
+                            ->live(onBlur: true)
+                            ->afterStateUpdated(fn (callable $get, callable $set) => \App\Filament\Resources\EventResource::refreshTotalCostFromTemplateState($set, $get))
+                            ->helperText('Osoby jadące w grupie bez opłaty za siebie. Uwzględniane w kalkulacji kosztów i zapisywane w wariancie ilościowym grupy.'),
+                    ])
+                        ->columns(3)
+                        ->columnSpanFull(),
 
                     EventNotesFields::dietInfo(),
 
-                    Forms\Components\Select::make('start_place_id')
-                        ->label('Miejsce startu (podstawienia)')
-                        ->options(fn (callable $get) => \App\Models\Place::startingPlaceSelectOptionsForTemplate(
-                            (int) ($get('event_template_id') ?? 0) ?: null,
-                            (int) ($get('start_place_id') ?? 0) ?: null,
-                        ))
-                        ->searchable()
-                        ->nullable()
-                        ->reactive()
-                        ->afterStateUpdated(function (callable $get, callable $set): void {
-                            $templateId = (int) ($get('event_template_id') ?? 0);
-                            $startPlaceId = (int) ($get('start_place_id') ?? 0);
-                            $currentTransfer = (float) ($get('transfer_km') ?? 0);
+                    Forms\Components\Group::make([
+                        Forms\Components\Select::make('start_place_id')
+                            ->label('Miejsce startu (podstawienia)')
+                            ->options(fn (callable $get) => \App\Models\Place::startingPlaceSelectOptionsForTemplate(
+                                (int) ($get('event_template_id') ?? 0) ?: null,
+                                (int) ($get('start_place_id') ?? 0) ?: null,
+                            ))
+                            ->searchable()
+                            ->nullable()
+                            ->reactive()
+                            ->afterStateUpdated(function (callable $get, callable $set): void {
+                                $templateId = (int) ($get('event_template_id') ?? 0);
+                                $startPlaceId = (int) ($get('start_place_id') ?? 0);
+                                $currentTransfer = (float) ($get('transfer_km') ?? 0);
 
-                            if (class_exists(\App\Filament\Resources\EventResource::class)) {
-                                $set('transfer_km', \App\Filament\Resources\EventResource::resolveTransferKmFromTemplateState(
-                                    $templateId,
-                                    $startPlaceId,
-                                    $currentTransfer
-                                ));
-                                \App\Filament\Resources\EventResource::refreshTotalCostFromTemplateState($set, $get);
-                            }
-                        })
-                        ->helperText(fn (callable $get): string => filled($get('event_template_id'))
-                            ? 'Punkty startowe dostępne dla wybranego szablonu.'
-                            : 'Tylko punkty startowe (podstawienia autokaru) — wymagane do obliczenia transferu i ceny z szablonu.'),
+                                if (class_exists(\App\Filament\Resources\EventResource::class)) {
+                                    $set('transfer_km', \App\Filament\Resources\EventResource::resolveTransferKmFromTemplateState(
+                                        $templateId,
+                                        $startPlaceId,
+                                        $currentTransfer
+                                    ));
+                                    \App\Filament\Resources\EventResource::refreshTotalCostFromTemplateState($set, $get);
+                                }
+                            })
+                            ->helperText(fn (callable $get): string => filled($get('event_template_id'))
+                                ? 'Punkty startowe dostępne dla wybranego szablonu.'
+                                : 'Tylko punkty startowe (podstawienia autokaru) — wymagane do obliczenia transferu i ceny z szablonu.'),
 
-                    Forms\Components\TextInput::make('program_km')
-                        ->label('Kilometry programu')
-                        ->numeric()
-                        ->minValue(0)
-                        ->default(0)
-                        ->live(onBlur: true)
-                        ->afterStateUpdated(function (callable $get, callable $set, $livewire): void {
-                            if (class_exists(\App\Filament\Resources\EventResource::class)) {
-                                \App\Filament\Resources\EventResource::refreshTotalCostFromTemplateState($set, $get);
-                            }
-                            if (method_exists($livewire, 'dispatch')) {
-                                $livewire->dispatch('event-price-table-refresh');
-                            }
-                        }),
+                        Forms\Components\TextInput::make('program_km')
+                            ->label('Kilometry programu')
+                            ->numeric()
+                            ->minValue(0)
+                            ->default(0)
+                            ->live(onBlur: true)
+                            ->afterStateUpdated(function (callable $get, callable $set, $livewire): void {
+                                if (class_exists(\App\Filament\Resources\EventResource::class)) {
+                                    \App\Filament\Resources\EventResource::refreshTotalCostFromTemplateState($set, $get);
+                                }
+                                if (method_exists($livewire, 'dispatch')) {
+                                    $livewire->dispatch('event-price-table-refresh');
+                                }
+                            }),
 
-                    Forms\Components\TextInput::make('transfer_km')
-                        ->label('Kilometry transferu')
-                        ->numeric()
-                        ->minValue(0)
-                        ->default(0)
-                        ->live(onBlur: true)
-                        ->afterStateUpdated(function (callable $get, callable $set, $livewire): void {
-                            if (method_exists($livewire, 'dispatch')) {
-                                $livewire->dispatch('event-price-table-refresh');
-                            }
-                        }),
+                        Forms\Components\TextInput::make('transfer_km')
+                            ->label('Kilometry transferu')
+                            ->numeric()
+                            ->minValue(0)
+                            ->default(0)
+                            ->live(onBlur: true)
+                            ->afterStateUpdated(function (callable $get, callable $set, $livewire): void {
+                                if (method_exists($livewire, 'dispatch')) {
+                                    $livewire->dispatch('event-price-table-refresh');
+                                }
+                            }),
+                    ])
+                        ->columns(3)
+                        ->columnSpanFull(),
 
                     ...\App\Filament\Forms\EventPricePerPersonFields::manualPriceFields(),
 

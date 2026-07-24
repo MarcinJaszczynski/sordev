@@ -49,7 +49,7 @@
                     @php
                         $sections = [
                             'qty' => 'Pokoje płatne',
-                            'gratis' => 'Gratis',
+                            'gratis' => \App\Support\EventParticipantGroupLabels::GRATIS,
                             'staff' => 'Obsługa',
                             'driver' => 'Kierowca',
                         ];

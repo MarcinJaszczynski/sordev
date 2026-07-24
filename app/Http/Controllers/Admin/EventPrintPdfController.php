@@ -7,6 +7,7 @@ use App\Models\Event;
 use App\Models\EventSettlementDocument;
 use App\Models\HotelRoom;
 use App\Services\EventFolderPdfService;
+use App\Support\EventParticipantGroupLabels;
 use App\Support\StoragePath;
 use Barryvdh\DomPDF\Facade\Pdf;
 use Carbon\Carbon;
@@ -168,7 +169,7 @@ class EventPrintPdfController extends Controller
             ],
             'hotel' => [
                 'Daty przyjazdu/wyjazdu oraz liczebność grupy',
-                'Rozpiska pokoi: uczestnicy, gratisy, obsługa, kierowca',
+                'Rozpiska pokoi: uczestnicy, '.EventParticipantGroupLabels::GRATIS_GENITIVE.', obsługa, kierowca',
                 'Uwagi do noclegu z podziałem na dzień',
                 'Dane kontaktowe pilota i biura operacyjnego',
             ],
@@ -294,7 +295,7 @@ class EventPrintPdfController extends Controller
             'attachedFiles' => $attachedFiles,
             'travelLegends' => app(EventFolderPdfService::class)->buildTravelLegends($event),
             'participantSummaryLine' => sprintf(
-                '%d uczestników + %d gratisów; obsługa: %d; kierowca(y): %d',
+                '%d uczestników + %d '.EventParticipantGroupLabels::GRATIS_GENITIVE.'; obsługa: %d; kierowca(y): %d',
                 max(0, $participantCount),
                 $gratisCount,
                 $staffCount,

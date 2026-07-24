@@ -5,6 +5,7 @@ namespace App\Filament\Forms;
 use App\Models\Currency;
 use App\Models\Event;
 use App\Services\EventManualPricePerPersonService;
+use App\Support\EventParticipantGroupLabels;
 use App\Support\MoneyFormatter;
 use Filament\Forms;
 use Filament\Forms\Get;
@@ -127,7 +128,7 @@ class EventPricePerPersonFields
                         ->afterStateUpdated(fn ($livewire) => method_exists($livewire, 'dispatch')
                             ? $livewire->dispatch('event-price-table-refresh')
                             : null)
-                        ->helperText('Każda waluta tylko raz. Dotyczy uczestników płacących (bez gratisów, pilota i obsługi).'),
+                        ->helperText('Każda waluta tylko raz. Dotyczy uczestników płacących (bez '.EventParticipantGroupLabels::GRATIS_GENITIVE.', pilota i obsługi).'),
                 ]),
         ];
     }

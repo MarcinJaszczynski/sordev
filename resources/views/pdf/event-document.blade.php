@@ -136,7 +136,7 @@
                 <div>ID imprezy: <span class="value">#{{ $event->id }}</span></div>
                 <div>Status: <span class="value">{{ $event->status ?? '—' }}</span></div>
                 <div>Klient: <span class="value">{{ $event->client_name ?: '—' }}</span></div>
-                <div>Uczestnicy: <span class="value">{{ $participantCount }}</span> + gratisy: <span class="value">{{ $gratisCount }}</span></div>
+                <div>Uczestnicy: <span class="value">{{ $participantCount }}</span> + {{ \App\Support\EventParticipantGroupLabels::GRATIS_GENITIVE }}: <span class="value">{{ $gratisCount }}</span></div>
                 <div>Obsługa: <span class="value">{{ $staffCount }}</span> | Kierowcy: <span class="value">{{ $driverCount }}</span></div>
             </td>
             <td class="card" style="width:50%;">
@@ -229,7 +229,7 @@
                     </tr>
                     <tr>
                         <th style="width:25%;">Uczestnicy</th>
-                        <th style="width:25%;">Gratisy</th>
+                        <th style="width:25%;">{{ \App\Support\EventParticipantGroupLabels::GRATIS }}</th>
                         <th style="width:25%;">Obsługa</th>
                         <th style="width:25%;">Kierowca</th>
                     </tr>

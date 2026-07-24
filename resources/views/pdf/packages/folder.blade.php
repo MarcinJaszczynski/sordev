@@ -77,7 +77,7 @@
                     <div class="program-day-title" style="margin-top:8px;">Dzień {{ $day['day'] }} — pokoje</div>
                     <table class="program-table">
                         <thead>
-                            <tr><th>Uczestnicy</th><th>Gratisy</th><th>Obsługa</th><th>Kierowca</th></tr>
+                            <tr><th>Uczestnicy</th><th>{{ \App\Support\EventParticipantGroupLabels::GRATIS }}</th><th>Obsługa</th><th>Kierowca</th></tr>
                         </thead>
                         <tbody>
                             <tr>

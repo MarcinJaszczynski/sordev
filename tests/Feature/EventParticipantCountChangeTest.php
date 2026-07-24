@@ -31,6 +31,49 @@ class EventParticipantCountChangeTest extends TestCase
         }
     }
 
+    public function test_edit_event_saves_gratis_count_to_qty_variant(): void
+    {
+        [$admin] = $this->makeOfficeUsers();
+        $contractor = Contractor::create([
+            'name' => 'Klient testowy',
+            'email' => 'klient@example.com',
+            'status' => 'active',
+        ]);
+
+        $event = Event::factory()->create([
+            'participant_count' => 30,
+            'client_name' => 'Klient testowy',
+            'contractor_id' => $contractor->id,
+            'status' => Event::STATUS_CONFIRMED,
+        ]);
+
+        \App\Models\EventQty::create([
+            'event_id' => $event->id,
+            'qty' => 30,
+            'gratis' => 2,
+            'staff' => 1,
+            'driver' => 1,
+        ]);
+
+        $this->actingAs($admin);
+
+        Livewire::test(EditEvent::class, ['record' => $event->getKey()])
+            ->fillForm([
+                'gratis_count' => 5,
+                'ordering_parties' => [
+                    [
+                        'contact_id' => null,
+                        'contractor_id' => (string) $contractor->id,
+                        'department_label' => null,
+                    ],
+                ],
+            ])
+            ->call('save')
+            ->assertHasNoFormErrors();
+
+        $this->assertSame(5, $event->fresh()->resolveGratisCountForParticipantCount(30));
+    }
+
     public function test_confirmed_resignation_decrements_count_and_creates_office_tasks(): void
     {
         [$admin, $biuro] = $this->makeOfficeUsers();

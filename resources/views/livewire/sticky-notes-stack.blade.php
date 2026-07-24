@@ -34,13 +34,9 @@
                     class="w-full rounded-lg border border-amber-200 bg-white px-3 py-2 text-sm text-gray-900 shadow-sm focus:border-amber-400 focus:ring-amber-400 dark:border-amber-800 dark:bg-gray-900 dark:text-gray-100"
                 ></textarea>
                 <div class="flex justify-end">
-                    <button
-                        type="button"
-                        wire:click="addNote"
-                        class="rounded-lg bg-amber-500 px-4 py-2 text-sm font-semibold text-white hover:bg-amber-600"
-                    >
+                    <x-filament::button type="button" wire:click="addNote" size="sm" color="warning">
                         Dodaj notatkę
-                    </button>
+                    </x-filament::button>
                 </div>
             </div>
         </div>
@@ -113,13 +109,9 @@
                                     >
                                         Anuluj
                                     </button>
-                                    <button
-                                        type="button"
-                                        wire:click="saveEdit"
-                                        class="rounded-lg bg-amber-500 px-3 py-1.5 text-xs font-semibold text-white hover:bg-amber-600"
-                                    >
+                                    <x-filament::button type="button" wire:click="saveEdit" size="xs" color="warning">
                                         Zapisz
-                                    </button>
+                                    </x-filament::button>
                                 </div>
                             </div>
                         @else

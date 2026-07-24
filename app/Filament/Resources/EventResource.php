@@ -437,6 +437,20 @@ class EventResource extends Resource
             ]);
     }
 
+    public static function syncGratisCountFromQtyVariant(callable $set, callable $get, Event $record): void
+    {
+        $participantCount = max(1, (int) ($get('participant_count') ?? 1));
+
+        $exactVariant = $record->qtyVariants()
+            ->where('qty', $participantCount)
+            ->orderBy('id')
+            ->first();
+
+        if ($exactVariant) {
+            $set('gratis_count', max(0, (int) ($exactVariant->gratis ?? 0)));
+        }
+    }
+
     public static function refreshTotalCostFromTemplateState(callable $set, callable $get): void
     {
         $templateId = (int) ($get('event_template_id') ?? $record?->event_template_id ?? 0);

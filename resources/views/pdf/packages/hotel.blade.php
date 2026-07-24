@@ -117,7 +117,7 @@
                             </tr>
                         </thead>
                         <tbody>
-                            @foreach (['qty' => 'Uczestnicy', 'gratis' => 'Gratis', 'staff' => 'Obsługa', 'driver' => 'Kierowca'] as $roleKey => $roleLabel)
+                            @foreach (\App\Support\EventParticipantGroupLabels::hotelRoleLabels() as $roleKey => $roleLabel)
                                 @foreach(($day[$roleKey] ?? collect()) as $room)
                                     <tr>
                                         <td>{{ $roleLabel }}</td>
@@ -135,7 +135,7 @@
                         <thead>
                             <tr>
                                 <th>Uczestnicy</th>
-                                <th>Gratisy</th>
+                                <th>{{ \App\Support\EventParticipantGroupLabels::GRATIS }}</th>
                                 <th>Obsługa</th>
                                 <th>Kierowca</th>
                             </tr>

@@ -11,8 +11,8 @@
         <div class="mb-8">
             <h4 class="text-md font-semibold mb-4">Szczegółowa kalkulacja kosztów</h4>
             <div class="mb-4 p-3 bg-blue-50 border border-blue-200 rounded text-xs text-blue-900">
-                <b>Wyjaśnienie:</b> Koszt całkowity liczony jest dla sumy: <b>uczestnicy + gratis + obsługa + kierowcy</b>.<br>
-                <b>Cena za osobę</b> to koszt całkowity podzielony przez liczbę uczestników (bez gratis, obsługi i kierowców).<br>
+                <b>Wyjaśnienie:</b> Koszt całkowity liczony jest dla sumy: <b>uczestnicy + opiekunowie/dodatkowe + obsługa + kierowcy</b>.<br>
+                <b>Cena za osobę</b> to koszt całkowity podzielony przez liczbę uczestników (bez opiekunów/dodatkowych, obsługi i kierowców).<br>
                 <b>Wielkość grupy</b> oznacza ile osób przypada na jedną jednostkę ceny punktu programu.
             </div>
             @foreach($this->detailedCalculations as $qty => $currencies)
@@ -22,7 +22,7 @@
                 @endphp
                 <div class="mb-6 border border-gray-200 rounded-lg p-4">
                     <h5 class="font-medium text-gray-800 mb-3">
-                        Wariant: {{ $variant['qty'] }} uczestników (plus {{ $variant['gratis'] }} gratis, {{ $variant['staff'] }} obsługa, {{ $variant['driver'] }} kierowców), razem: {{ $totalAll }} osób                    </h5>
+                        Wariant: {{ $variant['qty'] }} uczestników (plus {{ $variant['gratis'] }} opiekunów/dodatkowych, {{ $variant['staff'] }} obsługa, {{ $variant['driver'] }} kierowców), razem: {{ $totalAll }} osób                    </h5>
 
                     {{-- Struktura noclegów --}}
                     @if(isset($currencies['hotel_structure']))
@@ -37,7 +37,7 @@
                                                 <tr class="bg-green-100">
                                                     <th class="px-3 py-2 border-b text-left">Pokój</th>
                                                     <th class="px-3 py-2 border-b text-right">Uczestnicy</th>
-                                                    <th class="px-3 py-2 border-b text-right">Gratis</th>
+                                                    <th class="px-3 py-2 border-b text-right">{{ \App\Support\EventParticipantGroupLabels::GRATIS }}</th>
                                                     <th class="px-3 py-2 border-b text-right">Obsługa</th>
                                                     <th class="px-3 py-2 border-b text-right">Kierowcy</th>
                                                     <th class="px-3 py-2 border-b text-right">Cena (za pokój)</th>
