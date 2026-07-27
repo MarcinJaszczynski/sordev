@@ -4,12 +4,15 @@ namespace App\Filament\Resources\EventResource\Pages;
 
 use App\Filament\Concerns\SingleRelationManagerPage;
 use App\Filament\Resources\EventResource;
+use App\Filament\Resources\EventResource\Concerns\HasEventWorkflowContext;
 use App\Filament\Resources\TaskResource;
 use App\Filament\Resources\TaskResource\RelationManagers\TasksRelationManager;
 use Filament\Actions;
 
 class ManageEventTasks extends SingleRelationManagerPage
 {
+    use HasEventWorkflowContext;
+
     protected static string $resource = EventResource::class;
 
     protected static ?string $navigationLabel = 'Zadania';

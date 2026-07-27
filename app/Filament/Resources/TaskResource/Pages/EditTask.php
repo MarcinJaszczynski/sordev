@@ -5,7 +5,7 @@ namespace App\Filament\Resources\TaskResource\Pages;
 use App\Filament\Concerns\MarksTaskInboxAsSeen;
 use App\Filament\Resources\TaskResource;
 use App\Models\Task;
-use App\Services\NotificationService;
+use App\Support\Tasks\TaskNavigation;
 use App\Support\Tasks\TaskAuthorization;
 use App\Support\Tasks\TaskContextRegistry;
 use Filament\Actions;
@@ -20,12 +20,7 @@ class EditTask extends EditRecord
 
     public function mount(int | string $record): void
     {
-        parent::mount($record);
-
-        $userId = auth()->id();
-        if ($userId) {
-            NotificationService::markTaskAsRead($userId, $this->getRecord());
-        }
+        $this->redirect(TaskNavigation::fullViewUrl((int) $record));
     }
 
     public function getBreadcrumbs(): array

@@ -34,7 +34,7 @@ class TaskNavigationTest extends TestCase
         ]);
 
         $this->assertSame(
-            TaskResource::getUrl('edit', ['record' => $task->id]),
+            TaskNavigation::fullViewUrl($task),
             TaskNavigation::editUrl($task),
         );
         $this->assertSame(
@@ -57,7 +57,7 @@ class TaskNavigationTest extends TestCase
         ]);
 
         $this->assertSame(
-            TaskResource::getUrl('edit', ['record' => $task->id]),
+            TaskNavigation::fullViewUrl($task),
             TaskNavigation::editUrl($task),
         );
         $this->assertNull(TaskNavigation::pilotWorkUrl($task));
@@ -103,5 +103,17 @@ class TaskNavigationTest extends TestCase
         $this->assertStringContainsString(EventResource::getUrl('tasks', ['record' => $event->id]), $url);
         $this->assertStringContainsString('editTask='.$task->id, $url);
         $this->assertStringContainsString('activeRelationManager=0', $url);
+    }
+
+    public function test_create_url_opens_modal_on_event_tasks_with_prefilled_context(): void
+    {
+        $event = Event::factory()->create();
+
+        $url = TaskNavigation::createUrl(Event::class, $event->id);
+
+        $this->assertStringContainsString(EventResource::getUrl('tasks', ['record' => $event->id]), $url);
+        $this->assertStringContainsString('createTask=1', $url);
+        $this->assertStringContainsString('taskable_type=', $url);
+        $this->assertStringContainsString('taskable_id='.$event->id, $url);
     }
 }

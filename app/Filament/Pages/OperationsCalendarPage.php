@@ -7,6 +7,7 @@ use App\Filament\Concerns\InteractsWithTaskOwnershipScope;
 use App\Models\Task;
 use App\Services\CalendarEventAggregator;
 use App\Support\FilamentNavigation;
+use Filament\Actions;
 use Filament\Actions\Action;
 use Filament\Pages\Page;
 use Livewire\Attributes\Computed;
@@ -53,11 +54,10 @@ class OperationsCalendarPage extends Page
     protected function getHeaderActions(): array
     {
         return [
-            $this->makeCreateTaskAction(
-                defaultDueDate: fn (): ?\Carbon\Carbon => $this->clickedDate
-                    ? \Carbon\Carbon::parse($this->clickedDate)->startOfDay()
-                    : null,
-            ),
+            Actions\Action::make('createTask')
+                ->label('Dodaj zadanie')
+                ->icon('heroicon-m-plus')
+                ->action(fn () => $this->mountAction('createTask')),
             Action::make('calendarEntryContext')
                 ->modalHeading(fn (): string => (string) ($this->selectedCalendarEntry['title'] ?? 'Wpis kalendarza'))
                 ->modalContent(fn (): \Illuminate\Contracts\View\View => view(
@@ -77,6 +77,13 @@ class OperationsCalendarPage extends Page
     {
         $this->clickedDate = $date;
         $this->mountAction('createTask');
+    }
+
+    protected function createTaskDefaultDueDate(): mixed
+    {
+        return $this->clickedDate
+            ? \Carbon\Carbon::parse($this->clickedDate)->startOfDay()
+            : $this->pendingCreateDueDate;
     }
 
     public function openCalendarEntry(string $entryId): void

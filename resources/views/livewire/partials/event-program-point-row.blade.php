@@ -53,7 +53,7 @@
                     <button type="button" wire:click="openAddChild({{ $point->id }})">Dodaj podpunkt</button>
                     <button type="button" wire:click="duplicatePoint({{ $point->id }})">Duplikuj</button>
                     <a
-                        href="{{ \App\Filament\Resources\TaskResource::getUrl('create', ['taskable_type' => \App\Models\EventProgramPoint::class, 'taskable_id' => $point->id]) }}"
+                        href="{{ \App\Support\Tasks\TaskNavigation::createUrl(\App\Models\EventProgramPoint::class, $point->id) }}"
                         target="_blank"
                     >Nowe zadanie</a>
                 @else

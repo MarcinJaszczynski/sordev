@@ -266,17 +266,41 @@ class TaskResource extends Resource
     /**
      * @return array<int, Tables\Columns\Column>
      */
-    public static function adminListTableColumns(): array
+    public static function adminListTableColumns(bool $showContextColumn = true, bool $showSourceColumn = false): array
     {
-        return [
+        $columns = [
             Tables\Columns\ViewColumn::make('task_summary')
                 ->label('Zadanie')
                 ->searchable(['title', 'description'])
                 ->sortable(['title'])
                 ->view('filament.tasks.list-task-cell'),
-            Tables\Columns\ViewColumn::make('context_summary')
+        ];
+
+        if ($showContextColumn) {
+            $columns[] = Tables\Columns\ViewColumn::make('context_summary')
                 ->label('Kontekst')
-                ->view('filament.tasks.list-task-context-cell'),
+                ->view('filament.tasks.list-task-context-cell');
+        } else {
+            $columns[] = Tables\Columns\ViewColumn::make('context_summary')
+                ->label('Kontekst')
+                ->view('filament.tasks.list-task-context-cell')
+                ->viewData(['showContextRecord' => false]);
+
+            if ($showSourceColumn) {
+                $columns[] = Tables\Columns\TextColumn::make('source')
+                    ->label('Źródło')
+                    ->badge()
+                    ->formatStateUsing(fn ($state) => match ($state instanceof \App\Enums\TaskSource ? $state->value : (string) $state) {
+                        \App\Enums\TaskSource::PilotChecklist->value => 'Checklista pilota',
+                        default => 'Biuro',
+                    })
+                    ->color(fn ($state) => ($state instanceof \App\Enums\TaskSource ? $state->value : (string) $state) === \App\Enums\TaskSource::PilotChecklist->value
+                        ? 'info'
+                        : 'gray');
+            }
+        }
+
+        return array_merge($columns, [
             Tables\Columns\SelectColumn::make('status_id')
                 ->label('Status')
                 ->options(fn (): array => TaskStatus::query()->orderBy('order')->pluck('name', 'id')->all())
@@ -296,7 +320,7 @@ class TaskResource extends Resource
 
                     return $query->orderByRaw('COALESCE(updated_at, created_at) '.$dir);
                 }),
-        ];
+        ]);
     }
 
     /**
@@ -485,6 +509,42 @@ class TaskResource extends Resource
         return $filters;
     }
 
+    public static function configureAdminTaskListTable(
+        Table $table,
+        bool $officeOnly = true,
+        bool $showContextColumn = true,
+        bool $showSourceColumn = false,
+        bool $includeTrashed = false,
+        ?\Closure $additionalQueryModifier = null,
+    ): Table {
+        return $table
+            ->modifyQueryUsing(function (Builder $query) use ($officeOnly, $additionalQueryModifier): Builder {
+                TaskQueryFilters::applyDefaultListScopes($query, $officeOnly);
+
+                $query = TaskQueryFilters::orderByHierarchyThenLatestActivityDesc($query);
+
+                if ($additionalQueryModifier) {
+                    $query = $additionalQueryModifier($query);
+                }
+
+                return $query;
+            })
+            ->defaultSort('latest_activity_at', 'desc')
+            ->columns(static::adminListTableColumns($showContextColumn, $showSourceColumn))
+            ->filters(static::sharedTableFilters($includeTrashed))
+            ->recordUrl(null)
+            ->recordAction(null)
+            ->actionsColumnLabel('Działanie')
+            ->actions([
+                static::modalEditTableAction(),
+                Tables\Actions\DeleteAction::make()
+                    ->visible(fn (Task $record): bool => TaskAuthorization::canDelete(auth()->user(), $record)),
+            ])
+            ->bulkActions([
+                Tables\Actions\BulkActionGroup::make(static::tableBulkActions()),
+            ]);
+    }
+
     public static function configureSharedTable(
         Table $table,
         bool $officeOnly = true,
@@ -535,10 +595,7 @@ class TaskResource extends Resource
 
     public static function table(Table $table): Table
     {
-        return static::configureSharedTable($table, officeOnly: true, showContext: true, includeTrashed: true)
-            ->columns(static::adminListTableColumns())
-            ->recordAction(null)
-            ->actionsColumnLabel('Działanie')
+        return static::configureAdminTaskListTable($table, officeOnly: true, includeTrashed: true)
             ->filters(array_merge(static::sharedTableFilters(true), [
                 Tables\Filters\SelectFilter::make('taskable_type')
                     ->label('Kontekst')

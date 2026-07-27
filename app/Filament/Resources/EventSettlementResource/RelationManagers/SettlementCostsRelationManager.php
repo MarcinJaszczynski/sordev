@@ -809,10 +809,10 @@ class SettlementCostsRelationManager extends RelationManager
                         ->label('Dodaj zadanie')
                         ->icon('heroicon-o-clipboard-document-list')
                         ->color('primary')
-                        ->url(fn (EventSettlementCost $record): string => TaskResource::getUrl('create', [
-                            'taskable_type' => EventSettlementCost::class,
-                            'taskable_id' => $record->getKey(),
-                        ]))
+                        ->url(fn (EventSettlementCost $record): string => \App\Support\Tasks\TaskNavigation::createUrl(
+                            \App\Models\EventSettlementCost::class,
+                            $record->getKey(),
+                        ))
                         ->openUrlInNewTab(),
                 ])
                     ->label('Kontrola / Inne')

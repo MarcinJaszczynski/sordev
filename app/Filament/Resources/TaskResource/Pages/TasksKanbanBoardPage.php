@@ -126,13 +126,22 @@ class TasksKanbanBoardPage extends Page implements HasForms
             ->color('gray')
             ->url(TaskResource::getUrl('index'));
 
-        $actions[] = $this->makeCreateTaskAction(
-            defaultFormData: fn (): array => $this->eventFilter
-                ? ['taskable_type' => Event::class, 'taskable_id' => $this->eventFilter]
-                : [],
-        );
+        $actions[] = Actions\Action::make('createTask')
+            ->label('Dodaj zadanie')
+            ->icon('heroicon-m-plus')
+            ->action(fn () => $this->mountAction('createTask'));
 
         return $actions;
+    }
+
+    /**
+     * @return array<string, mixed>
+     */
+    protected function createTaskDefaultFormData(): array
+    {
+        return $this->eventFilter
+            ? ['taskable_type' => Event::class, 'taskable_id' => $this->eventFilter]
+            : [];
     }
 
     protected function afterTaskModalSaved(Task $task): void

@@ -26,6 +26,7 @@
                 @endif
             </td>
         </tr>
+        @if ($showContextRecord ?? true)
         <tr>
             <td class="pr-2 py-px text-[0.72rem] text-gray-400 align-top whitespace-nowrap">Kontekst:</td>
             <td class="text-[0.78rem] leading-snug text-gray-900 dark:text-gray-100">
@@ -43,5 +44,6 @@
                 @endif
             </td>
         </tr>
+        @endif
     </table>
 @endif

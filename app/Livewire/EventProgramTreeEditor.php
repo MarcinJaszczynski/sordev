@@ -5,6 +5,7 @@ namespace App\Livewire;
 use App\Filament\Resources\TaskResource;
 use App\Models\EventTemplate;
 use App\Models\EventTemplateProgramPoint;
+use App\Support\Tasks\TaskNavigation;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 use Livewire\Component;
@@ -603,10 +604,10 @@ class EventProgramTreeEditor extends Component
             return '#';
         }
 
-        return TaskResource::getUrl('create', [
-            'taskable_type' => EventTemplateProgramPoint::class,
-            'taskable_id' => $programPointId,
-        ]);
+        return TaskNavigation::createUrl(
+            EventTemplateProgramPoint::class,
+            $programPointId,
+        );
     }
 
     private function normalizeTime($value): ?string
