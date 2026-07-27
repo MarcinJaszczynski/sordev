@@ -8,6 +8,7 @@ use App\Models\Event;
 use App\Models\EventParticipantResignation;
 use App\Models\Task;
 use App\Models\User;
+use App\Support\Tasks\OfficeTaskRecipients;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\Auth;
 
@@ -24,7 +25,7 @@ class EventParticipantCountChangeService
      */
     public function resolveOfficeRecipients(): Collection
     {
-        return User::role(['admin', 'super_admin', 'biuro'])->get();
+        return OfficeTaskRecipients::users();
     }
 
     /**
@@ -46,14 +47,11 @@ class EventParticipantCountChangeService
             return;
         }
 
-        $authorId = Auth::id() ?? ($context['author_id'] ?? null);
-        $recipients = $this->resolveOfficeRecipients();
+        $recipients = OfficeTaskRecipients::users();
 
         if ($recipients->isEmpty()) {
             return;
         }
-
-        $authorId ??= $recipients->first()->id;
 
         $title = $this->buildTitle($event);
         $description = $this->buildDescription($oldCount, $newCount, $reason, $context);
@@ -68,7 +66,7 @@ class EventParticipantCountChangeService
                 'status_id' => $statusId,
                 'priority' => TaskPriority::Urgent->value,
                 'source' => TaskSource::System->value,
-                'author_id' => $authorId,
+                'author_id' => $recipient->id,
                 'assignee_id' => $recipient->id,
                 'taskable_type' => Event::class,
                 'taskable_id' => $event->id,

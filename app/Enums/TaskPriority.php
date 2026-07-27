@@ -10,7 +10,7 @@ enum TaskPriority: string
     public function label(): string
     {
         return match ($this) {
-            self::Normal => 'Domyślny',
+            self::Normal => 'Zwykły',
             self::Urgent => 'Pilne',
         };
     }

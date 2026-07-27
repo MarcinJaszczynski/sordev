@@ -12,9 +12,12 @@ use App\Models\EventProgramPoint;
 use App\Models\EventSettlementCost;
 use App\Models\Task;
 use App\Models\TaskStatus;
+use App\Models\User;
 use App\Models\VendorInvoice;
 use App\Support\CurrencyAmountDisplay;
+use App\Support\Tasks\OfficeTaskRecipients;
 use Carbon\Carbon;
+use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\Auth;
 
 class EventPaymentReminderSyncService
@@ -190,48 +193,85 @@ class EventPaymentReminderSyncService
             return;
         }
 
-        $assigneeId = $event->assigned_to ?: Auth::id();
-        $authorId = Auth::id() ?? $assigneeId;
         $body = trim($description."\n\n".$fingerprint.($url ? "\n\nLink: ".$url : ''));
+        $recipients = $this->resolveRecipients($event);
 
-        $existing = Task::query()
-            ->where('description', 'like', '%'.$fingerprint.'%')
-            ->whereHas('status', fn ($query) => $query->where('name', '!=', 'Zakończone'))
-            ->first();
-
-        if ($existing) {
-            $existing->update([
-                'title' => $title,
-                'description' => $body,
-                'due_date' => $dueDate,
-                'assignee_id' => $assigneeId,
-                'taskable_type' => $taskableType,
-                'taskable_id' => $taskableId,
-            ]);
-
-            if ($assigneeId) {
-                NotificationService::clearCacheForUser((int) $assigneeId);
-            }
-
+        if ($recipients->isEmpty()) {
             return;
         }
 
-        $task = Task::create([
-            'title' => $title,
-            'description' => $body,
-            'due_date' => $dueDate,
-            'status_id' => $statusId,
-            'priority' => TaskPriority::Urgent->value,
-            'source' => TaskSource::System->value,
-            'author_id' => $authorId,
-            'assignee_id' => $assigneeId,
-            'taskable_type' => $taskableType,
-            'taskable_id' => $taskableId,
-        ]);
+        $maxOrder = (int) Task::query()->where('status_id', $statusId)->max('order');
 
-        if ($task->assignee_id) {
-            NotificationService::clearCacheForUser((int) $task->assignee_id);
+        foreach ($recipients as $recipient) {
+            $existing = Task::query()
+                ->where('description', 'like', '%'.$fingerprint.'%')
+                ->where('assignee_id', $recipient->id)
+                ->whereHas('status', fn ($query) => $query->where('name', '!=', 'Zakończone'))
+                ->first();
+
+            if ($existing) {
+                $existing->update([
+                    'title' => $title,
+                    'description' => $body,
+                    'due_date' => $dueDate,
+                    'taskable_type' => $taskableType,
+                    'taskable_id' => $taskableId,
+                    'source' => TaskSource::System->value,
+                ]);
+
+                NotificationService::clearCacheForUser((int) $recipient->id);
+
+                continue;
+            }
+
+            Task::create([
+                'title' => $title,
+                'description' => $body,
+                'due_date' => $dueDate,
+                'status_id' => $statusId,
+                'priority' => TaskPriority::Urgent->value,
+                'source' => TaskSource::System->value,
+                'author_id' => $recipient->id,
+                'assignee_id' => $recipient->id,
+                'taskable_type' => $taskableType,
+                'taskable_id' => $taskableId,
+                'order' => ++$maxOrder,
+            ]);
+
+            NotificationService::clearCacheForUser((int) $recipient->id);
         }
+    }
+
+    /**
+     * @return Collection<int, User>
+     */
+    private function resolveRecipients(Event $event): Collection
+    {
+        $recipients = OfficeTaskRecipients::users();
+
+        if ($recipients->isNotEmpty()) {
+            return $recipients;
+        }
+
+        if ($event->assigned_to) {
+            $assignee = User::query()->find($event->assigned_to);
+
+            if ($assignee) {
+                return collect([$assignee]);
+            }
+        }
+
+        $fallbackId = Auth::id();
+
+        if ($fallbackId) {
+            $fallback = User::query()->find($fallbackId);
+
+            if ($fallback) {
+                return collect([$fallback]);
+            }
+        }
+
+        return collect();
     }
 
     private function retireTasks(string $fingerprint): void

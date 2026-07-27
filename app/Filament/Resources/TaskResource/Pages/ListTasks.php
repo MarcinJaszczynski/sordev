@@ -3,6 +3,7 @@
 namespace App\Filament\Resources\TaskResource\Pages;
 
 use App\Filament\Concerns\InteractsWithTaskEditModal;
+use App\Filament\Concerns\InteractsWithTaskListQuickActions;
 use App\Filament\Concerns\InteractsWithTaskOwnershipScope;
 use App\Filament\Concerns\MarksTaskInboxAsSeen;
 use App\Filament\Resources\TaskResource;
@@ -17,6 +18,7 @@ use Illuminate\Database\Eloquent\Builder;
 class ListTasks extends ListRecords
 {
     use InteractsWithTaskEditModal;
+    use InteractsWithTaskListQuickActions;
     use InteractsWithTaskOwnershipScope;
     use MarksTaskInboxAsSeen;
 

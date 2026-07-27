@@ -19,6 +19,7 @@ use App\Services\EventPaymentScheduleService;
 use App\Support\EventProgramPointPaymentDueColumn;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Schema;
+use Spatie\Permission\Models\Role;
 use Tests\TestCase;
 
 class EventPaymentScheduleTest extends TestCase
@@ -30,11 +31,20 @@ class EventPaymentScheduleTest extends TestCase
         parent::setUp();
 
         $this->seed(\Database\Seeders\TaskStatusSeeder::class);
+        Role::firstOrCreate(['name' => 'admin', 'guard_name' => 'web']);
+    }
+
+    protected function createOfficeUser(): User
+    {
+        $user = User::factory()->create();
+        $user->assignRole('admin');
+
+        return $user;
     }
 
     public function test_advance_in_eur_with_convert_shows_pln_equivalent_in_schedule_and_task(): void
     {
-        $user = User::factory()->create();
+        $user = $this->createOfficeUser();
         $eur = Currency::create([
             'name' => 'Euro',
             'symbol' => 'EUR',
@@ -107,7 +117,7 @@ class EventPaymentScheduleTest extends TestCase
 
     public function test_advance_in_eur_without_convert_omits_pln_equivalent(): void
     {
-        $user = User::factory()->create();
+        $user = $this->createOfficeUser();
         $eur = Currency::create([
             'name' => 'Euro',
             'symbol' => 'EUR',
@@ -162,7 +172,7 @@ class EventPaymentScheduleTest extends TestCase
             $this->markTestSkipped('vendor_invoices table not available.');
         }
 
-        $user = User::factory()->create();
+        $user = $this->createOfficeUser();
         $event = Event::factory()->create(['assigned_to' => $user->id]);
 
         $point = EventProgramPoint::create([
@@ -235,7 +245,7 @@ class EventPaymentScheduleTest extends TestCase
 
     public function test_paid_status_retires_active_payment_reminder_task(): void
     {
-        $user = User::factory()->create();
+        $user = $this->createOfficeUser();
         $event = Event::factory()->create(['assigned_to' => $user->id]);
         $settlement = EventSettlement::create([
             'event_id' => $event->id,
@@ -287,7 +297,7 @@ class EventPaymentScheduleTest extends TestCase
             $this->markTestSkipped('contract_payment_schedules table not available.');
         }
 
-        $user = User::factory()->create();
+        $user = $this->createOfficeUser();
         $event = Event::factory()->create(['code' => 'CAL-01']);
         $dueDate = now()->addDays(12);
 
@@ -324,7 +334,7 @@ class EventPaymentScheduleTest extends TestCase
 
     public function test_reminder_sync_service_upserts_without_duplicates(): void
     {
-        $user = User::factory()->create();
+        $user = $this->createOfficeUser();
         $event = Event::factory()->create(['assigned_to' => $user->id, 'name' => 'Test impreza']);
         $settlement = EventSettlement::create([
             'event_id' => $event->id,

@@ -590,7 +590,7 @@ class EventResource extends Resource
                 // --- Termin + Nazwa + Szablon ---
                 Tables\Columns\TextColumn::make('name')
                     ->label('Termin / Impreza')
-                    ->searchable()
+                    ->searchable(['name', 'code'])
                     ->sortable(query: function (Builder $query, string $direction): Builder {
                         return $query->orderBy('start_date', $direction)->orderBy('name', $direction);
                     })
@@ -775,17 +775,25 @@ class EventResource extends Resource
                                 return 'Dz.'.$day.' '.$name;
                             })->implode('<br>');
 
-                        $parts = [];
-                        $parts[] = '<strong>Pilot:</strong> '.$pilot;
-                        $parts[] = '<strong>Transport:</strong> '.$transportCompany;
+                        $row = fn (string $label, string $value): string => '<tr>'
+                            .'<td style="padding:1px 8px 1px 0;color:#9ca3af;font-size:0.72rem;white-space:nowrap;vertical-align:top">'.$label.'</td>'
+                            .'<td style="color:#111827;font-size:0.78rem;font-weight:600;line-height:1.25">'.$value.'</td>'
+                            .'</tr>';
+
+                        $transportValue = $transportCompany;
                         if ($transportExtra && $transportExtra !== '—') {
-                            $parts[] = '<span style="color:#9ca3af">'.$transportExtra.'</span>';
-                        }
-                        if ($hotelsLine && $hotelsLine !== '—') {
-                            $parts[] = '<span style="color:#6b7280">Hotele: '.$hotelsLine.'</span>';
+                            $transportValue .= '<br><span style="color:#9ca3af;font-weight:400;font-size:0.72rem">'.$transportExtra.'</span>';
                         }
 
-                        return '<div style="font-size:0.85rem;line-height:1.1">'.implode(' · ', $parts).'</div>';
+                        $hotelsValue = $hotelsLine !== '—'
+                            ? $hotelsLine
+                            : '—';
+
+                        return '<table style="border-collapse:collapse">'
+                            .$row('Pilot:', $pilot)
+                            .$row('Transport:', $transportValue)
+                            .$row('Hotele:', $hotelsValue)
+                            .'</table>';
                     })
                     ->wrap(),
 

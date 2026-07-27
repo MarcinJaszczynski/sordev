@@ -3,6 +3,7 @@
 namespace App\Filament\Concerns;
 
 use App\Models\Task;
+use App\Services\NotificationService;
 use Filament\Actions\Action;
 use Filament\Tables;
 use Illuminate\Contracts\View\View;
@@ -28,23 +29,23 @@ trait InteractsWithTaskEditModal
     {
         $this->editingTaskId = $taskId;
         $this->editingTaskActiveRelationManager = $activeRelationManager;
+
+        if ($userId = auth()->id()) {
+            NotificationService::markTaskCommentNotificationsAsRead($userId, $taskId);
+        }
+
         $this->mountAction('editTask');
     }
 
     #[On('task-full-editor-saved')]
+    #[On('task-full-editor-updated')]
     public function handleTaskFullEditorSaved(int $taskId): void
     {
-        $this->editingTaskId = null;
-        $this->editingTaskActiveRelationManager = null;
-
         $task = Task::query()->find($taskId);
 
         if ($task) {
             $this->afterTaskModalSaved($task);
         }
-
-        $this->unmountAction('editTask');
-        $this->unmountAction('createTask');
     }
 
     protected function openDeepLinkedTaskIfPresent(): void

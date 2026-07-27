@@ -11,6 +11,7 @@ use App\Models\Task;
 use App\Models\TaskComment;
 use App\Models\User;
 use App\Models\UserNotificationRead;
+use App\Support\Tasks\TaskListColumn;
 use App\Support\Tasks\TaskNavigation;
 use App\Support\Tasks\TaskQueryFilters;
 use Illuminate\Support\Collection;
@@ -244,10 +245,10 @@ class NotificationService
                     'task_id' => (int) $comment->task_id,
                     'revision' => (string) ($comment->created_at?->timestamp ?? 0),
                     'title' => 'Nowy komentarz: '.$taskTitle,
-                    'meta' => ($comment->author?->name ?? 'Użytkownik').': '.Str::limit($comment->content ?? '', 70),
+                    'meta' => ($comment->author?->name ?? 'Użytkownik').': '.TaskListColumn::sanitizeTaskText($comment->content ?? '', 70),
                     'time' => optional($comment->created_at)->diffForHumans() ?? 'teraz',
                     'url' => $comment->task
-                        ? TaskNavigation::fullViewUrl($comment->task, TaskNavigation::commentsRelationManagerIndex())
+                        ? TaskNavigation::fullViewUrl($comment->task)
                         : TaskResource::getUrl('index'),
                     'at' => optional($comment->created_at)?->timestamp ?? now()->timestamp,
                     'color' => 'sky',
@@ -394,7 +395,7 @@ class NotificationService
                 $queryLimit = max($limitPerType, min(50, $combinedLimit));
 
                 $taskItems = static::finalizeItems(static::taskNotificationsFor($user, $taskQueryLimit), $userId);
-                $commentItems = static::finalizeItems(static::commentNotificationsFor($user, $queryLimit), $userId);
+                $commentItems = static::finalizeItems(static::commentNotificationsFor($user, $taskQueryLimit), $userId);
                 $newEventItems = static::finalizeItems(
                     static::eventNotificationsFor($user, Event::STATUS_INQUIRY, 'new_event', 'Nowa impreza', $queryLimit),
                     $userId,
@@ -487,6 +488,60 @@ class NotificationService
             'id' => (int) $task->id,
             'revision' => (string) ($task->updated_at?->timestamp ?? 0),
         ]));
+    }
+
+    public static function markTaskCommentNotificationsAsRead(int $userId, int $taskId): void
+    {
+        if (! Schema::hasTable('user_notification_reads') || ! Schema::hasTable('task_comments')) {
+            return;
+        }
+
+        $now = now();
+        $marked = false;
+
+        TaskComment::query()
+            ->where('task_id', $taskId)
+            ->where('user_id', '!=', $userId)
+            ->orderBy('id')
+            ->get(['id', 'created_at'])
+            ->each(function (TaskComment $comment) use ($userId, $now, &$marked): void {
+                UserNotificationRead::query()->updateOrCreate(
+                    [
+                        'user_id' => $userId,
+                        'fingerprint' => UserNotificationRead::fingerprintFor([
+                            'type' => 'comment',
+                            'id' => (int) $comment->id,
+                            'revision' => (string) ($comment->created_at?->timestamp ?? 0),
+                        ]),
+                    ],
+                    [
+                        'read_at' => $now,
+                    ],
+                );
+
+                $marked = true;
+            });
+
+        if ($marked) {
+            static::clearCacheForUser($userId);
+        }
+    }
+
+    public static function clearCacheForTaskCommentStakeholders(TaskComment $comment): void
+    {
+        $comment->loadMissing('task');
+
+        $task = $comment->task;
+
+        if (! $task) {
+            return;
+        }
+
+        collect([$task->assignee_id, $task->author_id])
+            ->filter()
+            ->unique()
+            ->reject(fn (int $userId): bool => $userId === (int) $comment->user_id)
+            ->each(fn (int $userId) => static::clearCacheForUser($userId));
     }
 
     public static function markAsRead(int $userId, string $fingerprint): void

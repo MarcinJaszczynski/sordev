@@ -14,6 +14,7 @@ use App\Models\UserNotificationRead;
 use App\Services\NotificationService;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Schema;
+use Livewire\Livewire;
 use Spatie\Permission\Models\Role;
 use Tests\TestCase;
 
@@ -300,12 +301,97 @@ class NotificationServiceTopbarTest extends TestCase
         NotificationService::clearCacheForUser($user->id);
         $data = NotificationService::getTopbarDataForUser($user->id);
         $this->assertSame(1, $data['counts']['comments']);
+        $this->assertCount(1, $data['items_by_type']['comment']);
 
         $fingerprint = $data['items_by_type']['comment'][0]['fingerprint'];
         NotificationService::markAsRead($user->id, $fingerprint);
 
         $data = NotificationService::getTopbarDataForUser($user->id, fresh: true);
         $this->assertSame(0, $data['counts']['comments']);
+    }
+
+    public function test_comment_notification_meta_strips_html(): void
+    {
+        $user = User::factory()->create();
+        $other = User::factory()->create();
+        $statusId = TaskStatus::query()->where('name', 'Do zrobienia')->value('id');
+
+        $task = Task::factory()->create([
+            'assignee_id' => $user->id,
+            'author_id' => $user->id,
+            'status_id' => $statusId,
+        ]);
+
+        TaskComment::query()->create([
+            'task_id' => $task->id,
+            'user_id' => $other->id,
+            'content' => '<p>Treść komentarza</p>',
+        ]);
+
+        NotificationService::clearCacheForUser($user->id);
+        $data = NotificationService::getTopbarDataForUser($user->id, fresh: true);
+
+        $this->assertStringContainsString('Treść komentarza', $data['items_by_type']['comment'][0]['meta']);
+        $this->assertStringNotContainsString('<p>', $data['items_by_type']['comment'][0]['meta']);
+    }
+
+    public function test_new_comment_clears_assignee_notification_cache(): void
+    {
+        $assignee = User::factory()->create();
+        $author = User::factory()->create();
+        $statusId = TaskStatus::query()->where('name', 'Do zrobienia')->value('id');
+
+        $task = Task::factory()->create([
+            'assignee_id' => $assignee->id,
+            'author_id' => $author->id,
+            'status_id' => $statusId,
+        ]);
+
+        NotificationService::clearCacheForUser($assignee->id);
+        NotificationService::getTopbarDataForUser($assignee->id, fresh: true);
+
+        TaskComment::query()->create([
+            'task_id' => $task->id,
+            'user_id' => $author->id,
+            'content' => 'Nowy komentarz dla przypisanego',
+        ]);
+
+        $data = NotificationService::getTopbarDataForUser($assignee->id, fresh: true);
+
+        $this->assertSame(1, $data['counts']['comments']);
+        $this->assertCount(1, $data['items_by_type']['comment']);
+    }
+
+    public function test_opening_task_modal_marks_comment_notifications_as_read(): void
+    {
+        $assignee = User::factory()->create();
+        $assignee->assignRole('admin');
+        $author = User::factory()->create();
+        $statusId = TaskStatus::query()->where('name', 'Do zrobienia')->value('id');
+
+        $task = Task::factory()->create([
+            'assignee_id' => $assignee->id,
+            'author_id' => $author->id,
+            'status_id' => $statusId,
+        ]);
+
+        TaskComment::query()->create([
+            'task_id' => $task->id,
+            'user_id' => $author->id,
+            'content' => 'Do oznaczenia jako przeczytane',
+        ]);
+
+        NotificationService::clearCacheForUser($assignee->id);
+        $before = NotificationService::getTopbarDataForUser($assignee->id, fresh: true);
+        $this->assertSame(1, $before['counts']['comments']);
+
+        Livewire::actingAs($assignee)
+            ->test(\App\Filament\Resources\TaskResource\Pages\ListTasks::class)
+            ->call('openEditTaskModal', $task->id);
+
+        $after = NotificationService::getTopbarDataForUser($assignee->id, fresh: true);
+        $this->assertSame(0, $after['counts']['comments']);
+        $this->assertSame([], $after['items_by_type']['comment']);
     }
 
     public function test_invoice_request_for_finance_roles(): void

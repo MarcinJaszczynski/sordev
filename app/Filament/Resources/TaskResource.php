@@ -10,6 +10,7 @@ use App\Models\TaskStatus;
 use App\Services\Tasks\TaskInboxService;
 use App\Support\FilamentNavigation;
 use App\Support\Tasks\TaskAuthorization;
+use App\Support\Tasks\TaskListColumn;
 use App\Support\Tasks\TaskNavigation;
 use App\Support\Tasks\TaskQueryFilters;
 use Filament\Forms;
@@ -80,6 +81,79 @@ class TaskResource extends Resource
 
                 redirect(static::getUrl('edit', ['record' => $record]));
             });
+    }
+
+    public static function modalEditorForm(Form $form): Form
+    {
+        return $form
+            ->schema([
+                Forms\Components\TextInput::make('title')
+                    ->label('Tytuł')
+                    ->required()
+                    ->maxLength(255)
+                    ->columnSpanFull(),
+                Forms\Components\Grid::make(3)
+                    ->schema([
+                        Forms\Components\DateTimePicker::make('due_date')
+                            ->label('Termin'),
+                        Forms\Components\Select::make('status_id')
+                            ->label('Status')
+                            ->relationship('status', 'name')
+                            ->default(fn () => Task::getDefaultStatusId())
+                            ->searchable()
+                            ->preload()
+                            ->required(),
+                        Forms\Components\Select::make('priority')
+                            ->label('Priorytet')
+                            ->options(TaskPriority::options())
+                            ->default(TaskPriority::Normal->value)
+                            ->required(),
+                    ]),
+                Forms\Components\Grid::make(3)
+                    ->schema([
+                        Forms\Components\Select::make('assignee_id')
+                            ->label('Przypisane do')
+                            ->relationship('assignee', 'name')
+                            ->searchable()
+                            ->preload(),
+                        Forms\Components\Select::make('parent_id')
+                            ->label('Zadanie nadrzędne')
+                            ->relationship('parent', 'title', modifyQueryUsing: fn (Builder $query) => $query->whereNull('parent_id'))
+                            ->searchable()
+                            ->preload(),
+                        Forms\Components\Select::make('taskable_type')
+                            ->label('Kontekst zadania')
+                            ->options(Task::getTaskableTypeOptions())
+                            ->default(fn () => request()->query('taskable_type'))
+                            ->native(false)
+                            ->live()
+                            ->afterStateUpdated(function (Set $set): void {
+                                $set('taskable_id', null);
+                            }),
+                    ]),
+                Forms\Components\Select::make('taskable_id')
+                    ->label('Powiązany rekord')
+                    ->options(fn (Get $get): array => Task::getTaskableRecordOptions($get('taskable_type')))
+                    ->default(fn () => request()->query('taskable_id'))
+                    ->searchable()
+                    ->preload()
+                    ->visible(fn (Get $get): bool => filled($get('taskable_type')))
+                    ->required(fn (Get $get): bool => filled($get('taskable_type')))
+                    ->columnSpanFull(),
+                \FilamentTiptapEditor\TiptapEditor::make('description')
+                    ->label('Treść')
+                    ->columnSpanFull(),
+                Forms\Components\ViewField::make('context_navigation')
+                    ->label('Przejdź do')
+                    ->view('filament.pages.partials.calendar-entry-links')
+                    ->viewData(fn (?Task $record): array => [
+                        'links' => \App\Support\Tasks\TaskContextRegistry::linksForTask($record),
+                        'openInNewTab' => true,
+                    ])
+                    ->visible(fn (?Task $record): bool => filled($record?->taskable_type))
+                    ->columnSpanFull(),
+            ])
+            ->columns(1);
     }
 
     public static function form(Form $form): Form
@@ -187,6 +261,42 @@ class TaskResource extends Resource
                 false: fn (Builder $query): Builder => TaskQueryFilters::excludeArchived($query),
                 blank: fn (Builder $query): Builder => TaskQueryFilters::excludeArchived($query),
             );
+    }
+
+    /**
+     * @return array<int, Tables\Columns\Column>
+     */
+    public static function adminListTableColumns(): array
+    {
+        return [
+            Tables\Columns\ViewColumn::make('task_summary')
+                ->label('Zadanie')
+                ->searchable(['title', 'description'])
+                ->sortable(['title'])
+                ->view('filament.tasks.list-task-cell'),
+            Tables\Columns\ViewColumn::make('context_summary')
+                ->label('Kontekst')
+                ->view('filament.tasks.list-task-context-cell'),
+            Tables\Columns\SelectColumn::make('status_id')
+                ->label('Status')
+                ->options(fn (): array => TaskStatus::query()->orderBy('order')->pluck('name', 'id')->all())
+                ->sortable()
+                ->selectablePlaceholder(false),
+            Tables\Columns\TextColumn::make('due_date')
+                ->label('Termin / Priorytet')
+                ->html()
+                ->state(fn (Task $record): string => TaskListColumn::duePriorityCellHtml($record))
+                ->sortable(),
+            Tables\Columns\TextColumn::make('modified_at')
+                ->label('Modyfikacja')
+                ->html()
+                ->state(fn (Task $record): string => TaskListColumn::modificationCellHtml($record))
+                ->sortable(query: function (Builder $query, string $direction): Builder {
+                    $dir = strtolower($direction) === 'asc' ? 'asc' : 'desc';
+
+                    return $query->orderByRaw('COALESCE(updated_at, created_at) '.$dir);
+                }),
+        ];
     }
 
     /**
@@ -426,6 +536,9 @@ class TaskResource extends Resource
     public static function table(Table $table): Table
     {
         return static::configureSharedTable($table, officeOnly: true, showContext: true, includeTrashed: true)
+            ->columns(static::adminListTableColumns())
+            ->recordAction(null)
+            ->actionsColumnLabel('Działanie')
             ->filters(array_merge(static::sharedTableFilters(true), [
                 Tables\Filters\SelectFilter::make('taskable_type')
                     ->label('Kontekst')

@@ -4,7 +4,6 @@ namespace App\Filament\Resources\TaskResource\RelationManagers;
 
 use App\Enums\TaskPriority;
 use App\Enums\TaskSource;
-use App\Filament\Concerns\InteractsWithTaskEditModal;
 use App\Filament\Resources\TaskResource;
 use App\Models\Task;
 use Filament\Forms;
@@ -16,13 +15,22 @@ use Illuminate\Support\Facades\Auth;
 
 class SubtasksRelationManager extends RelationManager
 {
-    use InteractsWithTaskEditModal;
-
     protected static string $relationship = 'subtasks';
 
     protected static ?string $recordTitleAttribute = 'title';
 
     protected static ?string $title = 'Podzadania';
+
+    public bool $panelMode = false;
+
+    protected function dispatchPanelUpdated(): void
+    {
+        if (! $this->panelMode) {
+            return;
+        }
+
+        $this->dispatch('task-full-editor-updated', taskId: $this->getOwnerRecord()->getKey());
+    }
 
     public function form(Form $form): Form
     {
@@ -31,11 +39,12 @@ class SubtasksRelationManager extends RelationManager
                 Forms\Components\TextInput::make('title')
                     ->label('Tytuł')
                     ->required()
-                    ->maxLength(255),
-                \FilamentTiptapEditor\TiptapEditor::make('description')
-                    ->label('Opis'),
-                Forms\Components\DateTimePicker::make('due_date')
-                    ->label('Termin'),
+                    ->maxLength(255)
+                    ->columnSpanFull(),
+                Forms\Components\Textarea::make('description')
+                    ->label('Treść')
+                    ->rows(4)
+                    ->columnSpanFull(),
                 Forms\Components\Select::make('status_id')
                     ->label('Status')
                     ->relationship('status', 'name')
@@ -43,61 +52,80 @@ class SubtasksRelationManager extends RelationManager
                     ->searchable()
                     ->preload()
                     ->required(),
-                Forms\Components\Select::make('priority')
-                    ->label('Priorytet')
-                    ->options(TaskPriority::options())
-                    ->default(TaskPriority::Normal->value)
-                    ->required(),
                 Forms\Components\Select::make('assignee_id')
                     ->label('Przypisane do')
-                    ->relationship('assignee', 'name'),
+                    ->relationship('assignee', 'name')
+                    ->searchable()
+                    ->preload(),
+                Forms\Components\DateTimePicker::make('due_date')
+                    ->label('Termin'),
             ]);
     }
 
     public function table(Table $table): Table
     {
         return $table
-            ->reorderable('order')
-            ->defaultSort('order')
-            ->columns([
+            ->heading($this->panelMode ? static::$title : null)
+            ->paginated($this->panelMode ? false : true)
+            ->searchable(! $this->panelMode)
+            ->columns($this->panelMode ? [
                 Tables\Columns\TextColumn::make('title')
                     ->label('Tytuł')
-                    ->searchable(),
+                    ->wrap(),
                 Tables\Columns\TextColumn::make('status.name')
-                    ->label('Status'),
-                Tables\Columns\TextColumn::make('priority')
-                    ->label('Priorytet')
-                    ->badge()
-                    ->formatStateUsing(fn (?string $state) => TaskPriority::normalize($state) === TaskPriority::Urgent->value
-                        ? TaskPriority::Urgent->label()
-                        : TaskPriority::Normal->label()),
+                    ->label('Status')
+                    ->badge(),
+            ] : [
+                Tables\Columns\TextColumn::make('title')
+                    ->label('Tytuł')
+                    ->searchable()
+                    ->wrap(),
+                Tables\Columns\TextColumn::make('status.name')
+                    ->label('Status')
+                    ->badge(),
                 Tables\Columns\TextColumn::make('assignee.name')
-                    ->label('Przypisane do'),
+                    ->label('Przypisane do')
+                    ->placeholder('—'),
                 Tables\Columns\TextColumn::make('due_date')
                     ->label('Termin')
-                    ->dateTime(),
+                    ->dateTime()
+                    ->placeholder('—')
+                    ->toggleable(isToggledHiddenByDefault: $this->panelMode),
             ])
+            ->reorderable($this->panelMode ? false : 'order')
+            ->defaultSort('order')
             ->filters([
                 //
             ])
             ->headerActions([
                 Tables\Actions\CreateAction::make()
+                    ->when($this->panelMode, fn (Tables\Actions\CreateAction $action) => $action
+                        ->label('Dodaj podzadanie')
+                        ->icon('heroicon-o-plus')
+                        ->iconButton())
+                    ->modalHeading('Nowe podzadanie')
                     ->mutateFormDataUsing(function (array $data): array {
                         $data['author_id'] = Auth::id();
                         $data['taskable_type'] = $this->getOwnerRecord()->taskable_type;
                         $data['taskable_id'] = $this->getOwnerRecord()->taskable_id;
                         $data['source'] = TaskSource::Office->value;
+                        $data['priority'] = TaskPriority::Normal->value;
 
                         return $data;
-                    }),
+                    })
+                    ->after(fn () => $this->dispatchPanelUpdated()),
             ])
             ->recordUrl(null)
             ->recordAction('edit')
             ->actions([
-                TaskResource::modalEditTableAction(),
-                Tables\Actions\DeleteAction::make(),
+                $this->panelMode
+                    ? Tables\Actions\EditAction::make()
+                        ->after(fn () => $this->dispatchPanelUpdated())
+                    : TaskResource::modalEditTableAction(),
+                Tables\Actions\DeleteAction::make()
+                    ->after(fn () => $this->dispatchPanelUpdated()),
             ])
-            ->bulkActions([
+            ->bulkActions($this->panelMode ? [] : [
                 Tables\Actions\BulkActionGroup::make([
                     Tables\Actions\DeleteBulkAction::make(),
                 ]),

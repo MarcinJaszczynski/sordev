@@ -270,8 +270,9 @@ class TaskQueryFilters
             'author',
             'taskable',
             'parent',
+            'attachments' => fn ($attachments) => $attachments->orderBy('created_at'),
             'comments' => fn ($comments) => $comments->latest()->limit(1)->with('author'),
-        ])->withCount('attachments');
+        ])->withCount(['attachments', 'comments']);
     }
 
     public static function changedSince(Builder $query, Carbon $since): Builder

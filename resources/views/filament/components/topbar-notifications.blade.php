@@ -302,7 +302,7 @@
             <div class="topbar-notification-panel w-full rounded-xl border border-gray-200 bg-white shadow-xl">
             <div class="px-4 py-3 border-b border-gray-200 text-sm font-semibold text-gray-900 flex items-center justify-between gap-2">
                 <span>Ostatnie komentarze</span>
-                <span class="text-xs font-medium text-gray-500" x-text="commentsCount + ' zdarzeń'"></span>
+                <span class="text-xs font-medium text-gray-500" x-text="commentsCount > 0 ? commentsCount + ' nowych' : 'Brak nowych'"></span>
             </div>
             <div class="topbar-notification-scroll max-h-[14rem] overflow-y-auto divide-y divide-gray-100" @wheel.stop>
                 <template x-if="itemList('comment').length === 0">
