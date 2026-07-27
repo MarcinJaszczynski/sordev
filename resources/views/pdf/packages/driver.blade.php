@@ -40,7 +40,7 @@
             <table class="rows">
                 <tr>
                     <td class="lbl">Data i godzina podstawienia</td>
-                    <td class="val val--departure">{{ $travelLegends['departure'] ?? '—' }}</td>
+                    <td class="val">{{ $travelLegends['departure'] ?? '—' }}</td>
                 </tr>
                 <tr>
                     <td class="lbl">Miejsce podstawienia</td>
@@ -67,30 +67,19 @@
             <table class="rows">
                 <tr>
                     <td class="lbl">Odjazd / start</td>
-                    <td class="val val--departure">{{ $travelLegends['departure'] ?? '—' }}</td>
+                    <td class="val">{{ $travelLegends['departure'] ?? '—' }}</td>
                 </tr>
                 <tr>
                     <td class="lbl">Docelowe miejsce</td>
-                    <td @class([
-                        'val',
-                        'val--destination' => filled($travelLegends['destination'] ?? null) && ($travelLegends['destination'] ?? '—') !== '—',
-                    ])>{!! nl2br(e($travelLegends['destination'] ?? '—')) !!}</td>
+                    <td class="val">{!! nl2br(e($travelLegends['destination'] ?? '—')) !!}</td>
                 </tr>
                 <tr>
                     <td class="lbl">Powrót</td>
-                    <td @class([
-                        'val',
-                        'val--return' => filled($travelLegends['return'] ?? null)
-                            && str_contains((string) ($travelLegends['return'] ?? ''), 'godz.'),
-                    ])>{{ $travelLegends['return'] ?? '—' }}</td>
+                    <td class="val">{{ $travelLegends['return'] ?? '—' }}</td>
                 </tr>
                 <tr>
                     <td class="lbl">Miejsce powrotu</td>
-                    <td @class([
-                        'val',
-                        'val--return-place-diff' => ($travelLegends['colors']['return_place'] ?? '') === '#7c3aed',
-                        'val--return-place' => ($travelLegends['colors']['return_place'] ?? '') !== '#7c3aed',
-                    ])>{!! nl2br(e($travelLegends['return_place'] ?? '—')) !!}</td>
+                    <td class="val">{!! nl2br(e($travelLegends['return_place'] ?? '—')) !!}</td>
                 </tr>
             </table>
         </div>
