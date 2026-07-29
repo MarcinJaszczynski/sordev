@@ -206,9 +206,22 @@ class EventProgramPoint extends Model
         });
 
         static::deleted(function ($point) {
+            $pointIds = self::query()
+                ->withTrashed()
+                ->where('event_id', $point->event_id)
+                ->where(function ($query) use ($point): void {
+                    $query->where('id', $point->id)
+                        ->orWhere('parent_id', $point->id);
+                })
+                ->pluck('id')
+                ->map(fn ($id): int => (int) $id)
+                ->unique()
+                ->values()
+                ->all();
+
             EventSettlementCost::query()
                 ->whereIn('source_type', ['program_point', 'program_point_payment'])
-                ->where('source_id', $point->id)
+                ->whereIn('source_id', $pointIds)
                 ->delete();
 
             $event = $point->event;

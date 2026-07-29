@@ -37,6 +37,8 @@ class EditEventProgram extends Page
 
     public string $programDayStartTime = '08:00';
 
+    public string $programDayRoute = '';
+
     protected static string $resource = EventResource::class;
 
     protected static string $view = 'filament.resources.event-resource.pages.edit-event-program';
@@ -55,6 +57,7 @@ class EditEventProgram extends Page
         $this->authorizeAccess();
         $this->clampProgramDay();
         $this->syncProgramDayStartTimeProperty();
+        $this->syncProgramDayRouteProperty();
 
         if ($this->programView === 'planner') {
             $this->dispatchPlannerInit();
@@ -152,6 +155,7 @@ class EditEventProgram extends Page
         $this->programDay = $day;
         $this->clampProgramDay();
         $this->syncProgramDayStartTimeProperty();
+        $this->syncProgramDayRouteProperty();
     }
 
     public function updateProgramDayStartTime(?string $time = null): void
@@ -193,6 +197,31 @@ class EditEventProgram extends Page
         $this->dispatchPlannerInit();
     }
 
+    public function updateProgramDayRoute(?string $route = null): void
+    {
+        $route = trim($route ?? $this->programDayRoute);
+
+        /** @var Event $event */
+        $event = $this->getRecord();
+        $event->setProgramDayRoute($this->programDay, $route !== '' ? $route : null);
+        $event->save();
+
+        $this->record = $event->fresh();
+        $this->syncProgramDayRouteProperty();
+
+        Notification::make()
+            ->title('Trasa dnia zapisana')
+            ->success()
+            ->send();
+    }
+
+    protected function syncProgramDayRouteProperty(): void
+    {
+        /** @var Event $event */
+        $event = $this->getRecord();
+        $this->programDayRoute = $event->programDayRoute($this->programDay) ?? '';
+    }
+
     /**
      * @return array<string, string>
      */
@@ -231,6 +260,7 @@ class EditEventProgram extends Page
                 'date' => $event->dateForProgramDay($day)?->format('d.m.Y'),
                 'count' => (int) ($counts[$day] ?? 0),
                 'start_time' => $event->programDayStartTimeLabel($day),
+                'route' => $event->programDayRoute($day),
             ];
         }
 
@@ -302,6 +332,7 @@ class EditEventProgram extends Page
             $this->programDay = $programDay;
             $this->clampProgramDay();
             $this->syncProgramDayStartTimeProperty();
+            $this->syncProgramDayRouteProperty();
         }
 
         if ($programFilter !== null && in_array($programFilter, ['program', 'all'], true)) {
@@ -313,6 +344,7 @@ class EditEventProgram extends Page
     {
         $this->clampProgramDay();
         $this->syncProgramDayStartTimeProperty();
+        $this->syncProgramDayRouteProperty();
     }
 
     public function getMaxContentWidth(): MaxWidth|string|null

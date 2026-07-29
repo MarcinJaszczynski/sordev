@@ -294,6 +294,7 @@ class EventPrintPdfController extends Controller
             'selectedSettlementDocuments' => $selectedDocumentsForView,
             'attachedFiles' => $attachedFiles,
             'travelLegends' => app(EventFolderPdfService::class)->buildTravelLegends($event),
+            'programDayRoutes' => $event->programDayRoutes(),
             'participantSummaryLine' => sprintf(
                 '%d uczestników + %d '.EventParticipantGroupLabels::GRATIS_GENITIVE.'; obsługa: %d; kierowca(y): %d',
                 max(0, $participantCount),

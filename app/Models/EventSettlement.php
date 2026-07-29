@@ -387,6 +387,25 @@ class EventSettlement extends Model
             )
             ->delete();
 
+        $softDeletedProgramPointIds = EventProgramPoint::query()
+            ->onlyTrashed()
+            ->where('event_id', $event->id)
+            ->pluck('id')
+            ->map(fn ($id): int => (int) $id)
+            ->all();
+
+        if ($softDeletedProgramPointIds !== []) {
+            $this->costs()
+                ->where('source_type', 'program_point')
+                ->whereIn('source_id', $softDeletedProgramPointIds)
+                ->delete();
+
+            $this->costs()
+                ->where('source_type', 'program_point_payment')
+                ->whereIn('source_id', $softDeletedProgramPointIds)
+                ->delete();
+        }
+
         $this->costs()
             ->where('source_type', 'program_point_payment')
             ->when(

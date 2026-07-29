@@ -27,6 +27,11 @@
         $hiddenChildCount = $setChildren instanceof \Illuminate\Support\Collection
             ? $setChildren->filter(fn (\App\Models\EventProgramPoint $child): bool => ! $visibleChildIds->contains((int) $child->id))->count()
             : 0;
+
+        $participantCount = max(1, (int) ($record->event?->participant_count ?? 1));
+        $costLabel = ! $isSetParent
+            ? $record->formatAmount($record->resolveEffectiveTotalPrice($participantCount))
+            : null;
     @endphp
 
     <div @class([
@@ -82,6 +87,14 @@
         </div>
 
         <div class="epp-title">{{ $name }}</div>
+
+        @if ($costLabel && $costLabel !== '—')
+            <div class="epp-meta-row">
+                <span class="epp-meta-chip epp-meta-chip--cost" title="Koszt punktu w kalkulacji imprezy">
+                    Koszt: {{ $costLabel }}
+                </span>
+            </div>
+        @endif
 
         @if ($record->hasResolvedOfficeNotes() || $record->hasResolvedPilotNotes())
             <div class="epp-note-markers">

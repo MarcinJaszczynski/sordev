@@ -43,6 +43,8 @@ class PruneOrphanSettlementRowsTest extends TestCase
             'unit_price' => 100,
             'quantity' => 1,
             'calculated_price' => 100,
+            'include_in_calculation' => true,
+            'active' => true,
         ]);
 
         EventSettlementCost::create([
@@ -54,12 +56,72 @@ class PruneOrphanSettlementRowsTest extends TestCase
             'paid_by' => 'office',
         ]);
 
+        EventSettlementCost::create([
+            'settlement_id' => $settlement->id,
+            'source_type' => 'program_point_payment',
+            'source_id' => $point->id,
+            'name' => 'Muzeum • zaliczka',
+            'planned_amount_pln' => 0,
+            'advance_amount' => 25,
+            'paid_by' => 'office',
+        ]);
+
         $this->assertDatabaseHas('event_settlement_costs', [
             'source_type' => 'program_point',
             'source_id' => $point->id,
         ]);
 
         $point->delete();
+
+        $this->assertSame(0, EventSettlementCost::query()
+            ->whereIn('source_type', ['program_point', 'program_point_payment'])
+            ->where('source_id', $point->id)
+            ->count());
+    }
+
+    public function test_import_from_event_removes_costs_for_soft_deleted_program_points(): void
+    {
+        $user = User::factory()->create();
+        $template = EventTemplate::factory()->create();
+
+        $event = Event::create([
+            'event_template_id' => $template->id,
+            'name' => 'Impreza import',
+            'client_name' => 'Szkola',
+            'start_date' => now()->toDateString(),
+            'end_date' => now()->addDay()->toDateString(),
+            'participant_count' => 10,
+            'total_cost' => 1000,
+            'status' => 'confirmed',
+            'created_by' => $user->id,
+        ]);
+
+        $settlement = EventSettlement::findOrCreateActiveForEvent($event);
+
+        $point = EventProgramPoint::create([
+            'event_id' => $event->id,
+            'name' => 'Usuniety punkt',
+            'day' => 1,
+            'order' => 1,
+            'unit_price' => 100,
+            'quantity' => 1,
+            'calculated_price' => 100,
+            'include_in_calculation' => true,
+            'active' => true,
+        ]);
+
+        EventSettlementCost::create([
+            'settlement_id' => $settlement->id,
+            'source_type' => 'program_point',
+            'source_id' => $point->id,
+            'name' => 'Usuniety punkt',
+            'planned_amount_pln' => 100,
+            'paid_by' => 'office',
+        ]);
+
+        EventProgramPoint::withoutEvents(fn () => $point->delete());
+
+        $settlement->importFromEvent();
 
         $this->assertSame(0, EventSettlementCost::query()
             ->where('source_type', 'program_point')
