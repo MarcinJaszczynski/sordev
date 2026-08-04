@@ -254,12 +254,7 @@ class CreateEvent extends CreateRecord
                 ->collapsible()
                 ->collapsed()
                 ->schema([
-                    Forms\Components\TimePicker::make('departure_time')
-                        ->label('Godzina podstawienia')
-                        ->seconds(false)
-                        ->native(false)
-                        ->nullable()
-                        ->visible(fn (): bool => Schema::hasColumn('events', 'departure_time')),
+                    ...EventTransportFields::transportTimeFields(),
 
                     Forms\Components\TextInput::make('transport_company_name')
                         ->label('Firma transportowa')

@@ -276,7 +276,7 @@ class EventResource extends Resource
                             }
                         }
 
-                        static::refreshTotalCostFromTemplateState($set, $get);
+                        static::refreshTotalCostFromTemplateState($set, $get, $record);
                     }),
 
                 Forms\Components\Select::make('program_start_place_id')
@@ -314,8 +314,8 @@ class EventResource extends Resource
                     ->minValue(0)
                     ->default(0)
                     ->live(onBlur: true)
-                    ->afterStateUpdated(fn ($livewire, callable $get, callable $set) => [
-                        static::refreshTotalCostFromTemplateState($set, $get),
+                    ->afterStateUpdated(fn ($livewire, callable $get, callable $set, ?Event $record) => [
+                        static::refreshTotalCostFromTemplateState($set, $get, $record),
                         method_exists($livewire, 'dispatch') ? $livewire->dispatch('event-price-table-refresh') : null,
                     ]),
 
@@ -451,11 +451,11 @@ class EventResource extends Resource
         }
     }
 
-    public static function refreshTotalCostFromTemplateState(callable $set, callable $get): void
+    public static function refreshTotalCostFromTemplateState(callable $set, callable $get, ?Event $record = null): void
     {
         $templateId = (int) ($get('event_template_id') ?? $record?->event_template_id ?? 0);
-        $startPlaceId = (int) ($get('start_place_id') ?? 0);
-        $participantCount = max(1, (int) ($get('participant_count') ?? 1));
+        $startPlaceId = (int) ($get('start_place_id') ?? $record?->start_place_id ?? 0);
+        $participantCount = max(1, (int) ($get('participant_count') ?? $record?->participant_count ?? 1));
         $gratisCount = max(0, (int) ($get('gratis_count') ?? 0));
 
         if (! $templateId || ! $startPlaceId || $participantCount < 1) {
@@ -807,10 +807,25 @@ class EventResource extends Resource
                     ->extraCellAttributes(['class' => 'event-readiness-cell']),
 
                 // --- Ukryte domyślnie ---
+                Tables\Columns\TextColumn::make('substitution_time')
+                    ->label('Godz. podstawienia')
+                    ->state(fn ($record) => $record->substitution_time
+                        ? substr((string) $record->substitution_time, 0, 5)
+                        : '—')
+                    ->visible(fn (): bool => Schema::hasColumn('events', 'substitution_time')),
                 Tables\Columns\TextColumn::make('departure_time')
-                    ->label('Godzina podstawienia')
-                    ->state(fn ($record) => $record->departure_time ?: '—')
+                    ->label('Godz. wyjazdu')
+                    ->state(fn ($record) => $record->departure_time
+                        ? substr((string) $record->departure_time, 0, 5)
+                        : '—')
                     ->visible(fn (): bool => Schema::hasColumn('events', 'departure_time')),
+                Tables\Columns\TextColumn::make('return_time')
+                    ->label('Godz. powrotu')
+                    ->state(fn ($record) => $record->return_time
+                        ? substr((string) $record->return_time, 0, 5)
+                        : '—')
+                    ->toggleable(isToggledHiddenByDefault: true)
+                    ->visible(fn (): bool => Schema::hasColumn('events', 'return_time')),
 
                 Tables\Columns\TextColumn::make('created_at')
                     ->label('Utworzono')

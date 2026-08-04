@@ -237,7 +237,9 @@ final class EventReadinessIndicators
 
         $missing = array_filter([
             blank($event->driver_name) ? 'imię kierowcy' : null,
-            blank($event->departure_time) ? 'godzina podstawienia' : null,
+            (Schema::hasColumn('events', 'substitution_time')
+                ? blank($event->substitution_time)
+                : blank($event->departure_time)) ? 'godzina podstawienia' : null,
             blank($event->pickup_place_details) && blank($event->startPlace?->name) ? 'miejsce podstawienia' : null,
         ]);
 

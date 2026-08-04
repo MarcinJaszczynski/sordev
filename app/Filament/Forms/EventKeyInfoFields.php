@@ -149,7 +149,7 @@ class EventKeyInfoFields
                         ->placeholder('Bez szablonu (impreza czysta)')
                         ->nullable()
                         ->reactive()
-                        ->afterStateUpdated(fn (callable $get, callable $set) => \App\Filament\Resources\EventResource::refreshTotalCostFromTemplateState($set, $get))
+                        ->afterStateUpdated(fn (callable $get, callable $set, ?Event $record) => \App\Filament\Resources\EventResource::refreshTotalCostFromTemplateState($set, $get, $record))
                         ->disabledOn('edit')
                         ->dehydrated()
                         ->hintAction(
@@ -177,11 +177,15 @@ class EventKeyInfoFields
                             ->default(1)
                             ->live(onBlur: true)
                             ->afterStateUpdated(function (callable $get, callable $set, $livewire): void {
-                                if (isset($livewire->record) && $livewire->record instanceof Event) {
-                                    \App\Filament\Resources\EventResource::syncGratisCountFromQtyVariant($set, $get, $livewire->record);
+                                $record = (isset($livewire->record) && $livewire->record instanceof Event)
+                                    ? $livewire->record
+                                    : null;
+
+                                if ($record) {
+                                    \App\Filament\Resources\EventResource::syncGratisCountFromQtyVariant($set, $get, $record);
                                 }
 
-                                \App\Filament\Resources\EventResource::refreshTotalCostFromTemplateState($set, $get);
+                                \App\Filament\Resources\EventResource::refreshTotalCostFromTemplateState($set, $get, $record);
                             })
                             ->required(),
 
@@ -192,7 +196,7 @@ class EventKeyInfoFields
                             ->default(0)
                             ->dehydrated()
                             ->live(onBlur: true)
-                            ->afterStateUpdated(fn (callable $get, callable $set) => \App\Filament\Resources\EventResource::refreshTotalCostFromTemplateState($set, $get))
+                            ->afterStateUpdated(fn (callable $get, callable $set, ?Event $record) => \App\Filament\Resources\EventResource::refreshTotalCostFromTemplateState($set, $get, $record))
                             ->helperText('Osoby jadące w grupie bez opłaty za siebie. Uwzględniane w kalkulacji kosztów i zapisywane w wariancie ilościowym grupy.'),
                     ])
                         ->columns(3)
@@ -210,8 +214,8 @@ class EventKeyInfoFields
                             ->searchable()
                             ->nullable()
                             ->reactive()
-                            ->afterStateUpdated(function (callable $get, callable $set): void {
-                                $templateId = (int) ($get('event_template_id') ?? 0);
+                            ->afterStateUpdated(function (callable $get, callable $set, $livewire, ?Event $record): void {
+                                $templateId = (int) ($get('event_template_id') ?? $record?->event_template_id ?? 0);
                                 $startPlaceId = (int) ($get('start_place_id') ?? 0);
                                 $currentTransfer = (float) ($get('transfer_km') ?? 0);
 
@@ -221,7 +225,11 @@ class EventKeyInfoFields
                                         $startPlaceId,
                                         $currentTransfer
                                     ));
-                                    \App\Filament\Resources\EventResource::refreshTotalCostFromTemplateState($set, $get);
+                                    \App\Filament\Resources\EventResource::refreshTotalCostFromTemplateState($set, $get, $record);
+                                }
+
+                                if (method_exists($livewire, 'dispatch')) {
+                                    $livewire->dispatch('event-price-table-refresh');
                                 }
                             })
                             ->helperText(fn (callable $get): string => filled($get('event_template_id'))
@@ -234,9 +242,9 @@ class EventKeyInfoFields
                             ->minValue(0)
                             ->default(0)
                             ->live(onBlur: true)
-                            ->afterStateUpdated(function (callable $get, callable $set, $livewire): void {
+                            ->afterStateUpdated(function (callable $get, callable $set, $livewire, ?Event $record): void {
                                 if (class_exists(\App\Filament\Resources\EventResource::class)) {
-                                    \App\Filament\Resources\EventResource::refreshTotalCostFromTemplateState($set, $get);
+                                    \App\Filament\Resources\EventResource::refreshTotalCostFromTemplateState($set, $get, $record);
                                 }
                                 if (method_exists($livewire, 'dispatch')) {
                                     $livewire->dispatch('event-price-table-refresh');
@@ -249,7 +257,10 @@ class EventKeyInfoFields
                             ->minValue(0)
                             ->default(0)
                             ->live(onBlur: true)
-                            ->afterStateUpdated(function (callable $get, callable $set, $livewire): void {
+                            ->afterStateUpdated(function (callable $get, callable $set, $livewire, ?Event $record): void {
+                                if (class_exists(\App\Filament\Resources\EventResource::class)) {
+                                    \App\Filament\Resources\EventResource::refreshTotalCostFromTemplateState($set, $get, $record);
+                                }
                                 if (method_exists($livewire, 'dispatch')) {
                                     $livewire->dispatch('event-price-table-refresh');
                                 }

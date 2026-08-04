@@ -31,7 +31,8 @@ class EventPricePerPersonFields
                             }
 
                             $count = max(1, (int) ($get('participant_count') ?? $record->participant_count ?? 1));
-                            $calc = app(EventManualPricePerPersonService::class)->calculatedForEvent($record, $count);
+                            $preview = self::previewEventFromFormState($record, $get);
+                            $calc = app(EventManualPricePerPersonService::class)->calculatedForEvent($preview, $count);
 
                             if (! $calc) {
                                 return 'Brak danych kalkulacji';
@@ -43,7 +44,7 @@ class EventPricePerPersonFields
 
                             return "Zaokrąglona: {$rounded}\nDokładna: {$exact}\nPłacących: {$paying}";
                         })
-                        ->helperText('Wyliczona z kalkulacji (baza + marża + podatki) ÷ liczba płacących uczestników.')
+                        ->helperText('Wyliczona z kalkulacji (baza + marża + podatki) ÷ liczba płacących uczestników. Uwzględnia autokar imprezy oraz bieżące km transferu/programu.')
                         ->extraAttributes(['class' => 'whitespace-pre-line']),
 
                     Forms\Components\Placeholder::make('effective_price_per_person_preview')
@@ -131,5 +132,41 @@ class EventPricePerPersonFields
                         ->helperText('Każda waluta tylko raz. Dotyczy uczestników płacących (bez '.EventParticipantGroupLabels::GRATIS_GENITIVE.', pilota i obsługi).'),
                 ]),
         ];
+    }
+
+    /**
+     * Kopia imprezy z polami cenotwórczymi z formularza — do live-podglądu kalkulacji.
+     * Relacje (program, qty) pozostają z oryginału; autokar / km / miejsce startu z $get.
+     */
+    protected static function previewEventFromFormState(Event $record, Get $get): Event
+    {
+        $preview = $record->newInstance();
+        $preview->forceFill($record->getAttributes());
+        $preview->exists = true;
+        $preview->syncOriginal();
+
+        foreach (['start_place_id', 'bus_id', 'participant_count'] as $intField) {
+            if ($get($intField) !== null && $get($intField) !== '') {
+                $preview->{$intField} = (int) $get($intField) ?: null;
+            }
+        }
+
+        foreach (['transfer_km', 'program_km', 'manual_transport_cost'] as $floatField) {
+            if ($get($floatField) !== null && $get($floatField) !== '') {
+                $preview->{$floatField} = (float) $get($floatField);
+            }
+        }
+
+        if ($get('use_manual_transport_cost') !== null) {
+            $preview->use_manual_transport_cost = (bool) $get('use_manual_transport_cost');
+        }
+
+        if ((int) ($preview->bus_id ?? 0) !== (int) ($record->bus_id ?? 0)) {
+            $preview->unsetRelation('bus');
+        } elseif ($record->relationLoaded('bus')) {
+            $preview->setRelation('bus', $record->getRelation('bus'));
+        }
+
+        return $preview;
     }
 }
