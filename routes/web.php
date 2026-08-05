@@ -15,6 +15,7 @@ use App\Http\Controllers\EventCsvController;
 use App\Http\Controllers\EventPriceDescriptionController;
 use App\Http\Controllers\Front\AgreementFlowController;
 use App\Http\Controllers\Front\FrontController;
+use App\Http\Controllers\InstallmentPaymentLinkController;
 use App\Http\Controllers\InstallController;
 use App\Http\Controllers\Client\ClientContractPdfController;
 use App\Http\Controllers\Pilot\PilotEventPdfController;
@@ -53,6 +54,11 @@ Route::get('/', function () {
 
     return redirect()->route('home', ['regionSlug' => $slug]);
 });
+
+Route::get('/payments/installment/{type}/{schedule}', InstallmentPaymentLinkController::class)
+    ->whereIn('type', ['contract', 'agreement'])
+    ->middleware('signed')
+    ->name('payments.installment.show');
 
 // Przechwyć wszystkie żądania, które zaczynają się od /region i przekieruj
 // je do rzeczywistego sluga (np. /warszawa/...), zachowując resztę ścieżki i query string.

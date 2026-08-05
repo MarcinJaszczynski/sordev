@@ -33,6 +33,20 @@ class ClientPaymentSchedulePage extends Page
         $this->event = $event;
     }
 
+    public function payInstallment(int $scheduleId): void
+    {
+        $schedule = \App\Models\ContractPaymentSchedule::query()
+            ->whereKey($scheduleId)
+            ->whereHas('contract', fn ($q) => $q->where('event_id', $this->event->id))
+            ->firstOrFail();
+
+        $result = app(\App\Actions\Finance\GenerateInstallmentPaymentLinkAction::class)(
+            new \App\Data\GenerateInstallmentPaymentLinkData(schedule: $schedule)
+        );
+
+        $this->redirect($result['url']);
+    }
+
     public function getClientTripNavActiveTab(): ?string
     {
         return 'payment_schedule';

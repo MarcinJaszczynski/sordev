@@ -84,7 +84,9 @@ class PendingPaymentsInboxPage extends Page
 
     public function markCompleted(string $rowId): void
     {
-        app(\App\Services\PendingPaymentCompletionService::class)->complete($rowId);
+        app(\App\Actions\Finance\CompletePendingPaymentAction::class)(
+            new \App\Data\CompletePendingPaymentData(rowId: $rowId)
+        );
 
         $this->forgetInboxCache();
 
@@ -92,6 +94,41 @@ class PendingPaymentsInboxPage extends Page
             ->title('Oznaczono jako wykonane')
             ->success()
             ->send();
+    }
+
+    public function copyPaymentLink(string $rowId): void
+    {
+        $schedule = $this->resolveScheduleFromRowId($rowId);
+        if (! $schedule) {
+            Notification::make()->title('Link dostępny tylko dla rat umów')->warning()->send();
+
+            return;
+        }
+
+        $result = app(\App\Actions\Finance\GenerateInstallmentPaymentLinkAction::class)(
+            new \App\Data\GenerateInstallmentPaymentLinkData(schedule: $schedule)
+        );
+
+        $this->dispatch('copy-to-clipboard', text: $result['url']);
+
+        Notification::make()
+            ->title('Link płatności wygenerowany')
+            ->body($result['url'])
+            ->success()
+            ->send();
+    }
+
+    protected function resolveScheduleFromRowId(string $rowId): ?\Illuminate\Database\Eloquent\Model
+    {
+        if (str_starts_with($rowId, 'contract-')) {
+            return \App\Models\ContractPaymentSchedule::query()->find((int) substr($rowId, 9));
+        }
+
+        if (str_starts_with($rowId, 'agreement-')) {
+            return \App\Models\EventAgreementPaymentSchedule::query()->find((int) substr($rowId, 10));
+        }
+
+        return null;
     }
 
     #[Computed]

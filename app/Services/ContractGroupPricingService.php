@@ -93,6 +93,7 @@ class ContractGroupPricingService
             'payment_scheme_label' => $this->paymentSchemeLabel($agreement),
             'payment_schedules' => $agreement->paymentSchedules
                 ->map(fn ($schedule): array => [
+                    'id' => (int) $schedule->getKey(),
                     'label' => $schedule->label,
                     'amount' => (float) $schedule->amount,
                     'paid_amount' => (float) ($schedule->paid_amount ?? 0),

@@ -47,6 +47,7 @@
                                     <th class="px-4 py-2 text-right font-medium text-gray-600">Kwota</th>
                                     <th class="px-4 py-2 text-right font-medium text-gray-600">Wpłacono</th>
                                     <th class="px-4 py-2 text-left font-medium text-gray-600">Status</th>
+                                    <th class="px-4 py-2 text-right font-medium text-gray-600">Akcja</th>
                                 </tr>
                             </thead>
                             <tbody class="divide-y divide-gray-100">
@@ -67,6 +68,19 @@
                                                 <span class="text-blue-700">W terminie</span>
                                             @else
                                                 <span class="text-gray-600">Oczekuje</span>
+                                            @endif
+                                        </td>
+                                        <td class="px-4 py-2 text-right">
+                                            @if(!($schedule['is_paid'] ?? false) && !empty($schedule['id']) && $contract instanceof \App\Models\Contract)
+                                                <x-filament::button
+                                                    size="sm"
+                                                    color="primary"
+                                                    wire:click="payInstallment({{ (int) $schedule['id'] }})"
+                                                >
+                                                    Opłać ratę
+                                                </x-filament::button>
+                                            @else
+                                                <span class="text-gray-400">—</span>
                                             @endif
                                         </td>
                                     </tr>

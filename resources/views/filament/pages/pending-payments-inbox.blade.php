@@ -167,6 +167,14 @@
 
                                 <div class="inline-flex items-center gap-2">
 
+                                    @if(in_array($row['type'] ?? '', ['contract', 'agreement'], true))
+                                        <button
+                                            type="button"
+                                            wire:click="copyPaymentLink('{{ $row['id'] }}')"
+                                            class="text-xs font-semibold text-amber-700 hover:underline"
+                                        >Link płatności</button>
+                                    @endif
+
                                     @if($row['url'])
 
                                         <a href="{{ $row['url'] }}" class="text-primary-600 hover:underline text-xs font-semibold">Otwórz</a>

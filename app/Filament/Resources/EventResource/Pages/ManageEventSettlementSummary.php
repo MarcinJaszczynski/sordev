@@ -110,12 +110,24 @@ class ManageEventSettlementSummary extends EditEventSettlement
 
 
 
+    #[Computed]
+
+    public function marginPlanVsActual(): array
+
+    {
+
+        return \App\Support\EventMarginPlanVsActual::forEvent($this->event);
+
+    }
+
+
+
     #[On('settlement-data-changed')]
     public function onSettlementDataChanged(): void
     {
         parent::onSettlementDataChanged();
 
-        unset($this->settlementDashboard, $this->settlementReport);
+        unset($this->settlementDashboard, $this->settlementReport, $this->marginPlanVsActual);
     }
 
     public function refreshPlanFromEvent(): void
@@ -131,7 +143,7 @@ class ManageEventSettlementSummary extends EditEventSettlement
 
 
 
-        unset($this->settlementDashboard, $this->settlementReport);
+        unset($this->settlementDashboard, $this->settlementReport, $this->marginPlanVsActual);
 
 
 
