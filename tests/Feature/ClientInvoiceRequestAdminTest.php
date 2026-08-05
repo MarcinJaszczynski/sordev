@@ -59,6 +59,15 @@ class ClientInvoiceRequestAdminTest extends TestCase
         $this->assertSame($actor->id, $request->processed_by);
         $this->assertNotNull($request->processed_at);
         $this->assertSame('Wystawiono FV', $request->admin_notes);
+
+        if (Schema::hasTable('sales_invoices')) {
+            $this->assertDatabaseHas('sales_invoices', [
+                'event_id' => $request->event_id,
+                'client_invoice_request_id' => $request->id,
+                'procedure' => 'vat_margin',
+                'status' => 'draft',
+            ]);
+        }
     }
 
     public function test_workflow_rejects_request_with_note(): void

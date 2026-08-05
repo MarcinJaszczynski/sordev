@@ -4,6 +4,7 @@ namespace App\Models;
 
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Database\Eloquent\Relations\HasMany;
 
 class ClientInvoiceRequest extends Model
 {
@@ -65,6 +66,11 @@ class ClientInvoiceRequest extends Model
     public function processedByUser(): BelongsTo
     {
         return $this->belongsTo(User::class, 'processed_by');
+    }
+
+    public function salesInvoices(): HasMany
+    {
+        return $this->hasMany(SalesInvoice::class);
     }
 
     public function getStatusLabelAttribute(): string

@@ -21,8 +21,14 @@ class CalendarEventAggregator
     /** @return Collection<int, array<string, mixed>> */
     public function events(array $filters = []): Collection
     {
-        $from = isset($filters['from']) ? Carbon::parse($filters['from']) : now()->startOfMonth();
-        $to = isset($filters['to']) ? Carbon::parse($filters['to']) : now()->endOfMonth()->addMonths(2);
+        // Domyślnie szeroki zakres: bieżący miesiąc bywa pusty, a nawigacja FC
+        // bez from/to inaczej pokazywałaby pusty kalendarz.
+        $from = isset($filters['from'])
+            ? Carbon::parse($filters['from'])
+            : now()->subMonths(6)->startOfMonth();
+        $to = isset($filters['to'])
+            ? Carbon::parse($filters['to'])
+            : now()->addMonths(12)->endOfMonth();
         $types = collect($filters['types'] ?? [])->filter()->values();
 
         $items = collect();
@@ -65,6 +71,124 @@ class CalendarEventAggregator
         }
 
         return $items->sortBy('start')->values();
+    }
+
+    /**
+     * Zasoby do widoku Gantt-lite (piloci, transport, hotele).
+     *
+     * @return array{resources: array<int, array<string, mixed>>, events: Collection<int, array<string, mixed>>}
+     */
+    public function resourceTimeline(array $filters = []): array
+    {
+        $from = isset($filters['from'])
+            ? Carbon::parse($filters['from'])
+            : now()->subMonths(1)->startOfMonth();
+        $to = isset($filters['to'])
+            ? Carbon::parse($filters['to'])
+            : now()->addMonths(6)->endOfMonth();
+
+        $trips = Event::query()
+            ->with(['assignedUser', 'bus', 'transportContractor'])
+            ->whereNotNull('start_date')
+            ->whereDate('start_date', '<=', $to)
+            ->where(function ($query) use ($from): void {
+                $query->whereNull('end_date')
+                    ->orWhereDate('end_date', '>=', $from);
+            })
+            ->whereNotIn('status', [Event::STATUS_CANCELLED])
+            ->limit(200)
+            ->get();
+
+        $resources = [];
+        $events = collect();
+
+        foreach ($trips as $event) {
+            $start = $event->start_date?->toDateString();
+            $end = ($event->end_date ?? $event->start_date)?->copy()->addDay()->toDateString();
+            $title = ($event->code ? $event->code.' — ' : '').$event->name;
+
+            if ($event->assigned_to) {
+                $resourceId = 'pilot-'.$event->assigned_to;
+                $resources[$resourceId] = [
+                    'id' => $resourceId,
+                    'title' => 'Pilot: '.($event->assignedUser?->name ?? '#'.$event->assigned_to),
+                    'group' => 'pilots',
+                ];
+                $events->push([
+                    'id' => 'pilot-event-'.$event->id,
+                    'resourceId' => $resourceId,
+                    'title' => $title,
+                    'start' => $start,
+                    'end' => $end,
+                    'backgroundColor' => '#0f766e',
+                    'borderColor' => '#0f766e',
+                ]);
+            }
+
+            if ($event->bus_id || $event->transport_contractor_id) {
+                $resourceId = $event->bus_id
+                    ? 'bus-'.$event->bus_id
+                    : 'transport-'.$event->transport_contractor_id;
+                $resources[$resourceId] = [
+                    'id' => $resourceId,
+                    'title' => 'Transport: '.($event->bus?->name
+                        ?? $event->transportContractor?->name
+                        ?? $event->transport_company_name
+                        ?? $resourceId),
+                    'group' => 'transport',
+                ];
+                $events->push([
+                    'id' => 'transport-event-'.$event->id,
+                    'resourceId' => $resourceId,
+                    'title' => $title,
+                    'start' => $start,
+                    'end' => $end,
+                    'backgroundColor' => '#2563eb',
+                    'borderColor' => '#1d4ed8',
+                ]);
+            }
+        }
+
+        if (Schema::hasTable('event_hotel_stays')) {
+            EventHotelStay::query()
+                ->with(['event', 'contractor'])
+                ->whereHas('event', function ($query) use ($from, $to): void {
+                    $query->whereNotNull('start_date')
+                        ->whereDate('start_date', '<=', $to)
+                        ->where(function ($q) use ($from): void {
+                            $q->whereNull('end_date')->orWhereDate('end_date', '>=', $from);
+                        });
+                })
+                ->limit(200)
+                ->get()
+                ->each(function (EventHotelStay $stay) use (&$resources, &$events): void {
+                    $event = $stay->event;
+                    if (! $event?->start_date) {
+                        return;
+                    }
+                    $contractorId = $stay->contractor_id ?: 0;
+                    $resourceId = 'hotel-'.($contractorId ?: 'day-'.$stay->day.'-'.$stay->id);
+                    $resources[$resourceId] = [
+                        'id' => $resourceId,
+                        'title' => 'Hotel: '.($stay->contractor?->name ?? 'Dzień '.$stay->day),
+                        'group' => 'hotels',
+                    ];
+                    $events->push([
+                        'id' => 'hotel-stay-'.$stay->id,
+                        'resourceId' => $resourceId,
+                        'title' => ($event->code ? $event->code.' — ' : '').$event->name.' (dzień '.$stay->day.')',
+                        'start' => $event->start_date->copy()->addDays(max(0, (int) $stay->day - 1))->toDateString(),
+                        'end' => $event->start_date->copy()->addDays(max(1, (int) $stay->day))->toDateString(),
+                        'backgroundColor' => '#a16207',
+                        'borderColor' => '#a16207',
+                    ]);
+                });
+        }
+
+        return [
+            'resources' => array_values($resources),
+            'events' => $events->values(),
+        ];
     }
 
     /** @return Collection<int, array<string, mixed>> */

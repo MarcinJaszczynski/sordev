@@ -49,6 +49,13 @@ class ListEvents extends ListRecords
                 ->modifyQueryUsing(fn (Builder $query): Builder => $query
                     ->whereDate('start_date', '>=', $today)
                     ->whereNotIn('status', [Event::STATUS_CANCELLED, Event::STATUS_SETTLED])),
+            'pipeline' => Tab::make('Pipeline sprzedaży')
+                ->modifyQueryUsing(fn (Builder $query): Builder => $query
+                    ->whereIn('status', [
+                        Event::STATUS_INQUIRY,
+                        Event::STATUS_OFFER,
+                        Event::STATUS_PROVISIONAL_RESERVATION,
+                    ])),
             'to_settle' => Tab::make('Nierozliczone')
                 ->modifyQueryUsing(fn (Builder $query): Builder => $query
                     ->whereIn('status', [Event::STATUS_TO_SETTLE, 'in_progress'])),

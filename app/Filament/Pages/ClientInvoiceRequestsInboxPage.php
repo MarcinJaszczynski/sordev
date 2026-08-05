@@ -152,7 +152,7 @@ class ClientInvoiceRequestsInboxPage extends Page implements HasTable
                             $data['admin_notes'] ?? null,
                         );
 
-                        Notification::make()->title('Wniosek oznaczony jako zrealizowany')->success()->send();
+                        Notification::make()->title('Wniosek zrealizowany — utworzono szkic FV VAT-Marża')->success()->send();
                     }),
                 Tables\Actions\Action::make('markRejected')
                     ->label('Odrzuć')

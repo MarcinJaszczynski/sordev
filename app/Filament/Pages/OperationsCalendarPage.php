@@ -7,6 +7,7 @@ use App\Filament\Concerns\InteractsWithTaskOwnershipScope;
 use App\Models\Task;
 use App\Services\CalendarEventAggregator;
 use App\Support\FilamentNavigation;
+use Carbon\Carbon;
 use Filament\Actions;
 use Filament\Actions\Action;
 use Filament\Pages\Page;
@@ -16,6 +17,7 @@ class OperationsCalendarPage extends Page
 {
     use InteractsWithTaskEditModal;
     use InteractsWithTaskOwnershipScope;
+
     protected static ?string $navigationIcon = 'heroicon-o-calendar-days';
 
     protected static string $view = 'filament.pages.operations-calendar';
@@ -34,16 +36,28 @@ class OperationsCalendarPage extends Page
 
     public string $viewMode = 'dayGridMonth';
 
+    public string $layoutMode = 'calendar';
+
     public ?string $clickedDate = null;
 
     /** @var array<string, mixed>|null */
     public ?array $selectedCalendarEntry = null;
+
+    public ?string $visibleFrom = null;
+
+    public ?string $visibleTo = null;
 
     public static function canAccess(): bool
     {
         $user = auth()->user();
 
         return $user && $user->hasRole(['admin', 'super_admin', 'ksiegowosc', 'biuro']);
+    }
+
+    public function mount(): void
+    {
+        // Kalendarz operacyjny: pełny obraz biura, nie tylko „przypisane do mnie”.
+        $this->tasksScope = 'all';
     }
 
     public function getTitle(): string
@@ -82,7 +96,7 @@ class OperationsCalendarPage extends Page
     protected function createTaskDefaultDueDate(): mixed
     {
         return $this->clickedDate
-            ? \Carbon\Carbon::parse($this->clickedDate)->startOfDay()
+            ? Carbon::parse($this->clickedDate)->startOfDay()
             : $this->pendingCreateDueDate;
     }
 
@@ -116,6 +130,20 @@ class OperationsCalendarPage extends Page
         $this->mountAction('calendarEntryContext');
     }
 
+    public function setVisibleRange(?string $from, ?string $to): void
+    {
+        $normalizedFrom = filled($from) ? Carbon::parse($from)->toDateString() : null;
+        $normalizedTo = filled($to) ? Carbon::parse($to)->toDateString() : null;
+
+        if ($this->visibleFrom === $normalizedFrom && $this->visibleTo === $normalizedTo) {
+            return;
+        }
+
+        $this->visibleFrom = $normalizedFrom;
+        $this->visibleTo = $normalizedTo;
+        $this->invalidateCalendarEvents();
+    }
+
     public function resetTaskFilters(): void
     {
         $this->tasksScope = 'all';
@@ -126,12 +154,12 @@ class OperationsCalendarPage extends Page
             $this->enabledTypes[] = 'tasks';
         }
 
-        unset($this->calendarEvents);
+        $this->invalidateCalendarEvents();
     }
 
     public function hasActiveTaskFilters(): bool
     {
-        return $this->tasksScope !== 'assigned'
+        return $this->tasksScope !== 'all'
             || $this->tasksOnlyUrgent
             || $this->showFinishedTasks
             || ! in_array('tasks', $this->enabledTypes, true);
@@ -139,7 +167,7 @@ class OperationsCalendarPage extends Page
 
     protected function afterTaskModalSaved(Task $task): void
     {
-        unset($this->calendarEvents);
+        $this->invalidateCalendarEvents();
     }
 
     #[Computed]
@@ -148,12 +176,59 @@ class OperationsCalendarPage extends Page
         return app(CalendarEventAggregator::class)
             ->events([
                 'types' => $this->enabledTypes,
+                'from' => $this->resolveRangeFrom()->toDateString(),
+                'to' => $this->resolveRangeTo()->toDateString(),
                 'show_finished_tasks' => $this->showFinishedTasks,
                 'tasks_scope' => $this->tasksScope,
                 'tasks_only_urgent' => $this->tasksOnlyUrgent,
                 'user_id' => auth()->id(),
             ])
             ->all();
+    }
+
+    #[Computed]
+    public function resourceTimeline(): array
+    {
+        return app(CalendarEventAggregator::class)->resourceTimeline([
+            'from' => $this->resolveRangeFrom()->toDateString(),
+            'to' => $this->resolveRangeTo()->toDateString(),
+        ]);
+    }
+
+    public function setLayoutMode(string $mode): void
+    {
+        $this->layoutMode = in_array($mode, ['calendar', 'resources'], true) ? $mode : 'calendar';
+        unset($this->resourceTimeline);
+    }
+
+    #[Computed]
+    public function initialCalendarDate(): string
+    {
+        $today = now()->startOfDay();
+        $starts = collect($this->calendarEvents)
+            ->pluck('start')
+            ->filter()
+            ->map(fn (mixed $date): Carbon => Carbon::parse((string) $date)->startOfDay())
+            ->sortBy(fn (Carbon $date): int => $date->timestamp)
+            ->values();
+
+        if ($starts->isEmpty()) {
+            return $today->toDateString();
+        }
+
+        $inCurrentMonth = $starts->contains(
+            fn (Carbon $date): bool => $date->isSameMonth($today)
+        );
+
+        if ($inCurrentMonth) {
+            return $today->toDateString();
+        }
+
+        $nearestPast = $starts
+            ->filter(fn (Carbon $date): bool => $date->lte($today))
+            ->last();
+
+        return ($nearestPast ?? $starts->first())->toDateString();
     }
 
     public function toggleType(string $type): void
@@ -167,21 +242,47 @@ class OperationsCalendarPage extends Page
             $this->enabledTypes[] = $type;
         }
 
-        unset($this->calendarEvents);
+        $this->invalidateCalendarEvents();
     }
 
     protected function afterTasksScopeChanged(): void
     {
-        unset($this->calendarEvents);
+        $this->invalidateCalendarEvents();
     }
 
     public function updatedShowFinishedTasks(): void
     {
-        unset($this->calendarEvents);
+        $this->invalidateCalendarEvents();
     }
 
     public function updatedTasksOnlyUrgent(): void
     {
+        $this->invalidateCalendarEvents();
+    }
+
+    protected function invalidateCalendarEvents(): void
+    {
         unset($this->calendarEvents);
+        unset($this->initialCalendarDate);
+        unset($this->resourceTimeline);
+        $this->dispatch('operations-calendar-refresh');
+    }
+
+    protected function resolveRangeFrom(): Carbon
+    {
+        if (filled($this->visibleFrom)) {
+            return Carbon::parse($this->visibleFrom)->subMonthNoOverflow()->startOfDay();
+        }
+
+        return now()->subMonths(6)->startOfMonth();
+    }
+
+    protected function resolveRangeTo(): Carbon
+    {
+        if (filled($this->visibleTo)) {
+            return Carbon::parse($this->visibleTo)->addMonthNoOverflow()->endOfDay();
+        }
+
+        return now()->addMonths(12)->endOfMonth();
     }
 }

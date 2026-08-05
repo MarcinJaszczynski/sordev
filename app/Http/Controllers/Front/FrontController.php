@@ -2634,6 +2634,25 @@ class FrontController extends Controller
         $subject = "Zapytanie ze strony - {$eventName}".(strlen(trim($startPlace)) ? " {$startPlace}" : '');
         $eventUrl = $data['event_url'] ?? url('/');
 
+        try {
+            app(\App\Actions\Crm\CreateInquiryFromWebAction::class)(
+                new \App\Data\CreateInquiryFromWebData(
+                    email: (string) $data['email'],
+                    telephone: (string) $data['telephone'],
+                    name: $data['name'] ?? null,
+                    message: $data['message'] ?? null,
+                    eventName: $eventName,
+                    eventUrl: is_string($eventUrl) ? $eventUrl : null,
+                    startPlaceName: $startPlace !== '' ? $startPlace : null,
+                )
+            );
+        } catch (\Throwable $e) {
+            try {
+                Log::error('CreateInquiryFromWebAction error: '.$e->getMessage());
+            } catch (\Throwable) {
+            }
+        }
+
         // Build body
         $lines = [];
         $lines[] = 'Nowe zapytanie z formularza na stronie oferty.';

@@ -44,7 +44,7 @@ class OperationsCalendarPageTest extends TestCase
             ->assertSet('mountedActions', ['editTask']);
     }
 
-    public function test_calendar_defaults_to_assigned_scope(): void
+    public function test_calendar_defaults_to_all_tasks_scope(): void
     {
         $user = User::factory()->create();
         $user->assignRole('admin');
@@ -70,6 +70,41 @@ class OperationsCalendarPageTest extends TestCase
 
         $component = Livewire::actingAs($user)
             ->test(OperationsCalendarPage::class)
+            ->assertSet('tasksScope', 'all');
+
+        $taskEvents = collect($component->instance()->calendarEvents)
+            ->filter(fn (array $event): bool => ($event['type'] ?? null) === 'tasks');
+
+        $this->assertCount(2, $taskEvents);
+    }
+
+    public function test_calendar_can_narrow_to_assigned_scope(): void
+    {
+        $user = User::factory()->create();
+        $user->assignRole('admin');
+        $other = User::factory()->create();
+
+        Task::create([
+            'title' => 'Przypisane z kalendarza',
+            'due_date' => now()->addDay(),
+            'status_id' => Task::getDefaultStatusId(),
+            'priority' => 'normal',
+            'author_id' => $other->id,
+            'assignee_id' => $user->id,
+        ]);
+
+        Task::create([
+            'title' => 'Obce z kalendarza',
+            'due_date' => now()->addDay(),
+            'status_id' => Task::getDefaultStatusId(),
+            'priority' => 'normal',
+            'author_id' => $other->id,
+            'assignee_id' => $other->id,
+        ]);
+
+        $component = Livewire::actingAs($user)
+            ->test(OperationsCalendarPage::class)
+            ->call('setTasksScope', 'assigned')
             ->assertSet('tasksScope', 'assigned');
 
         $taskEvents = collect($component->instance()->calendarEvents)
@@ -77,6 +112,59 @@ class OperationsCalendarPageTest extends TestCase
 
         $this->assertCount(1, $taskEvents);
         $this->assertStringContainsString('Przypisane z kalendarza', (string) $taskEvents->first()['title']);
+    }
+
+    public function test_calendar_loads_past_events_outside_current_month(): void
+    {
+        $user = User::factory()->create();
+        $user->assignRole('admin');
+
+        $event = \App\Models\Event::factory()->create([
+            'assigned_to' => $user->id,
+            'start_date' => now()->subMonths(2)->toDateString(),
+            'end_date' => now()->subMonths(2)->addDays(2)->toDateString(),
+        ]);
+
+        $component = Livewire::actingAs($user)
+            ->test(OperationsCalendarPage::class);
+
+        $eventEntries = collect($component->instance()->calendarEvents)
+            ->filter(fn (array $item): bool => ($item['id'] ?? null) === 'event-'.$event->id);
+
+        $this->assertCount(1, $eventEntries);
+        $this->assertSame(
+            $event->start_date->toDateString(),
+            $component->instance()->initialCalendarDate
+        );
+    }
+
+    public function test_set_visible_range_reloads_events_for_window(): void
+    {
+        $user = User::factory()->create();
+        $user->assignRole('admin');
+
+        $inRange = \App\Models\Event::factory()->create([
+            'assigned_to' => $user->id,
+            'start_date' => '2025-01-15',
+            'end_date' => '2025-01-17',
+        ]);
+
+        $outOfRange = \App\Models\Event::factory()->create([
+            'assigned_to' => $user->id,
+            'start_date' => '2025-06-15',
+            'end_date' => '2025-06-17',
+        ]);
+
+        $component = Livewire::actingAs($user)
+            ->test(OperationsCalendarPage::class)
+            ->call('setVisibleRange', '2025-01-01', '2025-01-31');
+
+        $ids = collect($component->instance()->calendarEvents)
+            ->pluck('id')
+            ->all();
+
+        $this->assertContains('event-'.$inRange->id, $ids);
+        $this->assertNotContains('event-'.$outOfRange->id, $ids);
     }
 
     public function test_reset_task_filters_shows_all_tasks_and_enables_tasks_type(): void
