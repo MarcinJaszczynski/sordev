@@ -44,6 +44,7 @@ class AdminPanelProvider extends PanelProvider
             ->maxContentWidth(MaxWidth::Full)
             ->darkMode(condition: false, isForced: true)
             ->defaultThemeMode(ThemeMode::Light)
+            ->globalSearchKeyBindings(['command+k', 'ctrl+k'])
             ->colors([
                 'primary' => Color::hex('#B45309'),
                 'gray' => Color::Slate,

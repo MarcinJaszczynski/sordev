@@ -49,12 +49,7 @@ trait HasEventWorkflowContext
             'title_url' => EventResource::getUrl('settlement-summary', ['record' => $event->getKey()]),
             'subtitle' => $termin.($event->startPlace?->name ? ' · '.$event->startPlace->name : ''),
             'status' => $statusLabel,
-            'statusColor' => match ($event->status) {
-                Event::STATUS_CONFIRMED => 'success',
-                Event::STATUS_TO_SETTLE => 'warning',
-                Event::STATUS_CANCELLED => 'gray',
-                default => 'info',
-            },
+            'statusColor' => Event::statusBadgeColor($event->status),
             'meta' => [
                 ['label' => 'Kod', 'value' => $event->code ?? '—'],
                 ['label' => 'Uczestnicy', 'value' => $participantsDisplay],

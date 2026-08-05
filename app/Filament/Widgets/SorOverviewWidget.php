@@ -2,11 +2,13 @@
 
 namespace App\Filament\Widgets;
 
+use App\Filament\Pages\PendingPaymentsInboxPage;
 use App\Models\Event;
 use App\Models\EventSettlement;
 use App\Models\Reservation;
 use App\Models\Task;
 use App\Models\VendorInvoice;
+use App\Services\PendingPaymentAggregator;
 use App\Support\Tasks\TaskQueryFilters;
 use Filament\Widgets\StatsOverviewWidget;
 use Filament\Widgets\StatsOverviewWidget\Stat;
@@ -18,12 +20,22 @@ class SorOverviewWidget extends StatsOverviewWidget
 
     protected function getStats(): array
     {
+        $today = now()->toDateString();
+
         $eventsInProgress = Event::query()
             ->whereIn('status', [
                 Event::STATUS_CONFIRMED,
                 Event::STATUS_PROVISIONAL_RESERVATION,
                 Event::STATUS_TO_SETTLE,
                 Event::STATUS_OFFER,
+            ])
+            ->count();
+
+        $upcomingTrips = Event::query()
+            ->whereDate('start_date', '>=', $today)
+            ->whereIn('status', [
+                Event::STATUS_CONFIRMED,
+                Event::STATUS_PROVISIONAL_RESERVATION,
             ])
             ->count();
 
@@ -52,13 +64,27 @@ class SorOverviewWidget extends StatsOverviewWidget
                 ->count()
             : null;
 
+        $pendingPaymentsCount = app(PendingPaymentAggregator::class)
+            ->collect(now()->subMonths(1)->startOfDay(), now()->addMonths(3)->endOfDay())
+            ->count();
+
         $lastBackup = $this->lastBackupLabel();
 
         $stats = [
             Stat::make('Imprezy w toku', (string) $eventsInProgress)
-                ->description('Potwierdzone / w realizacji')
+                ->description('Oferta / potwierdzone / do rozliczenia')
                 ->url(route('filament.admin.resources.events.index'))
                 ->color('primary'),
+            Stat::make('Nadchodzące wyjazdy', (string) $upcomingTrips)
+                ->description('Potwierdzone od dziś')
+                ->url(route('filament.admin.resources.events.index', [
+                    'activeTab' => 'upcoming',
+                ]))
+                ->color('info'),
+            Stat::make('Brakujące wpłaty', (string) $pendingPaymentsCount)
+                ->description('Terminy w stercie płatności')
+                ->url(PendingPaymentsInboxPage::getUrl())
+                ->color($pendingPaymentsCount > 0 ? 'danger' : 'success'),
             Stat::make('Otwarte rozliczenia', (string) $openSettlements)
                 ->description('Szkice i aktywne')
                 ->url(route('filament.admin.resources.event-settlements.index'))

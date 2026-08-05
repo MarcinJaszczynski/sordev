@@ -35,6 +35,17 @@ class ManageEventPilot extends EditRecord
     public function form(Form $form): Form
     {
         return $form->schema([
+            Forms\Components\Placeholder::make('pilot_empty_state')
+                ->hiddenLabel()
+                ->visible(fn (): bool => blank($this->record->assigned_to))
+                ->content(new \Illuminate\Support\HtmlString(
+                    '<div class="rounded-lg border border-dashed border-gray-300 bg-gray-50 px-4 py-6 text-center dark:border-gray-600 dark:bg-gray-800/50">'
+                    .'<p class="text-sm font-medium text-gray-900 dark:text-gray-100">Brak przypisanego pilota</p>'
+                    .'<p class="mt-1 text-sm text-gray-500">Wybierz pilota w sekcji poniżej albo użyj szybkiego przypisania z listy imprez.</p>'
+                    .'</div>'
+                ))
+                ->columnSpanFull(),
+
             Forms\Components\Section::make('Podgląd portalu pilota')
                 ->icon('heroicon-o-eye')
                 ->description('Otwórz widok imprezy tak, jak zobaczy ją przypisany pilot.')

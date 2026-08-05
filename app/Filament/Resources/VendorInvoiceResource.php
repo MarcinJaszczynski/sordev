@@ -43,6 +43,35 @@ class VendorInvoiceResource extends Resource
 
     protected static ?int $navigationSort = 6;
 
+    protected static ?string $recordTitleAttribute = 'invoice_number';
+
+    /**
+     * @return array<int, string>
+     */
+    public static function getGloballySearchableAttributes(): array
+    {
+        return ['invoice_number', 'ksef_number', 'seller_name', 'seller_nip', 'buyer_name'];
+    }
+
+    /**
+     * @return array<string, string>
+     */
+    public static function getGlobalSearchResultDetails(\Illuminate\Database\Eloquent\Model $record): array
+    {
+        /** @var VendorInvoice $record */
+        $details = [];
+
+        if ($record->seller_name) {
+            $details['Wystawca'] = (string) $record->seller_name;
+        }
+
+        if ($record->gross_amount !== null) {
+            $details['Brutto'] = \App\Support\MoneyFormatter::format((float) $record->gross_amount, $record->currency ?: 'PLN');
+        }
+
+        return $details;
+    }
+
     public static function canViewAny(): bool
     {
         return parent::canViewAny() || static::canViewInvoices();

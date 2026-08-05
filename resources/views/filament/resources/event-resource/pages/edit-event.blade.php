@@ -7,27 +7,7 @@
 >
     @php
         $financials = $this->financials();
-        $keyInfo = $this->keyInfo();
-        $shortcuts = $this->shortcuts();
     @endphp
-
-    @if (count($shortcuts))
-        <div class="mb-6 sticky top-0 z-10 -mx-4 px-4 py-3 bg-white/95 dark:bg-gray-900/95 backdrop-blur border-b border-gray-200 dark:border-gray-700">
-            <div class="flex flex-wrap gap-2">
-                @foreach ($shortcuts as $shortcut)
-                    <x-filament::button
-                        tag="a"
-                        :href="$shortcut['url']"
-                        :icon="$shortcut['icon']"
-                        color="gray"
-                        size="sm"
-                    >
-                        {{ $shortcut['label'] }}
-                    </x-filament::button>
-                @endforeach
-            </div>
-        </div>
-    @endif
 
     @capture($form)
         <x-filament-panels::form

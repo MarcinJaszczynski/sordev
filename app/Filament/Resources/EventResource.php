@@ -2,6 +2,10 @@
 
 namespace App\Filament\Resources;
 
+use App\Actions\Events\AssignEventPilotAction;
+use App\Actions\Events\ChangeEventStatusAction;
+use App\Data\AssignEventPilotData;
+use App\Data\ChangeEventStatusData;
 use App\Filament\Forms\EventKeyInfoFields;
 use App\Filament\Forms\EventNotesFields;
 use App\Filament\Forms\EventReadinessFields;
@@ -22,6 +26,8 @@ use App\Support\EventListFinanceColumn;
 use App\Support\EventReadinessIndicators;
 use App\Support\ExecutiveAccess;
 use App\Support\FilamentNavigation;
+use App\Support\MoneyFormatter;
+use Illuminate\Database\Eloquent\Model;
 use Filament\Forms;
 use Filament\Forms\Form;
 use Filament\Pages\SubNavigationPosition;
@@ -47,6 +53,46 @@ class EventResource extends Resource
     protected static ?string $navigationLabel = 'Imprezy';
 
     protected static ?int $navigationSort = 1;
+
+    protected static ?string $recordTitleAttribute = 'name';
+
+    /**
+     * @return array<int, string>
+     */
+    public static function getGloballySearchableAttributes(): array
+    {
+        return ['name', 'code', 'client_name', 'client_email', 'client_phone'];
+    }
+
+    /**
+     * @return array<string, string>
+     */
+    public static function getGlobalSearchResultDetails(Model $record): array
+    {
+        /** @var Event $record */
+        $details = [];
+
+        if ($record->code) {
+            $details['Kod'] = $record->code;
+        }
+
+        $details['Status'] = Event::getStatusOptions()[$record->status] ?? (string) $record->status;
+
+        if ($record->start_date) {
+            $details['Termin'] = $record->start_date->format('d.m.Y');
+        }
+
+        if ($record->client_name) {
+            $details['Klient'] = $record->client_name;
+        }
+
+        return $details;
+    }
+
+    public static function getGlobalSearchResultUrl(Model $record): string
+    {
+        return static::getUrl('edit', ['record' => $record]);
+    }
 
     public static function form(Form $form): Form
     {
@@ -451,7 +497,7 @@ class EventResource extends Resource
         }
     }
 
-    public static function refreshTotalCostFromTemplateState(callable $set, callable $get): void
+    public static function refreshTotalCostFromTemplateState(callable $set, callable $get, ?Event $record = null): void
     {
         $templateId = (int) ($get('event_template_id') ?? $record?->event_template_id ?? 0);
         $startPlaceId = (int) ($get('start_place_id') ?? 0);
@@ -634,7 +680,10 @@ class EventResource extends Resource
                             return (string) $record->status;
                         }
 
-                        $record->changeStatus($state);
+                        app(ChangeEventStatusAction::class)(new ChangeEventStatusData(
+                            event: $record,
+                            status: $state,
+                        ));
 
                         return (string) $record->fresh()->status;
                     })
@@ -712,16 +761,16 @@ class EventResource extends Resource
                             $warn = $settlementPlan > 0
                                 && $percent !== null
                                 && abs($percent) >= 5.0;
-                            $fmt = fn ($v) => number_format($v, 2, ',', ' ').' PLN';
+                            $fmt = fn ($v) => MoneyFormatter::format($v, 'PLN');
                             $color = $warn ? '#dc2626' : '#047857';
 
-                            $deltaLine = '<div style="color:'.$color.';font-weight:600">Δ '.e($fmt($delta));
+                            $deltaLine = '<div style="color:'.$color.';font-weight:600;text-align:right">Δ '.e($fmt($delta));
                             if ($percent !== null) {
                                 $deltaLine .= ' ('.e(number_format($percent, 1, ',', ' ')).'%)';
                             }
                             $deltaLine .= '</div>';
 
-                            $html = '<div style="font-size:0.78rem;line-height:1.4">'
+                            $html = '<div style="font-size:0.78rem;line-height:1.4;text-align:right">'
                                 .'<div><span style="color:#6b7280">Kalkulacja:</span> '.e($fmt($calcPlan)).'</div>'
                                 .'<div><span style="color:#6b7280">Rozliczenie:</span> '.e($fmt($settlementPlan)).'</div>'
                                 .$deltaLine;
@@ -1001,26 +1050,39 @@ class EventResource extends Resource
                                 ->visible(fn (): bool => Schema::hasColumn('events', 'shared_with_pilot')),
                         ])
                         ->action(function (Event $record, array $data): void {
-                            $payload = [
-                                'assigned_to' => $data['assigned_to'] ?? null,
-                            ];
-
-                            if (Schema::hasColumn('events', 'shared_with_pilot')) {
-                                $payload['shared_with_pilot'] = (bool) ($data['shared_with_pilot'] ?? false);
-                            }
-
-                            $previousPilot = $record->assigned_to;
-                            $record->fill($payload);
-
-                            if (
-                                Schema::hasColumn('events', 'shared_with_pilot')
-                                && $previousPilot
-                                && (int) $previousPilot !== (int) ($payload['assigned_to'] ?? 0)
-                            ) {
-                                $record->shared_with_pilot = false;
-                            }
-
-                            $record->save();
+                            app(AssignEventPilotAction::class)(new AssignEventPilotData(
+                                event: $record,
+                                assignedTo: isset($data['assigned_to']) ? (int) $data['assigned_to'] : null,
+                                sharedWithPilot: Schema::hasColumn('events', 'shared_with_pilot')
+                                    ? (bool) ($data['shared_with_pilot'] ?? false)
+                                    : null,
+                            ));
+                        }),
+                    Tables\Actions\Action::make('change_status')
+                        ->label('Zmień status')
+                        ->icon('heroicon-o-arrow-path')
+                        ->slideOver()
+                        ->modalHeading('Zmień status imprezy')
+                        ->modalWidth('md')
+                        ->fillForm(fn (Event $record): array => [
+                            'status' => $record->status,
+                        ])
+                        ->form([
+                            Forms\Components\Select::make('status')
+                                ->label('Status')
+                                ->options(Event::getStatusOptions())
+                                ->required()
+                                ->native(false),
+                            Forms\Components\Textarea::make('reason')
+                                ->label('Powód (opcjonalnie)')
+                                ->rows(2),
+                        ])
+                        ->action(function (Event $record, array $data): void {
+                            app(ChangeEventStatusAction::class)(new ChangeEventStatusData(
+                                event: $record,
+                                status: (string) $data['status'],
+                                reason: $data['reason'] ?? null,
+                            ));
                         }),
                     Tables\Actions\EditAction::make(),
                     Tables\Actions\DeleteAction::make()
@@ -1039,11 +1101,22 @@ class EventResource extends Resource
                                 ->required(),
                         ])
                         ->action(function (\Illuminate\Support\Collection $records, array $data): void {
-                            $records->each(fn (Event $record) => $record->changeStatus($data['status']));
+                            $action = app(ChangeEventStatusAction::class);
+                            $records->each(fn (Event $record) => $action(new ChangeEventStatusData(
+                                event: $record,
+                                status: (string) $data['status'],
+                            )));
                         })
                         ->deselectRecordsAfterCompletion(),
                     Tables\Actions\DeleteBulkAction::make(),
                 ]),
+            ])
+            ->emptyStateHeading('Brak imprez')
+            ->emptyStateDescription('Utwórz pierwszą imprezę albo zmień filtry listy.')
+            ->emptyStateIcon('heroicon-o-calendar-days')
+            ->emptyStateActions([
+                Tables\Actions\CreateAction::make()
+                    ->label('Nowa impreza'),
             ])
             ->recordUrl(fn (Event $record): string => static::getUrl('edit', ['record' => $record]))
             ->defaultSort('updated_at', 'desc');

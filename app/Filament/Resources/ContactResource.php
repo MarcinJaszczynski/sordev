@@ -38,6 +38,41 @@ class ContactResource extends Resource
 
     protected static ?string $pluralModelLabel = 'kontakty';
 
+    protected static ?string $recordTitleAttribute = 'last_name';
+
+    /**
+     * @return array<int, string>
+     */
+    public static function getGloballySearchableAttributes(): array
+    {
+        return ['first_name', 'last_name', 'email', 'phone'];
+    }
+
+    public static function getGlobalSearchResultTitle(\Illuminate\Database\Eloquent\Model $record): string
+    {
+        /** @var Contact $record */
+        return trim($record->first_name.' '.$record->last_name) ?: 'Kontakt #'.$record->getKey();
+    }
+
+    /**
+     * @return array<string, string>
+     */
+    public static function getGlobalSearchResultDetails(\Illuminate\Database\Eloquent\Model $record): array
+    {
+        /** @var Contact $record */
+        $details = [];
+
+        if ($record->email) {
+            $details['Email'] = (string) $record->email;
+        }
+
+        if ($record->phone) {
+            $details['Telefon'] = (string) $record->phone;
+        }
+
+        return $details;
+    }
+
     /**
      * Zwraca etykietę pojedynczą modelu
      */

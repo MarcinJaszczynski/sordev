@@ -344,15 +344,29 @@ class Event extends Model
 
     public static function getStatusColors(): array
     {
+        // Paleta docs/03: Draft=gray, Oferta/W trakcie=info, Potwierdzona/Zrealizowana=success, Anulowana=danger
         return [
             'gray' => self::STATUS_INQUIRY,
-            'info' => self::STATUS_OFFER,
-            'warning' => self::STATUS_PROVISIONAL_RESERVATION,
-            'success' => self::STATUS_CONFIRMED,
-            'primary' => self::STATUS_TO_SETTLE,
-            'secondary' => self::STATUS_SETTLED,
+            'info' => [self::STATUS_OFFER, self::STATUS_PROVISIONAL_RESERVATION],
+            'warning' => self::STATUS_TO_SETTLE,
+            'success' => [self::STATUS_CONFIRMED, self::STATUS_SETTLED],
             'danger' => [self::STATUS_PENDING_CANCELLATION, self::STATUS_CANCELLED],
         ];
+    }
+
+    /**
+     * Kolor badge Filament dla pojedynczego statusu (docs UX).
+     */
+    public static function statusBadgeColor(?string $status): string
+    {
+        return match ($status) {
+            self::STATUS_INQUIRY => 'gray',
+            self::STATUS_OFFER, self::STATUS_PROVISIONAL_RESERVATION => 'info',
+            self::STATUS_TO_SETTLE => 'warning',
+            self::STATUS_CONFIRMED, self::STATUS_SETTLED => 'success',
+            self::STATUS_PENDING_CANCELLATION, self::STATUS_CANCELLED => 'danger',
+            default => 'gray',
+        };
     }
 
     public static function statusListCellClass(?string $status): string
@@ -1597,12 +1611,40 @@ class Event extends Model
 
         // Jeżeli event ma własne punkty programu, traktujemy je jako źródło prawdy
         // (m.in. po ręcznych zmianach cen w RelationManagerze).
-        $points = $this->programPoints()->where('active', true)->get();
+        // Transport liczony osobno (jak w EventCostCalculator) — nie z punktów is_transport.
+        $points = $this->programPoints()->with('templatePoint:id,name')->where('active', true)->get();
         if ($points->isNotEmpty()) {
-            $programCost = (float) \App\Services\ProgramPointHelper::sumIncluded($points, 'total_price');
+            $programPoints = $points->reject(function ($point): bool {
+                if ((bool) ($point->is_transport ?? false)) {
+                    return true;
+                }
+
+                return \App\Services\EventTransportCostCalculator::isTransportPointName(
+                    (string) ($point->templatePoint?->name ?? $point->name ?? '')
+                );
+            });
+
+            $programCost = (float) \App\Services\ProgramPointHelper::sumIncluded($programPoints, 'total_price');
             $insuranceCost = $this->resolvedInsuranceCost($count, $gratis);
 
-            return round($programCost + $insuranceCost, 2);
+            $variant = [
+                'qty' => $count,
+                'gratis' => $gratis,
+                'staff' => 1,
+                'driver' => 1,
+            ];
+            $qtyVariant = $this->qtyVariants()
+                ->orderByRaw('ABS(qty - ?)', [$count])
+                ->first();
+            if ($qtyVariant) {
+                $variant['staff'] = max(0, (int) ($qtyVariant->staff ?? 1));
+                $variant['driver'] = max(0, (int) ($qtyVariant->driver ?? 1));
+            }
+
+            $transportCost = (float) (new \App\Services\EventTransportCostCalculator($this))
+                ->effectiveTransportCost($variant);
+
+            return round($programCost + $insuranceCost + $transportCost, 2);
         }
 
         if ($this->eventTemplate && $startPlace > 0) {
@@ -1912,6 +1954,11 @@ class Event extends Model
     public function vendorInvoices(): HasMany
     {
         return $this->hasMany(VendorInvoice::class);
+    }
+
+    public function salesInvoices(): HasMany
+    {
+        return $this->hasMany(SalesInvoice::class);
     }
 
     /**

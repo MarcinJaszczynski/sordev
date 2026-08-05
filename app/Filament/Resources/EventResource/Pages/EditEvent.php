@@ -2,13 +2,23 @@
 
 namespace App\Filament\Resources\EventResource\Pages;
 
+use App\Actions\Events\ChangeEventStatusAction;
+use App\Actions\Events\RecalculateEventTotalsAction;
+use App\Data\ChangeEventStatusData;
+use App\Data\RecalculateEventTotalsData;
 use App\Filament\Resources\EventResource;
 use App\Filament\Resources\EventResource\Concerns\HasEventWorkflowContext;
+use App\Models\Event;
 use App\Services\EventManualPricePerPersonService;
 use App\Services\EventParticipantCountChangeService;
 use App\Services\NotificationService;
+use App\Support\MoneyFormatter;
+use Filament\Actions;
+use Filament\Forms;
+use Filament\Notifications\Notification;
 use Filament\Resources\Pages\EditRecord;
 use Illuminate\Support\Facades\Auth;
+use Illuminate\Support\Facades\Schema;
 
 class EditEvent extends EditRecord
 {
@@ -29,17 +39,75 @@ class EditEvent extends EditRecord
 
     protected ?int $previousParticipantCount = null;
 
+    protected function getHeaderActions(): array
+    {
+        return [
+            Actions\Action::make('download_offer')
+                ->label('Oferta Word')
+                ->icon('heroicon-o-document-arrow-down')
+                ->color('gray')
+                ->url(fn (): string => route('admin.events.offer.word', $this->record))
+                ->openUrlInNewTab(),
+            Actions\Action::make('open_participants')
+                ->label('Uczestnicy')
+                ->icon('heroicon-o-users')
+                ->color('gray')
+                ->url(fn (): string => EventResource::getUrl('participants', ['record' => $this->record]))
+                ->visible(fn (): bool => Schema::hasTable('event_participants')),
+            Actions\Action::make('open_finance')
+                ->label('Finanse')
+                ->icon('heroicon-o-banknotes')
+                ->color('gray')
+                ->url(fn (): string => EventResource::getUrl('calculation', ['record' => $this->record])),
+            Actions\Action::make('change_status')
+                ->label('Zmień status')
+                ->icon('heroicon-o-arrow-path')
+                ->color('primary')
+                ->slideOver()
+                ->modalHeading('Zmień status imprezy')
+                ->modalWidth('md')
+                ->fillForm(fn (): array => [
+                    'status' => $this->record->status,
+                ])
+                ->form([
+                    Forms\Components\Select::make('status')
+                        ->label('Status')
+                        ->options(Event::getStatusOptions())
+                        ->required()
+                        ->native(false),
+                    Forms\Components\Textarea::make('reason')
+                        ->label('Powód (opcjonalnie)')
+                        ->rows(2),
+                ])
+                ->action(function (array $data): void {
+                    app(ChangeEventStatusAction::class)(new ChangeEventStatusData(
+                        event: $this->record,
+                        status: (string) $data['status'],
+                        reason: $data['reason'] ?? null,
+                    ));
+
+                    $this->refreshFormData(['status']);
+
+                    Notification::make()
+                        ->title('Zmieniono status')
+                        ->success()
+                        ->send();
+                }),
+        ];
+    }
+
     protected function mutateFormDataBeforeFill(array $data): array
     {
         $participantCount = max(1, (int) ($data['participant_count'] ?? 1));
         $gratisCount = $this->record->resolveGratisCountForParticipantCount($participantCount);
 
         try {
-            $data['total_cost'] = $this->record->resolvedBaseTotalCost(
-                $participantCount,
-                $gratisCount,
-                $this->record->start_place_id ? (int) $this->record->start_place_id : null
-            );
+            $data['total_cost'] = app(RecalculateEventTotalsAction::class)(new RecalculateEventTotalsData(
+                event: $this->record,
+                participantCount: $participantCount,
+                gratisCount: $gratisCount,
+                startPlaceId: $this->record->start_place_id ? (int) $this->record->start_place_id : null,
+            ));
         } catch (\Throwable $e) {
             // keep existing total_cost value when recalculation fails
         }
@@ -62,7 +130,9 @@ class EditEvent extends EditRecord
 
         $participantCount = max(1, (int) ($data['participant_count'] ?? 1));
         $gratisCount = max(0, (int) ($data['gratis_count'] ?? 0));
-        $startPlaceId = $this->record->start_place_id ? (int) $this->record->start_place_id : null;
+        $startPlaceId = array_key_exists('start_place_id', $data)
+            ? ($data['start_place_id'] !== null && $data['start_place_id'] !== '' ? (int) $data['start_place_id'] : null)
+            : ($this->record->start_place_id ? (int) $this->record->start_place_id : null);
 
         $this->pendingGratisCount = $gratisCount;
         unset($data['gratis_count'], $data['ordering_parties']);
@@ -77,17 +147,58 @@ class EditEvent extends EditRecord
         ];
         unset($data['use_manual_price_per_person'], $data['manual_price_per_person_lines']);
 
+        // Atrybuty transportu z formularza muszą trafić do modelu przed kalkulacją
+        // (EventTransportCostCalculator czyta transfer_km / program_km / bus z rekordu).
+        $this->applyPendingTransportAttributesForCalculation($data, $participantCount, $startPlaceId);
+
         try {
-            $data['total_cost'] = $this->record->resolvedBaseTotalCost(
-                $participantCount,
-                $gratisCount,
-                $startPlaceId
-            );
+            $data['total_cost'] = app(RecalculateEventTotalsAction::class)(new RecalculateEventTotalsData(
+                event: $this->record,
+                participantCount: $participantCount,
+                gratisCount: $gratisCount,
+                startPlaceId: $startPlaceId,
+            ));
         } catch (\Throwable $e) {
             // keep existing total_cost when recalculation fails
         }
 
         return $data;
+    }
+
+    /**
+     * @param  array<string, mixed>  $data
+     */
+    protected function applyPendingTransportAttributesForCalculation(
+        array $data,
+        int $participantCount,
+        ?int $startPlaceId,
+    ): void {
+        if (array_key_exists('transfer_km', $data)) {
+            $this->record->transfer_km = $data['transfer_km'];
+        }
+
+        if (array_key_exists('program_km', $data)) {
+            $this->record->program_km = $data['program_km'];
+        }
+
+        if (array_key_exists('bus_id', $data)) {
+            $busId = $data['bus_id'] !== null && $data['bus_id'] !== '' ? (int) $data['bus_id'] : null;
+            if ((int) ($this->record->bus_id ?? 0) !== (int) ($busId ?? 0)) {
+                $this->record->bus_id = $busId;
+                $this->record->unsetRelation('bus');
+            }
+        }
+
+        if (array_key_exists('use_manual_transport_cost', $data)) {
+            $this->record->use_manual_transport_cost = (bool) $data['use_manual_transport_cost'];
+        }
+
+        if (array_key_exists('manual_transport_cost', $data)) {
+            $this->record->manual_transport_cost = $data['manual_transport_cost'];
+        }
+
+        $this->record->start_place_id = $startPlaceId;
+        $this->record->participant_count = $participantCount;
     }
 
     /**
@@ -197,7 +308,7 @@ class EditEvent extends EditRecord
             if ($calcData) {
                 $total = round((float) ($calcData['total_pln'] ?? 0), 2);
                 $perPerson = (float) ($calcData['price_per_person_rounded'] ?? $calcData['price_per_person'] ?? 0);
-                $calc = number_format($total, 2, ',', ' ').' PLN';
+                $calc = MoneyFormatter::format($total, 'PLN');
             }
         } catch (\Throwable) {
             $calc = 'Brak danych kalkulacji';
@@ -205,10 +316,10 @@ class EditEvent extends EditRecord
 
         $effectivePerPerson = $record->resolvedPricePerPerson($participantCount);
         if ($effectivePerPerson > 0 && $perPerson !== null && abs($effectivePerPerson - $perPerson) > 0.009) {
-            $perPersonLabel = number_format($perPerson, 2, ',', ' ').' PLN (kalkulacja) · '
-                .number_format($effectivePerPerson, 2, ',', ' ').' PLN (obowiązująca)';
+            $perPersonLabel = MoneyFormatter::format($perPerson, 'PLN').' (kalkulacja) · '
+                .MoneyFormatter::format($effectivePerPerson, 'PLN').' (obowiązująca)';
         } elseif ($effectivePerPerson > 0) {
-            $perPersonLabel = number_format($effectivePerPerson, 2, ',', ' ').' PLN';
+            $perPersonLabel = MoneyFormatter::format($effectivePerPerson, 'PLN');
         } else {
             $perPersonLabel = '—';
         }
@@ -222,17 +333,17 @@ class EditEvent extends EditRecord
         }
 
         $planned = $settlement && $settlement->planned_cost_pln !== null
-            ? number_format((float) $settlement->planned_cost_pln, 2, ',', ' ').' PLN'
+            ? MoneyFormatter::format((float) $settlement->planned_cost_pln, 'PLN')
             : '— (brak rozliczenia)';
 
         $actual = $settlement && $settlement->actual_cost_pln !== null
-            ? number_format((float) $settlement->actual_cost_pln, 2, ',', ' ').' PLN'
+            ? MoneyFormatter::format((float) $settlement->actual_cost_pln, 'PLN')
             : '— (brak rozliczenia)';
 
         $clientsPaid = '—';
         try {
             if ($record->agreements()->exists()) {
-                $clientsPaid = number_format((float) $record->agreements()->sum('amount_paid'), 2, ',', ' ').' PLN';
+                $clientsPaid = MoneyFormatter::format((float) $record->agreements()->sum('amount_paid'), 'PLN');
             } else {
                 $clientsPaid = '— (brak umów)';
             }
@@ -246,54 +357,6 @@ class EditEvent extends EditRecord
             'actual_cost' => $actual,
             'clients_paid' => $clientsPaid,
         ];
-    }
-
-    public function keyInfo(): array
-    {
-        $record = $this->record;
-        $start = $record->start_date?->format('d.m.Y') ?? '—';
-        $end = $record->end_date?->format('d.m.Y');
-        $termin = $end && $end !== $start ? "{$start} – {$end}" : $start;
-
-        $participants = (int) ($record->participant_count ?? 0);
-        $gratis = $record->resolveGratisCountForParticipantCount($participants);
-        $participantsDisplay = $gratis > 0 ? "{$participants}+{$gratis}" : (string) $participants;
-
-        return [
-            ['label' => 'Kod', 'value' => $record->code ?: '—'],
-            ['label' => 'Status', 'value' => \App\Models\Event::getStatusOptions()[$record->status] ?? (string) $record->status],
-            ['label' => 'Termin', 'value' => $termin],
-            ['label' => 'Liczba dni', 'value' => (string) ($record->duration_days ?? '—')],
-            ['label' => 'Uczestnicy', 'value' => $participantsDisplay],
-            ['label' => 'Szablon', 'value' => $record->eventTemplate?->name ?? 'Bez szablonu'],
-            ['label' => 'Pilot', 'value' => $record->assignedUser?->name ?? 'Nieprzypisany'],
-            ['label' => 'Miejsce podstawienia', 'value' => $record->startPlace?->name ?? '—'],
-            ['label' => 'Zamawiający', 'value' => $record->client_name ?: '—'],
-        ];
-    }
-
-    public function shortcuts(): array
-    {
-        $links = [
-            ['label' => 'Program', 'icon' => 'heroicon-o-list-bullet', 'page' => 'edit-program'],
-            ['label' => 'Uczestnicy', 'icon' => 'heroicon-o-users', 'page' => 'participants', 'table' => 'event_participants'],
-            ['label' => 'Rezerwacje', 'icon' => 'heroicon-o-calendar', 'page' => 'reservations'],
-            ['label' => 'Transport', 'icon' => 'heroicon-o-truck', 'page' => 'transport'],
-            ['label' => 'Hotele', 'icon' => 'heroicon-o-building-office-2', 'page' => 'hotel-planning'],
-            ['label' => 'Pilot', 'icon' => 'heroicon-o-user-circle', 'page' => 'pilot'],
-            ['label' => 'Finanse', 'icon' => 'heroicon-o-banknotes', 'page' => 'calculation'],
-            ['label' => 'Dokumenty', 'icon' => 'heroicon-o-folder', 'page' => 'documents'],
-        ];
-
-        return collect($links)
-            ->filter(fn (array $link): bool => ! isset($link['table']) || \Illuminate\Support\Facades\Schema::hasTable($link['table']))
-            ->map(fn (array $link): array => [
-                'label' => $link['label'],
-                'icon' => $link['icon'],
-                'url' => EventResource::getUrl($link['page'], ['record' => $this->record]),
-            ])
-            ->values()
-            ->all();
     }
 
     public function hasCombinedRelationManagerTabsWithContent(): bool

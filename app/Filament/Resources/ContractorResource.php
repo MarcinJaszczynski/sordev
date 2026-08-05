@@ -48,6 +48,35 @@ class ContractorResource extends Resource
 
     protected static ?string $pluralModelLabel = 'kontrahenci';
 
+    protected static ?string $recordTitleAttribute = 'name';
+
+    /**
+     * @return array<int, string>
+     */
+    public static function getGloballySearchableAttributes(): array
+    {
+        return ['name', 'email', 'phone', 'nip'];
+    }
+
+    /**
+     * @return array<string, string>
+     */
+    public static function getGlobalSearchResultDetails(\Illuminate\Database\Eloquent\Model $record): array
+    {
+        /** @var Contractor $record */
+        $details = [];
+
+        if ($record->nip) {
+            $details['NIP'] = (string) $record->nip;
+        }
+
+        if ($record->email) {
+            $details['Email'] = (string) $record->email;
+        }
+
+        return $details;
+    }
+
     /**
      * Zwraca etykietę pojedynczą modelu
      */

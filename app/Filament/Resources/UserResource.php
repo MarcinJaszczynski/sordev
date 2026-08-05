@@ -41,6 +41,35 @@ class UserResource extends Resource
 
     protected static ?string $pluralModelLabel = 'użytkownicy';
 
+    protected static ?string $recordTitleAttribute = 'name';
+
+    /**
+     * @return array<int, string>
+     */
+    public static function getGloballySearchableAttributes(): array
+    {
+        return ['name', 'email', 'phone'];
+    }
+
+    /**
+     * @return array<string, string>
+     */
+    public static function getGlobalSearchResultDetails(Model $record): array
+    {
+        /** @var User $record */
+        $details = [];
+
+        if ($record->email) {
+            $details['Email'] = (string) $record->email;
+        }
+
+        if ($record->phone) {
+            $details['Telefon'] = (string) $record->phone;
+        }
+
+        return $details;
+    }
+
     public static function canEdit(Model $record): bool
     {
         if (! parent::canEdit($record)) {
