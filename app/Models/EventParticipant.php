@@ -44,10 +44,14 @@ class EventParticipant extends Model
         'participant_payment_id',
         'import_batch_key',
         'notes',
+        'diet',
+        'parent_consent_at',
+        'parent_consent_ip',
     ];
 
     protected $casts = [
         'birth_date' => 'date',
+        'parent_consent_at' => 'datetime',
     ];
 
     public function event(): BelongsTo
@@ -68,6 +72,16 @@ class EventParticipant extends Model
     public function participantPayment(): BelongsTo
     {
         return $this->belongsTo(EventSettlementParticipantPayment::class, 'participant_payment_id');
+    }
+
+    public function attendances(): \Illuminate\Database\Eloquent\Relations\HasMany
+    {
+        return $this->hasMany(EventAttendance::class);
+    }
+
+    public function hasParentConsent(): bool
+    {
+        return $this->parent_consent_at !== null;
     }
 
     public function fullName(): string

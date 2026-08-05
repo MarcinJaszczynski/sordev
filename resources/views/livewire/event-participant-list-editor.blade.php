@@ -63,6 +63,8 @@
                                     <th class="px-2 py-2">Data urodzenia</th>
                                     <th class="px-2 py-2">PESEL</th>
                                     <th class="px-2 py-2">Kontakt</th>
+                                    <th class="px-2 py-2">Dieta</th>
+                                    <th class="px-2 py-2">Zgoda</th>
                                     <th class="px-2 py-2">Źródło</th>
                                     <th class="px-2 py-2"></th>
                                 </tr>
@@ -82,6 +84,14 @@
                                             @endif
                                             @if (! $participant['email'] && ! $participant['phone'])
                                                 —
+                                            @endif
+                                        </td>
+                                        <td class="px-2 py-2 text-gray-700">{{ $participant['diet'] ?: '—' }}</td>
+                                        <td class="px-2 py-2">
+                                            @if ($participant['parent_consent'] ?? false)
+                                                <span class="text-emerald-700">Tak</span>
+                                            @else
+                                                <span class="text-gray-400">Nie</span>
                                             @endif
                                         </td>
                                         <td class="px-2 py-2 text-gray-600">{{ $participant['source'] }}</td>
@@ -127,6 +137,14 @@
                         <label class="mb-1 block text-xs font-medium text-gray-700">Nr rezerwacji</label>
                         <input type="text" wire:model.live.debounce.500ms="formBookingReference" class="fi-input block w-full rounded-lg border-gray-300 text-sm" />
                     </div>
+                    <div>
+                        <label class="mb-1 block text-xs font-medium text-gray-700">Dieta</label>
+                        <input type="text" wire:model.live.debounce.500ms="formDiet" class="fi-input block w-full rounded-lg border-gray-300 text-sm" placeholder="np. wegetariańska" />
+                    </div>
+                    <label class="flex items-center gap-2 text-sm text-gray-700">
+                        <input type="checkbox" wire:model.live="formParentConsent" class="rounded border-gray-300" />
+                        Zgoda rodzica / opiekuna
+                    </label>
                     <div class="flex gap-2">
                         <x-filament::button wire:click="saveParticipant" color="primary" class="flex-1">
                             {{ $editParticipantId ? 'Zapisz' : 'Dodaj' }}

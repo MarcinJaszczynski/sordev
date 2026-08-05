@@ -51,6 +51,10 @@ class EventParticipantListEditor extends Component
 
     public string $formBookingReference = '';
 
+    public string $formDiet = '';
+
+    public bool $formParentConsent = false;
+
     public function mount(int $eventId): void
     {
         $this->eventId = $eventId;
@@ -80,6 +84,8 @@ class EventParticipantListEditor extends Component
                 'email' => $participant->email,
                 'phone' => $participant->phone,
                 'booking_reference' => $participant->booking_reference,
+                'diet' => $participant->diet,
+                'parent_consent' => $participant->hasParentConsent(),
                 'source' => EventParticipant::$sources[$participant->source] ?? $participant->source,
                 'status' => EventParticipant::$statuses[$participant->status] ?? $participant->status,
             ])
@@ -209,6 +215,8 @@ class EventParticipantListEditor extends Component
         $this->formEmail = (string) ($participant->email ?? '');
         $this->formPhone = (string) ($participant->phone ?? '');
         $this->formBookingReference = (string) ($participant->booking_reference ?? '');
+        $this->formDiet = (string) ($participant->diet ?? '');
+        $this->formParentConsent = $participant->hasParentConsent();
     }
 
     public function cancelEdit(): void
@@ -226,6 +234,8 @@ class EventParticipantListEditor extends Component
             'formEmail' => ['nullable', 'email', 'max:255'],
             'formPhone' => ['nullable', 'string', 'max:50'],
             'formBookingReference' => ['nullable', 'string', 'max:120'],
+            'formDiet' => ['nullable', 'string', 'max:255'],
+            'formParentConsent' => ['boolean'],
         ]);
 
         $payload = [
@@ -236,7 +246,18 @@ class EventParticipantListEditor extends Component
             'email' => trim($this->formEmail) ?: null,
             'phone' => trim($this->formPhone) ?: null,
             'booking_reference' => trim($this->formBookingReference) ?: null,
+            'diet' => trim($this->formDiet) ?: null,
         ];
+
+        if (Schema::hasColumn('event_participants', 'parent_consent_at')) {
+            if ($this->formParentConsent) {
+                $payload['parent_consent_at'] = now();
+                $payload['parent_consent_ip'] = request()->ip();
+            } else {
+                $payload['parent_consent_at'] = null;
+                $payload['parent_consent_ip'] = null;
+            }
+        }
 
         if ($this->editParticipantId) {
             EventParticipant::query()
@@ -296,6 +317,8 @@ class EventParticipantListEditor extends Component
         $this->formEmail = '';
         $this->formPhone = '';
         $this->formBookingReference = '';
+        $this->formDiet = '';
+        $this->formParentConsent = false;
     }
 
     public function render()

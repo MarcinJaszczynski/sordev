@@ -21,6 +21,7 @@ class EventHotelRoomOccupant extends Model
         'source',
         'event_agreement_id',
         'contract_id',
+        'event_participant_id',
         'reservation_id',
         'order',
     ];
@@ -34,6 +35,11 @@ class EventHotelRoomOccupant extends Model
     public function roomLine(): BelongsTo
     {
         return $this->belongsTo(EventHotelRoomLine::class, 'event_hotel_room_line_id');
+    }
+
+    public function eventParticipant(): BelongsTo
+    {
+        return $this->belongsTo(EventParticipant::class, 'event_participant_id');
     }
 
     public function eventAgreement(): BelongsTo

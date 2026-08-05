@@ -601,6 +601,7 @@ class EventHotelPlanService
                         'bed_index' => $occupant->bed_index,
                         'event_agreement_id' => $occupant->event_agreement_id,
                         'contract_id' => $occupant->contract_id,
+                        'event_participant_id' => $occupant->event_participant_id,
                         'reservation_id' => $occupant->reservation_id,
                         'participant_key' => $occupant->participantKey(),
                     ])->values()->all();
@@ -765,9 +766,16 @@ class EventHotelPlanService
                             'bed_index' => max(1, (int) ($occPayload['bed_index'] ?? 1)),
                             'event_agreement_id' => $occPayload['event_agreement_id'] ?? null,
                             'contract_id' => $occPayload['contract_id'] ?? null,
+                            'event_participant_id' => $occPayload['event_participant_id'] ?? null,
                             'reservation_id' => $occPayload['reservation_id'] ?? null,
                             'order' => $occOrder,
                         ]);
+                        if (! empty($occPayload['event_participant_id']) && $occupant->name === '') {
+                            $participant = \App\Models\EventParticipant::query()->find($occPayload['event_participant_id']);
+                            if ($participant) {
+                                $occupant->name = $participant->fullName();
+                            }
+                        }
                         $occupant->event_hotel_room_line_id = $line->id;
                         $occupant->save();
                         $existingOccupantIds[] = $occupant->id;

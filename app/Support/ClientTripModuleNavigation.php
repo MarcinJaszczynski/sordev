@@ -6,6 +6,7 @@ use App\Filament\Client\Pages\ClientAgreementPage;
 use App\Filament\Client\Pages\ClientGroupPaymentsPage;
 use App\Filament\Client\Pages\ClientInvoiceRequestPage;
 use App\Filament\Client\Pages\ClientMyPaymentsPage;
+use App\Filament\Client\Pages\ClientParticipantsPage;
 use App\Filament\Client\Pages\ClientPaymentSchedulePage;
 use App\Filament\Client\Pages\ClientProgramPage;
 use App\Filament\Client\Resources\ClientEventResource;
@@ -78,6 +79,13 @@ final class ClientTripModuleNavigation
             }
 
             if ($isGuardian) {
+                $tabs[] = [
+                    'key' => 'participants',
+                    'label' => 'Uczestnicy',
+                    'description' => 'Lista, diety, zgody',
+                    'url' => ClientParticipantsPage::urlFor($event),
+                    'icon' => 'heroicon-o-user-group',
+                ];
                 $tabs[] = [
                     'key' => 'group_payments',
                     'label' => 'Wpłaty grupy',

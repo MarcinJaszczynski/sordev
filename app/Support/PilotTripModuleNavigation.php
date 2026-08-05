@@ -3,6 +3,7 @@
 namespace App\Support;
 
 use App\Filament\Pilot\Pages\PilotAdvancePage;
+use App\Filament\Pilot\Pages\PilotAttendancePage;
 use App\Filament\Pilot\Pages\PilotChecklistPage;
 use App\Filament\Pilot\Pages\PilotHotelPlanPage;
 use App\Filament\Pilot\Pages\PilotProgramPage;
@@ -48,6 +49,14 @@ final class PilotTripModuleNavigation
                 'description' => 'Zadania przed wyjazdem',
                 'url' => PilotChecklistPage::urlFor($event),
                 'icon' => 'heroicon-o-clipboard-document-check',
+            ];
+
+            $tabs[] = [
+                'key' => 'attendance',
+                'label' => 'Obecność',
+                'description' => 'Lista obecności dziennej',
+                'url' => PilotAttendancePage::urlFor($event),
+                'icon' => 'heroicon-o-clipboard-document-list',
             ];
 
             $tabs[] = [
