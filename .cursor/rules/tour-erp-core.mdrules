@@ -1,0 +1,13 @@
+---
+description: Zasady architektoniczne i projektowe TourERP
+globs: **/*.php, **/*.blade.php
+---
+
+# TourERP Architecture Rules
+
+- Always use strict types: `declare(strict_types=1);`
+- Use Laravel 11 conventions and Filament v4 components.
+- Never write business/calculation logic inside Blade views or Livewire components. Put them inside `App\Actions` or `App\Services`.
+- Financial computations must always use integer cents or `bcmath` / `Decimal` to avoid floating-point inaccuracies.
+- Ensure all Filament tables have proper eager loading (`modifyQueryUsing(fn ($query) => $query->with([...]))`) to prevent N+1 issues.
+- Modal-First UI: Always prefer sliders/modals (`ModalSlideOver`) for sub-forms instead of redirecting to new pages.

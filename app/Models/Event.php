@@ -545,9 +545,7 @@ class Event extends Model
                         ->all()
                     : [];
 
-                $contactsById = $contactIds !== []
-                    ? \App\Models\Contact::query()->whereIn('id', $contactIds)->get()->keyBy('id')
-                    : collect();
+                $contactsById = self::contactsByIdsCached($contactIds);
 
                 return $this->orderingContractors
                     ->map(function (Contractor $contractor) use ($service, $hasContactPivot, $hasDepartmentPivot, $contactsById): string {
@@ -566,6 +564,37 @@ class Event extends Model
         }
 
         return (string) ($this->client_name ?? '—');
+    }
+
+    /**
+     * Cache Contact w ramach requestu — unika N+1 na liście imprez.
+     *
+     * @param  array<int, int>  $contactIds
+     * @return \Illuminate\Support\Collection<int, \App\Models\Contact>
+     */
+    private static function contactsByIdsCached(array $contactIds): \Illuminate\Support\Collection
+    {
+        if ($contactIds === []) {
+            return collect();
+        }
+
+        /** @var array<int, \App\Models\Contact> $cache */
+        static $cache = [];
+
+        $missing = array_values(array_filter(
+            $contactIds,
+            fn (int $id): bool => ! array_key_exists($id, $cache)
+        ));
+
+        if ($missing !== []) {
+            foreach (\App\Models\Contact::query()->whereIn('id', $missing)->get() as $contact) {
+                $cache[(int) $contact->id] = $contact;
+            }
+        }
+
+        return collect($contactIds)
+            ->mapWithKeys(fn (int $id) => [$id => $cache[$id] ?? null])
+            ->filter();
     }
 
     /**
@@ -860,6 +889,23 @@ class Event extends Model
     {
         $count = max(1, (int) ($participantCount ?? $this->participant_count ?? 1));
 
+        if ($this->relationLoaded('qtyVariants')) {
+            $exactVariant = $this->qtyVariants
+                ->where('qty', $count)
+                ->sortBy('id')
+                ->first();
+
+            if ($exactVariant) {
+                return max(0, (int) ($exactVariant->gratis ?? 0));
+            }
+
+            $variant = $this->qtyVariants
+                ->sortBy(fn ($variant) => abs(((int) ($variant->qty ?? 0)) - $count))
+                ->first();
+
+            return max(0, (int) ($variant?->gratis ?? 0));
+        }
+
         $exactVariant = $this->qtyVariants()
             ->where('qty', $count)
             ->orderBy('id')
@@ -867,14 +913,6 @@ class Event extends Model
 
         if ($exactVariant) {
             return max(0, (int) ($exactVariant->gratis ?? 0));
-        }
-
-        if ($this->relationLoaded('qtyVariants')) {
-            $variant = $this->qtyVariants
-                ->sortBy(fn ($variant) => abs(((int) ($variant->qty ?? 0)) - $count))
-                ->first();
-
-            return max(0, (int) ($variant->gratis ?? 0));
         }
 
         $variant = $this->qtyVariants()

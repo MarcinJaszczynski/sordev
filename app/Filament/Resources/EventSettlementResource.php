@@ -44,16 +44,23 @@ class EventSettlementResource extends Resource
                 ->schema([
                     Forms\Components\Select::make('event_id')
                         ->label('Impreza')
-                        ->options(fn () => Event::orderByDesc('start_date')
-                            ->limit(200)
-                            ->get()
-                            ->mapWithKeys(fn ($e) => [
-                                $e->id => "[{$e->id}] {$e->name} ({$e->start_date?->format('d.m.Y')})",
-                            ])
-                        )
                         ->searchable()
+                        ->getSearchResultsUsing(fn (string $search) => Event::query()
+                            ->where(function ($query) use ($search): void {
+                                $query->where('name', 'like', "%{$search}%")
+                                    ->orWhere('code', 'like', "%{$search}%");
+                            })
+                            ->orderByDesc('start_date')
+                            ->limit(20)
+                            ->get()
+                            ->mapWithKeys(fn (Event $e) => [
+                                $e->id => trim(($e->code ? "[{$e->code}] " : '').$e->name.' ('.($e->start_date?->format('d.m.Y') ?? '—').')'),
+                            ])
+                            ->all())
+                        ->getOptionLabelUsing(fn ($value) => optional(Event::find($value), fn (Event $e) => trim(($e->code ? "[{$e->code}] " : '').$e->name.' ('.($e->start_date?->format('d.m.Y') ?? '—').')')))
                         ->required()
                         ->columnSpanFull()
+                        ->helperText('Kanoniczny workflow rozliczenia jest też w zakładce Finanse imprezy.')
                         ->reactive()
                         ->afterStateUpdated(fn ($state, Forms\Set $set) => static::fillEventDefaults($state, $set)),
 
@@ -361,6 +368,15 @@ class EventSettlementResource extends Resource
                     ->color('gray')
                     ->url(fn ($record) => $record->event_id ? EventResource::getUrl('edit', ['record' => $record->event_id]) : null)
                     ->openUrlInNewTab(),
+
+                Tables\Actions\Action::make('open_in_event_finance')
+                    ->label('W imprezie')
+                    ->icon('heroicon-o-calculator')
+                    ->color('primary')
+                    ->tooltip('Otwórz rozliczenie w workflow imprezy (zalecane)')
+                    ->url(fn ($record) => $record->event_id
+                        ? EventResource::getUrl('settlement-summary', ['record' => $record->event_id])
+                        : null),
 
                 Tables\Actions\Action::make('import')
                     ->label('Importuj z imprezy')
