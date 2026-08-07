@@ -4,16 +4,14 @@ namespace App\Filament\Resources\EventResource\Pages;
 
 use App\Filament\Resources\EventResource;
 use App\Filament\Resources\EventResource\Concerns\HasEventParticipantsSubNavigation;
-use App\Filament\Resources\EventResource\Concerns\HasEventWorkflowContext;
+use App\Filament\Resources\EventResource\Concerns\InteractsWithEventRecord;
 use App\Models\Event;
-use Filament\Resources\Pages\Concerns\InteractsWithRecord;
 use Filament\Resources\Pages\Page;
 
 abstract class ManageEventParticipantsSection extends Page
 {
     use HasEventParticipantsSubNavigation;
-    use HasEventWorkflowContext;
-    use InteractsWithRecord;
+    use InteractsWithEventRecord;
 
     protected static string $resource = EventResource::class;
 

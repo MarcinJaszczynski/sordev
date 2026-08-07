@@ -12,6 +12,11 @@ class ListReservations extends ListRecords
 {
     protected static string $resource = ReservationResource::class;
 
+    public function getSubheading(): ?string
+    {
+        return 'Skrzynka cross-event — rezerwacje w jednej imprezie znajdziesz w Operacjach karty imprezy';
+    }
+
     protected function getHeaderActions(): array
     {
         return [

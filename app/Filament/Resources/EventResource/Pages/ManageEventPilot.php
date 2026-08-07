@@ -5,6 +5,7 @@ namespace App\Filament\Resources\EventResource\Pages;
 use App\Filament\Pilot\Resources\PilotEventResource;
 use App\Filament\Resources\ChecklistTemplateResource;
 use App\Filament\Resources\EventResource;
+use App\Filament\Resources\EventResource\Concerns\HasEventOperationsSubNavigation;
 use App\Filament\Resources\EventResource\Concerns\HasEventWorkflowContext;
 use App\Models\User;
 use App\Services\PilotAdvanceService;
@@ -18,13 +19,14 @@ use Illuminate\Support\Facades\Schema;
 
 class ManageEventPilot extends EditRecord
 {
+    use HasEventOperationsSubNavigation;
     use HasEventWorkflowContext;
 
     protected static string $resource = EventResource::class;
 
-    protected static ?string $navigationLabel = 'Pilot';
+    protected static ?string $navigationLabel = 'Pilot wycieczki';
 
-    protected static ?string $title = 'Pilot i checklista';
+    protected static ?string $title = 'Pilot wycieczki';
 
     protected static ?string $navigationIcon = 'heroicon-o-user-circle';
 
@@ -48,7 +50,7 @@ class ManageEventPilot extends EditRecord
 
             Forms\Components\Section::make('Podgląd portalu pilota')
                 ->icon('heroicon-o-eye')
-                ->description('Otwórz widok imprezy tak, jak zobaczy ją przypisany pilot.')
+                ->description('Otwórz widok wycieczki tak, jak zobaczy ją przypisany pilot.')
                 ->schema([
                     Forms\Components\Placeholder::make('pilot_preview_link')
                         ->hiddenLabel()
@@ -58,11 +60,11 @@ class ManageEventPilot extends EditRecord
                                 ['record' => $this->record->getKey()],
                                 panel: 'pilot',
                             ).'?preview=1').'" target="_blank" rel="noopener" class="inline-flex items-center gap-2 rounded-lg bg-teal-600 px-4 py-2 text-sm font-semibold text-white hover:bg-teal-700">'
-                            .'<span>Podgląd panelu pilota</span>'
+                            .'<span>Podgląd portalu pilota</span>'
                             .'</a>'
                             .(filled($this->record->assigned_to)
                                 ? ''
-                                : '<p class="mt-2 text-xs text-gray-500">Pilot nie jest jeszcze przypisany — podgląd pokazuje widok biura.</p>')
+                                : '<p class="mt-2 text-xs text-gray-500">Pilot wycieczki nie jest jeszcze przypisany — podgląd pokazuje widok biura.</p>')
                         )),
                 ]),
 
@@ -72,7 +74,7 @@ class ManageEventPilot extends EditRecord
 
     public function getContentTabLabel(): ?string
     {
-        return 'Pilot';
+        return 'Pilot wycieczki';
     }
 
     protected function getSavedNotificationTitle(): ?string
@@ -219,7 +221,7 @@ class ManageEventPilot extends EditRecord
                 ->visible(fn (): bool => (bool) Auth::user()?->hasRole(['admin', 'super_admin', 'biuro'])),
 
             Actions\Action::make('preview_pilot_advance')
-                ->label('Podgląd zaliczki pilota')
+                ->label('Podgląd zaliczki pilota wycieczki')
                 ->icon('heroicon-o-banknotes')
                 ->color('gray')
                 ->url(fn (): string => \App\Filament\Pilot\Pages\PilotAdvancePage::urlFor($this->record).'?preview=1')
@@ -227,7 +229,7 @@ class ManageEventPilot extends EditRecord
                 ->visible(fn (): bool => (bool) Auth::user()?->hasRole(['admin', 'super_admin', 'biuro'])),
 
             Actions\Action::make('preview_pilot_panel')
-                ->label('Podgląd panelu pilota')
+                ->label('Podgląd portalu pilota')
                 ->icon('heroicon-o-eye')
                 ->color('gray')
                 ->url(fn (): string => PilotEventResource::getUrl(

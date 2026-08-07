@@ -7,6 +7,7 @@ use App\Filament\Resources\EventResource;
 use App\Filament\Resources\EventTemplateResource;
 use App\Models\Event;
 use App\Services\EventWorkflowFinanceSummaryService;
+use Illuminate\Support\Str;
 
 trait HasEventWorkflowContext
 {
@@ -46,7 +47,7 @@ trait HasEventWorkflowContext
         return [
             'type' => 'Impreza',
             'title' => $event->name ?? 'Impreza #'.$event->id,
-            'title_url' => EventResource::getUrl('settlement-summary', ['record' => $event->getKey()]),
+            'title_url' => EventResource::getUrl('edit', ['record' => $event->getKey()]),
             'subtitle' => $termin.($event->startPlace?->name ? ' · '.$event->startPlace->name : ''),
             'status' => $statusLabel,
             'statusColor' => Event::statusBadgeColor($event->status),
@@ -57,5 +58,52 @@ trait HasEventWorkflowContext
             'finance' => $finance,
             'links' => $links,
         ];
+    }
+
+    /**
+     * @return array<int|string, string>
+     */
+    public function getBreadcrumbs(): array
+    {
+        if (method_exists($this, 'buildModuleBreadcrumbs')) {
+            /** @var callable(): array<int|string, string> $builder */
+            $builder = [$this, 'buildModuleBreadcrumbs'];
+
+            return $builder();
+        }
+
+        return $this->eventRecordBreadcrumbs();
+    }
+
+    /**
+     * Breadcrumbs: Imprezy › {nazwa} › [moduł] › [sekcja].
+     *
+     * @return array<int|string, string>
+     */
+    protected function eventRecordBreadcrumbs(?string $moduleLabel = null, ?string $moduleUrl = null, ?string $sectionLabel = null): array
+    {
+        if (! isset($this->record) || ! $this->record instanceof Event) {
+            return [
+                EventResource::getUrl('index') => 'Imprezy',
+            ];
+        }
+
+        /** @var Event $event */
+        $event = $this->record;
+
+        $breadcrumbs = [
+            EventResource::getUrl('index') => 'Imprezy',
+            EventResource::getUrl('edit', ['record' => $event->getKey()]) => Str::limit((string) ($event->name ?: 'Impreza'), 48),
+        ];
+
+        if (filled($moduleLabel) && filled($moduleUrl)) {
+            $breadcrumbs[$moduleUrl] = $moduleLabel;
+        }
+
+        if (filled($sectionLabel)) {
+            $breadcrumbs[] = $sectionLabel;
+        }
+
+        return $breadcrumbs;
     }
 }

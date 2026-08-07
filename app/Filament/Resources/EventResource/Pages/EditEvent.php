@@ -28,9 +28,22 @@ class EditEvent extends EditRecord
 
     protected static string $view = 'filament.resources.event-resource.pages.edit-event';
 
-    protected static ?string $navigationLabel = 'Podsumowanie i dane';
+    protected static ?string $navigationLabel = 'Podsumowanie';
 
     protected static ?string $navigationIcon = 'heroicon-o-home';
+
+    public function getSubheading(): ?string
+    {
+        return 'Uzupełnij gotowość imprezy, potem przejdź do Programu, Operacji i Finansów';
+    }
+
+    /**
+     * @return array<int|string, string>
+     */
+    protected function buildModuleBreadcrumbs(): array
+    {
+        return $this->eventRecordBreadcrumbs(sectionLabel: 'Podsumowanie');
+    }
 
     protected int $pendingGratisCount = 0;
 
@@ -58,7 +71,7 @@ class EditEvent extends EditRecord
                 ->label('Finanse')
                 ->icon('heroicon-o-banknotes')
                 ->color('gray')
-                ->url(fn (): string => EventResource::getUrl('calculation', ['record' => $this->record])),
+                ->url(fn (): string => EventResource::getUrl('finance', ['record' => $this->record])),
             Actions\Action::make('change_status')
                 ->label('Zmień status')
                 ->icon('heroicon-o-arrow-path')
@@ -300,28 +313,28 @@ class EditEvent extends EditRecord
     {
         $record = $this->record;
         $participantCount = max(1, (int) ($record->participant_count ?? 1));
+        $gratisCount = max(0, $record->resolveGratisCountForParticipantCount($participantCount));
 
         $calc = '—';
-        $perPerson = null;
+        $perPersonLabel = '—';
         try {
-            $calcData = app(EventManualPricePerPersonService::class)->calculatedForEvent($record, $participantCount);
-            if ($calcData) {
-                $total = round((float) ($calcData['total_pln'] ?? 0), 2);
-                $perPerson = (float) ($calcData['price_per_person_rounded'] ?? $calcData['price_per_person'] ?? 0);
-                $calc = MoneyFormatter::format($total, 'PLN');
+            $summary = app(\App\Services\EventPriceSummaryService::class)->forEvent(
+                $record,
+                $participantCount,
+                $gratisCount,
+                includeNearest: false,
+            );
+            if ($summary['ready'] ?? false) {
+                $calc = MoneyFormatter::format((float) $summary['total_pln'], 'PLN');
+                $perPersonLabel = (string) $summary['price_per_person_label'];
             }
         } catch (\Throwable) {
             $calc = 'Brak danych kalkulacji';
         }
 
         $effectivePerPerson = $record->resolvedPricePerPerson($participantCount);
-        if ($effectivePerPerson > 0 && $perPerson !== null && abs($effectivePerPerson - $perPerson) > 0.009) {
-            $perPersonLabel = MoneyFormatter::format($perPerson, 'PLN').' (kalkulacja) · '
-                .MoneyFormatter::format($effectivePerPerson, 'PLN').' (obowiązująca)';
-        } elseif ($effectivePerPerson > 0) {
+        if (($perPersonLabel === '—' || $perPersonLabel === '') && $effectivePerPerson > 0) {
             $perPersonLabel = MoneyFormatter::format($effectivePerPerson, 'PLN');
-        } else {
-            $perPersonLabel = '—';
         }
 
         $settlement = null;
@@ -342,7 +355,10 @@ class EditEvent extends EditRecord
 
         $clientsPaid = '—';
         try {
-            if ($record->agreements()->exists()) {
+            // Prefer ledger totals from active settlement (SSoT) over raw agreement projections.
+            if ($settlement && $settlement->participant_paid_pln !== null) {
+                $clientsPaid = MoneyFormatter::format((float) $settlement->participant_paid_pln, 'PLN');
+            } elseif ($record->agreements()->exists()) {
                 $clientsPaid = MoneyFormatter::format((float) $record->agreements()->sum('amount_paid'), 'PLN');
             } else {
                 $clientsPaid = '— (brak umów)';

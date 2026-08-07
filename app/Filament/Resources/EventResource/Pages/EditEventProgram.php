@@ -3,7 +3,7 @@
 namespace App\Filament\Resources\EventResource\Pages;
 
 use App\Filament\Resources\EventResource;
-use App\Filament\Resources\EventResource\Concerns\HasEventWorkflowContext;
+use App\Filament\Resources\EventResource\Concerns\InteractsWithEventRecord;
 use App\Filament\Resources\EventResource\RelationManagers\ProgramPointsRelationManager;
 use App\Models\Event;
 use App\Models\EventProgramPoint;
@@ -13,7 +13,6 @@ use Filament\Actions;
 use Filament\Actions\ActionGroup;
 use Filament\Notifications\Notification;
 use Filament\Resources\Pages\Concerns\HasRelationManagers;
-use Filament\Resources\Pages\Concerns\InteractsWithRecord;
 use Filament\Resources\Pages\Page;
 use Filament\Resources\RelationManagers\RelationManager;
 use Filament\Support\Enums\MaxWidth;
@@ -22,9 +21,8 @@ use Livewire\Attributes\Url;
 
 class EditEventProgram extends Page
 {
-    use HasEventWorkflowContext;
     use HasRelationManagers;
-    use InteractsWithRecord;
+    use InteractsWithEventRecord;
 
     #[Url(as: 'view', except: 'days')]
     public string $programView = 'days';
@@ -45,9 +43,17 @@ class EditEventProgram extends Page
 
     protected static ?string $navigationLabel = 'Program';
 
-    protected static ?string $title = 'Program imprezy';
+    protected static ?string $title = 'Program';
 
     protected static ?string $navigationIcon = 'heroicon-o-bars-3';
+
+    /**
+     * @return array<int|string, string>
+     */
+    protected function buildModuleBreadcrumbs(): array
+    {
+        return $this->eventRecordBreadcrumbs(sectionLabel: 'Program');
+    }
 
     protected ?string $maxContentWidth = 'full';
 

@@ -2,6 +2,8 @@
 
 namespace App\Filament\Resources\EventResource\RelationManagers;
 
+use App\Actions\Reservations\UpsertReservationAction;
+use App\Data\UpsertReservationData;
 use App\Filament\Forms\ReservationFormFields;
 use App\Filament\Forms\ReservationFormOptions;
 use App\Models\EventProgramPoint;
@@ -46,7 +48,7 @@ class ReservationsRelationManager extends RelationManager
                     ->width(60),
 
                 Tables\Columns\TextColumn::make('booking_reference')
-                    ->label('Nr rezerwacji')
+                    ->label('Nr potwierdzenia dostawcy')
                     ->sortable()
                     ->searchable()
                     ->placeholder('—'),
@@ -164,21 +166,46 @@ class ReservationsRelationManager extends RelationManager
                 Tables\Actions\CreateAction::make()
                     ->label('Dodaj rezerwację')
                     ->modalWidth(ReservationFormFields::MODAL_WIDTH)
-                    ->mutateFormDataUsing(function (array $data): array {
-                        $data['event_id'] = $this->getOwnerRecord()->id;
-
-                        return ReservationFormFields::normalizeSaveData($data);
-                    })
                     ->using(function (array $data): Reservation {
-                        $reservation = Reservation::query()->create($data);
-                        ReservationFormFields::persistAttachments($reservation, $data);
-
-                        return $reservation;
+                        return app(UpsertReservationAction::class)(new UpsertReservationData(
+                            attributes: [
+                                ...$data,
+                                'event_id' => $this->getOwnerRecord()->id,
+                            ],
+                            attachmentData: $data,
+                            createdBy: auth()->id(),
+                        ));
+                    }),
+            ])
+            ->emptyStateHeading('Brak rezerwacji')
+            ->emptyStateDescription('Dodaj pierwszą rezerwację u kontrahenta w kontekście tej imprezy.')
+            ->emptyStateActions([
+                Tables\Actions\CreateAction::make()
+                    ->label('Dodaj rezerwację')
+                    ->icon('heroicon-m-plus')
+                    ->modalWidth(ReservationFormFields::MODAL_WIDTH)
+                    ->using(function (array $data): Reservation {
+                        return app(UpsertReservationAction::class)(new UpsertReservationData(
+                            attributes: [
+                                ...$data,
+                                'event_id' => $this->getOwnerRecord()->id,
+                            ],
+                            attachmentData: $data,
+                            createdBy: auth()->id(),
+                        ));
                     }),
             ])
             ->actions([
                 Tables\Actions\EditAction::make()
-                    ->modalWidth(ReservationFormFields::MODAL_WIDTH),
+                    ->modalWidth(ReservationFormFields::MODAL_WIDTH)
+                    ->using(function (Reservation $record, array $data): Reservation {
+                        return app(UpsertReservationAction::class)(new UpsertReservationData(
+                            attributes: $data,
+                            reservation: $record,
+                            attachmentData: $data,
+                            createdBy: auth()->id(),
+                        ));
+                    }),
                 Tables\Actions\DeleteAction::make(),
             ])
             ->bulkActions([

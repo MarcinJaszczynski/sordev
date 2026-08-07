@@ -2,20 +2,19 @@
 
 namespace App\Filament\Resources\EventResource\Pages;
 
-use App\Filament\Forms\EventNotesFields;
 use App\Filament\Pilot\Pages\PilotHotelPlanPage;
 use App\Filament\Resources\EventResource;
-use App\Filament\Resources\EventResource\Concerns\HasEventWorkflowContext;
+use App\Filament\Resources\EventResource\Concerns\HasEventOperationsSubNavigation;
+use App\Filament\Resources\EventResource\Concerns\InteractsWithEventRecord;
+use App\Services\EventHotelOccupancyService;
 use Filament\Actions\Action;
-use Filament\Resources\Pages\Concerns\InteractsWithRecord;
 use Filament\Resources\Pages\Page;
 use Illuminate\Support\Facades\Auth;
-use Illuminate\Support\Facades\Schema;
 
 class EventHotelPlanning extends Page
 {
-    use HasEventWorkflowContext;
-    use InteractsWithRecord;
+    use HasEventOperationsSubNavigation;
+    use InteractsWithEventRecord;
 
     protected static string $resource = EventResource::class;
 
@@ -33,6 +32,21 @@ class EventHotelPlanning extends Page
         $this->record->load(['eventTemplate', 'hotelStays']);
     }
 
+    /**
+     * @return array{
+     *   participants: int,
+     *   beds: int,
+     *   assigned: int,
+     *   free_beds: int,
+     *   occupancy_percent: float,
+     *   stays: list<array<string, mixed>>
+     * }
+     */
+    public function occupancySummary(): array
+    {
+        return app(EventHotelOccupancyService::class)->forEvent($this->record);
+    }
+
     protected function getHeaderActions(): array
     {
         $actions = [];
@@ -43,6 +57,14 @@ class EventHotelPlanning extends Page
             ->color('gray')
             ->tooltip('Załączniki dodasz w zakładce „Dokumenty”: zaznacz pakiety PDF i status „Zaakceptowany”.')
             ->url(fn () => route('admin.events.pdf', ['event' => $this->record->id, 'audience' => 'hotel']))
+            ->openUrlInNewTab();
+
+        $actions[] = Action::make('pdf_hotel_agendas')
+            ->label('Agendy hotelowe (ZIP)')
+            ->icon('heroicon-o-building-office-2')
+            ->color('gray')
+            ->tooltip('Osobny PDF „Agenda dla hotelu” dla każdego obiektu z planu noclegów.')
+            ->url(fn () => route('admin.events.pdf', ['event' => $this->record->id, 'audience' => 'hotel_agendas']))
             ->openUrlInNewTab();
 
         if (Auth::user()?->hasRole(['admin', 'super_admin'])) {

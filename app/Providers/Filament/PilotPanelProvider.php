@@ -88,8 +88,17 @@ class PilotPanelProvider extends PanelProvider
             ->renderHook(
                 PanelsRenderHook::PAGE_START,
                 function (): string {
-                    $livewire = \Livewire\Livewire::current();
                     $html = '';
+
+                    if (\App\Http\Middleware\PilotPreviewMiddleware::isActive()) {
+                        $html .= view('filament.components.preview-mode-banner', [
+                            'title' => 'Podgląd portalu pilota',
+                            'description' => 'Widzisz portal tak jak pilot wycieczki. To tryb podglądu biura — nie zastępuje logowania przypisanego pilota.',
+                            'accentClass' => 'border-teal-200 bg-teal-50 text-teal-950',
+                        ])->render();
+                    }
+
+                    $livewire = \Livewire\Livewire::current();
 
                     if (is_object($livewire) && method_exists($livewire, 'getPilotTripEvent')) {
                         $event = $livewire->getPilotTripEvent();

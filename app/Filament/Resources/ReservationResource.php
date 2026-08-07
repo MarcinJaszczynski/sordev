@@ -2,6 +2,8 @@
 
 namespace App\Filament\Resources;
 
+use App\Actions\Reservations\UpsertReservationAction;
+use App\Data\UpsertReservationData;
 use App\Filament\Forms\ReservationFormFields;
 use App\Filament\Forms\ReservationFormOptions;
 use App\Filament\Resources\ReservationResource\Pages;
@@ -26,15 +28,15 @@ class ReservationResource extends Resource
 
     protected static ?string $navigationIcon = 'heroicon-o-calendar-days';
 
-    protected static ?string $navigationLabel = 'Rezerwacje';
+    protected static ?string $navigationLabel = 'Wszystkie rezerwacje';
 
-    protected static ?string $navigationGroup = FilamentNavigation::GROUP_OPERATIONS;
+    protected static ?string $navigationGroup = FilamentNavigation::GROUP_EVENTS;
 
     protected static ?int $navigationSort = 4;
 
     protected static ?string $modelLabel = 'Rezerwacja';
 
-    protected static ?string $pluralModelLabel = 'Rezerwacje';
+    protected static ?string $pluralModelLabel = 'Wszystkie rezerwacje';
 
     public static function form(Form $form): Form
     {
@@ -163,6 +165,7 @@ class ReservationResource extends Resource
                     ->label('Szczegóły')
                     ->icon('heroicon-o-eye')
                     ->color('gray')
+                    ->tooltip('Podgląd rezerwacji bez otwierania formularza edycji.')
                     ->modalHeading(fn (Reservation $record): string => 'Rezerwacja: '.($record->booking_reference ?: '#'.$record->id))
                     ->modalSubmitAction(false)
                     ->modalCancelActionLabel('Zamknij')
@@ -171,7 +174,7 @@ class ReservationResource extends Resource
                         \Filament\Infolists\Components\Section::make('Dane rezerwacji')
                             ->columns(2)
                             ->schema([
-                                \Filament\Infolists\Components\TextEntry::make('booking_reference')->label('Numer rezerwacji')->placeholder('—'),
+                                \Filament\Infolists\Components\TextEntry::make('booking_reference')->label('Nr potwierdzenia dostawcy')->placeholder('—'),
                                 \Filament\Infolists\Components\TextEntry::make('status')
                                     ->label('Status')
                                     ->formatStateUsing(fn (?string $state): string => Reservation::$statuses[$state] ?? ($state ?? '—')),
@@ -212,8 +215,12 @@ class ReservationResource extends Resource
                                 editingReservation: $record,
                             )))
                             ->action(function (Reservation $record, array $data): void {
-                                $record->update(ReservationFormFields::normalizeSaveData($data));
-                                ReservationFormFields::persistAttachments($record, $data);
+                                app(UpsertReservationAction::class)(new UpsertReservationData(
+                                    attributes: $data,
+                                    reservation: $record,
+                                    attachmentData: $data,
+                                    createdBy: auth()->id(),
+                                ));
                             }),
                     ]),
                 Tables\Actions\EditAction::make(),

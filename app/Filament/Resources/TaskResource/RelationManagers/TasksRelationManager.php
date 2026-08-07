@@ -3,23 +3,20 @@
 namespace App\Filament\Resources\TaskResource\RelationManagers;
 
 use App\Filament\Concerns\InteractsWithTaskEditModal;
-use App\Filament\Concerns\InteractsWithTaskListQuickActions;
-use App\Filament\Concerns\InteractsWithTaskOwnershipScope;
 use App\Filament\Resources\TaskResource;
 use App\Models\Event;
+use App\Models\EventProgramPoint;
 use App\Models\Task;
-use App\Support\Tasks\TaskAuthorization;
+use App\Support\Tasks\TaskQueryFilters;
 use Filament\Resources\RelationManagers\RelationManager;
 use Filament\Tables;
 use Filament\Tables\Table;
 use Illuminate\Database\Eloquent\Builder;
-use Illuminate\Support\HtmlString;
+use Illuminate\Database\Eloquent\Relations\Relation;
 
 class TasksRelationManager extends RelationManager
 {
     use InteractsWithTaskEditModal;
-    use InteractsWithTaskListQuickActions;
-    use InteractsWithTaskOwnershipScope;
 
     protected static string $relationship = 'tasks';
 
@@ -34,26 +31,62 @@ class TasksRelationManager extends RelationManager
 
     public function table(Table $table): Table
     {
-        $owner = $this->getOwnerRecord();
-
-        return TaskResource::configureAdminTaskListTable(
-            $table,
-            officeOnly: true,
-            showContextColumn: false,
-            showSourceColumn: $owner instanceof Event,
-            includeTrashed: false,
-            additionalQueryModifier: fn (Builder $query): Builder => $this->applyTasksScopeTo($query),
-        )
-            ->heading('Zadania')
-            ->description(new HtmlString(
-                view('filament.tasks.ownership-quick-filters', ['tasksScope' => $this->tasksScope])->render()
-            ))
+        return $table
+            ->modifyQueryUsing(function (Builder $query): Builder {
+                return TaskQueryFilters::applyDefaultListScopes($query, officeOnly: true);
+            })
+            ->columns(TaskResource::eventWorkspaceTableColumns())
+            ->defaultSort('due_date', 'asc')
+            ->searchable()
+            ->filters([
+                TaskResource::finishedVisibilityTableFilter(),
+            ])
+            ->recordUrl(null)
+            ->recordAction(null)
+            ->actionsColumnLabel('Działanie')
+            ->actions([
+                TaskResource::modalEditTableAction(),
+                Tables\Actions\DeleteAction::make(),
+            ])
             ->headerActions([
                 Tables\Actions\Action::make('createTask')
                     ->label('Dodaj zadanie')
                     ->icon('heroicon-m-plus')
                     ->action(fn () => $this->mountAction('createTask')),
+            ])
+            ->emptyStateHeading('Brak zadań')
+            ->emptyStateDescription('Dodaj pierwsze zadanie powiązane z tą imprezą lub punktem programu.')
+            ->emptyStateActions([
+                Tables\Actions\Action::make('createTaskEmpty')
+                    ->label('Dodaj zadanie')
+                    ->icon('heroicon-m-plus')
+                    ->action(fn () => $this->mountAction('createTask')),
             ]);
+    }
+
+    /**
+     * Zadania imprezy + zadania punktów programu tej imprezy.
+     */
+    protected function getTableQuery(): Builder|Relation|null
+    {
+        $owner = $this->getOwnerRecord();
+
+        if (! $owner instanceof Event) {
+            return parent::getTableQuery();
+        }
+
+        $pointIds = $owner->programPoints()->pluck('id');
+
+        return Task::query()
+            ->where(function (Builder $query) use ($owner, $pointIds): void {
+                $query->where(function (Builder $inner) use ($owner): void {
+                    $inner->where('taskable_type', Event::class)
+                        ->where('taskable_id', $owner->getKey());
+                })->orWhere(function (Builder $inner) use ($pointIds): void {
+                    $inner->where('taskable_type', EventProgramPoint::class)
+                        ->whereIn('taskable_id', $pointIds);
+                });
+            });
     }
 
     /**
@@ -69,17 +102,7 @@ class TasksRelationManager extends RelationManager
         ];
     }
 
-    protected function afterTasksScopeChanged(): void
-    {
-        $this->resetTable();
-    }
-
     protected function afterTaskModalSaved(Task $task): void
-    {
-        $this->resetTable();
-    }
-
-    protected function afterTaskListQuickActionSaved(): void
     {
         $this->resetTable();
     }

@@ -4,9 +4,10 @@ namespace App\Filament\Resources\EventResource\Concerns;
 
 use App\Filament\Resources\EventResource;
 use App\Filament\Resources\EventResource\Pages\ManageEventClientPortal;
+use App\Filament\Resources\EventResource\Pages\ManageEventDayInsurances;
 use App\Filament\Resources\EventResource\Pages\ManageEventParticipants;
 use App\Filament\Resources\EventResource\Pages\ManageEventResignations;
-use App\Filament\Resources\EventResource\Pages\ManageEventSettlementPayments;
+use App\Support\WorkflowModuleNavigation;
 use Illuminate\Support\Facades\Schema;
 
 trait HasEventParticipantsSubNavigation
@@ -15,15 +16,15 @@ trait HasEventParticipantsSubNavigation
     {
         return match (static::class) {
             ManageEventParticipants::class => 'participants-list',
-            ManageEventSettlementPayments::class => 'participant-payments',
             ManageEventResignations::class => 'participant-resignations',
             ManageEventClientPortal::class => 'participant-portal',
+            ManageEventDayInsurances::class => 'day-insurances',
             default => 'participants-list',
         };
     }
 
     /**
-     * @return array<int, array{key: string, label: string, icon: string, url: string}>
+     * @return array<int, array{key: string, label: string, description: string, url: string, icon: string, badge: ?string, active?: bool}>
      */
     public static function participantsSubNavigationTabs(int|string $recordId): array
     {
@@ -35,30 +36,41 @@ trait HasEventParticipantsSubNavigation
             [
                 'key' => 'participants-list',
                 'label' => 'Lista',
+                'description' => 'Rejestr uczestników imprezy',
                 'icon' => 'heroicon-o-users',
                 'url' => EventResource::getUrl('participants', ['record' => $recordId]),
-            ],
-            [
-                'key' => 'participant-payments',
-                'label' => 'Zapłacono',
-                'icon' => 'heroicon-o-credit-card',
-                'url' => EventResource::getUrl('participant-payments', ['record' => $recordId]),
+                'badge' => null,
             ],
             [
                 'key' => 'participant-resignations',
                 'label' => 'Rezygnacje',
+                'description' => 'Rezygnacje i korekty listy',
                 'icon' => 'heroicon-o-user-minus',
                 'url' => EventResource::getUrl('participant-resignations', ['record' => $recordId]),
+                'badge' => null,
             ],
             [
                 'key' => 'participant-portal',
                 'label' => 'Portal klienta',
+                'description' => 'Dostęp opiekunów i uczestników',
                 'icon' => 'heroicon-o-user-group',
                 'url' => EventResource::getUrl('participant-portal', ['record' => $recordId]),
+                'badge' => null,
             ],
         ];
 
-        return $tabs;
+        if (Schema::hasTable('event_day_insurance')) {
+            $tabs[] = [
+                'key' => 'day-insurances',
+                'label' => 'Ubezpieczenia',
+                'description' => 'Polisy dzienne uczestników',
+                'icon' => 'heroicon-o-shield-check',
+                'url' => EventResource::getUrl('day-insurances', ['record' => $recordId]),
+                'badge' => null,
+            ];
+        }
+
+        return WorkflowModuleNavigation::markActive($tabs, static::participantsSubNavigationActiveTab());
     }
 
     /**
@@ -70,11 +82,37 @@ trait HasEventParticipantsSubNavigation
             return [];
         }
 
-        return [
+        $routes = [
             ManageEventParticipants::getRouteName(),
-            ManageEventSettlementPayments::getRouteName(),
             ManageEventResignations::getRouteName(),
             ManageEventClientPortal::getRouteName(),
         ];
+
+        if (Schema::hasTable('event_day_insurance')) {
+            $routes[] = ManageEventDayInsurances::getRouteName();
+        }
+
+        return $routes;
+    }
+
+    /**
+     * @return array<int|string, string>
+     */
+    protected function buildModuleBreadcrumbs(): array
+    {
+        $recordId = $this->getRecord()->getKey();
+        $section = match (static::participantsSubNavigationActiveTab()) {
+            'participants-list' => 'Lista',
+            'participant-resignations' => 'Rezygnacje',
+            'participant-portal' => 'Portal klienta',
+            'day-insurances' => 'Ubezpieczenia',
+            default => 'Uczestnicy',
+        };
+
+        return $this->eventRecordBreadcrumbs(
+            moduleLabel: 'Uczestnicy',
+            moduleUrl: EventResource::getUrl('participants', ['record' => $recordId]),
+            sectionLabel: $section,
+        );
     }
 }

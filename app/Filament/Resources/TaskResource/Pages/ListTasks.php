@@ -26,6 +26,11 @@ class ListTasks extends ListRecords
 
     protected static string $view = 'filament.resources.task-resource.pages.list-tasks';
 
+    public function getSubheading(): ?string
+    {
+        return 'Skrzynka cross-event — zadania w jednej imprezie znajdziesz w Operacjach karty imprezy';
+    }
+
     public function mount(): void
     {
         if (method_exists(get_parent_class($this), 'mount')) {
@@ -87,9 +92,10 @@ class ListTasks extends ListRecords
                 ->icon('heroicon-m-plus')
                 ->action(fn () => $this->mountAction('createTask')),
             Actions\Action::make('board')
-                ->label('Widok Tablicy (Kanban)')
+                ->label('Widok tablicy')
                 ->icon('heroicon-m-view-columns')
                 ->color('gray')
+                ->tooltip('Tablica kolumnowa statusów zadań — wygodna do codziennej pracy.')
                 ->url(TaskResource::getUrl('board')),
         ];
     }

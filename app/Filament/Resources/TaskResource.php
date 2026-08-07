@@ -3,6 +3,7 @@
 namespace App\Filament\Resources;
 
 use App\Enums\TaskPriority;
+use App\Filament\Forms\TaskFormFields;
 use App\Filament\Resources\TaskResource\Pages;
 use App\Filament\Resources\TaskResource\RelationManagers;
 use App\Models\Task;
@@ -15,8 +16,6 @@ use App\Support\Tasks\TaskNavigation;
 use App\Support\Tasks\TaskQueryFilters;
 use Filament\Forms;
 use Filament\Forms\Form;
-use Filament\Forms\Get;
-use Filament\Forms\Set;
 use Filament\Navigation\NavigationItem;
 use Filament\Resources\Resource;
 use Filament\Tables;
@@ -33,9 +32,9 @@ class TaskResource extends Resource
 
     protected static ?string $navigationIcon = 'heroicon-o-clipboard-document-list';
 
-    protected static ?string $navigationLabel = 'Zadania';
+    protected static ?string $navigationLabel = 'Wszystkie zadania';
 
-    protected static ?string $navigationGroup = FilamentNavigation::GROUP_OPERATIONS;
+    protected static ?string $navigationGroup = FilamentNavigation::GROUP_EVENTS;
 
     protected static ?int $navigationSort = 6;
 
@@ -86,166 +85,69 @@ class TaskResource extends Resource
     public static function modalEditorForm(Form $form): Form
     {
         return $form
-            ->schema([
-                Forms\Components\TextInput::make('title')
-                    ->label('Tytuł')
-                    ->required()
-                    ->maxLength(255)
-                    ->columnSpanFull(),
-                Forms\Components\Grid::make(3)
-                    ->schema([
-                        Forms\Components\DateTimePicker::make('due_date')
-                            ->label('Termin'),
-                        Forms\Components\Select::make('status_id')
-                            ->label('Status')
-                            ->relationship('status', 'name')
-                            ->default(fn () => Task::getDefaultStatusId())
-                            ->searchable()
-                            ->preload()
-                            ->required(),
-                        Forms\Components\Select::make('priority')
-                            ->label('Priorytet')
-                            ->options(TaskPriority::options())
-                            ->default(TaskPriority::Normal->value)
-                            ->required(),
-                    ]),
-                Forms\Components\Grid::make(3)
-                    ->schema([
-                        Forms\Components\Select::make('assignee_id')
-                            ->label('Przypisane do')
-                            ->relationship('assignee', 'name')
-                            ->searchable()
-                            ->preload(),
-                        Forms\Components\Select::make('parent_id')
-                            ->label('Zadanie nadrzędne')
-                            ->relationship('parent', 'title', modifyQueryUsing: fn (Builder $query) => $query->whereNull('parent_id'))
-                            ->searchable()
-                            ->preload(),
-                        Forms\Components\Select::make('taskable_type')
-                            ->label('Kontekst zadania')
-                            ->options(Task::getTaskableTypeOptions())
-                            ->default(fn () => request()->query('taskable_type'))
-                            ->native(false)
-                            ->live()
-                            ->afterStateUpdated(function (Set $set): void {
-                                $set('taskable_id', null);
-                            }),
-                    ]),
-                Forms\Components\Select::make('taskable_id')
-                    ->label('Powiązany rekord')
-                    ->options(fn (Get $get): array => Task::getTaskableRecordOptions($get('taskable_type')))
-                    ->default(fn () => request()->query('taskable_id'))
-                    ->searchable()
-                    ->preload()
-                    ->visible(fn (Get $get): bool => filled($get('taskable_type')))
-                    ->required(fn (Get $get): bool => filled($get('taskable_type')))
-                    ->columnSpanFull(),
-                \FilamentTiptapEditor\TiptapEditor::make('description')
-                    ->label('Treść')
-                    ->columnSpanFull(),
-                Forms\Components\ViewField::make('context_navigation')
-                    ->label('Przejdź do')
-                    ->view('filament.pages.partials.calendar-entry-links')
-                    ->viewData(fn (?Task $record): array => [
-                        'links' => \App\Support\Tasks\TaskContextRegistry::linksForTask($record),
-                        'openInNewTab' => true,
-                    ])
-                    ->visible(fn (?Task $record): bool => filled($record?->taskable_type))
-                    ->columnSpanFull(),
-            ])
+            ->schema(TaskFormFields::coreFields(compact: true))
             ->columns(1);
+    }
+
+    /**
+     * Prosta lista zadań w workspace imprezy (bez ownership scopes i ciężkich kolumn).
+     *
+     * @return array<int, Tables\Columns\Column>
+     */
+    public static function eventWorkspaceTableColumns(): array
+    {
+        return [
+            Tables\Columns\TextColumn::make('title')
+                ->label('Tytuł')
+                ->searchable()
+                ->sortable()
+                ->wrap()
+                ->weight('semibold')
+                ->description(function (Task $record): ?string {
+                    if ($record->taskable instanceof \App\Models\EventProgramPoint) {
+                        $name = $record->taskable->name
+                            ?? $record->taskable->templatePoint?->name;
+
+                        return $name ? 'Punkt: '.$name : 'Punkt programu';
+                    }
+
+                    if ($record->taskable instanceof \App\Models\Reservation) {
+                        $ref = $record->taskable->booking_reference
+                            ?: ('#'.$record->taskable->getKey());
+
+                        return 'Rezerwacja: '.$ref;
+                    }
+
+                    $plain = trim(strip_tags((string) ($record->description ?? '')));
+
+                    return $plain !== '' ? \Illuminate\Support\Str::limit($plain, 80) : null;
+                }),
+            Tables\Columns\TextColumn::make('assignee.name')
+                ->label('Przypisane')
+                ->placeholder('—')
+                ->toggleable(),
+            Tables\Columns\SelectColumn::make('status_id')
+                ->label('Status')
+                ->options(fn (): array => TaskStatus::query()->orderBy('order')->pluck('name', 'id')->all())
+                ->sortable()
+                ->selectablePlaceholder(false),
+            Tables\Columns\TextColumn::make('due_date')
+                ->label('Termin')
+                ->dateTime('d.m.Y H:i')
+                ->sortable()
+                ->placeholder('—'),
+            Tables\Columns\TextColumn::make('priority')
+                ->label('Priorytet')
+                ->badge()
+                ->formatStateUsing(fn ($state): string => TaskPriority::tryFrom(TaskPriority::normalize(is_string($state) ? $state : null))?->label() ?? 'Zwykły')
+                ->color(fn ($state): string => TaskPriority::normalize(is_string($state) ? $state : null) === TaskPriority::Urgent->value ? 'danger' : 'gray'),
+        ];
     }
 
     public static function form(Form $form): Form
     {
         return $form
-            ->schema([
-                Forms\Components\Group::make()
-                    ->schema([
-                        Forms\Components\Section::make()
-                            ->schema([
-                                Forms\Components\TextInput::make('title')
-                                    ->label('Tytuł')
-                                    ->required()
-                                    ->maxLength(255),
-                                \FilamentTiptapEditor\TiptapEditor::make('description')
-                                    ->label('Opis')
-                                    
-                                    ->columnSpanFull(),
-                                Forms\Components\DateTimePicker::make('due_date')
-                                    ->label('Termin'),
-                                Forms\Components\Select::make('status_id')
-                                    ->label('Status')
-                                    ->relationship('status', 'name')
-                                    ->default(fn () => Task::getDefaultStatusId())
-                                    ->searchable()
-                                    ->preload()
-                                    ->required(),
-                                Forms\Components\Select::make('priority')
-                                    ->label('Priorytet')
-                                    ->options(TaskPriority::options())
-                                    ->default(TaskPriority::Normal->value)
-                                    ->required(),
-                            ])
-                            ->columns(2),
-                        Forms\Components\Section::make('Przypisanie i kontekst')
-                            ->schema([
-                                Forms\Components\Select::make('assignee_id')
-                                    ->label('Przypisane do')
-                                    ->relationship('assignee', 'name')
-                                    ->searchable()
-                                    ->preload(),
-                                Forms\Components\Select::make('parent_id')
-                                    ->label('Zadanie nadrzędne')
-                                    ->relationship('parent', 'title', modifyQueryUsing: fn (Builder $query) => $query->whereNull('parent_id'))
-                                    ->searchable()
-                                    ->preload(),
-                                Forms\Components\Select::make('taskable_type')
-                                    ->label('Kontekst zadania')
-                                    ->options(Task::getTaskableTypeOptions())
-                                    ->default(fn () => request()->query('taskable_type'))
-                                    ->native(false)
-                                    ->live()
-                                    ->helperText('Zostaw puste, aby zadanie było wolne / nieprzypisane.')
-                                    ->afterStateUpdated(function (Set $set): void {
-                                        $set('taskable_id', null);
-                                    }),
-                                Forms\Components\Select::make('taskable_id')
-                                    ->label('Powiązany rekord')
-                                    ->options(fn (Get $get): array => Task::getTaskableRecordOptions($get('taskable_type')))
-                                    ->default(fn () => request()->query('taskable_id'))
-                                    ->searchable()
-                                    ->preload()
-                                    ->visible(fn (Get $get): bool => filled($get('taskable_type')))
-                                    ->required(fn (Get $get): bool => filled($get('taskable_type'))),
-                                Forms\Components\ViewField::make('context_navigation')
-                                    ->label('Przejdź do')
-                                    ->view('filament.pages.partials.calendar-entry-links')
-                                    ->viewData(fn (?Task $record): array => [
-                                        'links' => \App\Support\Tasks\TaskContextRegistry::linksForTask($record),
-                                        'openInNewTab' => true,
-                                    ])
-                                    ->visible(fn (?Task $record): bool => filled($record?->taskable_type))
-                                    ->columnSpanFull(),
-                            ]),
-                    ])
-                    ->columnSpan(['lg' => 2]),
-                Forms\Components\Group::make()
-                    ->schema([
-                        Forms\Components\Section::make('Załączniki')
-                            ->schema([
-                                Forms\Components\FileUpload::make('pending_attachments')
-                                    ->label('Pliki')
-                                    ->disk('public')
-                                    ->multiple()
-                                    ->directory('task-attachments')
-                                    ->preserveFilenames()
-                                    ->helperText('Możesz dodać pliki już przy tworzeniu zadania.'),
-                            ]),
-                    ])
-                    ->columnSpan(['lg' => 1])
-                    ->visible(fn (?Task $record): bool => ! $record?->exists),
-            ])
+            ->schema(TaskFormFields::coreFields(compact: false))
             ->columns(3);
     }
 
@@ -291,7 +193,7 @@ class TaskResource extends Resource
                     ->label('Źródło')
                     ->badge()
                     ->formatStateUsing(fn ($state) => match ($state instanceof \App\Enums\TaskSource ? $state->value : (string) $state) {
-                        \App\Enums\TaskSource::PilotChecklist->value => 'Checklista pilota',
+                        \App\Enums\TaskSource::PilotChecklist->value => 'Lista kontrolna pilota',
                         default => 'Biuro',
                     })
                     ->color(fn ($state) => ($state instanceof \App\Enums\TaskSource ? $state->value : (string) $state) === \App\Enums\TaskSource::PilotChecklist->value
@@ -472,7 +374,7 @@ class TaskResource extends Resource
                 ->label('Źródło')
                 ->badge()
                 ->formatStateUsing(fn ($state) => match ($state instanceof \App\Enums\TaskSource ? $state->value : (string) $state) {
-                    \App\Enums\TaskSource::PilotChecklist->value => 'Checklista pilota',
+                    \App\Enums\TaskSource::PilotChecklist->value => 'Lista kontrolna pilota',
                     default => 'Biuro',
                 })
                 ->color(fn ($state) => ($state instanceof \App\Enums\TaskSource ? $state->value : (string) $state) === \App\Enums\TaskSource::PilotChecklist->value

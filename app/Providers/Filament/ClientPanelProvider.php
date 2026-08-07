@@ -87,8 +87,17 @@ class ClientPanelProvider extends PanelProvider
             ->renderHook(
                 PanelsRenderHook::PAGE_START,
                 function (): string {
-                    $livewire = \Livewire\Livewire::current();
                     $html = '';
+
+                    if (\App\Http\Middleware\ClientPreviewMiddleware::isActive()) {
+                        $html .= view('filament.components.preview-mode-banner', [
+                            'title' => 'Podgląd portalu klienta',
+                            'description' => 'Widzisz portal tak jak uczestnik lub opiekun. To nie jest Twoje konto klienta — zmiany i płatności mogą działać inaczej niż w biurze.',
+                            'accentClass' => 'border-blue-200 bg-blue-50 text-blue-950',
+                        ])->render();
+                    }
+
+                    $livewire = \Livewire\Livewire::current();
 
                     if (is_object($livewire) && method_exists($livewire, 'getClientTripEvent')) {
                         $event = $livewire->getClientTripEvent();

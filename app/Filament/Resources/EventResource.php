@@ -22,11 +22,14 @@ use App\Models\EventTemplate;
 use App\Models\Place;
 use App\Models\PlaceDistance;
 use App\Models\TransportType;
+use App\Models\EventHotelStay;
+use App\Support\ContractorContactDetails;
 use App\Support\EventListFinanceColumn;
 use App\Support\EventReadinessIndicators;
 use App\Support\ExecutiveAccess;
 use App\Support\FilamentNavigation;
 use App\Support\MoneyFormatter;
+use Illuminate\Support\Collection;
 use Illuminate\Database\Eloquent\Model;
 use Filament\Forms;
 use Filament\Forms\Form;
@@ -51,6 +54,10 @@ class EventResource extends Resource
     protected static SubNavigationPosition $subNavigationPosition = SubNavigationPosition::Top;
 
     protected static ?string $navigationLabel = 'Imprezy';
+
+    protected static ?string $modelLabel = 'impreza';
+
+    protected static ?string $pluralModelLabel = 'imprezy';
 
     protected static ?int $navigationSort = 1;
 
@@ -654,6 +661,20 @@ class EventResource extends Resource
                         }
                         $termin .= ' <span style="color:#6b7280;font-size:0.85rem">('.e($daysLabel).')</span></div>';
 
+                        $timeParts = [];
+                        if (Schema::hasColumn('events', 'substitution_time') && filled($record->substitution_time)) {
+                            $timeParts[] = 'podstawienie '.e(substr((string) $record->substitution_time, 0, 5));
+                        }
+                        if (Schema::hasColumn('events', 'departure_time') && filled($record->departure_time)) {
+                            $timeParts[] = 'wyjazd '.e(substr((string) $record->departure_time, 0, 5));
+                        }
+                        if (Schema::hasColumn('events', 'return_time') && filled($record->return_time)) {
+                            $timeParts[] = 'powrót '.e(substr((string) $record->return_time, 0, 5));
+                        }
+                        $timesHtml = $timeParts !== []
+                            ? '<div class="admin-event-times">'.implode(' · ', $timeParts).'</div>'
+                            : '';
+
                         $nazwa = '<div style="font-size:0.95rem;font-weight:600;line-height:1">'.e($record->name ?? '—').'</div>';
 
                         $szablon = '';
@@ -667,7 +688,7 @@ class EventResource extends Resource
                             $codeHtml = '<div style="color:#6b7280;font-size:0.85rem">['.e($record->code).']</div>';
                         }
 
-                        return $termin.$nazwa.$codeHtml.$szablon;
+                        return $termin.$timesHtml.$nazwa.$codeHtml.$szablon;
                     }),
 
                 Tables\Columns\SelectColumn::make('status')
@@ -752,7 +773,9 @@ class EventResource extends Resource
                     ->html()
                     ->state(function (Event $record): string {
                         try {
-                            $calcPlan = (float) ($record->total_cost ?? 0);
+                            $calcPlan = (float) $record->resolvedBaseTotalCost(
+                                max(1, (int) ($record->participant_count ?? 1))
+                            );
                             $settlementPlan = (float) ($record->activeSettlement?->planned_cost_pln ?? 0);
                             $delta = $settlementPlan - $calcPlan;
                             $percent = $calcPlan > 0
@@ -815,37 +838,41 @@ class EventResource extends Resource
                     ->html()
                     ->state(function (Event $record): string {
                         $pilot = e($record->assignedUser?->name ?? '—');
-                        $transportCompany = e($record->transportContractor?->name ?? $record->transport_company_name ?? '—');
+
+                        $transportContractor = $record->transportContractor;
+                        $transportLocation = $transportContractor?->usesBusinessLocations()
+                            ? $transportContractor->defaultLocation()
+                            : null;
+                        $transportMeta = ContractorContactDetails::operationalMeta($transportContractor, $transportLocation);
+                        $transportName = e(
+                            $transportMeta['company_name']
+                                ?? $record->transport_company_name
+                                ?? '—'
+                        );
+                        $transportAddress = filled($transportMeta['address'] ?? null)
+                            ? e((string) $transportMeta['address'])
+                            : null;
                         $driverParts = array_filter([
                             $record->driver_name ?: null,
                             $record->driver_phone ?: null,
                             $record->vehicle_registration ? 'rej. '.$record->vehicle_registration : null,
                         ]);
-                        $transportExtra = ! empty($driverParts) ? e(implode(', ', $driverParts)) : '—';
+                        $transportExtra = ! empty($driverParts) ? e(implode(', ', $driverParts)) : null;
 
-                        $hotels = $record->hotelProgramPoints;
-                        $hotelsLine = $hotels->isEmpty()
-                            ? '—'
-                            : $hotels->map(function ($point) {
-                                $name = e($point->contractor?->name ?? $point->name ?? '—');
-                                $day = (int) ($point->day ?? 1);
+                        $transportValue = $transportName;
+                        if ($transportAddress) {
+                            $transportValue .= '<br><span style="color:#6b7280;font-weight:400;font-size:0.72rem">'.$transportAddress.'</span>';
+                        }
+                        if ($transportExtra) {
+                            $transportValue .= '<br><span style="color:#9ca3af;font-weight:400;font-size:0.72rem">'.$transportExtra.'</span>';
+                        }
 
-                                return 'Dz.'.$day.' '.$name;
-                            })->implode('<br>');
+                        $hotelsValue = static::formatHotelBusinessLocationsHtml($record);
 
                         $row = fn (string $label, string $value): string => '<tr>'
                             .'<td style="padding:1px 8px 1px 0;color:#9ca3af;font-size:0.72rem;white-space:nowrap;vertical-align:top">'.$label.'</td>'
                             .'<td style="color:#111827;font-size:0.78rem;font-weight:600;line-height:1.25">'.$value.'</td>'
                             .'</tr>';
-
-                        $transportValue = $transportCompany;
-                        if ($transportExtra && $transportExtra !== '—') {
-                            $transportValue .= '<br><span style="color:#9ca3af;font-weight:400;font-size:0.72rem">'.$transportExtra.'</span>';
-                        }
-
-                        $hotelsValue = $hotelsLine !== '—'
-                            ? $hotelsLine
-                            : '—';
 
                         return '<table style="border-collapse:collapse">'
                             .$row('Pilot:', $pilot)
@@ -865,11 +892,6 @@ class EventResource extends Resource
                     ->extraCellAttributes(['class' => 'event-readiness-cell']),
 
                 // --- Ukryte domyślnie ---
-                Tables\Columns\TextColumn::make('departure_time')
-                    ->label('Godzina podstawienia')
-                    ->state(fn ($record) => $record->departure_time ?: '—')
-                    ->visible(fn (): bool => Schema::hasColumn('events', 'departure_time')),
-
                 Tables\Columns\TextColumn::make('created_at')
                     ->label('Utworzono')
                     ->label('Utworzona')
@@ -975,7 +997,7 @@ class EventResource extends Resource
                     }),
 
                 Tables\Filters\TernaryFilter::make('pilot_funds_paid')
-                    ->label('Wypłata pilotowi')
+                    ->label('Wypłata pilota wycieczki')
                     ->visible(fn (): bool => Schema::hasColumn('events', 'pilot_funds_paid'))
                     ->placeholder('Wszystkie')
                     ->trueLabel('Wypłacono')
@@ -1022,7 +1044,7 @@ class EventResource extends Resource
                     Tables\Actions\Action::make('open_finance')
                         ->label('Finanse')
                         ->icon('heroicon-o-banknotes')
-                        ->url(fn (Event $record): string => static::getUrl('calculation', ['record' => $record])),
+                        ->url(fn (Event $record): string => static::getUrl('finance', ['record' => $record])),
                     Tables\Actions\Action::make('open_pilot')
                         ->label('Pilot')
                         ->icon('heroicon-o-user-circle')
@@ -1129,33 +1151,25 @@ class EventResource extends Resource
 
     public static function getRecordSubNavigation(Page $page): array
     {
+        // IA: max 6 primary — Operacje / Finanse / Dokumenty / Uczestnicy mają nested module nav.
         $items = [
             Pages\EditEvent::class,
             Pages\EditEventProgram::class,
-            Pages\ManageEventTasks::class,
         ];
 
         if (Schema::hasTable('event_participants')) {
             $items[] = Pages\ManageEventParticipants::class;
         }
 
-        $items[] = Pages\ManageEventReservations::class;
-        $items[] = Pages\ManageEventTransport::class;
-        $items[] = Pages\EventHotelPlanning::class;
-        $items[] = Pages\ManageEventPilot::class;
+        $items[] = Pages\ManageEventTasks::class;
+        $items[] = Pages\EventFinance::class;
 
         if (Schema::hasTable('contracts') || Schema::hasTable('event_agreements')) {
             $items[] = Pages\ManageEventContracts::class;
-        }
-
-        $items[] = Pages\EventFinance::class;
-
-        if (Schema::hasTable('event_day_insurance')) {
-            $items[] = Pages\ManageEventDayInsurances::class;
-        }
-
-        if (Schema::hasTable('event_documents')) {
+        } elseif (Schema::hasTable('event_documents')) {
             $items[] = Pages\ManageEventDocuments::class;
+        } elseif (Schema::hasTable('event_histories')) {
+            $items[] = Pages\EventAuditLogPage::class;
         }
 
         return $page->generateNavigationItems($items);
@@ -1176,6 +1190,9 @@ class EventResource extends Resource
             'pilot' => Pages\ManageEventPilot::route('/{record}/pilot'),
             'client-portal' => Pages\RedirectLegacyEventClientPortal::route('/{record}/portal-klienta'),
             'finance' => Pages\EventFinance::route('/{record}/finance'),
+            'finance-participant-payments' => Pages\EventFinanceParticipantPayments::route('/{record}/finance/participant-payments'),
+            'finance-pilot-cash' => Pages\EventFinancePilotCash::route('/{record}/finance/pilot-cash'),
+            'finance-settlement-documents' => Pages\EventFinanceSettlementDocuments::route('/{record}/finance/settlement-documents'),
             'day-insurances' => Pages\ManageEventDayInsurances::route('/{record}/day-insurances'),
             'reservations' => Pages\ManageEventReservations::route('/{record}/reservations'),
             'contracts' => Pages\ManageEventContracts::route('/{record}/contracts'),
@@ -1184,6 +1201,7 @@ class EventResource extends Resource
             'participant-resignations' => Pages\ManageEventResignations::route('/{record}/participants/resignations'),
             'participant-portal' => Pages\ManageEventClientPortal::route('/{record}/participants/portal'),
             'documents' => Pages\ManageEventDocuments::route('/{record}/documents'),
+            'audit' => Pages\EventAuditLogPage::route('/{record}/audit'),
             'settlement-summary' => Pages\ManageEventSettlementSummary::route('/{record}/settlement'),
             'settlement-costs' => Pages\ManageEventSettlementCosts::route('/{record}/settlement/costs'),
             'settlement-payments' => Pages\RedirectLegacyEventSettlementPayments::route('/{record}/settlement/payments'),
@@ -1221,12 +1239,18 @@ class EventResource extends Resource
                 'eventTemplate',
                 'startPlace',
                 'assignedUser',
-                'transportContractor',
-                'hotelProgramPoints',
+                Schema::hasTable('contractor_locations')
+                    ? 'transportContractor.activeLocations'
+                    : 'transportContractor',
                 'activeSettlement.participantPayments',
-                'bus:id,name',
+                'bus',
                 'markup:id,percent',
             ];
+
+            if (Schema::hasTable('event_hotel_stays')) {
+                $relations[] = 'hotelStays.contractor';
+                $relations[] = 'hotelStays.contractorLocation';
+            }
 
             if (Schema::hasTable('event_contractor')) {
                 $relations[] = 'orderingContractors';
@@ -1259,12 +1283,18 @@ class EventResource extends Resource
             'eventTemplate',
             'startPlace',
             'assignedUser',
-            'transportContractor',
-            'hotelProgramPoints',
+            Schema::hasTable('contractor_locations')
+                ? 'transportContractor.activeLocations'
+                : 'transportContractor',
             'activeSettlement.participantPayments',
-            'bus:id,name',
+            'bus',
             'markup:id,percent',
         ];
+
+        if (Schema::hasTable('event_hotel_stays')) {
+            $relations[] = 'hotelStays.contractor';
+            $relations[] = 'hotelStays.contractorLocation';
+        }
 
         if (Schema::hasTable('event_contractor')) {
             $relations[] = 'orderingContractors';
@@ -1275,6 +1305,46 @@ class EventResource extends Resource
         }
 
         return $query->with($relations);
+    }
+
+    /**
+     * Hotele z planu noclegów: nazwa kontrahenta + adres prowadzenia działalności (nie punkty programu).
+     */
+    protected static function formatHotelBusinessLocationsHtml(Event $record): string
+    {
+        if (! Schema::hasTable('event_hotel_stays')) {
+            return '—';
+        }
+
+        $stays = $record->relationLoaded('hotelStays')
+            ? $record->hotelStays
+            : $record->hotelStays()->with(['contractor', 'contractorLocation'])->get();
+
+        /** @var Collection<int, EventHotelStay> $withContractor */
+        $withContractor = $stays->filter(fn (EventHotelStay $stay): bool => (int) ($stay->contractor_id ?? 0) > 0);
+
+        if ($withContractor->isEmpty()) {
+            return '—';
+        }
+
+        return $withContractor
+            ->groupBy(fn (EventHotelStay $stay): string => (int) $stay->contractor_id.'_'.(int) ($stay->contractor_location_id ?? 0))
+            ->map(function (Collection $grouped): string {
+                /** @var EventHotelStay $first */
+                $first = $grouped->sortBy('day')->first();
+                $meta = ContractorContactDetails::operationalMeta($first->contractor, $first->contractorLocation);
+                $name = e((string) ($meta['company_name'] ?? $first->contractor?->name ?? '—'));
+                $branch = filled($meta['branch_name'] ?? null)
+                    ? '<br><span style="color:#6b7280;font-weight:400;font-size:0.72rem">'.e((string) $meta['branch_name']).'</span>'
+                    : '';
+                $address = filled($meta['address'] ?? null)
+                    ? '<br><span style="color:#6b7280;font-weight:400;font-size:0.72rem">'.e((string) $meta['address']).'</span>'
+                    : '';
+
+                return $name.$branch.$address;
+            })
+            ->values()
+            ->implode('<br>');
     }
 
     public static function canViewAny(): bool

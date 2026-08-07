@@ -5,25 +5,25 @@ namespace App\Filament\Resources\EventResource\Pages;
 use App\Filament\Forms\EventKeyInfoFields;
 use App\Filament\Forms\EventNotesFields;
 use App\Filament\Forms\EventOrderingPartyFields;
-use App\Filament\Forms\EventTransportFields;
 use App\Filament\Resources\EventResource;
 use App\Filament\Resources\EventResource\Traits\SearchContractorTrait;
-use App\Models\Bus;
-use App\Models\Contractor;
 use App\Models\Currency;
 use App\Models\Event;
 use App\Models\EventTemplate;
-use App\Models\Place;
-use App\Models\PlaceDistance;
 use App\Models\User;
 use App\Services\EventInquiryNotificationService;
 use Filament\Forms;
+use Filament\Notifications\Notification;
 use Filament\Resources\Pages\CreateRecord;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Schema;
 use Livewire\Attributes\On;
 
+/**
+ * Create = szybkie zapytanie (inquiry).
+ * Transport, hotel, pilot, pełna kalkulacja — po zapisie na Podsumowaniu / w hubach.
+ */
 class CreateEvent extends CreateRecord
 {
     use SearchContractorTrait;
@@ -31,6 +31,11 @@ class CreateEvent extends CreateRecord
     protected static string $resource = EventResource::class;
 
     protected ?EventTemplate $template = null;
+
+    public function getSubheading(): ?string
+    {
+        return 'Tylko dane startowe zapytania — resztę uzupełnisz na karcie imprezy';
+    }
 
     public function mount(): void
     {
@@ -69,6 +74,15 @@ class CreateEvent extends CreateRecord
     protected function getFormSchema(): array
     {
         return [
+            Forms\Components\Section::make('Nowe zapytanie')
+                ->icon('heroicon-o-sparkles')
+                ->description('Minimalny formularz startowy. Transport, hotel, pilota, dokumenty i pełną kalkulację uzupełnisz po utworzeniu — na Podsumowaniu oraz w hubach Operacje / Finanse.')
+                ->schema([
+                    Forms\Components\Placeholder::make('create_flow_hint')
+                        ->hiddenLabel()
+                        ->content('Status startowy: zapytanie. Po zapisie przejdziesz od razu do karty imprezy.'),
+                ]),
+
             Forms\Components\Section::make('Zamawiający')
                 ->icon('heroicon-o-user-circle')
                 ->description('Wymagane: wyszukaj osobę w bazie albo — gdy jej nie ma — wprowadź ręcznie z telefonem lub e-mailem.')
@@ -90,20 +104,8 @@ class CreateEvent extends CreateRecord
                         ->columnSpanFull(),
                 ]),
 
-            Forms\Components\Section::make('Uwagi klienta/uwagi dla biura')
-                ->icon('heroicon-o-chat-bubble-left-right')
-                ->schema([
-                    EventNotesFields::generalNotes()
-                        ->hiddenLabel()
-                        ->columnSpanFull(),
-                    EventNotesFields::officeNotes()
-                        ->hiddenLabel()
-                        ->columnSpanFull(),
-                ]),
-
-            Forms\Components\Section::make('Szablon i parametry')
+            Forms\Components\Section::make('Szablon')
                 ->icon('heroicon-o-rectangle-stack')
-                ->columns(2)
                 ->schema([
                     Forms\Components\Select::make('event_template_id')
                         ->label('Szablon imprezy')
@@ -112,7 +114,6 @@ class CreateEvent extends CreateRecord
                         ->placeholder('Bez szablonu (impreza czysta)')
                         ->nullable()
                         ->reactive()
-                        ->columnSpanFull()
                         ->afterStateUpdated(function ($state, callable $set, callable $get) {
                             $this->template = $state ? EventTemplate::find($state) : null;
 
@@ -139,199 +140,43 @@ class CreateEvent extends CreateRecord
 
                             $this->refreshTotalCostFromTemplateState($set, $get);
                         })
-                        ->helperText('Wybierz szablon, na podstawie którego zostanie utworzona impreza'),
+                        ->helperText('Szablon programu i bazowej kalkulacji. Szczegóły ceny dojrzewają po utworzeniu w module Finanse.'),
 
-                    ...EventKeyInfoFields::identitySection(),
-
-                    Forms\Components\TextInput::make('participant_count')
-                        ->label('Liczba uczestników')
-                        ->numeric()
-                        ->minValue(1)
-                        ->default(1)
-                        ->live(onBlur: true)
-                        ->afterStateUpdated(fn (callable $get, callable $set) => $this->refreshTotalCostFromTemplateState($set, $get))
-                        ->required(),
-
-                    Forms\Components\TextInput::make('gratis_count')
-                        ->label(\App\Support\EventParticipantGroupLabels::GRATIS)
-                        ->numeric()
-                        ->minValue(0)
+                    // Wartości z szablonu — bez UI na Create (Operacje / Finanse po zapisie).
+                    Forms\Components\Hidden::make('bus_id')->dehydrated(),
+                    Forms\Components\Hidden::make('markup_id')->dehydrated(),
+                    Forms\Components\Hidden::make('total_cost')
                         ->default(0)
-                        ->dehydrated()
-                        ->live(onBlur: true)
-                        ->afterStateUpdated(fn (callable $get, callable $set) => $this->refreshTotalCostFromTemplateState($set, $get))
-                        ->helperText('Osoby jadące w grupie bez opłaty za siebie. Uwzględniane w kalkulacji kosztów i zapisywane w wariancie ilościowym grupy.'),
-
-                    Forms\Components\Select::make('start_place_id')
-                        ->label('Miejsce wyjazdu (podstawienia)')
-                        ->options(fn (callable $get) => Place::startingPlaceSelectOptionsForTemplate(
-                            (int) ($get('event_template_id') ?? 0) ?: null,
-                            (int) ($get('start_place_id') ?? 0) ?: null,
-                        ))
-                        ->searchable()
-                        ->nullable()
-                        ->reactive()
-                        ->helperText(fn (callable $get): string => filled($get('event_template_id'))
-                            ? 'Punkty startowe dostępne dla wybranego szablonu.'
-                            : 'Tylko miejsca oznaczone jako punkty startowe — wymagane do kalkulacji transferu.')
-                        ->afterStateUpdated(function (callable $get, callable $set): void {
-                            $templateId = (int) ($get('event_template_id') ?? 0);
-                            $startPlaceId = (int) ($get('start_place_id') ?? 0);
-                            $currentTransfer = (float) ($get('transfer_km') ?? 0);
-
-                            if ($templateId) {
-                                $set('transfer_km', EventResource::resolveTransferKmFromTemplateState(
-                                    $templateId,
-                                    $startPlaceId,
-                                    $currentTransfer
-                                ));
-                            } else {
-                                $programStartPlaceId = (int) ($get('program_start_place_id') ?? 0);
-                                if ($programStartPlaceId > 0 && $startPlaceId > 0) {
-                                    $d1 = (float) (PlaceDistance::query()
-                                        ->where('from_place_id', $startPlaceId)
-                                        ->where('to_place_id', $programStartPlaceId)
-                                        ->value('distance_km') ?? 0);
-                                    $set('transfer_km', $d1 * 2);
-                                }
-                            }
-
-                            $this->refreshTotalCostFromTemplateState($set, $get);
-                        }),
-
-                    Forms\Components\Select::make('program_start_place_id')
-                        ->label('Początek programu')
-                        ->options(Place::pluck('name', 'id'))
-                        ->searchable()
-                        ->nullable()
-                        ->dehydrated(false)
-                        ->reactive()
-                        ->visible(fn (callable $get) => empty($get('event_template_id')))
-                        ->afterStateUpdated(function (callable $get, callable $set): void {
-                            $startPlaceId = (int) ($get('start_place_id') ?? 0);
-                            $programStartPlaceId = (int) ($get('program_start_place_id') ?? 0);
-                            if ($programStartPlaceId > 0 && $startPlaceId > 0) {
-                                $d1 = (float) (PlaceDistance::query()
-                                    ->where('from_place_id', $startPlaceId)
-                                    ->where('to_place_id', $programStartPlaceId)
-                                    ->value('distance_km') ?? 0);
-                                $set('transfer_km', $d1 * 2);
-                            }
-                        })
-                        ->helperText('Służy tylko do przeliczenia transferu (x2).'),
-
-                    Forms\Components\TextInput::make('transfer_km')
-                        ->label('Km transferu')
-                        ->numeric()
-                        ->minValue(0)
-                        ->default(0)
-                        ->live(onBlur: true)
-                        ->afterStateUpdated(fn ($livewire) => method_exists($livewire, 'dispatch') ? $livewire->dispatch('event-price-table-refresh') : null),
-
-                    Forms\Components\TextInput::make('program_km')
-                        ->label('Km programu')
-                        ->numeric()
-                        ->minValue(0)
-                        ->default(0)
-                        ->live(onBlur: true)
-                        ->afterStateUpdated(fn ($livewire, callable $get, callable $set) => [
-                            $this->refreshTotalCostFromTemplateState($set, $get),
-                            method_exists($livewire, 'dispatch') ? $livewire->dispatch('event-price-table-refresh') : null,
-                        ]),
-
-                    Forms\Components\Select::make('bus_id')
-                        ->label('Autokar')
-                        ->options(Bus::pluck('name', 'id'))
-                        ->searchable()
-                        ->nullable()
-                        ->live()
-                        ->afterStateUpdated(fn ($livewire) => $livewire->dispatch('event-price-table-refresh')),
+                        ->dehydrated(),
                 ]),
 
-            Forms\Components\Section::make('Przewoźnik i kierowca')
-                ->icon('heroicon-o-truck')
+            ...EventKeyInfoFields::identitySection(),
+
+            Forms\Components\Section::make('Grupa i miejsce startu')
+                ->icon('heroicon-o-users')
+                ->description('Potrzebne do utworzenia z szablonu i wstępnej kalkulacji. Resztę parametrów operacyjnych uzupełnisz później.')
                 ->columns(2)
-                ->collapsible()
-                ->collapsed()
                 ->schema([
-                    Forms\Components\TimePicker::make('departure_time')
-                        ->label('Godzina podstawienia')
-                        ->seconds(false)
-                        ->native(false)
-                        ->nullable()
-                        ->visible(fn (): bool => Schema::hasColumn('events', 'departure_time')),
-
-                    Forms\Components\TextInput::make('transport_company_name')
-                        ->label('Firma transportowa')
-                        ->maxLength(255)
-                        ->visible(fn (): bool => Schema::hasColumn('events', 'transport_company_name')),
-
-                    Forms\Components\TextInput::make('driver_name')
-                        ->label('Kierowca')
-                        ->maxLength(255)
-                        ->visible(fn (): bool => Schema::hasColumn('events', 'driver_name')),
-
-                    \App\Filament\Forms\PhoneInput::make('driver_phone')
-                        ->label('Telefon kierowcy')
-                        ->visible(fn (): bool => Schema::hasColumn('events', 'driver_phone')),
-
-                    Forms\Components\TextInput::make('vehicle_registration')
-                        ->label('Nr rejestracyjny')
-                        ->maxLength(32)
-                        ->visible(fn (): bool => Schema::hasColumn('events', 'vehicle_registration')),
-
-                    \FilamentTiptapEditor\TiptapEditor::make('pickup_place_details')
-                        ->label('Szczegóły miejsca podstawienia')
-                        ->columnSpanFull()
-                        ->visible(fn (): bool => Schema::hasColumn('events', 'pickup_place_details'))
-                        ->helperText('Np. dokładny adres, brama, punkt orientacyjny.'),
-
-                    Forms\Components\Select::make('contractor_id')
-                        ->label('Wykonawca (kontrahent)')
-                        ->options(Contractor::orderBy('name')->pluck('name', 'id'))
-                        ->searchable()
-                        ->nullable(),
-
-                    ...EventTransportFields::manualTransportCostFields(),
-
-                    EventNotesFields::driverNotes()
-                        ->columnSpanFull(),
+                    ...EventKeyInfoFields::participantFields(
+                        onUpdated: fn (callable $get, callable $set) => $this->refreshTotalCostFromTemplateState($set, $get),
+                    ),
+                    ...EventKeyInfoFields::placeAndDistanceFields(
+                        onUpdated: fn (callable $get, callable $set) => $this->refreshTotalCostFromTemplateState($set, $get),
+                        includeProgramStartPlace: true,
+                    ),
                 ]),
 
-            Forms\Components\Section::make('Zakwaterowanie')
-                ->icon('heroicon-o-building-office-2')
+            Forms\Components\Section::make('Uwagi')
+                ->icon('heroicon-o-chat-bubble-left-right')
                 ->collapsible()
                 ->collapsed()
                 ->schema([
-                    Forms\Components\Placeholder::make('hotel_info')
+                    EventNotesFields::generalNotes()
                         ->hiddenLabel()
-                        ->content('Szczegóły hoteli (i ich uwagi) uzupełnisz w zakładce „Hotele” po utworzeniu imprezy.'),
-                ]),
-
-            Forms\Components\Section::make('Kalkulacja ceny')
-                ->icon('heroicon-o-calculator')
-                ->schema([
-                    Forms\Components\View::make('components.event-price-calculation')
-                        ->viewData(fn (callable $get) => [
-                            'template' => EventTemplate::find($get('event_template_id')),
-                            'participantCount' => $get('participant_count') ?? 1,
-                            'gratisCount' => $get('gratis_count') ?? 0,
-                            'startPlaceId' => $get('start_place_id'),
-                            'calculatedTotal' => ($get('event_template_id') && $get('start_place_id') && ((int) ($get('participant_count') ?? 0) > 0))
-                                ? $get('total_cost')
-                                : null,
-                        ])
-                        ->hidden(fn (callable $get) => ! $get('event_template_id') || ! $get('start_place_id')),
-
-                    Forms\Components\TextInput::make('total_cost')
-                        ->label('Całkowity koszt (PLN)')
-                        ->numeric()
-                        ->prefix('PLN')
-                        ->default(0)
-                        ->readOnly()
-                        ->helperText('Koszt jest obliczany na podstawie wyboru parametrów'),
-
-                    Forms\Components\Hidden::make('markup_id'),
+                        ->columnSpanFull(),
+                    EventNotesFields::officeNotes()
+                        ->hiddenLabel()
+                        ->columnSpanFull(),
                 ]),
 
             Forms\Components\Section::make('Zapis')
@@ -348,6 +193,19 @@ class CreateEvent extends CreateRecord
                         ->dehydrated(false),
                 ]),
         ];
+    }
+
+    protected function getRedirectUrl(): string
+    {
+        return EventResource::getUrl('edit', ['record' => $this->getRecord()]);
+    }
+
+    protected function getCreatedNotification(): ?Notification
+    {
+        return Notification::make()
+            ->success()
+            ->title('Utworzono zapytanie')
+            ->body('Jesteś na Podsumowaniu — uzupełnij gotowość, potem Program, Operacje i Finanse.');
     }
 
     protected function beforeValidate(): void
@@ -415,7 +273,7 @@ class CreateEvent extends CreateRecord
         try {
             parent::create($another);
         } catch (\Illuminate\Validation\ValidationException $exception) {
-            \Filament\Notifications\Notification::make()
+            Notification::make()
                 ->title('Nie można utworzyć imprezy')
                 ->body(collect($exception->errors())->flatten()->unique()->implode("\n"))
                 ->danger()

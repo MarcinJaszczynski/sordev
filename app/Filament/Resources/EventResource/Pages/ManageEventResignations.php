@@ -13,7 +13,7 @@ class ManageEventResignations extends ManageEventParticipantsSection
 
     protected static ?string $navigationLabel = 'Rezygnacje';
 
-    protected static ?string $title = 'Rezygnacje uczestników';
+    protected static ?string $title = 'Rezygnacje';
 
     protected static ?string $navigationIcon = 'heroicon-o-user-minus';
 

@@ -4,18 +4,16 @@ namespace App\Filament\Resources\EventResource\Pages;
 
 use App\Filament\Resources\EventResource;
 use App\Filament\Resources\EventResource\Concerns\HasEventFinanceSubNavigation;
-use App\Filament\Resources\EventResource\Concerns\HasEventWorkflowContext;
+use App\Filament\Resources\EventResource\Concerns\InteractsWithEventRecord;
 use App\Services\EventPriceCalculator;
 use Filament\Actions;
 use Filament\Actions\ActionGroup;
-use Filament\Resources\Pages\Concerns\InteractsWithRecord;
 use Filament\Resources\Pages\Page;
 
 class EventCalculation extends Page
 {
     use HasEventFinanceSubNavigation;
-    use HasEventWorkflowContext;
-    use InteractsWithRecord;
+    use InteractsWithEventRecord;
 
     protected static string $resource = EventResource::class;
 
@@ -23,7 +21,7 @@ class EventCalculation extends Page
 
     protected static ?string $navigationLabel = 'Kalkulacja';
 
-    protected static ?string $title = 'Kalkulacja imprezy';
+    protected static ?string $title = 'Kalkulacja';
 
     protected static ?string $navigationIcon = 'heroicon-o-calculator';
 
@@ -40,7 +38,7 @@ class EventCalculation extends Page
         }
 
         if (! $hasVariants) {
-            $this->redirect(EventResource::getUrl('settlement-summary', ['record' => $this->record]));
+            $this->redirect(EventResource::getUrl('finance', ['record' => $this->record]));
 
             return;
         }
@@ -53,6 +51,7 @@ class EventCalculation extends Page
                 ->label('Przelicz')
                 ->icon('heroicon-o-arrow-path')
                 ->color('primary')
+                ->tooltip('Przelicza koszty i ceny imprezy na podstawie programu i transportu.')
                 ->requiresConfirmation()
                 ->action(function () {
                     (new EventPriceCalculator)->calculateForEvent($this->record);
@@ -61,26 +60,30 @@ class EventCalculation extends Page
                 }),
             ActionGroup::make([
                 Actions\Action::make('create_snapshot')
-                    ->label('Utwórz snapshot')
+                    ->label('Zapisz migawkę')
                     ->icon('heroicon-o-camera')
+                    ->tooltip('Zapisuje aktualny stan kalkulacji do porównania później.')
                     ->form([
                         \Filament\Forms\Components\TextInput::make('name')
-                            ->label('Nazwa snapshotu')
+                            ->label('Nazwa migawki')
                             ->required()
-                            ->default('Snapshot kalkulacji '.now()->format('d.m.Y H:i')),
+                            ->default('Migawka kalkulacji '.now()->format('d.m.Y H:i')),
                         \FilamentTiptapEditor\TiptapEditor::make('description')
+                            ->label('Opis')
                             ->maxLength(500),
                     ])
                     ->action(function (array $data) {
                         $this->record->createManualSnapshot($data['name'], $data['description'] ?? null);
-                        \Filament\Notifications\Notification::make()->title('Snapshot utworzony')->success()->send();
+                        \Filament\Notifications\Notification::make()->title('Migawka zapisana')->success()->send();
                     }),
                 Actions\Action::make('export_pdf')
-                    ->label('Eksport PDF')
+                    ->label('Pobierz PDF')
+                    ->tooltip('Pobierz kalkulację w formacie PDF.')
                     ->url(fn () => route('admin.events.calculation.pdf', $this->record))
                     ->openUrlInNewTab(),
                 Actions\Action::make('export_excel')
-                    ->label('Eksport Excel')
+                    ->label('Pobierz Excel')
+                    ->tooltip('Pobierz kalkulację w arkuszu Excel.')
                     ->url(fn () => route('admin.events.calculation.excel', $this->record))
                     ->openUrlInNewTab(),
             ])
@@ -96,5 +99,23 @@ class EventCalculation extends Page
         return [
             \App\Filament\Resources\EventResource\Widgets\EventPriceTable::class,
         ];
+    }
+
+    public static function getResourcePageName(): string
+    {
+        foreach (EventResource::getPages() as $pageName => $pageRegistration) {
+            if ($pageRegistration->getPage() !== static::class) {
+                continue;
+            }
+
+            return $pageName;
+        }
+
+        throw new \Exception('Page ['.static::class.'] is not registered to the resource ['.EventResource::class.'].');
+    }
+
+    public static function getRouteName(?string $panel = null): string
+    {
+        return EventResource::getRouteBaseName(panel: $panel).'.'.static::getResourcePageName();
     }
 }

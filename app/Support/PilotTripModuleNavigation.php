@@ -5,6 +5,7 @@ namespace App\Support;
 use App\Filament\Pilot\Pages\PilotAdvancePage;
 use App\Filament\Pilot\Pages\PilotAttendancePage;
 use App\Filament\Pilot\Pages\PilotChecklistPage;
+use App\Filament\Pilot\Pages\PilotDocumentsPage;
 use App\Filament\Pilot\Pages\PilotHotelPlanPage;
 use App\Filament\Pilot\Pages\PilotProgramPage;
 use App\Filament\Pilot\Pages\PilotSettlementPage;
@@ -92,8 +93,8 @@ final class PilotTripModuleNavigation
             $tabs[] = [
                 'key' => 'documents',
                 'label' => 'Dokumenty',
-                'description' => 'PDF teczki i pilota',
-                'url' => route('pilot.events.pdf', ['event' => $event->id, 'audience' => 'folder']),
+                'description' => 'PDF teczki i pakietu pilota',
+                'url' => PilotDocumentsPage::urlFor($event),
                 'icon' => 'heroicon-o-document-arrow-down',
             ];
         }

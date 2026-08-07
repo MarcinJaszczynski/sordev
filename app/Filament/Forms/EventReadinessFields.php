@@ -39,9 +39,9 @@ class EventReadinessFields
      */
     public static function pilotSection(?callable $configureSection = null): array
     {
-        $section = Forms\Components\Section::make('Pilot')
+        $section = Forms\Components\Section::make('Pilot wycieczki')
             ->icon('heroicon-o-user-circle')
-            ->description('Przypisanie pilota, zaliczka gotówkowa i uwagi operacyjne.')
+            ->description('Przypisanie pilota wycieczki, zaliczka gotówkowa i uwagi operacyjne.')
             ->columns(2)
             ->schema([
                 Forms\Components\Placeholder::make('pilot_portal_settings_toolbar')
@@ -78,29 +78,13 @@ class EventReadinessFields
     }
 
     /**
-     * Pola kierowcy i podstawienia — używane w formularzu transportu i w modalu gotowości.
+     * Dane kierowcy i miejsca podstawienia (bez godzin — godziny tylko w EventTransportFields).
      *
      * @return array<int, Forms\Components\Component>
      */
     public static function driverFields(): array
     {
         return [
-            Forms\Components\TimePicker::make('departure_time')
-                ->label('Godzina podstawienia')
-                ->seconds(false)
-                ->native(false)
-                ->nullable()
-                ->visible(fn (): bool => Schema::hasColumn('events', 'departure_time'))
-                ->helperText('Godzina zbiórki / podstawienia autokaru.'),
-
-            Forms\Components\TimePicker::make('return_time')
-                ->label('Godzina powrotu')
-                ->seconds(false)
-                ->native(false)
-                ->nullable()
-                ->visible(fn (): bool => Schema::hasColumn('events', 'return_time'))
-                ->helperText('Godzina planowanego powrotu autokaru.'),
-
             Forms\Components\TextInput::make('driver_name')
                 ->label('Kierowca')
                 ->maxLength(255)
@@ -117,10 +101,9 @@ class EventReadinessFields
 
             \FilamentTiptapEditor\TiptapEditor::make('pickup_place_details')
                 ->label('Szczegóły miejsca podstawienia')
-                
                 ->columnSpanFull()
                 ->visible(fn (): bool => Schema::hasColumn('events', 'pickup_place_details'))
-                ->helperText('Np. dokładny adres, brama, punkt orientacyjny.'),
+                ->helperText('Np. dokładny adres, brama, punkt orientacyjny. Godziny podstawienia/odjazdu/powrotu są w sekcji Impreza.'),
 
             Forms\Components\Toggle::make('driver_pickup_info_sent')
                 ->label('Wysłano kierowcy informację o podstawieniu')
@@ -172,7 +155,10 @@ class EventReadinessFields
                 ->columns(2)
                 ->columnSpanFull()
                 ->visible(fn (?Event $record): bool => $record?->requiresDriverPickupInfo() ?? true)
-                ->schema(self::driverFields()),
+                ->schema([
+                    ...EventTransportFields::transportTimeFields(),
+                    ...self::driverFields(),
+                ]),
         ];
     }
 
@@ -193,7 +179,9 @@ class EventReadinessFields
             'insurance_paid_at' => $event->insurance_paid_at,
             'insurance_document_path' => $event->insurance_document_path,
             'insurance_terms' => $event->insurance_terms,
+            'substitution_time' => $event->substitution_time,
             'departure_time' => $event->departure_time,
+            'return_time' => $event->return_time,
             'driver_name' => $event->driver_name,
             'driver_phone' => $event->driver_phone,
             'vehicle_registration' => $event->vehicle_registration,
@@ -228,7 +216,7 @@ class EventReadinessFields
             }
         }
 
-        foreach (['departure_time', 'driver_name', 'driver_phone', 'vehicle_registration', 'pickup_place_details'] as $field) {
+        foreach (['substitution_time', 'departure_time', 'return_time', 'driver_name', 'driver_phone', 'vehicle_registration', 'pickup_place_details'] as $field) {
             if (Schema::hasColumn('events', $field) && array_key_exists($field, $data)) {
                 $payload[$field] = $data[$field];
             }

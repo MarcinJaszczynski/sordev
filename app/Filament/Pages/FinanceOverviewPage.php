@@ -3,7 +3,6 @@
 namespace App\Filament\Pages;
 
 use App\Filament\Resources\EventResource;
-use App\Filament\Resources\EventSettlementResource;
 use App\Filament\Resources\VendorInvoiceResource;
 use App\Models\Event;
 use App\Models\EventSettlement;
@@ -95,9 +94,14 @@ class FinanceOverviewPage extends Page
             'planned_pilot_advances_label' => MoneyFormatter::format($plannedPilotAdvances, 'PLN'),
             ...$invoiceStats,
             'urls' => [
-                'open_settlements' => EventSettlementResource::getUrl('index'),
+                'open_settlements' => EventResource::getUrl('index', [
+                    'activeTab' => 'to_settle',
+                ]),
                 'unpaid_pilot_funds' => EventResource::getUrl('index', [
-                    'activeTab' => 'no_pilot_funds',
+                    'activeTab' => 'all',
+                    'tableFilters' => [
+                        'pilot_funds_paid' => ['value' => '0'],
+                    ],
                 ]),
                 'unmatched' => VendorInvoiceInboxPage::getUrl(),
                 'due' => VendorInvoiceResource::getUrl('index', [
@@ -148,9 +152,9 @@ class FinanceOverviewPage extends Page
             ],
             [
                 'step' => 5,
-                'title' => 'Rozliczenie i wypłata pilota',
-                'body' => 'W rozliczeniu imprezy zweryfikuj koszty i gotówkę pilota. Na liście imprez oznacz wypłatę środków pilotowi.',
-                'url' => EventSettlementResource::getUrl('index'),
+                'title' => 'Finanse imprezy i wypłata pilota',
+                'body' => 'W finansach imprezy zweryfikuj koszty i gotówkę pilota. Na liście imprez oznacz wypłatę środków pilotowi.',
+                'url' => EventResource::getUrl('index', ['activeTab' => 'to_settle']),
             ],
         ];
     }

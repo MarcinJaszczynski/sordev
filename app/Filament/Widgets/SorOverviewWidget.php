@@ -87,7 +87,9 @@ class SorOverviewWidget extends StatsOverviewWidget
                 ->color($pendingPaymentsCount > 0 ? 'danger' : 'success'),
             Stat::make('Otwarte rozliczenia', (string) $openSettlements)
                 ->description('Szkice i aktywne')
-                ->url(route('filament.admin.resources.event-settlements.index'))
+                ->url(route('filament.admin.resources.events.index', [
+                    'activeTab' => 'to_settle',
+                ]))
                 ->color('warning'),
         ];
 
@@ -95,6 +97,7 @@ class SorOverviewWidget extends StatsOverviewWidget
             $stats[] = Stat::make('Wypłata pilota', (string) $unpaidPilotFunds)
                 ->description('Do wypłaty (z pilotem)')
                 ->url(route('filament.admin.resources.events.index', [
+                    'activeTab' => 'all',
                     'tableFilters' => ['pilot_funds_paid' => ['value' => '0']],
                 ]))
                 ->color($unpaidPilotFunds > 0 ? 'danger' : 'success');
