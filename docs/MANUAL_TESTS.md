@@ -72,6 +72,11 @@ Szum z rozszerzeń przeglądarki (`chrome-extension://`, `content-script`) jest 
 | # | Funkcja | Kroki | Oczekiwany wynik |
 |---|---------|-------|------------------|
 | 1.1 | Lista imprez | Otwórz listę, filtry, sortowanie | wiersze z płatnościami / statusem |
+| 1.1a | Quick tabs listy | Zakładki: Dziś / Ten tydzień / Nadchodzące / Nierozliczone / Bez wypłaty pilota / Moje | filtruje listę bez DatePickerów |
+| 1.1b | Deep-linke wiersza | Menu akcji wiersza → Program / Uczestnicy / Finanse / Pilot | bezpośrednie przejście (1 klik) |
+| 1.1c | Szybki pilot (SlideOver) | Akcja „Szybki pilot” → przypisz + udostępnij → zapisz | pilot i `shared_with_pilot` zapisane |
+| 1.1d | Status inline | Zmiana statusu w SelectColumn na liście | wywołuje `changeStatus()` (historia/snapshot) |
+| 1.1e | Quick Actions huba | Podsumowanie imprezy — sticky pasek skrótów | Program, Finanse, Pilot itd. w 1 klik |
 | 1.2 | Utworzenie z szablonu | Utwórz → wybierz szablon, daty, pilot | impreza z programem i cenami |
 | 1.3 | Edycja podstawowa | Zmień nazwę, status, liczbę uczestników | zapis bez błędu |
 | 1.4 | Pilot — data urodzenia, PESEL | Wybierz pilota, uzupełnij pola, zapisz | dane w profilu użytkownika (Users) |
@@ -110,7 +115,9 @@ Powiązane słowniki (Konfiguracja / Szablony): typy imprez, typy transportu, pu
 
 | # | Moduł | URL (przykład) | Test |
 |---|-------|----------------|------|
-| 3.1 | Rozliczenia imprez | `/admin/event-settlements` | edycja, koszty programu, dokumenty |
+| 3.1 | Rozliczenia imprez | `/admin/event-settlements` | edycja, koszty programu, dokumenty; akcja „W imprezie” → settlement-summary; searchable select imprezy |
+| 3.1a | Pulpit finansowy | `/admin/finance-overview` | KPI klikalne (rozliczenia, zaliczki pilota, KSeF, sterta); kwoty przez MoneyFormatter |
+| 3.1b | Sterta płatności | `/admin/pending-payments-inbox` | filtry typu/płatnika zapamiętane w sesji; licznik; komunikat przy limicie źródeł |
 | 3.2 | Rezerwacje | `/admin/reservations` | CRUD, filtry, analityka `/admin/reservations-analytics` |
 | 3.3 | Umowy TFG (UFG) | `/admin/contracts` | tworzenie, edycja, anulowanie, aneks | ✅ auto |
 | 3.4 | Logi feed TFG | `/admin/tfg-feed-logs` | podgląd, pobranie pliku feed |
@@ -393,7 +400,7 @@ Checklist po redesignie nawigacji workspace i responsywności.
 | 16.7g | Program — odświeżanie kwot w liście | Impreza → Program → Lista → punkt z rozliczeniem → Plan / Zaliczka / Wpłaty: zmień kwotę i zapisz (także od razu Zapisz, bez Tab) | kolumna „Ceny & Zaliczka” (Planowana, Zapłacona, zaliczka) aktualizuje się bez F5; przy setach wiersz Σ set pokazuje nową sumę po zmianie podpunktu |
 | 16.7h | Program — wiele zaliczek | Impreza → Program → punkt → Zaliczka → Dodaj zaliczkę (2 wpisy: kwota, waluta, płatne do; jedna bez „Zapłacone dnia”) → Zapisz | w kolumnie: „Zaliczki” + suma; niezapłacona z terminem → zadanie w inboxie; po uzupełnieniu „Zapłacone dnia” zadanie znika, „do dop.” = plan − zapłacono |
 | 16.8 | Kalendarz operacyjny | `/admin/operations-calendar` | filtry typów: imprezy, KSeF, płatności, zaliczki, transport, hotele |
-| 16.9 | Sterta płatności | `/admin/pending-payments-inbox` | rozliczenia + raty kontraktów TFG + umowy; filtry typu; kalendarz |
+| 16.9 | Sterta płatności | `/admin/pending-payments-inbox` | rozliczenia + raty kontraktów TFG + umowy; filtry typu; kalendarz; persist filtrów w sesji; ostrzeżenie limitu |
 | 16.10 | Semafor rozliczenia | Impreza → Finanse → Podsumowanie rozliczenia | karty zielony/niebieski/pomarańczowy/czerwony; biuro vs pilot (plan/wpłacono/brakuje); tabela Kontrola planu; pozycje do korekty linkują do kosztów |
 | 16.11 | Semafor w kosztach | Impreza → Koszty rozliczenia | kolumna Semafor + filtr; klik w pozycję z czerwonym/pomarańczowym → korekta wpłat |
 | 16.12 | Raport rozliczenia | Podsumowanie rozliczenia → Eksport raportu | plik Excel: podsumowanie, koszty, wpłaty uczestników |

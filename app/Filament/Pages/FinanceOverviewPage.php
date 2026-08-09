@@ -2,6 +2,7 @@
 
 namespace App\Filament\Pages;
 
+use App\Filament\Resources\EventResource;
 use App\Filament\Resources\EventSettlementResource;
 use App\Filament\Resources\VendorInvoiceResource;
 use App\Models\Event;
@@ -9,6 +10,7 @@ use App\Models\EventSettlement;
 use App\Models\VendorInvoice;
 use App\Support\FilamentNavigation;
 use App\Support\FinanceModuleNavigation;
+use App\Support\MoneyFormatter;
 use Filament\Pages\Page;
 use Illuminate\Support\Facades\Schema;
 
@@ -90,7 +92,29 @@ class FinanceOverviewPage extends Page
             'open_settlements' => $openSettlements,
             'unpaid_pilot_funds' => $unpaidPilotFunds,
             'planned_pilot_advances' => $plannedPilotAdvances,
+            'planned_pilot_advances_label' => MoneyFormatter::format($plannedPilotAdvances, 'PLN'),
             ...$invoiceStats,
+            'urls' => [
+                'open_settlements' => EventSettlementResource::getUrl('index'),
+                'unpaid_pilot_funds' => EventResource::getUrl('index', [
+                    'activeTab' => 'no_pilot_funds',
+                ]),
+                'unmatched' => VendorInvoiceInboxPage::getUrl(),
+                'due' => VendorInvoiceResource::getUrl('index', [
+                    'tableFilters' => [
+                        'approval_status' => ['value' => 'approved'],
+                        'payment_status' => ['value' => 'due'],
+                    ],
+                ]),
+                'overdue' => VendorInvoiceResource::getUrl('index', [
+                    'tableFilters' => [
+                        'approval_status' => ['value' => 'approved'],
+                        'payment_status' => ['value' => 'due'],
+                        'overdue' => ['isActive' => true],
+                    ],
+                ]),
+                'pending_payments' => PendingPaymentsInboxPage::getUrl(),
+            ],
         ];
     }
 

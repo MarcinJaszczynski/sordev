@@ -3,9 +3,15 @@
 namespace App\Support;
 
 use App\Models\Event;
+use App\Services\ParticipantPaymentBalanceService;
+use App\Services\SettlementPaymentHealthService;
+use Illuminate\Support\Collection;
 
 final class EventListFinanceColumn
 {
+    /** @var array<int, bool> */
+    private static array $overdueByEventId = [];
+
     public static function resolveCurrencyCode(mixed $livewire): string
     {
         if (! is_object($livewire) || ! property_exists($livewire, 'tableFilters')) {
@@ -19,6 +25,43 @@ final class EventListFinanceColumn
         }
 
         return strtoupper($code);
+    }
+
+    /**
+     * Wstępne wyliczenie overdue dla strony listy — jedno przejście zamiast N+1 przy renderze.
+     *
+     * @param  Collection<int, Event>|iterable<Event>  $records
+     */
+    public static function warmForPage(iterable $records): void
+    {
+        $events = Collection::make($records)->filter(fn ($record) => $record instanceof Event);
+
+        if ($events->isEmpty()) {
+            return;
+        }
+
+        $service = app(ParticipantPaymentBalanceService::class);
+
+        foreach ($events as $event) {
+            $eventId = (int) $event->getKey();
+
+            if (array_key_exists($eventId, self::$overdueByEventId)) {
+                continue;
+            }
+
+            try {
+                $aggregate = $service->eventAggregate($event);
+                self::$overdueByEventId[$eventId] = ($aggregate['count'] ?? 0) > 0
+                    && ($aggregate['coverage_status'] ?? '') === SettlementPaymentHealthService::STATUS_OVERDUE;
+            } catch (\Throwable) {
+                self::$overdueByEventId[$eventId] = false;
+            }
+        }
+    }
+
+    public static function resetWarmCache(): void
+    {
+        self::$overdueByEventId = [];
     }
 
     public static function html(Event $record, string $currencyCode = 'PLN'): string
@@ -49,7 +92,7 @@ final class EventListFinanceColumn
 
     private static function resolveClientPaymentsColor(Event $record, float $paidAmount, float $dueAmount): string
     {
-        $tolerance = \App\Services\SettlementPaymentHealthService::TOLERANCE;
+        $tolerance = SettlementPaymentHealthService::TOLERANCE;
 
         if ($dueAmount <= $tolerance || $paidAmount >= $dueAmount - $tolerance) {
             return '#047857';
@@ -64,17 +107,22 @@ final class EventListFinanceColumn
 
     private static function isClientPaymentsOverdue(Event $record): bool
     {
-        try {
-            $aggregate = app(\App\Services\ParticipantPaymentBalanceService::class)->eventAggregate($record);
+        $eventId = (int) $record->getKey();
 
-            if (($aggregate['count'] ?? 0) > 0) {
-                return ($aggregate['coverage_status'] ?? '') === \App\Services\SettlementPaymentHealthService::STATUS_OVERDUE;
-            }
-        } catch (\Throwable) {
-            // fallback below
+        if (array_key_exists($eventId, self::$overdueByEventId)) {
+            return self::$overdueByEventId[$eventId];
         }
 
-        return false;
+        try {
+            $aggregate = app(ParticipantPaymentBalanceService::class)->eventAggregate($record);
+
+            self::$overdueByEventId[$eventId] = ($aggregate['count'] ?? 0) > 0
+                && ($aggregate['coverage_status'] ?? '') === SettlementPaymentHealthService::STATUS_OVERDUE;
+        } catch (\Throwable) {
+            self::$overdueByEventId[$eventId] = false;
+        }
+
+        return self::$overdueByEventId[$eventId];
     }
 
     private static function resolvePaidAmount(Event $record, string $currencyCode): float

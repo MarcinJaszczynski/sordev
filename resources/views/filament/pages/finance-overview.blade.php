@@ -1,50 +1,63 @@
 <x-filament-panels::page>
-    @include('filament.components.finance-module-nav', ['tabs' => $this->getNavigationTabs()])
+    @include('filament.components.finance-module-nav', ['activeTab' => 'overview'])
 
     @php($stats = $this->getOverviewStats())
+    @php($urls = $stats['urls'])
 
-    <div class="mb-8 grid gap-4 sm:grid-cols-2 xl:grid-cols-5">
-        <x-filament::section class="!p-4">
-            <p class="text-xs font-medium uppercase tracking-wide text-gray-500">Otwarte rozliczenia</p>
-            <p class="mt-1 text-2xl font-bold text-gray-900">{{ $stats['open_settlements'] }}</p>
-            <p class="mt-1 text-xs text-gray-500">Szkice, aktywne i po pilocie</p>
-        </x-filament::section>
+    <div class="mb-8 grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
+        <a href="{{ $urls['open_settlements'] }}" class="block rounded-xl transition hover:ring-2 hover:ring-amber-300 focus:outline-none focus:ring-2 focus:ring-amber-400">
+            <x-filament::section class="!p-4 h-full">
+                <p class="text-xs font-medium uppercase tracking-wide text-gray-500">Otwarte rozliczenia</p>
+                <p class="mt-1 text-2xl font-bold text-gray-900">{{ $stats['open_settlements'] }}</p>
+                <p class="mt-1 text-xs text-gray-500">Szkice, aktywne i po pilocie — kliknij, aby otworzyć</p>
+            </x-filament::section>
+        </a>
 
-        <x-filament::section class="!p-4 {{ $stats['unpaid_pilot_funds'] > 0 ? 'ring-1 ring-danger-200' : '' }}">
-            <p class="text-xs font-medium uppercase tracking-wide text-gray-500">Zaliczki pilota — do wypłaty</p>
-            <p class="mt-1 text-2xl font-bold {{ $stats['unpaid_pilot_funds'] > 0 ? 'text-danger-600' : 'text-success-600' }}">
-                {{ $stats['unpaid_pilot_funds'] }}
-            </p>
-            <p class="mt-1 text-xs text-gray-500">Zaplanowane, bez zatwierdzonej wypłaty</p>
-        </x-filament::section>
+        <a href="{{ $urls['unpaid_pilot_funds'] }}" class="block rounded-xl transition hover:ring-2 hover:ring-amber-300 focus:outline-none focus:ring-2 focus:ring-amber-400">
+            <x-filament::section class="!p-4 h-full {{ $stats['unpaid_pilot_funds'] > 0 ? 'ring-1 ring-danger-200' : '' }}">
+                <p class="text-xs font-medium uppercase tracking-wide text-gray-500">Zaliczki pilota — do wypłaty</p>
+                <p class="mt-1 text-2xl font-bold {{ $stats['unpaid_pilot_funds'] > 0 ? 'text-danger-600' : 'text-success-600' }}">
+                    {{ $stats['unpaid_pilot_funds'] }}
+                </p>
+                <p class="mt-1 text-xs text-gray-500">
+                    Plan: {{ $stats['planned_pilot_advances_label'] }} — lista imprez bez wypłaty
+                </p>
+            </x-filament::section>
+        </a>
 
-        <x-filament::section class="!p-4">
-            <p class="text-xs font-medium uppercase tracking-wide text-gray-500">Plan zaliczek (PLN)</p>
-            <p class="mt-1 text-2xl font-bold text-gray-900">
-                {{ number_format((float) ($stats['planned_pilot_advances'] ?? 0), 2, ',', ' ') }}
-            </p>
-            <p class="mt-1 text-xs text-gray-500">Suma zaplanowanych, niewypłaconych zaliczek</p>
-        </x-filament::section>
+        <a href="{{ $urls['pending_payments'] }}" class="block rounded-xl transition hover:ring-2 hover:ring-amber-300 focus:outline-none focus:ring-2 focus:ring-amber-400">
+            <x-filament::section class="!p-4 h-full">
+                <p class="text-xs font-medium uppercase tracking-wide text-gray-500">Sterta płatności</p>
+                <p class="mt-1 text-2xl font-bold text-gray-900">→</p>
+                <p class="mt-1 text-xs text-gray-500">Terminy płatności biura i pilota</p>
+            </x-filament::section>
+        </a>
 
-        <x-filament::section class="!p-4">
-            <p class="text-xs font-medium uppercase tracking-wide text-gray-500">Faktury do opracowania</p>
-            <p class="mt-1 text-2xl font-bold text-warning-600">{{ $stats['unmatched'] }}</p>
-            <p class="mt-1 text-xs text-gray-500">Bez przypisanej imprezy</p>
-        </x-filament::section>
+        <a href="{{ $urls['unmatched'] }}" class="block rounded-xl transition hover:ring-2 hover:ring-amber-300 focus:outline-none focus:ring-2 focus:ring-amber-400">
+            <x-filament::section class="!p-4 h-full">
+                <p class="text-xs font-medium uppercase tracking-wide text-gray-500">Faktury do opracowania</p>
+                <p class="mt-1 text-2xl font-bold text-warning-600">{{ $stats['unmatched'] }}</p>
+                <p class="mt-1 text-xs text-gray-500">Bez przypisanej imprezy</p>
+            </x-filament::section>
+        </a>
 
-        <x-filament::section class="!p-4">
-            <p class="text-xs font-medium uppercase tracking-wide text-gray-500">Faktury do zapłaty</p>
-            <p class="mt-1 text-2xl font-bold text-gray-900">{{ $stats['due'] }}</p>
-            <p class="mt-1 text-xs text-gray-500">Zaakceptowane, nieopłacone</p>
-        </x-filament::section>
+        <a href="{{ $urls['due'] }}" class="block rounded-xl transition hover:ring-2 hover:ring-amber-300 focus:outline-none focus:ring-2 focus:ring-amber-400">
+            <x-filament::section class="!p-4 h-full">
+                <p class="text-xs font-medium uppercase tracking-wide text-gray-500">Faktury do zapłaty</p>
+                <p class="mt-1 text-2xl font-bold text-gray-900">{{ $stats['due'] }}</p>
+                <p class="mt-1 text-xs text-gray-500">Zaakceptowane, nieopłacone</p>
+            </x-filament::section>
+        </a>
 
-        <x-filament::section class="!p-4 {{ $stats['overdue'] > 0 ? 'ring-1 ring-danger-200' : '' }}">
-            <p class="text-xs font-medium uppercase tracking-wide text-gray-500">Przeterminowane</p>
-            <p class="mt-1 text-2xl font-bold {{ $stats['overdue'] > 0 ? 'text-danger-600' : 'text-gray-900' }}">
-                {{ $stats['overdue'] }}
-            </p>
-            <p class="mt-1 text-xs text-gray-500">Po terminie płatności</p>
-        </x-filament::section>
+        <a href="{{ $urls['overdue'] }}" class="block rounded-xl transition hover:ring-2 hover:ring-amber-300 focus:outline-none focus:ring-2 focus:ring-amber-400">
+            <x-filament::section class="!p-4 h-full {{ $stats['overdue'] > 0 ? 'ring-1 ring-danger-200' : '' }}">
+                <p class="text-xs font-medium uppercase tracking-wide text-gray-500">Przeterminowane</p>
+                <p class="mt-1 text-2xl font-bold {{ $stats['overdue'] > 0 ? 'text-danger-600' : 'text-gray-900' }}">
+                    {{ $stats['overdue'] }}
+                </p>
+                <p class="mt-1 text-xs text-gray-500">Po terminie płatności</p>
+            </x-filament::section>
+        </a>
     </div>
 
     <x-filament::section heading="Typowy przepływ pracy" class="mb-8">
@@ -74,7 +87,7 @@
             @endforeach
             <x-filament::button
                 tag="a"
-                :href="route('filament.admin.resources.events.index', ['tableFilters' => ['pilot_funds_paid' => ['value' => '0']]])"
+                :href="$urls['unpaid_pilot_funds']"
                 color="danger"
                 icon="heroicon-o-user-circle"
             >
