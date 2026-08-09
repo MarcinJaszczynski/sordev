@@ -45,7 +45,7 @@
     openPanel: null,
     mobileOpen: false,
     panelCloseTimeout: null,
-    pollIntervalMs: 60000,
+    pollIntervalMs: 15000,
     alertsEnabled: false,
     snapshotCounts() {
         return {
@@ -205,12 +205,24 @@
         })
             .finally(() => this.refreshNotifications());
     },
+    bindLivewireRefresh() {
+        if (typeof Livewire === 'undefined') {
+            return;
+        }
+
+        Livewire.on('refresh-notifications', () => setTimeout(() => this.refreshNotifications(), 100));
+    },
 }" x-init="
     setTimeout(() => { alertsEnabled = true; }, 5000);
     setInterval(() => refreshNotifications(), pollIntervalMs);
     window.addEventListener('focus', () => refreshNotifications());
     window.addEventListener('refresh-notifications', () => setTimeout(() => refreshNotifications(), 100));
     document.addEventListener('livewire:navigated', () => setTimeout(() => refreshNotifications(), 200));
+    if (typeof Livewire !== 'undefined') {
+        bindLivewireRefresh();
+    } else {
+        document.addEventListener('livewire:init', () => bindLivewireRefresh(), { once: true });
+    }
 " @refresh-notifications.window="refreshNotifications()" @click.away="openPanel = null">
 
     <button

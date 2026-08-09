@@ -657,7 +657,7 @@
                 document.addEventListener('keydown', (e) => {
                     if (e.ctrlKey && e.key === 'n') {
                         e.preventDefault();
-                        window.location.href = '{{ \App\Filament\Resources\TaskResource::getUrl("create") }}';
+                        window.location.href = '{{ \App\Support\Tasks\TaskNavigation::createUrl($eventFilter ? \App\Models\Event::class : null, $eventFilter) }}';
                     } else if (e.key === 'r' && !e.ctrlKey && !e.altKey) {
                         e.preventDefault();
                         @this.refreshBoard();

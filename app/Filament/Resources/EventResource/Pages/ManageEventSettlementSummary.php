@@ -157,16 +157,6 @@ class ManageEventSettlementSummary extends EditEventSettlement
 
 
 
-    public function getSubNavigation(): array
-
-    {
-
-        return [];
-
-    }
-
-
-
     public function getWorkflowContext(): ?array
 
     {

@@ -27,6 +27,11 @@
         $hiddenChildCount = $setChildren instanceof \Illuminate\Support\Collection
             ? $setChildren->filter(fn (\App\Models\EventProgramPoint $child): bool => ! $visibleChildIds->contains((int) $child->id))->count()
             : 0;
+
+        $participantCount = max(1, (int) ($record->event?->participant_count ?? 1));
+        $costLabel = ! $isSetParent
+            ? $record->formatAmount($record->resolveEffectiveTotalPrice($participantCount))
+            : null;
     @endphp
 
     <div @class([
@@ -82,6 +87,14 @@
         </div>
 
         <div class="epp-title">{{ $name }}</div>
+
+        @if ($costLabel && $costLabel !== '—')
+            <div class="epp-meta-row">
+                <span class="epp-meta-chip epp-meta-chip--cost" title="Koszt punktu w kalkulacji imprezy">
+                    Koszt: {{ $costLabel }}
+                </span>
+            </div>
+        @endif
 
         @if ($record->hasResolvedOfficeNotes() || $record->hasResolvedPilotNotes())
             <div class="epp-note-markers">
@@ -153,7 +166,7 @@
 
         <div class="mt-1 flex flex-wrap items-center gap-1">
             <a
-                href="{{ \App\Filament\Resources\TaskResource::getUrl('create', ['taskable_type' => \App\Models\EventProgramPoint::class, 'taskable_id' => $record->getKey()]) }}"
+                href="{{ \App\Support\Tasks\TaskNavigation::createUrl(\App\Models\EventProgramPoint::class, $record->getKey()) }}"
                 class="inline-flex items-center rounded-md border border-slate-300 bg-white px-2 py-0.5 text-[11px] font-medium text-slate-700 transition hover:bg-slate-50"
                 x-on:click.stop
             >

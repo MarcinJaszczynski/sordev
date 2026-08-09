@@ -3,6 +3,7 @@
 namespace App\Filament\Concerns;
 
 use App\Models\TaskComment;
+use App\Services\NotificationService;
 use App\Support\Tasks\TaskAttachmentStore;
 use App\Support\Tasks\TaskListColumn;
 use Filament\Actions\Action;
@@ -12,6 +13,8 @@ use Illuminate\Support\Facades\Auth;
 
 trait InteractsWithTaskListQuickActions
 {
+    use DispatchesTopbarNotificationRefresh;
+
     public ?int $commentingTaskId = null;
 
     public ?int $attachingTaskId = null;
@@ -94,11 +97,13 @@ trait InteractsWithTaskListQuickActions
                     return;
                 }
 
-                TaskComment::query()->create([
+                $comment = TaskComment::query()->create([
                     'task_id' => $this->commentingTaskId,
                     'content' => $data['content'],
                     'user_id' => Auth::id(),
                 ]);
+
+                NotificationService::clearCacheForTaskCommentStakeholders($comment);
 
                 unset($this->expandedCommentsCache[$this->commentingTaskId]);
                 if ($this->expandedCommentsTaskId === $this->commentingTaskId) {
@@ -112,6 +117,7 @@ trait InteractsWithTaskListQuickActions
                     ->success()
                     ->send();
 
+                $this->dispatchTopbarNotificationRefresh();
                 $this->afterTaskListQuickActionSaved();
             })
             ->after(function (): void {

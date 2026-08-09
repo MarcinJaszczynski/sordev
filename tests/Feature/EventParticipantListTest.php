@@ -209,28 +209,30 @@ class EventParticipantListTest extends TestCase
             ->assertSee('Millennium');
     }
 
-    public function test_participants_workflow_context_contains_back_to_event_link(): void
+    public function test_participants_workflow_context_matches_standard_event_header(): void
     {
         if (! Schema::hasTable('event_participants')) {
             $this->markTestSkipped('Tabela event_participants nie istnieje.');
         }
 
-        $event = Event::factory()->create(['code' => 'TEST-WF']);
+        $event = Event::factory()->create(['code' => 'TEST-WF', 'name' => 'Impreza testowa']);
         $admin = User::factory()->create(['status' => 'active']);
         $admin->assignRole('admin');
         $this->actingAs($admin);
 
-        $page = new \App\Filament\Resources\EventResource\Pages\ManageEventSettlementPayments;
-        $page->record = $event;
+        $participantsPage = new \App\Filament\Resources\EventResource\Pages\ManageEventSettlementPayments;
+        $participantsPage->record = $event;
 
-        $context = $page->getWorkflowContext();
+        $documentsPage = new \App\Filament\Resources\EventResource\Pages\ManageEventDocuments;
+        $documentsPage->record = $event;
 
-        $this->assertNotNull($context);
-        $this->assertStringContainsString('Uczestnicy imprezy TEST-WF', (string) ($context['subtitle'] ?? ''));
-        $this->assertTrue(
-            collect($context['links'] ?? [])->contains(fn (array $link): bool => ($link['label'] ?? '') === 'Dane imprezy'),
-        );
-        $this->assertNotNull($context['title_url'] ?? null);
-        $this->assertNotNull($context['finance'] ?? null);
+        $participantsContext = $participantsPage->getWorkflowContext();
+        $documentsContext = $documentsPage->getWorkflowContext();
+
+        $this->assertNotNull($participantsContext);
+        $this->assertSame($documentsContext['title'], $participantsContext['title']);
+        $this->assertSame($documentsContext['subtitle'], $participantsContext['subtitle']);
+        $this->assertSame($documentsContext['title_url'], $participantsContext['title_url']);
+        $this->assertNotNull($participantsContext['finance'] ?? null);
     }
 }

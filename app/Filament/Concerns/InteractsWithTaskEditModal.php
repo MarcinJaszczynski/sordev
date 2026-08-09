@@ -11,30 +11,47 @@ use Livewire\Attributes\On;
 
 trait InteractsWithTaskEditModal
 {
+    use DispatchesTopbarNotificationRefresh;
+
     public ?int $editingTaskId = null;
 
     public ?int $editingTaskActiveRelationManager = null;
 
+    /** @var array<string, mixed> */
+    public array $pendingCreateFormData = [];
+
+    public ?string $pendingCreateDueDate = null;
+
     public function bootInteractsWithTaskEditModal(): void
     {
         $this->cacheAction($this->makeEditTaskAction());
+        $this->cacheAction($this->makeCreateTaskAction(
+            defaultDueDate: fn (): mixed => $this->createTaskDefaultDueDate(),
+            defaultFormData: fn (): array => array_merge(
+                $this->createTaskDefaultFormData(),
+                $this->pendingCreateFormData,
+            ),
+        ));
     }
 
     public function mountInteractsWithTaskEditModal(): void
     {
         $this->openDeepLinkedTaskIfPresent();
+        $this->openDeepLinkedCreateTaskIfPresent();
     }
 
     public function openEditTaskModal(int $taskId, ?int $activeRelationManager = null): void
     {
         $this->editingTaskId = $taskId;
         $this->editingTaskActiveRelationManager = $activeRelationManager;
-
-        if ($userId = auth()->id()) {
-            NotificationService::markTaskCommentNotificationsAsRead($userId, $taskId);
-        }
-
         $this->mountAction('editTask');
+    }
+
+    public function openCreateTaskModal(array $defaultFormData = [], ?string $defaultDueDate = null): void
+    {
+        $this->pendingCreateFormData = $defaultFormData;
+        $this->pendingCreateDueDate = $defaultDueDate;
+        $this->mountAction('createTask');
     }
 
     #[On('task-full-editor-saved')]
@@ -46,6 +63,12 @@ trait InteractsWithTaskEditModal
         if ($task) {
             $this->afterTaskModalSaved($task);
         }
+    }
+
+    #[On('comment-added')]
+    public function handleTaskCommentAddedForTopbar(): void
+    {
+        $this->dispatchTopbarNotificationRefresh();
     }
 
     protected function openDeepLinkedTaskIfPresent(): void
@@ -63,6 +86,35 @@ trait InteractsWithTaskEditModal
         $this->openEditTaskModal($taskId, $activeRelationManager);
     }
 
+    protected function openDeepLinkedCreateTaskIfPresent(): void
+    {
+        if (! request()->boolean('createTask')) {
+            return;
+        }
+
+        $this->pendingCreateFormData = array_filter([
+            'taskable_type' => request()->query('taskable_type'),
+            'taskable_id' => request()->has('taskable_id') ? (int) request()->query('taskable_id') : null,
+        ], fn ($value): bool => $value !== null && $value !== '');
+
+        $this->pendingCreateDueDate = request()->query('dueDate');
+
+        $this->mountAction('createTask');
+    }
+
+    /**
+     * @return array<string, mixed>
+     */
+    protected function createTaskDefaultFormData(): array
+    {
+        return [];
+    }
+
+    protected function createTaskDefaultDueDate(): mixed
+    {
+        return $this->pendingCreateDueDate;
+    }
+
     protected function afterTaskModalSaved(Task $task): void
     {
         //
@@ -77,7 +129,11 @@ trait InteractsWithTaskEditModal
             ->modalWidth('7xl')
             ->modalContent(fn (): View => $this->createTaskModalView($defaultDueDate, $defaultFormData))
             ->modalSubmitAction(false)
-            ->modalCancelActionLabel('Zamknij');
+            ->modalCancelActionLabel('Zamknij')
+            ->after(function (): void {
+                $this->pendingCreateFormData = [];
+                $this->pendingCreateDueDate = null;
+            });
     }
 
     protected function makeCreateTaskTableAction(?callable $defaultDueDate = null, ?callable $defaultFormData = null): Tables\Actions\Action
@@ -85,11 +141,7 @@ trait InteractsWithTaskEditModal
         return Tables\Actions\Action::make('createTask')
             ->label('Dodaj zadanie')
             ->icon('heroicon-m-plus')
-            ->modalHeading('Nowe zadanie')
-            ->modalWidth('7xl')
-            ->modalContent(fn (): View => $this->createTaskModalView($defaultDueDate, $defaultFormData))
-            ->modalSubmitAction(false)
-            ->modalCancelActionLabel('Zamknij');
+            ->action(fn () => $this->mountAction('createTask'));
     }
 
     /**
@@ -103,7 +155,7 @@ trait InteractsWithTaskEditModal
 
         return view('filament.tasks.full-editor-modal', [
             'taskId' => null,
-            'defaultDueDate' => $dueDate?->format('Y-m-d H:i:s'),
+            'defaultDueDate' => is_string($dueDate) ? $dueDate : $dueDate?->format('Y-m-d H:i:s'),
             'defaultFormData' => $formDefaults,
             'activeRelationManager' => null,
         ]);
@@ -124,8 +176,17 @@ trait InteractsWithTaskEditModal
             ->modalSubmitAction(false)
             ->modalCancelActionLabel('Zamknij')
             ->action(function (): void {
+                if ($userId = auth()->id()) {
+                    $taskId = $this->editingTaskId;
+
+                    if ($taskId) {
+                        NotificationService::markTaskCommentNotificationsAsRead($userId, $taskId);
+                    }
+                }
+
                 $this->editingTaskId = null;
                 $this->editingTaskActiveRelationManager = null;
+                $this->dispatchTopbarNotificationRefresh();
             });
     }
 }

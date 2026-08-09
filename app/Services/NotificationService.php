@@ -650,6 +650,14 @@ class NotificationService
 
     public static function clearCacheForUser(int $userId): void
     {
+        Cache::forget(sprintf(
+            'user_notifications_%d_%d_%d_%d',
+            $userId,
+            self::TOPBAR_LIMIT_PER_TYPE,
+            self::TOPBAR_COMBINED_LIMIT,
+            self::TOPBAR_TASK_QUERY_LIMIT,
+        ));
+
         foreach ([[4, 10, 30], [15, 15, 30], [50, 200, 30]] as [$perType, $combined, $taskQueryLimit]) {
             Cache::forget("user_notifications_{$userId}_{$perType}_{$combined}_{$taskQueryLimit}");
         }

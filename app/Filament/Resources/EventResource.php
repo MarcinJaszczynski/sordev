@@ -629,6 +629,15 @@ class EventResource extends Resource
                     ->options(Event::getStatusOptions())
                     ->sortable()
                     ->selectablePlaceholder(false)
+                    ->updateStateUsing(function (Event $record, ?string $state): string {
+                        if ($state === null || $state === $record->status) {
+                            return (string) $record->status;
+                        }
+
+                        $record->changeStatus($state);
+
+                        return (string) $record->fresh()->status;
+                    })
                     ->extraCellAttributes(fn (Event $record): array => [
                         'class' => Event::statusListCellClass($record->status),
                     ]),
@@ -966,9 +975,72 @@ class EventResource extends Resource
                     }),
             ])
             ->actions([
-                Tables\Actions\EditAction::make(),
-                Tables\Actions\DeleteAction::make()
-                    ->visible(fn (Event $record) => $record->status === Event::STATUS_INQUIRY),
+                Tables\Actions\ActionGroup::make([
+                    Tables\Actions\Action::make('open_program')
+                        ->label('Program')
+                        ->icon('heroicon-o-list-bullet')
+                        ->url(fn (Event $record): string => static::getUrl('edit-program', ['record' => $record])),
+                    Tables\Actions\Action::make('open_participants')
+                        ->label('Uczestnicy')
+                        ->icon('heroicon-o-users')
+                        ->url(fn (Event $record): string => static::getUrl('participants', ['record' => $record]))
+                        ->visible(fn (): bool => Schema::hasTable('event_participants')),
+                    Tables\Actions\Action::make('open_finance')
+                        ->label('Finanse')
+                        ->icon('heroicon-o-banknotes')
+                        ->url(fn (Event $record): string => static::getUrl('calculation', ['record' => $record])),
+                    Tables\Actions\Action::make('open_pilot')
+                        ->label('Pilot')
+                        ->icon('heroicon-o-user-circle')
+                        ->url(fn (Event $record): string => static::getUrl('pilot', ['record' => $record])),
+                    Tables\Actions\Action::make('quick_pilot')
+                        ->label('Szybki pilot')
+                        ->icon('heroicon-o-pencil-square')
+                        ->slideOver()
+                        ->modalHeading('Przypisz pilota')
+                        ->modalWidth('md')
+                        ->fillForm(fn (Event $record): array => [
+                            'assigned_to' => $record->assigned_to,
+                            'shared_with_pilot' => (bool) ($record->shared_with_pilot ?? false),
+                        ])
+                        ->form([
+                            Forms\Components\Select::make('assigned_to')
+                                ->label('Pilot / opiekun')
+                                ->relationship('assignedUser', 'name')
+                                ->searchable()
+                                ->preload()
+                                ->nullable(),
+                            Forms\Components\Toggle::make('shared_with_pilot')
+                                ->label('Udostępnij w panelu pilota')
+                                ->helperText('Impreza widoczna u pilota dopiero po udostępnieniu.')
+                                ->visible(fn (): bool => Schema::hasColumn('events', 'shared_with_pilot')),
+                        ])
+                        ->action(function (Event $record, array $data): void {
+                            $payload = [
+                                'assigned_to' => $data['assigned_to'] ?? null,
+                            ];
+
+                            if (Schema::hasColumn('events', 'shared_with_pilot')) {
+                                $payload['shared_with_pilot'] = (bool) ($data['shared_with_pilot'] ?? false);
+                            }
+
+                            $previousPilot = $record->assigned_to;
+                            $record->fill($payload);
+
+                            if (
+                                Schema::hasColumn('events', 'shared_with_pilot')
+                                && $previousPilot
+                                && (int) $previousPilot !== (int) ($payload['assigned_to'] ?? 0)
+                            ) {
+                                $record->shared_with_pilot = false;
+                            }
+
+                            $record->save();
+                        }),
+                    Tables\Actions\EditAction::make(),
+                    Tables\Actions\DeleteAction::make()
+                        ->visible(fn (Event $record) => $record->status === Event::STATUS_INQUIRY),
+                ]),
             ])
             ->bulkActions([
                 Tables\Actions\BulkActionGroup::make([
@@ -1093,7 +1165,7 @@ class EventResource extends Resource
                 'assignedUser',
                 'transportContractor',
                 'hotelProgramPoints',
-                'activeSettlement',
+                'activeSettlement.participantPayments',
                 'bus:id,name',
                 'markup:id,percent',
             ];
@@ -1131,7 +1203,7 @@ class EventResource extends Resource
             'assignedUser',
             'transportContractor',
             'hotelProgramPoints',
-            'activeSettlement',
+            'activeSettlement.participantPayments',
             'bus:id,name',
             'markup:id,percent',
         ];

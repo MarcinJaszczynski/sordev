@@ -4,6 +4,7 @@ namespace App\Filament\Resources\EventResource\Pages;
 
 use App\Filament\Resources\EventResource;
 use App\Filament\Resources\EventResource\Concerns\HasEventWorkflowContext;
+use App\Filament\Forms\EventProgramDayRouteFields;
 use App\Models\Contractor;
 use Filament\Actions;
 use Filament\Forms;
@@ -58,6 +59,7 @@ class ManageEventTransport extends EditRecord
                             ]);
                         }),
                 ]),
+            EventProgramDayRouteFields::section(),
             EventResource::carrierAndDriverSection(),
         ]);
     }

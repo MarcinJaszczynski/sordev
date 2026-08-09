@@ -82,7 +82,10 @@ class ListTasks extends ListRecords
     protected function getHeaderActions(): array
     {
         return [
-            $this->makeCreateTaskAction(),
+            Actions\Action::make('createTask')
+                ->label('Dodaj zadanie')
+                ->icon('heroicon-m-plus')
+                ->action(fn () => $this->mountAction('createTask')),
             Actions\Action::make('board')
                 ->label('Widok Tablicy (Kanban)')
                 ->icon('heroicon-m-view-columns')

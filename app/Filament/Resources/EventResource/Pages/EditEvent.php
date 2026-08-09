@@ -360,21 +360,24 @@ class EditEvent extends EditRecord
     {
         $links = [
             ['label' => 'Program', 'icon' => 'heroicon-o-list-bullet', 'page' => 'edit-program'],
-            ['label' => 'Uczestnicy', 'icon' => 'heroicon-o-users', 'page' => 'participants'],
+            ['label' => 'Uczestnicy', 'icon' => 'heroicon-o-users', 'page' => 'participants', 'table' => 'event_participants'],
             ['label' => 'Rezerwacje', 'icon' => 'heroicon-o-calendar', 'page' => 'reservations'],
             ['label' => 'Transport', 'icon' => 'heroicon-o-truck', 'page' => 'transport'],
             ['label' => 'Hotele', 'icon' => 'heroicon-o-building-office-2', 'page' => 'hotel-planning'],
             ['label' => 'Pilot', 'icon' => 'heroicon-o-user-circle', 'page' => 'pilot'],
-            ['label' => 'Finanse', 'icon' => 'heroicon-o-banknotes', 'page' => 'finance'],
+            ['label' => 'Finanse', 'icon' => 'heroicon-o-banknotes', 'page' => 'calculation'],
             ['label' => 'Dokumenty', 'icon' => 'heroicon-o-folder', 'page' => 'documents'],
-            ['label' => 'Rezygnacje', 'icon' => 'heroicon-o-user-minus', 'page' => 'resignations'],
         ];
 
-        return array_map(fn (array $link): array => [
-            'label' => $link['label'],
-            'icon' => $link['icon'],
-            'url' => EventResource::getUrl($link['page'], ['record' => $this->record]),
-        ], $links);
+        return collect($links)
+            ->filter(fn (array $link): bool => ! isset($link['table']) || \Illuminate\Support\Facades\Schema::hasTable($link['table']))
+            ->map(fn (array $link): array => [
+                'label' => $link['label'],
+                'icon' => $link['icon'],
+                'url' => EventResource::getUrl($link['page'], ['record' => $this->record]),
+            ])
+            ->values()
+            ->all();
     }
 
     public function hasCombinedRelationManagerTabsWithContent(): bool

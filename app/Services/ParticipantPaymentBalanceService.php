@@ -56,13 +56,18 @@ final class ParticipantPaymentBalanceService
      */
     public function eventAggregate(Event $event): array
     {
-        $settlement = $event->activeSettlement ?? $event->settlements()->latest('id')->first();
+        $settlement = $event->relationLoaded('activeSettlement')
+            ? $event->activeSettlement
+            : ($event->activeSettlement ?? $event->settlements()->latest('id')->first());
 
         if (! $settlement) {
             return $this->emptyAggregate();
         }
 
-        $payments = $settlement->participantPayments()->get();
+        $payments = $settlement->relationLoaded('participantPayments')
+            ? $settlement->participantPayments
+            : $settlement->participantPayments()->get();
+
         $rows = $payments->map(fn (EventSettlementParticipantPayment $payment): array => $this->balanceRow($payment));
 
         $paidCount = $rows->filter(fn (array $row): bool => ($row['coverage_status'] ?? '') === SettlementPaymentHealthService::STATUS_OK)->count();

@@ -362,7 +362,7 @@ class NotificationServiceTopbarTest extends TestCase
         $this->assertCount(1, $data['items_by_type']['comment']);
     }
 
-    public function test_opening_task_modal_marks_comment_notifications_as_read(): void
+    public function test_closing_task_modal_marks_comment_notifications_as_read(): void
     {
         $assignee = User::factory()->create();
         $assignee->assignRole('admin');
@@ -387,11 +387,12 @@ class NotificationServiceTopbarTest extends TestCase
 
         Livewire::actingAs($assignee)
             ->test(\App\Filament\Resources\TaskResource\Pages\ListTasks::class)
-            ->call('openEditTaskModal', $task->id);
+            ->call('openEditTaskModal', $task->id)
+            ->call('callMountedAction');
 
-        $after = NotificationService::getTopbarDataForUser($assignee->id, fresh: true);
-        $this->assertSame(0, $after['counts']['comments']);
-        $this->assertSame([], $after['items_by_type']['comment']);
+        $afterClose = NotificationService::getTopbarDataForUser($assignee->id, fresh: true);
+        $this->assertSame(0, $afterClose['counts']['comments']);
+        $this->assertSame([], $afterClose['items_by_type']['comment']);
     }
 
     public function test_invoice_request_for_finance_roles(): void

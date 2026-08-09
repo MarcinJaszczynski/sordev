@@ -86,17 +86,19 @@ class ProgramPointsRelationManager extends RelationManager
         parent::mount();
 
         $stored = session($this->expandedSetsSessionKey(), []);
-        if (is_array($stored)) {
-            $this->expandedSetIds = array_values(array_filter(
+        $storedIds = is_array($stored)
+            ? array_values(array_filter(
                 array_map('intval', $stored),
                 fn (int $id): bool => $id > 0,
-            ));
-        }
+            ))
+            : [];
 
-        if ($this->expandedSetIds === []) {
-            $this->expandedSetIds = $this->defaultExpandedSetIds();
-            $this->persistExpandedSetIds();
-        }
+        $this->expandedSetIds = array_values(array_unique(array_merge(
+            $this->defaultExpandedSetIds(),
+            $storedIds,
+        )));
+
+        $this->persistExpandedSetIds();
     }
 
     /**
@@ -615,13 +617,7 @@ class ProgramPointsRelationManager extends RelationManager
                     ->html()
                     ->state(function (EventProgramPoint $record): string {
                         if ($record->getAttribute('_is_set_parent')) {
-                            $summary = $this->setFinanceAggregator()->summarize($record, $this->getOwnerRecord());
-
-                            if (! $summary->hasSettlement) {
-                                return '<span style="color:#999">Nie rozliczony</span>';
-                            }
-
-                            return $summary->settlementInfoHtml;
+                            return '<span style="color:#999">—</span>';
                         }
 
                         $baseCost = $this->settlementCosts()->baseCost((int) $record->id);
@@ -658,10 +654,7 @@ class ProgramPointsRelationManager extends RelationManager
                         $event = $this->getOwnerRecord();
 
                         if ($record->getAttribute('_is_set_parent')) {
-                            return EventProgramPointPaymentDueColumn::html(
-                                $record,
-                                $this->setFinanceAggregator()->collectScheduleRows($record, $event),
-                            );
+                            return '<span style="color:#999">—</span>';
                         }
 
                         return EventProgramPointPaymentDueColumn::html(
@@ -1327,18 +1320,34 @@ class ProgramPointsRelationManager extends RelationManager
                                 }),
                         ]),
 
-                    Tables\Actions\DeleteAction::make(),
+                    Tables\Actions\DeleteAction::make()
+                        ->before(fn (EventProgramPoint $record) => $this->purgeProgramPointSettlementCosts($record)),
                     Tables\Actions\RestoreAction::make(),
-                    Tables\Actions\ForceDeleteAction::make(),
+                    Tables\Actions\ForceDeleteAction::make()
+                        ->before(fn (EventProgramPoint $record) => $this->purgeProgramPointSettlementCosts($record)),
                 ])
                     ->label('Więcej')
                     ->icon('heroicon-o-ellipsis-vertical'),
             ])
             ->bulkActions([
                 Tables\Actions\BulkActionGroup::make([
-                    Tables\Actions\DeleteBulkAction::make(),
+                    Tables\Actions\DeleteBulkAction::make()
+                        ->before(function ($records): void {
+                            foreach ($records as $record) {
+                                if ($record instanceof EventProgramPoint) {
+                                    $this->purgeProgramPointSettlementCosts($record);
+                                }
+                            }
+                        }),
                     Tables\Actions\RestoreBulkAction::make(),
-                    Tables\Actions\ForceDeleteBulkAction::make(),
+                    Tables\Actions\ForceDeleteBulkAction::make()
+                        ->before(function ($records): void {
+                            foreach ($records as $record) {
+                                if ($record instanceof EventProgramPoint) {
+                                    $this->purgeProgramPointSettlementCosts($record);
+                                }
+                            }
+                        }),
 
                     Tables\Actions\BulkAction::make('bulk_include_in_program_on')
                         ->label('Zaznacz w programie')
@@ -1964,16 +1973,7 @@ class ProgramPointsRelationManager extends RelationManager
     protected function buildProgramPointPricesSummaryViewData(EventProgramPoint $record): array
     {
         if ($record->getAttribute('_is_set_parent')) {
-            $summary = $this->setFinanceAggregator()->summarize($record, $this->getOwnerRecord());
-
-            return [
-                'calc' => $summary->calcLabel,
-                'planned' => $summary->plannedLabel,
-                'paid' => $summary->paidLabel,
-                'paidStatus' => $summary->paidStatus,
-                'advanceHtml' => $summary->advanceHtml,
-                'isSetRollup' => true,
-            ];
+            return $this->emptySetParentFinanceViewData();
         }
 
         return app(ProgramPointListFinanceDisplay::class)->summarizePoint(
@@ -1981,5 +1981,62 @@ class ProgramPointsRelationManager extends RelationManager
             $this->settlementCosts(),
             max(1, (int) ($record->event?->participant_count ?? $this->getOwnerRecord()->participant_count ?? 1)),
         );
+    }
+
+    /**
+     * @return array{
+     *     calc: string,
+     *     planned: string,
+     *     paid: string,
+     *     paidStatus: string,
+     *     advanceHtml: string|null,
+     *     isSetRollup: bool,
+     *     hideSetParentFinance: bool,
+     * }
+     */
+    protected function emptySetParentFinanceViewData(): array
+    {
+        return [
+            'calc' => '—',
+            'planned' => '—',
+            'paid' => '—',
+            'paidStatus' => 'none',
+            'advanceHtml' => null,
+            'isSetRollup' => false,
+            'hideSetParentFinance' => true,
+        ];
+    }
+
+    protected function purgeProgramPointSettlementCosts(EventProgramPoint $record): void
+    {
+        $pointIds = EventProgramPoint::query()
+            ->withTrashed()
+            ->where('event_id', $record->event_id)
+            ->where(function ($query) use ($record): void {
+                $query->where('id', $record->id)
+                    ->orWhere('parent_id', $record->id);
+            })
+            ->pluck('id')
+            ->map(fn ($id): int => (int) $id)
+            ->unique()
+            ->values()
+            ->all();
+
+        if ($pointIds === []) {
+            return;
+        }
+
+        EventSettlementCost::query()
+            ->whereIn('source_type', ['program_point', 'program_point_payment'])
+            ->whereIn('source_id', $pointIds)
+            ->delete();
+
+        $settlement = $this->getOwnerRecord()->activeSettlement;
+
+        if ($settlement) {
+            $settlement->recalculateTotals();
+        }
+
+        $this->invalidateSettlementCostCache();
     }
 }

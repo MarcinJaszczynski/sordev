@@ -9,6 +9,7 @@ use App\Models\Task;
 use App\Models\TaskComment;
 use App\Support\Tasks\TaskAttachmentStore;
 use App\Support\Tasks\TaskContextRegistry;
+use App\Filament\Concerns\DispatchesTopbarNotificationRefresh;
 use App\Services\NotificationService;
 use Filament\Forms\Concerns\InteractsWithForms;
 use Filament\Forms\Contracts\HasForms;
@@ -23,6 +24,7 @@ use Livewire\Component;
 
 class TaskFullEditor extends Component implements HasForms
 {
+    use DispatchesTopbarNotificationRefresh;
     use HasRelationManagers;
     use InteractsWithForms;
 
@@ -56,10 +58,6 @@ class TaskFullEditor extends Component implements HasForms
                 ->with(['taskable', 'parent', 'status', 'assignee', 'comments.author'])
                 ->findOrFail($taskId);
             $this->form->fill($this->record->attributesToArray());
-
-            if ($userId = Auth::id()) {
-                NotificationService::markTaskCommentNotificationsAsRead($userId, $taskId);
-            }
 
             return;
         }
@@ -148,11 +146,13 @@ class TaskFullEditor extends Component implements HasForms
             'newCommentContent' => ['required', 'string', 'max:10000'],
         ]);
 
-        TaskComment::query()->create([
+        $comment = TaskComment::query()->create([
             'task_id' => $this->record->id,
             'content' => trim($validated['newCommentContent']),
             'user_id' => Auth::id(),
         ]);
+
+        NotificationService::clearCacheForTaskCommentStakeholders($comment);
 
         $this->newCommentContent = '';
         $this->showCommentComposer = false;
@@ -166,7 +166,7 @@ class TaskFullEditor extends Component implements HasForms
 
         $this->dispatch('task-full-editor-updated', taskId: $this->record->id);
         $this->dispatch('comment-added');
-        $this->dispatch('refresh-notifications');
+        $this->dispatchTopbarNotificationRefresh();
     }
 
     /**
@@ -215,7 +215,7 @@ class TaskFullEditor extends Component implements HasForms
             ->send();
 
         $this->dispatch('task-full-editor-updated', taskId: $this->record->id);
-        $this->dispatch('refresh-notifications');
+        $this->dispatchTopbarNotificationRefresh();
     }
 
     public function updatedDataStatusId($value): void
@@ -233,7 +233,7 @@ class TaskFullEditor extends Component implements HasForms
             ->send();
 
         $this->dispatch('task-full-editor-updated', taskId: $this->record->id);
-        $this->dispatch('refresh-notifications');
+        $this->dispatchTopbarNotificationRefresh();
     }
 
     public function render(): View

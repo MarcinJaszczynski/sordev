@@ -326,10 +326,10 @@ class PilotCashRelationManager extends RelationManager
                     ->label('Dodaj zadanie')
                     ->icon('heroicon-o-clipboard-document-list')
                     ->color('primary')
-                    ->url(fn (PilotCashPreparation $record): string => TaskResource::getUrl('create', [
-                        'taskable_type' => PilotCashPreparation::class,
-                        'taskable_id' => $record->getKey(),
-                    ]))
+                    ->url(fn (PilotCashPreparation $record): string => \App\Support\Tasks\TaskNavigation::createUrl(
+                        \App\Models\PilotCashPreparation::class,
+                        $record->getKey(),
+                    ))
                     ->openUrlInNewTab(),
 
                 Tables\Actions\Action::make('approve_item')

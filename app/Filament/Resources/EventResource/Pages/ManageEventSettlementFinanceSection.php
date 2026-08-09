@@ -29,11 +29,6 @@ abstract class ManageEventSettlementFinanceSection extends Page
         $this->resolveEventSettlement($this->getRecord());
     }
 
-    public function getSubNavigation(): array
-    {
-        return [];
-    }
-
     /**
      * @return array<class-string>
      */
