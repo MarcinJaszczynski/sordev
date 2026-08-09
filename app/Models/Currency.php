@@ -21,6 +21,9 @@ class Currency extends Model
 {
     use HasFactory;
 
+    /** @var list<int>|null */
+    private static ?array $plnIdsCache = null;
+
     /**
      * Pola masowo przypisywalne
      *
@@ -54,6 +57,9 @@ class Currency extends Model
                 $currency->last_updated_at = now();
             }
         });
+
+        static::saved(fn () => static::clearPlnIdsCache());
+        static::deleted(fn () => static::clearPlnIdsCache());
     }
 
     /**
@@ -73,23 +79,33 @@ class Currency extends Model
     }
 
     /**
-     * Zwraca (cache static) tablicę ID waluty PLN (różne warianty nazwy/kodu).
+     * Zwraca tablicę ID waluty PLN (różne warianty nazwy/kodu).
+     *
+     * Cache jest czyszczony przy zmianie walut oraz z testów (RefreshDatabase
+     * nie odpala eventów Eloquent przy truncate).
+     *
+     * @return list<int>
      */
     public static function plnIds(): array
     {
-        static $cache = null;
-        if ($cache !== null) {
-            return $cache;
+        if (self::$plnIdsCache !== null) {
+            return self::$plnIdsCache;
         }
-        $cache = static::where(function ($q) {
+
+        self::$plnIdsCache = static::where(function ($q) {
             $q->where('name', 'like', '%polski%złoty%')
                 ->orWhere('name', 'like', '%złoty%polski%')
                 ->orWhere('name', '=', 'Polski złoty')
                 ->orWhere('name', '=', 'Złoty polski')
                 ->orWhere('code', '=', 'PLN');
-        })->pluck('id')->toArray();
+        })->pluck('id')->map(fn ($id): int => (int) $id)->all();
 
-        return $cache;
+        return self::$plnIdsCache;
+    }
+
+    public static function clearPlnIdsCache(): void
+    {
+        self::$plnIdsCache = null;
     }
 
     public function displayLabel(): string

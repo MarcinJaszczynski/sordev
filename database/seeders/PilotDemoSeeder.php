@@ -98,56 +98,92 @@ class PilotDemoSeeder extends Seeder
 
         $targetCount = 3;
 
-        if ($assigned->count() >= $targetCount) {
-            return $assigned->take($targetCount);
-        }
+        if ($assigned->count() < $targetCount) {
+            $needed = $targetCount - $assigned->count();
 
-        $needed = $targetCount - $assigned->count();
+            $candidates = Event::query()
+                ->where('status', '!=', Event::STATUS_CANCELLED)
+                ->where(function ($query) use ($pilot) {
+                    $query->whereNull('assigned_to')
+                        ->orWhere('assigned_to', '!=', $pilot->id);
+                })
+                ->whereIn('status', [
+                    Event::STATUS_CONFIRMED,
+                    Event::STATUS_TO_SETTLE,
+                    Event::STATUS_SETTLED,
+                    Event::STATUS_PROVISIONAL_RESERVATION,
+                ])
+                ->orderByDesc('start_date')
+                ->limit($needed)
+                ->get();
 
-        $candidates = Event::query()
-            ->where('status', '!=', Event::STATUS_CANCELLED)
-            ->where(function ($query) use ($pilot) {
-                $query->whereNull('assigned_to')
-                    ->orWhere('assigned_to', '!=', $pilot->id);
-            })
-            ->whereIn('status', [
-                Event::STATUS_CONFIRMED,
-                Event::STATUS_TO_SETTLE,
-                Event::STATUS_SETTLED,
-                Event::STATUS_PROVISIONAL_RESERVATION,
-            ])
-            ->orderByDesc('start_date')
-            ->limit($needed)
-            ->get();
+            foreach ($candidates as $event) {
+                $payload = ['assigned_to' => $pilot->id];
 
-        foreach ($candidates as $event) {
-            $payload = ['assigned_to' => $pilot->id];
+                if (Schema::hasColumn('events', 'shared_with_pilot')) {
+                    $payload['shared_with_pilot'] = true;
+                    $payload['shared_with_pilot_at'] = now();
+                }
 
-            if (Schema::hasColumn('events', 'shared_with_pilot')) {
-                $payload['shared_with_pilot'] = true;
-                $payload['shared_with_pilot_at'] = now();
+                $event->update($payload);
+
+                if (Schema::hasColumn('events', 'pilot_notes') && blank($event->pilot_notes)) {
+                    $event->update([
+                        'pilot_notes' => '<p>Uwagi demo dla pilota — impreza #'.$event->id.'.</p>',
+                    ]);
+                }
             }
 
-            $event->update($payload);
-
-            if (Schema::hasColumn('events', 'pilot_notes') && blank($event->pilot_notes)) {
-                $event->update([
-                    'pilot_notes' => '<p>Uwagi demo dla pilota — impreza #'.$event->id.'.</p>',
-                ]);
-            }
+            $assigned = Event::query()
+                ->forPilot($pilot)
+                ->orderByDesc('start_date')
+                ->get();
         }
-
-        $assigned = Event::query()
-            ->forPilot($pilot)
-            ->orderByDesc('start_date')
-            ->get();
 
         if ($assigned->isEmpty()) {
             $demo = $this->createDemoEvent($pilot);
             $assigned = collect([$demo]);
         }
 
-        return $assigned->take($targetCount);
+        // Console-audit / panel pilota wymagają pełnego dostępu (okno po end_date).
+        // Gdy wszystkie przypisane imprezy są w archiwum — odśwież daty najnowszej.
+        $this->ensureAtLeastOneActiveDemoTrip($pilot, $assigned);
+
+        return Event::query()
+            ->forPilot($pilot)
+            ->orderByDesc('start_date')
+            ->limit($targetCount)
+            ->get();
+    }
+
+    /**
+     * @param  \Illuminate\Support\Collection<int, Event>  $assigned
+     */
+    protected function ensureAtLeastOneActiveDemoTrip(User $pilot, \Illuminate\Support\Collection $assigned): void
+    {
+        $access = app(\App\Services\PilotAccessService::class);
+
+        foreach ($assigned as $event) {
+            if ($access->hasFullAccess($event, $pilot)) {
+                return;
+            }
+        }
+
+        /** @var Event|null $event */
+        $event = $assigned->sortByDesc('id')->first();
+
+        if ($event === null) {
+            $this->createDemoEvent($pilot);
+
+            return;
+        }
+
+        $event->update([
+            'start_date' => now()->addDays(10)->toDateString(),
+            'end_date' => now()->addDays(13)->toDateString(),
+            'duration_days' => 4,
+            'status' => Event::STATUS_CONFIRMED,
+        ]);
     }
 
     protected function createDemoEvent(User $pilot): Event

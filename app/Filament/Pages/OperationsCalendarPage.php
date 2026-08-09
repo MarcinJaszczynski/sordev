@@ -54,10 +54,13 @@ class OperationsCalendarPage extends Page
     protected function getHeaderActions(): array
     {
         return [
-            Actions\Action::make('createTask')
-                ->label('Dodaj zadanie')
-                ->icon('heroicon-m-plus')
-                ->action(fn () => $this->mountAction('createTask')),
+            $this->makeCreateTaskAction(
+                defaultDueDate: fn (): mixed => $this->createTaskDefaultDueDate(),
+                defaultFormData: fn (): array => array_merge(
+                    $this->createTaskDefaultFormData(),
+                    $this->pendingCreateFormData,
+                ),
+            ),
             Action::make('calendarEntryContext')
                 ->modalHeading(fn (): string => (string) ($this->selectedCalendarEntry['title'] ?? 'Wpis kalendarza'))
                 ->modalContent(fn (): \Illuminate\Contracts\View\View => view(

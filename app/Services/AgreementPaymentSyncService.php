@@ -45,9 +45,10 @@ class AgreementPaymentSyncService
         }
 
         $participantPayment->settlement()->associate($settlement);
-        $effectivePaidAmount = $participantPayment->exists
+        $ledgerPaidAmount = $participantPayment->exists
             ? app(ParticipantPaymentLedgerService::class)->resolvedPaidAmount($participantPayment)
-            : (float) $agreement->amount_paid;
+            : 0.0;
+        $effectivePaidAmount = round(max($ledgerPaidAmount, (float) $agreement->amount_paid), 2);
 
         $participantPayment->fill([
             'participant_name' => $participantName,

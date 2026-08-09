@@ -226,6 +226,13 @@ class EventSettlement extends Model
             return (float) $cost->actual_amount_pln;
         }
 
+        if (in_array($cost->payment_status, ['advance_paid', 'partially_paid'], true)
+            && (float) ($cost->advance_amount ?? 0) > 0) {
+            $rate = (float) ($cost->actual_rate ?? $cost->planned_rate ?? 1);
+
+            return (float) $cost->advance_amount * $rate;
+        }
+
         return 0.0;
     }
 

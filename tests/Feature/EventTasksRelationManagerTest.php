@@ -108,4 +108,30 @@ class EventTasksRelationManagerTest extends TestCase
             ->assertSet('editingTaskId', $task->id)
             ->assertSet('mountedActions', ['editTask']);
     }
+
+    public function test_event_tasks_edit_button_opens_page_modal(): void
+    {
+        $user = User::factory()->create();
+        $user->assignRole('admin');
+
+        $event = Event::factory()->create();
+        $task = Task::factory()->create([
+            'taskable_type' => Event::class,
+            'taskable_id' => $event->id,
+            'author_id' => $user->id,
+            'assignee_id' => $user->id,
+            'status_id' => Task::getDefaultStatusId(),
+            'title' => 'Do edycji z przycisku',
+        ]);
+
+        Livewire::actingAs($user)
+            ->test(TasksRelationManager::class, [
+                'ownerRecord' => $event,
+                'pageClass' => ManageEventTasks::class,
+            ])
+            ->call('mountTableAction', 'edit', (string) $task->getKey())
+            ->assertSet('editingTaskId', $task->id)
+            ->assertSet('mountedActions', ['editTask'])
+            ->assertSee('Do edycji z przycisku');
+    }
 }

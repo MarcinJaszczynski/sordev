@@ -100,9 +100,10 @@ abstract class AbstractContractPaymentStrategy implements ContractPaymentStrateg
         }
 
         $participantPayment->settlement()->associate($settlement);
-        $effectivePaidAmount = $participantPayment->exists
+        $ledgerPaidAmount = $participantPayment->exists
             ? app(\App\Services\ParticipantPaymentLedgerService::class)->resolvedPaidAmount($participantPayment)
-            : round($paidAmount, 2);
+            : 0.0;
+        $effectivePaidAmount = round(max($ledgerPaidAmount, $paidAmount), 2);
 
         $participantPayment->fill(array_merge([
             'participant_name' => $participantName,

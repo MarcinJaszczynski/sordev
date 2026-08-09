@@ -38,11 +38,19 @@ class TasksKanbanBoardPageTest extends TestCase
             'assignee_id' => $user->id,
         ]);
 
-        Task::create([
+        $authored = Task::create([
             'title' => 'Zlecone przeze mnie',
             'status_id' => Task::getDefaultStatusId(),
             'priority' => 'normal',
             'author_id' => $user->id,
+            'assignee_id' => $other->id,
+        ]);
+
+        Task::create([
+            'title' => 'Obce zadanie',
+            'status_id' => Task::getDefaultStatusId(),
+            'priority' => 'normal',
+            'author_id' => $other->id,
             'assignee_id' => $other->id,
         ]);
 
@@ -52,8 +60,11 @@ class TasksKanbanBoardPageTest extends TestCase
             ->instance()
             ->tasks();
 
+        // Scope "assigned" = Moje (assignee OR author), nie wyłącznie assignee_id.
         $this->assertTrue($tasks->contains('id', $assigned->id));
-        $this->assertCount(1, $tasks);
+        $this->assertTrue($tasks->contains('id', $authored->id));
+        $this->assertFalse($tasks->contains('title', 'Obce zadanie'));
+        $this->assertCount(2, $tasks);
     }
 
     public function test_kanban_can_switch_to_authored_and_all_scopes(): void

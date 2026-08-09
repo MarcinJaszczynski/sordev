@@ -3,7 +3,6 @@
 namespace Tests\Feature;
 
 use App\Enums\TaskSource;
-use App\Filament\Resources\TaskResource;
 use App\Livewire\PilotEventChecklist;
 use App\Models\ChecklistTemplate;
 use App\Models\Event;
@@ -50,7 +49,7 @@ class PilotChecklistTemplateTest extends TestCase
         app(PilotChecklistService::class)->applyTemplate($event, $template, $user);
 
         $this->assertGreaterThan(0, Task::query()->pilotChecklistOnly()->count());
-        $this->assertSame(0, TaskResource::getEloquentQuery()->count());
+        $this->assertSame(0, Task::query()->officeOnly()->count());
     }
 
     public function test_apply_template_skips_duplicates(): void

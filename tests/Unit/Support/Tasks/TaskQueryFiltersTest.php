@@ -132,7 +132,8 @@ class TaskQueryFiltersTest extends TestCase
             ->pluck('id')
             ->all();
 
-        $this->assertEqualsCanonicalizing([$assigned->id], $assignedIds);
+        // Scope "assigned" = Moje (assignee OR author), zgodnie z TaskQueryFilters::mine().
+        $this->assertEqualsCanonicalizing([$assigned->id, $authored->id], $assignedIds);
         $this->assertEqualsCanonicalizing([$authored->id], $authoredIds);
         $this->assertCount(3, $allIds);
     }

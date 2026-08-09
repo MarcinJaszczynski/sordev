@@ -12,6 +12,7 @@ use Livewire\Attributes\On;
 trait InteractsWithTaskEditModal
 {
     use DispatchesTopbarNotificationRefresh;
+    use EnsuresFilamentActionModalVisible;
 
     public ?int $editingTaskId = null;
 
@@ -44,14 +45,29 @@ trait InteractsWithTaskEditModal
     {
         $this->editingTaskId = $taskId;
         $this->editingTaskActiveRelationManager = $activeRelationManager;
+        $this->clearConflictingMountedTableAction();
         $this->mountAction('editTask');
+        $this->ensureMountedActionModalVisible();
     }
 
     public function openCreateTaskModal(array $defaultFormData = [], ?string $defaultDueDate = null): void
     {
         $this->pendingCreateFormData = $defaultFormData;
         $this->pendingCreateDueDate = $defaultDueDate;
+        $this->clearConflictingMountedTableAction();
         $this->mountAction('createTask');
+        $this->ensureMountedActionModalVisible();
+    }
+
+    protected function clearConflictingMountedTableAction(): void
+    {
+        if (! method_exists($this, 'unmountTableAction')) {
+            return;
+        }
+
+        if (! empty($this->mountedTableActions ?? [])) {
+            $this->unmountTableAction(shouldCancelParentActions: false, shouldCloseModal: false);
+        }
     }
 
     #[On('task-full-editor-saved')]
@@ -83,6 +99,18 @@ trait InteractsWithTaskEditModal
             ? (int) request()->query('activeRelationManager')
             : null;
 
+        // mountAction() w mount() dispatchuje open-modal zanim Alpine zdąży
+        // zarejestrować listener → modal zostaje w DOM z isShown=false.
+        // W przeglądarce otwieramy po hydracji; w testach Livewire od razu.
+        if ($this->shouldDeferTaskModalDeepLink()) {
+            $this->editingTaskId = $taskId;
+            $this->editingTaskActiveRelationManager = $activeRelationManager;
+            $armJs = $activeRelationManager === null ? 'null' : (string) $activeRelationManager;
+            $this->js("queueMicrotask(() => \$wire.call('openEditTaskModal', {$taskId}, {$armJs}))");
+
+            return;
+        }
+
         $this->openEditTaskModal($taskId, $activeRelationManager);
     }
 
@@ -99,7 +127,30 @@ trait InteractsWithTaskEditModal
 
         $this->pendingCreateDueDate = request()->query('dueDate');
 
+        if ($this->shouldDeferTaskModalDeepLink()) {
+            // Nie wołaj openCreateTaskModal() — nadpisałoby pending* pustymi defaultami.
+            $this->js("queueMicrotask(() => \$wire.call('mountDeferredCreateTaskModal'))");
+
+            return;
+        }
+
+        $this->clearConflictingMountedTableAction();
         $this->mountAction('createTask');
+    }
+
+    public function mountDeferredCreateTaskModal(): void
+    {
+        $this->clearConflictingMountedTableAction();
+        $this->mountAction('createTask');
+        $this->ensureMountedActionModalVisible();
+    }
+
+    /**
+     * Livewire Feature/Unit nie wykonuje JS z $this->js() — tam montujemy synchronicznie.
+     */
+    protected function shouldDeferTaskModalDeepLink(): bool
+    {
+        return ! app()->runningUnitTests();
     }
 
     /**

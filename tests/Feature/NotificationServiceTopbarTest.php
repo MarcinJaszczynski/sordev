@@ -74,10 +74,48 @@ class NotificationServiceTopbarTest extends TestCase
         $this->assertSame(1, $data['counts']['new_events']);
         $this->assertSame(1, $data['counts']['pending_cancellation_events']);
         $this->assertSame(1, $data['counts']['confirmed_events']);
+        $this->assertSame(3, $data['counts']['events']);
         $this->assertArrayHasKey('new_event', $data['items_by_type']);
         $this->assertArrayHasKey('pending_cancellation_event', $data['items_by_type']);
+        $this->assertArrayHasKey('events', $data['items_by_group']);
         $this->assertCount(1, $data['items_by_type']['new_event']);
         $this->assertCount(1, $data['items_by_type']['pending_cancellation_event']);
+        $this->assertCount(3, $data['items_by_group']['events']);
+    }
+
+    public function test_work_count_combines_tasks_and_comments(): void
+    {
+        $user = User::factory()->create();
+        $other = User::factory()->create();
+        $statusId = TaskStatus::query()->where('name', 'Do zrobienia')->value('id');
+
+        Task::factory()->create([
+            'assignee_id' => $user->id,
+            'author_id' => $user->id,
+            'status_id' => $statusId,
+            'title' => 'Zadanie work',
+        ]);
+
+        $taskForComment = Task::factory()->create([
+            'assignee_id' => $user->id,
+            'author_id' => $user->id,
+            'status_id' => $statusId,
+            'title' => 'Zadanie z komentarzem',
+        ]);
+
+        TaskComment::query()->create([
+            'task_id' => $taskForComment->id,
+            'user_id' => $other->id,
+            'content' => 'Komentarz do work',
+        ]);
+
+        NotificationService::clearCacheForUser($user->id);
+        $data = NotificationService::getTopbarDataForUser($user->id, fresh: true);
+
+        $this->assertSame(2, $data['counts']['tasks']);
+        $this->assertSame(1, $data['counts']['comments']);
+        $this->assertSame(3, $data['counts']['work']);
+        $this->assertCount(3, $data['items_by_group']['work']);
     }
 
     public function test_event_counts_are_unread_only(): void
@@ -417,12 +455,15 @@ class NotificationServiceTopbarTest extends TestCase
         NotificationService::clearCacheForUser($accountant->id);
         $financeData = NotificationService::getTopbarDataForUser($accountant->id, fresh: true);
         $this->assertSame(1, $financeData['counts']['invoice_requests']);
+        $this->assertSame(1, $financeData['counts']['events']);
         $this->assertCount(1, $financeData['items_by_type']['invoice_request']);
+        $this->assertCount(1, $financeData['items_by_group']['events']);
 
         $regular = User::factory()->create();
         NotificationService::clearCacheForUser($regular->id);
         $regularData = NotificationService::getTopbarDataForUser($regular->id, fresh: true);
         $this->assertSame(0, $regularData['counts']['invoice_requests']);
+        $this->assertSame(0, $regularData['counts']['events']);
         $this->assertSame([], $regularData['items_by_type']['invoice_request']);
     }
 

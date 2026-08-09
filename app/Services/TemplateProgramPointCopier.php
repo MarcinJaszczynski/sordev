@@ -101,32 +101,20 @@ class TemplateProgramPointCopier
         $templateId = (int) $event->event_template_id;
         $pivotRows = $this->loadPivotRows($templateId);
         $templatePointIds = $pivotRows->pluck('event_template_program_point_id')->map(fn ($id) => (int) $id)->unique();
+        $allTemplatePointIds = $this->collectAllNestedTemplatePointIds($templatePointIds);
+        $childTemplateIds = $allTemplatePointIds->diff($templatePointIds)->values();
 
         $parentChildLinks = DB::table('event_template_program_point_parent')
-            ->whereIn('parent_id', $templatePointIds)
+            ->whereIn('parent_id', $allTemplatePointIds)
             ->orderBy('order')
             ->get()
             ->groupBy('parent_id');
-
-        $childIdsFromLinks = $parentChildLinks
-            ->flatten(1)
-            ->pluck('child_id')
-            ->map(fn ($id) => (int) $id)
-            ->unique();
-
-        $allTemplatePointIds = $templatePointIds->merge($childIdsFromLinks)->unique();
 
         $templatePoints = EventTemplateProgramPoint::query()
             ->with(['currency'])
             ->whereIn('id', $allTemplatePointIds)
             ->get()
             ->keyBy('id');
-
-        $childTemplateIds = $parentChildLinks
-            ->flatten(1)
-            ->pluck('child_id')
-            ->map(fn ($id) => (int) $id)
-            ->unique();
 
         return [
             'template_id' => $templateId,
@@ -171,6 +159,36 @@ class TemplateProgramPointCopier
             ->orderBy('order')
             ->orderBy('id')
             ->get();
+    }
+
+    /**
+     * Zbiera ID punktów szablonu wraz z wszystkimi potomkami (dowolna głębokość).
+     *
+     * @param  Collection<int, int>  $rootIds
+     * @return Collection<int, int>
+     */
+    protected function collectAllNestedTemplatePointIds(Collection $rootIds): Collection
+    {
+        $allIds = $rootIds->values();
+        $frontier = $rootIds->values();
+
+        while ($frontier->isNotEmpty()) {
+            $childIds = DB::table('event_template_program_point_parent')
+                ->whereIn('parent_id', $frontier)
+                ->pluck('child_id')
+                ->map(fn ($id) => (int) $id)
+                ->unique()
+                ->diff($allIds);
+
+            if ($childIds->isEmpty()) {
+                break;
+            }
+
+            $allIds = $allIds->merge($childIds)->unique()->values();
+            $frontier = $childIds->values();
+        }
+
+        return $allIds;
     }
 
     /**

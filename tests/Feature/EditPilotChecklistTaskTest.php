@@ -41,9 +41,9 @@ class EditPilotChecklistTaskTest extends TestCase
             'taskable_id' => $event->id,
         ]);
 
+        // EditTask zawsze przekierowuje do pełnego widoku (modal / lista z ?editTask=).
         Livewire::actingAs($user)
             ->test(EditTask::class, ['record' => $task->id])
-            ->assertSuccessful()
-            ->assertSet('data.title', 'Potwierdzić autokar i dane kierowcy');
+            ->assertRedirect(\App\Support\Tasks\TaskNavigation::fullViewUrl($task->id));
     }
 }

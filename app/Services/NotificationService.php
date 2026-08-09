@@ -59,6 +59,8 @@ class NotificationService
                 'confirmed_events' => 0,
                 'pending_cancellation_events' => 0,
                 'invoice_requests' => 0,
+                'work' => 0,
+                'events' => 0,
                 'total_unread' => 0,
             ],
             'items' => [],
@@ -70,6 +72,11 @@ class NotificationService
                 'pending_cancellation_event' => [],
                 'invoice_request' => [],
                 'message' => [],
+            ],
+            'items_by_group' => [
+                'work' => [],
+                'events' => [],
+                'messages' => [],
             ],
         ];
     }
@@ -99,10 +106,12 @@ class NotificationService
     {
         $startDate = $event->start_date ? $event->start_date->format('d.m.Y') : 'bez daty';
 
+        // Osobna revision — ten sam event+type=event co potwierdzenie nie może mieć tego samego fingerprint
+        // (Alpine x-for pada na zduplikowanych :key).
         return [
             'type' => 'event',
             'id' => (int) $event->id,
-            'revision' => (string) (optional($event->updated_at)?->timestamp ?? now()->timestamp),
+            'revision' => 'insurance:'.(string) (optional($event->updated_at)?->timestamp ?? now()->timestamp),
             'title' => 'Ubezpieczenie do domknięcia: '.Str::limit($event->name ?? ('Impreza #'.$event->id), 42),
             'meta' => 'Brak kompletu danych/płatności ubezpieczenia | Start: '.$startDate,
             'time' => optional($event->updated_at)->diffForHumans() ?? 'teraz',
@@ -449,13 +458,29 @@ class NotificationService
                     ->values()
                     ->all();
 
-                $totalUnread = $tasksCount
-                    + $commentsCount
-                    + $newEventsCount
+                $workCount = $tasksCount + $commentsCount;
+                $eventsGroupCount = $newEventsCount
                     + $confirmedEventsCount
                     + $pendingCancellationEventsCount
-                    + $invoiceRequestsCount
+                    + $invoiceRequestsCount;
+
+                $totalUnread = $workCount
+                    + $eventsGroupCount
                     + $unreadMessagesCount;
+
+                $itemsByGroup = [
+                    'work' => static::sortNewestFirst(array_merge(
+                        $itemsByType['task'],
+                        $itemsByType['comment'],
+                    )),
+                    'events' => static::sortNewestFirst(array_merge(
+                        $itemsByType['new_event'],
+                        $itemsByType['event'],
+                        $itemsByType['pending_cancellation_event'],
+                        $itemsByType['invoice_request'],
+                    )),
+                    'messages' => $itemsByType['message'],
+                ];
 
                 return [
                     'counts' => [
@@ -466,10 +491,13 @@ class NotificationService
                         'confirmed_events' => $confirmedEventsCount,
                         'pending_cancellation_events' => $pendingCancellationEventsCount,
                         'invoice_requests' => $invoiceRequestsCount,
+                        'work' => $workCount,
+                        'events' => $eventsGroupCount,
                         'total_unread' => $totalUnread,
                     ],
                     'items' => $items,
                     'items_by_type' => $itemsByType,
+                    'items_by_group' => $itemsByGroup,
                 ];
             });
         } catch (\Throwable $e) {

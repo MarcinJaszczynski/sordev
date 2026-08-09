@@ -21,6 +21,12 @@ class TasksRelationManager extends RelationManager
     use InteractsWithTaskListQuickActions;
     use InteractsWithTaskOwnershipScope;
 
+    /**
+     * Lazy RM ładuje się przez /livewire/update bez query stringa — deep link ?editTask=
+     * wtedy nie otwiera modala. Eager mount zachowuje request()->query().
+     */
+    protected static bool $isLazy = false;
+
     protected static string $relationship = 'tasks';
 
     protected static ?string $recordTitleAttribute = 'title';
