@@ -2,6 +2,7 @@
 
 namespace App\Livewire;
 
+use App\Filament\Pilot\Resources\PilotEventResource;
 use App\Models\Event;
 use App\Services\PilotOnboardingService;
 use Filament\Actions\Action;
@@ -205,6 +206,41 @@ class PilotPortalSettingsToolbar extends Component implements HasActions, HasFor
     {
         return Schema::hasColumn('events', 'shared_with_pilot')
             && blank($this->event()->assigned_to);
+    }
+
+    public function canPreviewPortal(): bool
+    {
+        return (bool) Auth::user()?->hasRole(['admin', 'super_admin', 'biuro']);
+    }
+
+    public function previewAsPilotVisible(): bool
+    {
+        return $this->canPreviewPortal() && filled($this->event()->assigned_to);
+    }
+
+    public function previewUrl(): string
+    {
+        $url = PilotEventResource::getUrl(
+            'view',
+            ['record' => $this->eventId],
+            panel: 'pilot',
+        ).'?preview=1';
+
+        $pilotId = $this->event()->assigned_to;
+        if (filled($pilotId)) {
+            $url .= '&pilot='.(int) $pilotId;
+        }
+
+        return $url;
+    }
+
+    public function previewAsPilotLabel(): string
+    {
+        $name = $this->event()->assignedUser?->name;
+
+        return filled($name)
+            ? 'Podgląd jako '.$name
+            : 'Podgląd jako ten pilot';
     }
 
     public function migrationHintVisible(): bool

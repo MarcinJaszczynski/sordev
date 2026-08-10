@@ -141,4 +141,48 @@ class PilotPortalSettingsToolbarTest extends TestCase
                 && $mail->plainPassword === 'secret-pass';
         });
     }
+
+    public function test_preview_as_pilot_url_includes_assigned_pilot_query(): void
+    {
+        $admin = User::factory()->create(['status' => 'active']);
+        $admin->assignRole('admin');
+
+        $pilot = User::factory()->create([
+            'status' => 'active',
+            'name' => 'Jan Pilot',
+        ]);
+        $pilot->assignRole('pilot');
+
+        $event = Event::factory()->create([
+            'assigned_to' => $pilot->id,
+            'shared_with_pilot' => true,
+        ]);
+
+        $this->actingAs($admin);
+
+        $component = Livewire::test(PilotPortalSettingsToolbar::class, ['eventId' => $event->id]);
+
+        $this->assertTrue($component->instance()->previewAsPilotVisible());
+        $this->assertSame('Podgląd jako Jan Pilot', $component->instance()->previewAsPilotLabel());
+        $this->assertStringContainsString('preview=1', $component->instance()->previewUrl());
+        $this->assertStringContainsString('pilot='.$pilot->id, $component->instance()->previewUrl());
+        $component->assertSee('Podgląd jako Jan Pilot');
+    }
+
+    public function test_preview_as_pilot_hidden_label_when_no_pilot_assigned(): void
+    {
+        $admin = User::factory()->create(['status' => 'active']);
+        $admin->assignRole('admin');
+
+        $event = Event::factory()->create([
+            'assigned_to' => null,
+            'shared_with_pilot' => false,
+        ]);
+
+        $this->actingAs($admin);
+
+        Livewire::test(PilotPortalSettingsToolbar::class, ['eventId' => $event->id])
+            ->assertSee('Podgląd jako pilot')
+            ->assertDontSee('Podgląd jako Jan');
+    }
 }

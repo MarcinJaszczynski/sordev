@@ -3,7 +3,6 @@
 namespace App\Filament\Resources\EventResource\Pages;
 
 use App\Filament\Pilot\Resources\PilotEventResource;
-use App\Filament\Resources\ChecklistTemplateResource;
 use App\Filament\Resources\EventResource;
 use App\Filament\Resources\EventResource\Concerns\HasEventOperationsSubNavigation;
 use App\Filament\Resources\EventResource\Concerns\HasEventWorkflowContext;
@@ -24,9 +23,9 @@ class ManageEventPilot extends EditRecord
 
     protected static string $resource = EventResource::class;
 
-    protected static ?string $navigationLabel = 'Pilot wycieczki';
+    protected static ?string $navigationLabel = 'Pilot';
 
-    protected static ?string $title = 'Pilot wycieczki';
+    protected static ?string $title = 'Pilot';
 
     protected static ?string $navigationIcon = 'heroicon-o-user-circle';
 
@@ -43,38 +42,28 @@ class ManageEventPilot extends EditRecord
                 ->content(new \Illuminate\Support\HtmlString(
                     '<div class="rounded-lg border border-dashed border-gray-300 bg-gray-50 px-4 py-6 text-center dark:border-gray-600 dark:bg-gray-800/50">'
                     .'<p class="text-sm font-medium text-gray-900 dark:text-gray-100">Brak przypisanego pilota</p>'
-                    .'<p class="mt-1 text-sm text-gray-500">Wybierz pilota w sekcji poniżej albo użyj szybkiego przypisania z listy imprez.</p>'
+                    .'<p class="mt-1 text-sm text-gray-500">Wybierz pilota w sekcji „Przypisanie” poniżej.</p>'
                     .'</div>'
                 ))
                 ->columnSpanFull(),
 
-            Forms\Components\Section::make('Podgląd portalu pilota')
-                ->icon('heroicon-o-eye')
-                ->description('Otwórz widok wycieczki tak, jak zobaczy ją przypisany pilot.')
-                ->schema([
-                    Forms\Components\Placeholder::make('pilot_preview_link')
-                        ->hiddenLabel()
-                        ->content(fn (): \Illuminate\Support\HtmlString => new \Illuminate\Support\HtmlString(
-                            '<a href="'.e(PilotEventResource::getUrl(
-                                'view',
-                                ['record' => $this->record->getKey()],
-                                panel: 'pilot',
-                            ).'?preview=1').'" target="_blank" rel="noopener" class="inline-flex items-center gap-2 rounded-lg bg-teal-600 px-4 py-2 text-sm font-semibold text-white hover:bg-teal-700">'
-                            .'<span>Podgląd portalu pilota</span>'
-                            .'</a>'
-                            .(filled($this->record->assigned_to)
-                                ? ''
-                                : '<p class="mt-2 text-xs text-gray-500">Pilot wycieczki nie jest jeszcze przypisany — podgląd pokazuje widok biura.</p>')
-                        )),
-                ]),
-
-            ...\App\Filament\Forms\EventReadinessFields::pilotSection(),
+            ...\App\Filament\Forms\EventReadinessFields::pilotPageSchema(),
         ]);
     }
 
-    public function getContentTabLabel(): ?string
+    protected function pilotPreviewUrl(): string
     {
-        return 'Pilot wycieczki';
+        $url = PilotEventResource::getUrl(
+            'view',
+            ['record' => $this->record->getKey()],
+            panel: 'pilot',
+        ).'?preview=1';
+
+        if (filled($this->record->assigned_to)) {
+            $url .= '&pilot='.(int) $this->record->assigned_to;
+        }
+
+        return $url;
     }
 
     protected function getSavedNotificationTitle(): ?string
@@ -204,47 +193,18 @@ class ManageEventPilot extends EditRecord
     protected function getHeaderActions(): array
     {
         return [
-            Actions\Action::make('create_checklist_template')
-                ->label('Utwórz szablon checklisty')
-                ->icon('heroicon-o-plus-circle')
-                ->color('gray')
-                ->url(fn (): string => ChecklistTemplateResource::getUrl('create'))
-                ->openUrlInNewTab()
-                ->visible(fn (): bool => (bool) Auth::user()?->hasRole(['admin', 'super_admin', 'biuro'])),
-
-            Actions\Action::make('manage_checklist_templates')
-                ->label('Szablony checklisty')
-                ->icon('heroicon-o-clipboard-document-check')
-                ->color('gray')
-                ->url(fn (): string => ChecklistTemplateResource::getUrl('index'))
-                ->openUrlInNewTab()
-                ->visible(fn (): bool => (bool) Auth::user()?->hasRole(['admin', 'super_admin', 'biuro'])),
-
-            Actions\Action::make('preview_pilot_advance')
-                ->label('Podgląd zaliczki pilota wycieczki')
-                ->icon('heroicon-o-banknotes')
-                ->color('gray')
-                ->url(fn (): string => \App\Filament\Pilot\Pages\PilotAdvancePage::urlFor($this->record).'?preview=1')
-                ->openUrlInNewTab()
-                ->visible(fn (): bool => (bool) Auth::user()?->hasRole(['admin', 'super_admin', 'biuro'])),
-
             Actions\Action::make('preview_pilot_panel')
-                ->label('Podgląd portalu pilota')
+                ->label('Podgląd portalu')
                 ->icon('heroicon-o-eye')
-                ->color('gray')
-                ->url(fn (): string => PilotEventResource::getUrl(
-                    'view',
-                    ['record' => $this->record->getKey()],
-                    panel: 'pilot',
-                ).'?preview=1')
+                ->color('primary')
+                ->url(fn (): string => $this->pilotPreviewUrl())
                 ->openUrlInNewTab()
                 ->visible(fn (): bool => (bool) Auth::user()?->hasRole(['admin', 'super_admin', 'biuro'])),
 
             Actions\Action::make('pdf_pilot')
-                ->label('Pakiet pilota')
+                ->label('PDF')
                 ->icon('heroicon-o-document-arrow-down')
                 ->color('gray')
-                ->tooltip('Załączniki dodasz w zakładce „Dokumenty”: zaznacz pakiety PDF i status „Zaakceptowany”.')
                 ->url(fn () => route('admin.events.pdf', ['event' => $this->record->id, 'audience' => 'pilot']))
                 ->openUrlInNewTab(),
         ];
