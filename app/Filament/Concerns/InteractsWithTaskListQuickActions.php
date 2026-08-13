@@ -34,12 +34,21 @@ trait InteractsWithTaskListQuickActions
     {
         $this->commentingTaskId = $taskId;
         $this->mountAction('addComment');
+        $this->ensureQuickActionModalVisible();
     }
 
     public function openAddAttachmentModal(int $taskId): void
     {
         $this->attachingTaskId = $taskId;
         $this->mountAction('addAttachment');
+        $this->ensureQuickActionModalVisible();
+    }
+
+    protected function ensureQuickActionModalVisible(): void
+    {
+        if (method_exists($this, 'ensureMountedActionModalVisible')) {
+            $this->ensureMountedActionModalVisible();
+        }
     }
 
     public function toggleExpandedComments(int $taskId): void
@@ -118,10 +127,11 @@ trait InteractsWithTaskListQuickActions
                     ->send();
 
                 $this->dispatchTopbarNotificationRefresh();
-                $this->afterTaskListQuickActionSaved();
             })
             ->after(function (): void {
                 $this->commentingTaskId = null;
+                // Po zamknięciu modala — resetTable w trakcie action potrafi psuć Alpine close.
+                $this->afterTaskListQuickActionSaved();
             });
     }
 
@@ -162,18 +172,26 @@ trait InteractsWithTaskListQuickActions
                     ->title('Załączniki dodane')
                     ->success()
                     ->send();
-
-                $this->afterTaskListQuickActionSaved();
             })
             ->after(function (): void {
                 $this->attachingTaskId = null;
+                $this->afterTaskListQuickActionSaved();
             });
     }
 
     protected function afterTaskListQuickActionSaved(): void
     {
-        if (method_exists($this, 'resetTable')) {
-            $this->resetTable();
+        if (! method_exists($this, 'resetTable')) {
+            return;
         }
+
+        // W teście odśwież od razu; w UI dopiero po zamknięciu modala (inaczej morph psuje Alpine).
+        if (app()->runningUnitTests()) {
+            $this->resetTable();
+
+            return;
+        }
+
+        $this->js('queueMicrotask(() => $wire.call("resetTable"))');
     }
 }

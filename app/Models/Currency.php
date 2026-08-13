@@ -21,6 +21,9 @@ class Currency extends Model
 {
     use HasFactory;
 
+    /** @var list<int>|null */
+    private static ?array $plnIdsCache = null;
+
     /**
      * Pola masowo przypisywalne
      *
@@ -54,6 +57,9 @@ class Currency extends Model
                 $currency->last_updated_at = now();
             }
         });
+
+        static::saved(fn () => static::clearPlnIdsCache());
+        static::deleted(fn () => static::clearPlnIdsCache());
     }
 
     /**
@@ -72,21 +78,21 @@ class Currency extends Model
         return $this->hasMany(CurrencyRateSnapshot::class);
     }
 
-    /** @var list<int>|null */
-    protected static ?array $plnIdsCache = null;
-
     /**
-     * Zwraca (cache static) tablicę ID waluty PLN (różne warianty nazwy/kodu).
+     * Zwraca tablicę ID waluty PLN (różne warianty nazwy/kodu).
+     *
+     * Cache jest czyszczony przy zmianie walut oraz z testów (RefreshDatabase
+     * nie odpala eventów Eloquent przy truncate).
      *
      * @return list<int>
      */
     public static function plnIds(): array
     {
-        if (static::$plnIdsCache !== null) {
-            return static::$plnIdsCache;
+        if (self::$plnIdsCache !== null) {
+            return self::$plnIdsCache;
         }
 
-        static::$plnIdsCache = static::where(function ($q) {
+        self::$plnIdsCache = static::where(function ($q) {
             $q->where('name', 'like', '%polski%złoty%')
                 ->orWhere('name', 'like', '%złoty%polski%')
                 ->orWhere('name', '=', 'Polski złoty')
@@ -95,7 +101,7 @@ class Currency extends Model
                 ->orWhere('symbol', '=', 'PLN');
         })->pluck('id')->map(fn ($id): int => (int) $id)->all();
 
-        return static::$plnIdsCache;
+        return self::$plnIdsCache;
     }
 
     /**
@@ -103,7 +109,7 @@ class Currency extends Model
      */
     public static function clearPlnIdsCache(): void
     {
-        static::$plnIdsCache = null;
+        self::$plnIdsCache = null;
     }
 
     public function displayLabel(): string

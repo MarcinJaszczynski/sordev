@@ -29,6 +29,7 @@
         'routes' => [
             'tasks' => $taskIndexUrl,
             'inbox' => $inboxUrl,
+            'comments' => $inboxUrl.'?typeFilter=comment',
             'newEvents' => $newEventsIndexUrl,
             'events' => $confirmedEventsIndexUrl,
             'pendingCancellationEvents' => $pendingCancellationEventsIndexUrl,

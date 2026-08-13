@@ -37,9 +37,9 @@ class VendorInvoiceModuleTest extends TestCase
 
     private function requireKsefFixture(string $relativePath): string
     {
-        $path = base_path('pliki/ksef/'.$relativePath);
+        $path = base_path('tests/Fixtures/ksef/'.$relativePath);
         if (! is_file($path)) {
-            $this->markTestSkipped('Brak lokalnych fixture KSeF (pliki/ksef/'.$relativePath.').');
+            $this->markTestSkipped('Brak fixture KSeF (tests/Fixtures/ksef/'.$relativePath.').');
         }
 
         $contents = file_get_contents($path);
@@ -223,12 +223,16 @@ class VendorInvoiceModuleTest extends TestCase
 
     public function test_bulk_pdf_splitter_attaches_individual_files(): void
     {
-        $pdf = $this->requireKsefFixture('Faktury pdf w jednym pliku.pdf');
-        $csv = $this->requireKsefFixture('CSV.csv');
+        Storage::disk('public')->put(
+            'vendor-invoices/test-bulk.pdf',
+            $this->requireKsefFixture('bulk-invoices.pdf')
+        );
 
-        Storage::disk('public')->put('vendor-invoices/test-bulk.pdf', $pdf);
-
-        app(VendorInvoiceImportService::class)->importFromContent($csv, 'csv', 'CSV.csv');
+        app(VendorInvoiceImportService::class)->importFromContent(
+            $this->requireKsefFixture('CSV.csv'),
+            'csv',
+            'CSV.csv'
+        );
 
         $result = app(BulkPdfSplitter::class)->splitAndAttach('vendor-invoices/test-bulk.pdf');
 
@@ -240,11 +244,8 @@ class VendorInvoiceModuleTest extends TestCase
 
     public function test_batch_import_processes_csv_and_xml_together(): void
     {
-        $this->requireKsefFixture('CSV.csv');
-        $this->requireKsefFixture('xml.xml');
-
-        $csv = base_path('pliki/ksef/CSV.csv');
-        $xml = base_path('pliki/ksef/xml.xml');
+        $csv = base_path('tests/Fixtures/ksef/CSV.csv');
+        $xml = base_path('tests/Fixtures/ksef/xml.xml');
 
         $result = app(VendorInvoiceBatchImportService::class)->import(
             csvPath: $csv,

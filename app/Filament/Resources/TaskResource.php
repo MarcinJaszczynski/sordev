@@ -14,6 +14,7 @@ use App\Support\Tasks\TaskAuthorization;
 use App\Support\Tasks\TaskListColumn;
 use App\Support\Tasks\TaskNavigation;
 use App\Support\Tasks\TaskQueryFilters;
+use App\Services\NotificationService;
 use Filament\Forms;
 use Filament\Forms\Form;
 use Filament\Navigation\NavigationItem;
@@ -21,6 +22,7 @@ use Filament\Notifications\Notification;
 use Filament\Resources\Resource;
 use Filament\Tables;
 use Filament\Tables\Table;
+use Illuminate\Contracts\View\View;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Collection;
 use Illuminate\Database\Eloquent\SoftDeletingScope;
@@ -66,19 +68,22 @@ class TaskResource extends Resource
 
     public static function modalEditTableAction(): Tables\Actions\Action
     {
+        // Page/RM action `editTask` ma pełny edytor. Klik w przycisk idzie przez Alpine
+        // (bez mountTableAction) — cykl table-action + Livewire morph zostawiał x-cloak
+        // na wrapperze modala (isOpen=true, ale display:none). action() zostaje dla
+        // recordAction / testów wołających mountTableAction.
         return Tables\Actions\Action::make('edit')
             ->label('Edytuj')
             ->icon('heroicon-o-pencil-square')
-            ->action(function (Task $record, Tables\Actions\Action $action): void {
-                $livewire = $action->getLivewire();
-
-                if (method_exists($livewire, 'openEditTaskModal')) {
-                    $livewire->openEditTaskModal($record->id);
-
+            ->alpineClickHandler(
+                fn (Task $record): string => '$wire.openEditTaskModal('.(int) $record->id.')',
+            )
+            ->action(function (Task $record, $livewire): void {
+                if (! is_object($livewire) || ! method_exists($livewire, 'openEditTaskModal')) {
                     return;
                 }
 
-                redirect(static::getUrl('edit', ['record' => $record]));
+                $livewire->openEditTaskModal((int) $record->id);
             });
     }
 

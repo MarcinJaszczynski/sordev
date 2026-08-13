@@ -41,6 +41,7 @@ class EditPilotChecklistTaskTest extends TestCase
             'taskable_id' => $event->id,
         ]);
 
+        // EditTask zawsze przekierowuje do pełnego widoku (modal / lista z ?editTask=).
         Livewire::actingAs($user)
             ->test(EditTask::class, ['record' => $task->id])
             ->assertRedirect(\App\Support\Tasks\TaskNavigation::fullViewUrl($task));

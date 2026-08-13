@@ -22,6 +22,8 @@ class NotificationController extends Controller
                 'confirmed_events' => 0,
                 'pending_cancellation_events' => 0,
                 'invoice_requests' => 0,
+                'work' => 0,
+                'events' => 0,
                 'total_unread' => 0,
                 'counts' => [
                     'tasks' => 0,
@@ -31,6 +33,8 @@ class NotificationController extends Controller
                     'confirmed_events' => 0,
                     'pending_cancellation_events' => 0,
                     'invoice_requests' => 0,
+                    'work' => 0,
+                    'events' => 0,
                     'total_unread' => 0,
                 ],
                 'items' => [],
@@ -42,6 +46,11 @@ class NotificationController extends Controller
                     'pending_cancellation_event' => [],
                     'invoice_request' => [],
                     'message' => [],
+                ],
+                'items_by_group' => [
+                    'work' => [],
+                    'events' => [],
+                    'messages' => [],
                 ],
             ]);
         }
@@ -63,6 +72,8 @@ class NotificationController extends Controller
             'confirmed_events' => $counts['confirmed_events'] ?? 0,
             'pending_cancellation_events' => $counts['pending_cancellation_events'] ?? 0,
             'invoice_requests' => $counts['invoice_requests'] ?? 0,
+            'work' => $counts['work'] ?? 0,
+            'events' => $counts['events'] ?? 0,
             'total_unread' => $counts['total_unread'] ?? 0,
             'counts' => $counts,
             'items' => $notificationData['items'] ?? [],
@@ -74,6 +85,11 @@ class NotificationController extends Controller
                 'pending_cancellation_event' => [],
                 'invoice_request' => [],
                 'message' => [],
+            ],
+            'items_by_group' => $notificationData['items_by_group'] ?? [
+                'work' => [],
+                'events' => [],
+                'messages' => [],
             ],
         ]);
     }

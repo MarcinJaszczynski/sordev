@@ -149,6 +149,10 @@ class AdminPanelProvider extends PanelProvider
                 fn (): string => view('filament.components.admin-readability-styles')->render(),
             )
             ->renderHook(
+                PanelsRenderHook::SCRIPTS_AFTER,
+                fn (): string => view('filament.components.filament-action-modal-heal')->render(),
+            )
+            ->renderHook(
                 PanelsRenderHook::PAGE_START,
                 function (): string {
                     $livewire = \Livewire\Livewire::current();
@@ -191,6 +195,13 @@ class AdminPanelProvider extends PanelProvider
                             'confirmedEventsCount' => $counts['confirmed_events'] ?? 0,
                             'pendingCancellationEventsCount' => $counts['pending_cancellation_events'] ?? 0,
                             'invoiceRequestsCount' => $counts['invoice_requests'] ?? 0,
+                            'workCount' => $counts['work'] ?? (($counts['tasks'] ?? 0) + ($counts['comments'] ?? 0)),
+                            'eventsCount' => $counts['events'] ?? (
+                                ($counts['new_events'] ?? 0)
+                                + ($counts['confirmed_events'] ?? 0)
+                                + ($counts['pending_cancellation_events'] ?? 0)
+                                + ($counts['invoice_requests'] ?? 0)
+                            ),
                             'totalUnread' => $counts['total_unread'] ?? 0,
                             'canSeeInvoiceRequests' => $user->hasRole(['super_admin', 'admin', 'biuro', 'ksiegowosc']),
                             'notificationItems' => $notificationData['items'] ?? [],

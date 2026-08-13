@@ -20,8 +20,8 @@ abstract class TestCase extends BaseTestCase
         set_time_limit(0);
         @ini_set('max_execution_time', '0');
 
-        // Statyczne cache'e nie mogą przeciekać między testami
-        // (RefreshDatabase resetuje ID → kolizje / „fałszywe” wyniki).
+        // RefreshDatabase truncate'uje tabele bez eventów Eloquent —
+        // statyczne cache ID muszą być czyszczone między testami.
         EventCostCalculator::clearRequestCache();
         Currency::clearPlnIdsCache();
         Event::clearContactsByIdsCache();

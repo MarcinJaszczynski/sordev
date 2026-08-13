@@ -44,14 +44,13 @@ class AgreementPaymentSyncService
             $participantPayment = new EventSettlementParticipantPayment;
         }
 
+        $participantPayment->settlement()->associate($settlement);
         $ledgerPaid = $participantPayment->exists
             ? (float) app(ParticipantPaymentLedgerService::class)->resolvedPaidAmount($participantPayment)
             : 0.0;
         $agreementPaid = (float) ($agreement->amount_paid ?? 0);
         // Demo/flow płatności ustawia amount_paid na umowie — ledger może jeszcze nie mieć wpisu.
-        $effectivePaidAmount = max($ledgerPaid, $agreementPaid);
-
-        $participantPayment->settlement()->associate($settlement);
+        $effectivePaidAmount = round(max($ledgerPaid, $agreementPaid), 2);
         $participantPayment->fill([
             'participant_name' => $participantName,
             'booking_reference' => $bookingReference,

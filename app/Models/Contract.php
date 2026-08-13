@@ -293,6 +293,16 @@ class Contract extends Model
             }
 
             app(ContractPaymentSyncService::class)->sync($contract->fresh());
+
+            if ($contract->wasRecentlyCreated || $contract->wasChanged(['amount_paid', 'payment_status', 'status'])) {
+                $event = $contract->relationLoaded('event')
+                    ? $contract->event
+                    : Event::query()->find($contract->event_id);
+
+                if ($event) {
+                    app(\App\Services\EventPaymentReminderSyncService::class)->syncEventContractInstallmentReminders($event);
+                }
+            }
         });
 
         static::deleted(function (self $contract): void {

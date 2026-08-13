@@ -41,10 +41,14 @@ class ListTasksCommentModalTest extends TestCase
         Livewire::actingAs($user)
             ->test(ListTasks::class)
             ->call('openAddCommentModal', $task->id)
+            ->assertSet('mountedActions', ['addComment'])
+            ->assertSet('commentingTaskId', $task->id)
             ->callAction('addComment', data: [
                 'content' => 'Komentarz dodany z listy zadań.',
             ])
-            ->assertHasNoActionErrors();
+            ->assertHasNoActionErrors()
+            ->assertSet('mountedActions', [])
+            ->assertSet('commentingTaskId', null);
 
         $this->assertDatabaseHas('task_comments', [
             'task_id' => $task->id,

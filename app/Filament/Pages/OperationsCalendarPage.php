@@ -8,7 +8,6 @@ use App\Models\Task;
 use App\Services\CalendarEventAggregator;
 use App\Support\FilamentNavigation;
 use Carbon\Carbon;
-use Filament\Actions;
 use Filament\Actions\Action;
 use Filament\Pages\Page;
 use Livewire\Attributes\Computed;
@@ -68,11 +67,13 @@ class OperationsCalendarPage extends Page
     protected function getHeaderActions(): array
     {
         return [
-            Actions\Action::make('createTask')
-                ->label('Dodaj zadanie')
-                ->icon('heroicon-m-plus')
-                ->tooltip('Utwórz zadanie z terminem na wybrany dzień kalendarza.')
-                ->action(fn () => $this->mountAction('createTask')),
+            $this->makeCreateTaskAction(
+                defaultDueDate: fn (): mixed => $this->createTaskDefaultDueDate(),
+                defaultFormData: fn (): array => array_merge(
+                    $this->createTaskDefaultFormData(),
+                    $this->pendingCreateFormData,
+                ),
+            )->tooltip('Utwórz zadanie z terminem na wybrany dzień kalendarza.'),
         ];
     }
 

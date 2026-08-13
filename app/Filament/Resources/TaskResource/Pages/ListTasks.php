@@ -87,10 +87,15 @@ class ListTasks extends ListRecords
     protected function getHeaderActions(): array
     {
         return [
-            Actions\Action::make('createTask')
-                ->label('Dodaj zadanie')
-                ->icon('heroicon-m-plus')
-                ->action(fn () => $this->mountAction('createTask')),
+            // Musi być pełna akcja z modalem — stub z mountAction() nadpisywał
+            // cacheAction(createTask) z traita i modal przestawał się otwierać.
+            $this->makeCreateTaskAction(
+                defaultDueDate: fn (): mixed => $this->createTaskDefaultDueDate(),
+                defaultFormData: fn (): array => array_merge(
+                    $this->createTaskDefaultFormData(),
+                    $this->pendingCreateFormData,
+                ),
+            ),
             Actions\Action::make('board')
                 ->label('Widok tablicy')
                 ->icon('heroicon-m-view-columns')

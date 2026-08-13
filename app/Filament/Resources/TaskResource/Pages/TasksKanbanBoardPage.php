@@ -127,10 +127,13 @@ class TasksKanbanBoardPage extends Page implements HasForms
             ->color('gray')
             ->url(TaskResource::getUrl('index'));
 
-        $actions[] = Actions\Action::make('createTask')
-            ->label('Dodaj zadanie')
-            ->icon('heroicon-m-plus')
-            ->action(fn () => $this->mountAction('createTask'));
+        $actions[] = $this->makeCreateTaskAction(
+            defaultDueDate: fn (): mixed => $this->createTaskDefaultDueDate(),
+            defaultFormData: fn (): array => array_merge(
+                $this->createTaskDefaultFormData(),
+                $this->pendingCreateFormData,
+            ),
+        );
 
         return $actions;
     }
