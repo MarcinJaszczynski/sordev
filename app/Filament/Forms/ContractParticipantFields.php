@@ -15,7 +15,7 @@ class ContractParticipantFields
     public static function schema(bool $collapsed = false): array
     {
         $section = Forms\Components\Section::make('Uczestnik')
-            ->columns(2)
+            ->columns(['default' => 1, 'md' => 2])
             ->schema([
                 Forms\Components\Select::make('gender')
                     ->label('Płeć')

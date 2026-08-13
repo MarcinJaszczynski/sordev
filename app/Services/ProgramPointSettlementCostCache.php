@@ -5,6 +5,7 @@ namespace App\Services;
 use App\Models\Event;
 use App\Models\EventProgramPoint;
 use App\Models\EventSettlementCost;
+use App\Models\EventSettlementDocument;
 use Illuminate\Database\Eloquent\Collection as EloquentCollection;
 use Illuminate\Support\Collection;
 
@@ -18,6 +19,9 @@ class ProgramPointSettlementCostCache
 
     /** @var array<int, EloquentCollection<int, EventSettlementCost>> */
     private array $paymentRowsByPointId = [];
+
+    /** @var array<int, array{files_count: int, has_uploaded_file: bool, hint: string, status_label: string}> */
+    private array $documentMetaByPointId = [];
 
     private bool $warmed = false;
 
@@ -58,14 +62,21 @@ class ProgramPointSettlementCostCache
             ->with(['plannedCurrency', 'actualCurrency'])
             ->get();
 
+        $documents = $settlement->relationLoaded('documents')
+            ? $settlement->documents
+            : $settlement->documents()->get();
+
         foreach ($pointIds as $pointId) {
             $rows = $costs->where('source_id', $pointId);
-            $this->baseCostsByPointId[(int) $pointId] = $rows
-                ->first(fn (EventSettlementCost $cost): bool => $cost->source_type === 'program_point');
-            $this->paymentRowsByPointId[(int) $pointId] = $rows
+            $base = $rows->first(fn (EventSettlementCost $cost): bool => $cost->source_type === 'program_point');
+            $payments = $rows
                 ->filter(fn (EventSettlementCost $cost): bool => $cost->source_type === 'program_point_payment'
                     && $cost->payment_status !== 'cancelled')
                 ->values();
+
+            $this->baseCostsByPointId[(int) $pointId] = $base;
+            $this->paymentRowsByPointId[(int) $pointId] = $payments;
+            $this->documentMetaByPointId[(int) $pointId] = $this->buildDocumentMeta($base, $payments, $documents);
         }
     }
 
@@ -80,5 +91,92 @@ class ProgramPointSettlementCostCache
     public function paymentRows(int $pointId): Collection|EloquentCollection
     {
         return $this->paymentRowsByPointId[$pointId] ?? collect();
+    }
+
+    /**
+     * @return array{files_count: int, has_uploaded_file: bool, hint: string, status_label: string}
+     */
+    public function documentMeta(int $pointId): array
+    {
+        return $this->documentMetaByPointId[$pointId] ?? [
+            'files_count' => 0,
+            'has_uploaded_file' => false,
+            'hint' => 'Brak pliku',
+            'status_label' => 'Brak wgranego pliku faktury / dowodu',
+        ];
+    }
+
+    /**
+     * @param  Collection<int, EventSettlementDocument>|EloquentCollection<int, EventSettlementDocument>  $documents
+     * @param  Collection<int, EventSettlementCost>|EloquentCollection<int, EventSettlementCost>  $payments
+     * @return array{files_count: int, has_uploaded_file: bool, hint: string, status_label: string}
+     */
+    private function buildDocumentMeta(
+        ?EventSettlementCost $base,
+        Collection|EloquentCollection $payments,
+        Collection|EloquentCollection $documents,
+    ): array {
+        $ids = collect($base ? [$base->id] : [])
+            ->merge($payments->pluck('id'))
+            ->map(fn ($id) => (int) $id)
+            ->all();
+
+        $linkedDocs = $documents->filter(function ($doc) use ($ids): bool {
+            $linked = collect($doc->linked_cost_ids ?? [])->map(fn ($id) => (int) $id)->all();
+
+            return count(array_intersect($ids, $linked)) > 0;
+        });
+
+        $fileNames = $linkedDocs
+            ->flatMap(fn ($doc): array => collect($doc->files ?? [])
+                ->filter(fn ($path) => is_string($path) && $path !== '')
+                ->map(fn (string $path): string => basename($path))
+                ->all())
+            ->values();
+
+        $filesCount = $fileNames->count();
+        $numbers = $payments
+            ->map(fn (EventSettlementCost $p): ?string => $p->document_number ?: $p->invoice_number)
+            ->filter(fn (?string $n): bool => filled($n))
+            ->unique()
+            ->values();
+
+        if ($filesCount > 0) {
+            $first = (string) $fileNames->first();
+            $type = EventSettlementDocument::$documentTypes[$linkedDocs->first()?->document_type ?? '']
+                ?? ((string) ($linkedDocs->first()?->document_type ?: 'Plik'));
+            $number = (string) ($linkedDocs->first()?->document_number ?: ($numbers->first() ?? ''));
+            $hint = $number !== ''
+                ? trim($type.' '.$number)
+                : ($filesCount === 1
+                    ? $type
+                    : $type.' ('.$filesCount.' pl.)');
+
+            return [
+                'files_count' => $filesCount,
+                'has_uploaded_file' => true,
+                'hint' => $hint,
+                'status_label' => 'Faktura / dokument wgrany: '.$hint
+                    .($number === '' && $filesCount > 0 ? ' · '.$first : ''),
+            ];
+        }
+
+        if ($numbers->isNotEmpty()) {
+            $joined = $numbers->take(2)->implode(', ');
+
+            return [
+                'files_count' => 0,
+                'has_uploaded_file' => false,
+                'hint' => 'Nr '.$joined.' (bez pliku)',
+                'status_label' => 'Brak wgranego pliku — jest numer: '.$joined,
+            ];
+        }
+
+        return [
+            'files_count' => 0,
+            'has_uploaded_file' => false,
+            'hint' => 'Brak pliku',
+            'status_label' => 'Brak wgranego pliku faktury / dowodu',
+        ];
     }
 }

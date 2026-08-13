@@ -3,8 +3,9 @@
         <x-filament::section>
             <x-slot name="heading">Import wpłat bankowych (Millennium)</x-slot>
             <x-slot name="description">
-                Wczytaj wyciąg CSV z Banku Millennium. System pokaże tylko wpływy dopasowane do uczestników
-                lub umów <strong>tej imprezy</strong>. Wpłaty innych imprez zostaną ukryte.
+                Wczytaj wyciąg CSV z Banku Millennium. System pokaże wpływy dopasowane do uczestników
+                lub umów <strong>tej imprezy</strong> oraz linie bez dopasowania (do ręcznego przypisania).
+                Wpłaty innych imprez zostaną ukryte.
             </x-slot>
 
             <div>
@@ -85,6 +86,7 @@
                             <th class="px-3 py-2 text-right">Kwota</th>
                             <th class="px-3 py-2 text-left">Dopasowanie</th>
                             <th class="px-3 py-2 text-left">Cel</th>
+                            <th class="px-3 py-2 text-left">Akcja</th>
                         </tr>
                     </thead>
                     <tbody class="divide-y divide-gray-100 bg-white">
@@ -116,6 +118,19 @@
                                     @endif
                                 </td>
                                 <td class="px-3 py-2">{{ $line['target_label'] }}</td>
+                                <td class="px-3 py-2 whitespace-nowrap">
+                                    @if (empty($line['applied']))
+                                        <button
+                                            type="button"
+                                            class="text-sm font-medium text-primary-600 hover:underline"
+                                            wire:click="openAssignModal({{ $line['id'] }})"
+                                        >
+                                            {{ $line['match_status'] === 'unmatched' ? 'Przypisz' : 'Zmień' }}
+                                        </button>
+                                    @else
+                                        <span class="text-xs text-gray-400">—</span>
+                                    @endif
+                                </td>
                             </tr>
                         @endforeach
                     </tbody>
@@ -133,4 +148,6 @@
             </ul>
         </x-filament::section>
     @endif
+
+    @include('filament.components.bank-payment-assign-modal')
 </div>

@@ -12,7 +12,7 @@
         }
         .title {
             font-size: 18px;
-            font-weight: 700;
+            font-weight: bold;
             margin: 0 0 8px;
         }
         .meta {
@@ -30,9 +30,16 @@
             color: #555;
         }
         .body {
-            white-space: pre-wrap;
             word-break: break-word;
         }
+        .body-plain {
+            white-space: pre-wrap;
+        }
+        .body p { margin: 0 0 8px; }
+        .body ul, .body ol { margin: 0 0 8px 18px; padding: 0; }
+        .body h1, .body h2, .body h3, .body h4 { margin: 12px 0 8px; font-weight: bold; }
+        .body table { width: 100%; border-collapse: collapse; margin: 8px 0; }
+        .body table td, .body table th { border: 1px solid #ddd; padding: 4px 6px; }
         .schedule-table {
             width: 100%;
             border-collapse: collapse;
@@ -147,7 +154,16 @@
         @endif
     </div>
 
-    <div class="body">{{ $agreementBody }}</div>
+    @php
+        $agreementBodyHtml = \App\Support\AgreementHtml::looksLikeHtml((string) $agreementBody);
+    @endphp
+    <div class="body {{ $agreementBodyHtml ? '' : 'body-plain' }}">
+        @if($agreementBodyHtml)
+            {!! \App\Support\AgreementHtml::sanitize((string) $agreementBody) !!}
+        @else
+            {{ $agreementBody }}
+        @endif
+    </div>
     </div>
 </body>
 </html>

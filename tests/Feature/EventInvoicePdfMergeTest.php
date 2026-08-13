@@ -107,6 +107,8 @@ class EventInvoicePdfMergeTest extends TestCase
 
         Storage::fake('public');
         $user = User::factory()->create();
+        \Spatie\Permission\Models\Role::firstOrCreate(['name' => 'admin', 'guard_name' => 'web']);
+        $user->assignRole('admin');
         $this->actingAs($user);
 
         $event = Event::factory()->create();

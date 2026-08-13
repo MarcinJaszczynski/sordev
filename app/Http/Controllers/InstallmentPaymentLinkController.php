@@ -8,6 +8,7 @@ use App\Models\ContractPaymentSchedule;
 use App\Models\EventAgreementPaymentSchedule;
 use App\Support\MoneyFormatter;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\URL;
 use Illuminate\View\View;
 
 class InstallmentPaymentLinkController extends Controller
@@ -38,6 +39,14 @@ class InstallmentPaymentLinkController extends Controller
             ? ($model->label ?? $model->title ?? 'Rata umowy')
             : ($model->label ?? $model->title ?? 'Rata umowy');
 
+        $payOnlineUrl = $remaining > 0.009
+            ? URL::temporarySignedRoute(
+                'payments.installment.pay',
+                now()->addDays(14),
+                ['type' => $type, 'schedule' => $model->getKey()],
+            )
+            : null;
+
         return view('payments.installment-public', [
             'type' => $type,
             'schedule' => $model,
@@ -50,6 +59,8 @@ class InstallmentPaymentLinkController extends Controller
             'dueDate' => $model->due_date?->format('d.m.Y') ?? '—',
             'isPaid' => $remaining <= 0.009,
             'transferTitle' => trim(($event?->code ? $event->code.' ' : '').'rata #'.$model->getKey()),
+            'payOnlineUrl' => $payOnlineUrl,
+            'paymentsDriver' => (string) config('payments.driver', 'fake'),
         ]);
     }
 }

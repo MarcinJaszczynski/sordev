@@ -12,6 +12,7 @@ use App\Models\EventSettlementParticipantPayment;
 use App\Models\EventTemplate;
 use App\Models\EventTemplateProgramPoint;
 use App\Models\PilotCashPreparation;
+use App\Models\Reservation;
 use App\Models\Task;
 use App\Support\Calendar\CalendarEventLinks;
 use Illuminate\Database\Eloquent\Model;
@@ -30,6 +31,7 @@ class TaskContextRegistry
             EventSettlementCost::class => 'Pozycja kosztu rozliczenia',
             EventSettlementDocument::class => 'Dokument rozliczenia',
             EventSettlementParticipantPayment::class => 'Wpłata uczestnika',
+            Reservation::class => 'Rezerwacja u dostawcy',
             PilotCashPreparation::class => 'Gotówka pilota',
         ];
     }
@@ -122,6 +124,18 @@ class TaskContextRegistry
                 ->mapWithKeys(fn (EventSettlementParticipantPayment $payment) => [$payment->getKey() => static::labelForRecord($payment)])
                 ->all(),
 
+            Reservation::class => Reservation::query()
+                ->with([
+                    'event:id,name,start_date',
+                    'contractor:id,name',
+                    'programPoint:id,name,event_id',
+                ])
+                ->orderByDesc('id')
+                ->limit(1000)
+                ->get()
+                ->mapWithKeys(fn (Reservation $reservation) => [$reservation->getKey() => static::labelForRecord($reservation)])
+                ->all(),
+
             PilotCashPreparation::class => PilotCashPreparation::query()
                 ->with(['settlement.event:id,name,start_date', 'currency:id,name,symbol'])
                 ->orderByDesc('id')
@@ -148,6 +162,7 @@ class TaskContextRegistry
             $record instanceof EventSettlementCost => static::formatSettlementCostLabel($record),
             $record instanceof EventSettlementDocument => static::formatSettlementDocumentLabel($record),
             $record instanceof EventSettlementParticipantPayment => static::formatSettlementPaymentLabel($record),
+            $record instanceof Reservation => static::formatReservationLabel($record),
             $record instanceof PilotCashPreparation => static::formatPilotCashLabel($record),
             default => method_exists($record, '__toString') ? (string) $record : class_basename($record).' #'.$record->getKey(),
         };
@@ -227,6 +242,33 @@ class TaskContextRegistry
         $label = $payment->participant_name ?: 'Wpłata uczestnika';
 
         return trim($label.($eventName ? ' • '.$eventName : '').' (#'.$payment->getKey().')');
+    }
+
+    protected static function formatReservationLabel(Reservation $reservation): string
+    {
+        $reference = $reservation->booking_reference
+            ?: ('Rezerwacja #'.$reservation->getKey());
+
+        $eventName = $reservation->relationLoaded('event')
+            ? $reservation->event?->name
+            : $reservation->event?->name;
+
+        $pointName = null;
+        if ($reservation->relationLoaded('programPoint') && $reservation->programPoint) {
+            $pointName = $reservation->programPoint->name;
+        }
+
+        $contractorName = $reservation->relationLoaded('contractor')
+            ? $reservation->contractor?->name
+            : $reservation->contractor?->name;
+
+        return trim(
+            $reference
+            .($eventName ? ' • '.$eventName : '')
+            .($pointName ? ' • '.$pointName : '')
+            .($contractorName && ! $pointName ? ' • '.$contractorName : '')
+            .' (#'.$reservation->getKey().')'
+        );
     }
 
     protected static function formatPilotCashLabel(PilotCashPreparation $cash): string
@@ -333,26 +375,27 @@ class TaskContextRegistry
                 ],
                 $record instanceof EventSettlementCost => static::settlementContextLinks(
                     $record->settlement_id,
-                    \App\Filament\Resources\EventSettlementResource::getUrl('costs', ['record' => $record->settlement_id]),
-                    'Koszty rozliczenia',
+                    \App\Filament\Resources\EventSettlementResource::getEventFinanceUrlForSettlement($record->settlement_id),
+                    'Finanse imprezy',
                     'heroicon-o-receipt-percent',
                 ),
                 $record instanceof EventSettlementDocument => static::settlementContextLinks(
                     $record->settlement_id,
-                    \App\Filament\Resources\EventSettlementResource::getUrl('documents', ['record' => $record->settlement_id]),
-                    'Dokumenty rozliczenia',
+                    \App\Filament\Resources\EventSettlementResource::getEventFinanceUrlForSettlement($record->settlement_id),
+                    'Finanse imprezy',
                     'heroicon-o-document',
                 ),
                 $record instanceof EventSettlementParticipantPayment => static::settlementContextLinks(
                     $record->settlement_id,
-                    \App\Filament\Resources\EventSettlementResource::getUrl('payments', ['record' => $record->settlement_id]),
-                    'Wpłaty uczestników',
+                    \App\Filament\Resources\EventSettlementResource::getEventFinanceUrlForSettlement($record->settlement_id),
+                    'Finanse imprezy',
                     'heroicon-o-banknotes',
                 ),
+                $record instanceof Reservation => static::reservationLinks($record),
                 $record instanceof PilotCashPreparation => static::settlementContextLinks(
                     $record->settlement_id,
-                    \App\Filament\Resources\EventSettlementResource::getUrl('pilot-cash', ['record' => $record->settlement_id]),
-                    'Gotówka pilota',
+                    \App\Filament\Resources\EventSettlementResource::getEventFinanceUrlForSettlement($record->settlement_id),
+                    'Finanse imprezy',
                     'heroicon-o-wallet',
                 ),
                 default => [],
@@ -360,6 +403,36 @@ class TaskContextRegistry
         } catch (\Exception $e) {
             return [];
         }
+    }
+
+    /**
+     * @return array<int, array{label: string, url: string, icon?: string}|null>
+     */
+    protected static function reservationLinks(Reservation $reservation): array
+    {
+        $reservation->loadMissing([
+            'event:id',
+            'contractor:id',
+            'programPoint:id,event_id,contractor_id',
+            'settlementCost:id,settlement_id',
+        ]);
+
+        return [
+            CalendarEventLinks::reservation($reservation->getKey()),
+            CalendarEventLinks::event($reservation->event_id),
+            CalendarEventLinks::eventProgram($reservation->event_id),
+            CalendarEventLinks::eventReservations($reservation->event_id),
+            CalendarEventLinks::contractor($reservation->contractor_id),
+            $reservation->settlementCost?->settlement_id
+                ? CalendarEventLinks::link(
+                    \App\Filament\Resources\EventSettlementResource::getEventFinanceUrlForSettlement(
+                        $reservation->settlementCost->settlement_id
+                    ),
+                    'Finanse imprezy',
+                    'heroicon-o-receipt-percent',
+                )
+                : null,
+        ];
     }
 
     /**
@@ -395,5 +468,4 @@ class TaskContextRegistry
             CalendarEventLinks::link($detailUrl, $detailLabel, $detailIcon),
         ];
     }
-
 }

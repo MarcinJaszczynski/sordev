@@ -9,7 +9,7 @@
     {{-- Podstawowe informacje --}}
     <div class="bg-gray-50 dark:bg-gray-800 rounded-lg p-4">
         <h3 class="text-lg font-semibold mb-3">Informacje o snapszoczie</h3>
-        <div class="grid grid-cols-2 gap-4">
+        <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div>
                 <span class="text-sm font-medium text-gray-600 dark:text-gray-400">Nazwa:</span>
                 <p class="text-sm">{{ $snapshot->name }}</p>
@@ -44,7 +44,7 @@
     {{-- Dane imprezy --}}
     <div class="bg-white dark:bg-gray-900 rounded-lg border border-gray-200 dark:border-gray-700 p-4">
         <h3 class="text-lg font-semibold mb-3">Dane imprezy</h3>
-        <div class="grid grid-cols-2 gap-4">
+        <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div>
                 <span class="text-sm font-medium text-gray-600 dark:text-gray-400">Nazwa:</span>
                 <p class="text-sm font-medium">{{ $eventData['name'] ?? 'Brak danych' }}</p>
@@ -81,7 +81,7 @@
     {{-- Kalkulacje --}}
     <div class="bg-white dark:bg-gray-900 rounded-lg border border-gray-200 dark:border-gray-700 p-4">
         <h3 class="text-lg font-semibold mb-3">Kalkulacje i koszty</h3>
-        <div class="grid grid-cols-3 gap-4 mb-4">
+        <div class="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-4 mb-4">
             <div class="text-center p-3 bg-blue-50 dark:bg-blue-900/20 rounded">
                 <p class="text-sm text-gray-600 dark:text-gray-400">Koszt całkowity</p>
                 <p class="text-xl font-bold text-blue-600 dark:text-blue-400">{{ number_format($snapshot->total_cost_snapshot, 2) }} PLN</p>
@@ -163,7 +163,7 @@
     @if(count($currencyRates) > 0)
         <div class="bg-white dark:bg-gray-900 rounded-lg border border-gray-200 dark:border-gray-700 p-4">
             <h3 class="text-lg font-semibold mb-3">Kursy walut w momencie snapszotu</h3>
-            <div class="grid grid-cols-3 gap-4">
+            <div class="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-4">
                 @foreach($currencyRates as $symbol => $rateData)
                     <div class="text-center p-2 border border-gray-200 dark:border-gray-700 rounded">
                         <p class="font-medium">{{ $symbol }}</p>

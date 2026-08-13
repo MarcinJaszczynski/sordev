@@ -274,6 +274,7 @@
                     <ul class="useful-links">
                         <li><a href="{{ route('documents.global') }}"><i class="fas fa-angle-right"></i> Dokumenty</a></li>
                         <li><a href="{{ route('insurance') }}"><i class="fas fa-angle-right"></i> Ubezpieczenia</a></li>
+                        <li><a href="{{ route('invoice-request') }}"><i class="fas fa-angle-right"></i> Wniosek o fakturę za imprezę turystyczną</a></li>
                         <li><a href="{{ route('contact') }}"><i class="fas fa-angle-right"></i> Kontakt</a></li>
                     </ul>
                 </div>

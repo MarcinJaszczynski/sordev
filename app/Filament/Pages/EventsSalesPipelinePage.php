@@ -6,6 +6,7 @@ namespace App\Filament\Pages;
 
 use App\Actions\Events\ChangeEventStatusAction;
 use App\Data\ChangeEventStatusData;
+use App\Filament\Actions\HelpArticleAction;
 use App\Filament\Resources\EventResource;
 use App\Models\Event;
 use App\Support\AdminPanelUrls;
@@ -54,6 +55,7 @@ class EventsSalesPipelinePage extends Page
     protected function getHeaderActions(): array
     {
         return [
+            HelpArticleAction::make('sciezka-imprezy'),
             Action::make('events_list')
                 ->label('Lista imprez')
                 ->icon('heroicon-o-queue-list')

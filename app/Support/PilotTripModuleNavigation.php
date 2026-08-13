@@ -2,9 +2,9 @@
 
 namespace App\Support;
 
-use App\Filament\Pilot\Pages\PilotAdvancePage;
 use App\Filament\Pilot\Pages\PilotAttendancePage;
 use App\Filament\Pilot\Pages\PilotChecklistPage;
+use App\Filament\Pilot\Pages\PilotContactPage;
 use App\Filament\Pilot\Pages\PilotDocumentsPage;
 use App\Filament\Pilot\Pages\PilotHotelPlanPage;
 use App\Filament\Pilot\Pages\PilotProgramPage;
@@ -13,6 +13,7 @@ use App\Filament\Pilot\Resources\PilotEventResource;
 use App\Models\Event;
 use App\Services\PilotAccessService;
 use Illuminate\Support\Facades\Auth;
+use Illuminate\Support\Facades\Schema;
 
 /**
  * Sub-nawigacja workspace wycieczki pilota.
@@ -29,8 +30,7 @@ final class PilotTripModuleNavigation
             [
                 'key' => 'info',
                 'label' => 'Informacje',
-                'description' => 'Teczka wycieczki',
-                'url' => PilotEventResource::getUrl('view', ['record' => $event->id]),
+                'url' => PilotEventResource::getUrl('view', ['record' => $event->id], panel: 'pilot'),
                 'icon' => 'heroicon-o-information-circle',
             ],
         ];
@@ -39,7 +39,6 @@ final class PilotTripModuleNavigation
             $tabs[] = [
                 'key' => 'program',
                 'label' => 'Program',
-                'description' => 'Plan dnia po dniu',
                 'url' => PilotProgramPage::urlFor($event),
                 'icon' => 'heroicon-o-calendar-days',
             ];
@@ -47,7 +46,6 @@ final class PilotTripModuleNavigation
             $tabs[] = [
                 'key' => 'checklist',
                 'label' => 'Checklista',
-                'description' => 'Zadania przed wyjazdem',
                 'url' => PilotChecklistPage::urlFor($event),
                 'icon' => 'heroicon-o-clipboard-document-check',
             ];
@@ -55,35 +53,24 @@ final class PilotTripModuleNavigation
             $tabs[] = [
                 'key' => 'attendance',
                 'label' => 'Obecność',
-                'description' => 'Lista obecności dziennej',
                 'url' => PilotAttendancePage::urlFor($event),
                 'icon' => 'heroicon-o-clipboard-document-list',
             ];
 
             $tabs[] = [
-                'key' => 'advance',
-                'label' => 'Zaliczka',
-                'description' => 'Gotówka, wymiana walut, zwrot',
-                'url' => PilotAdvancePage::urlFor($event),
-                'icon' => 'heroicon-o-banknotes',
-            ];
-
-            $tabs[] = [
                 'key' => 'settlement',
                 'label' => 'Rozliczenie',
-                'description' => 'Raport i wydatki',
-                'url' => PilotSettlementPage::getUrl(['event' => $event->id]),
-                'icon' => 'heroicon-o-calculator',
+                'url' => PilotSettlementPage::getUrl(['event' => $event->id], panel: 'pilot'),
+                'icon' => 'heroicon-o-banknotes',
             ];
         }
 
         $hasHotelPlan = $event->hotelStays()->exists();
 
-        if ($fullAccess && $user && $hasHotelPlan && ($user->hasRole(['admin', 'super_admin']) || $user->hasRole('pilot'))) {
+        if ($fullAccess && $user && $hasHotelPlan && ($user->hasRole(['admin', 'super_admin']) || $user->hasRole('pilot') || app(PilotAccessService::class)->isOfficePreview($user))) {
             $tabs[] = [
                 'key' => 'hotel',
                 'label' => 'Hotele',
-                'description' => $user->hasRole('pilot') ? 'Lista pokoi i numery' : 'Plan pokoi',
                 'url' => PilotHotelPlanPage::urlFor($event),
                 'icon' => 'heroicon-o-building-office-2',
             ];
@@ -93,10 +80,18 @@ final class PilotTripModuleNavigation
             $tabs[] = [
                 'key' => 'documents',
                 'label' => 'Dokumenty',
-                'description' => 'PDF teczki i pakietu pilota',
                 'url' => PilotDocumentsPage::urlFor($event),
                 'icon' => 'heroicon-o-document-arrow-down',
             ];
+
+            if (Schema::hasTable('client_trip_inquiries')) {
+                $tabs[] = [
+                    'key' => 'contact',
+                    'label' => 'Kontakt',
+                    'url' => PilotContactPage::urlFor($event),
+                    'icon' => 'heroicon-o-chat-bubble-left-right',
+                ];
+            }
         }
 
         return WorkflowModuleNavigation::markActive($tabs, $active);

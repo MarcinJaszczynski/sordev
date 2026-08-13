@@ -9,6 +9,19 @@
         $financials = $this->financials();
     @endphp
 
+    <div class="mb-6 space-y-3">
+        <div class="flex items-center gap-3">
+            <div class="h-10 w-10 rounded-full bg-primary-100 dark:bg-primary-900/50 flex items-center justify-center text-primary-600 dark:text-primary-400">
+                <x-heroicon-m-check-badge class="h-6 w-6" />
+            </div>
+            <div>
+                <h3 class="text-sm font-semibold text-gray-900 dark:text-white">Status operacyjny imprezy</h3>
+                <p class="text-xs text-gray-500 dark:text-gray-400">Kliknij kartę, aby przejść do uzupełnienia</p>
+            </div>
+        </div>
+        @include('filament.components.event-readiness-overview', ['event' => $record])
+    </div>
+
     @capture($form)
         <x-filament-panels::form
             id="form"
@@ -66,19 +79,37 @@
 
         {{-- Finanse — skrót do zakładki workflow --}}
         <x-filament::section>
-            <x-slot name="heading">Finanse</x-slot>
-            <x-slot name="description">Szczegóły rozliczenia i wpłat w dedykowanej zakładce workflow.</x-slot>
+            <x-slot name="heading">Finanse imprezy</x-slot>
+            <x-slot name="description">Koszty (wykonanie), wpłaty uczestników i kalkulacja (plan) — jeden hub.</x-slot>
             <div class="flex flex-wrap items-center gap-3">
                 <x-filament::button
                     tag="a"
-                    :href="\App\Filament\Resources\EventResource::getUrl('calculation', ['record' => $record])"
+                    :href="\App\Filament\Resources\EventResource::getUrl('finance', ['record' => $record])"
                     icon="heroicon-o-banknotes"
                     color="gray"
                 >
-                    Otwórz zakładkę Finanse
+                    Koszty
+                </x-filament::button>
+                <x-filament::button
+                    tag="a"
+                    :href="\App\Filament\Resources\EventResource::getUrl('finance-participant-payments', ['record' => $record])"
+                    icon="heroicon-o-credit-card"
+                    color="gray"
+                >
+                    Wpłaty
+                </x-filament::button>
+                <x-filament::button
+                    tag="a"
+                    :href="\App\Filament\Resources\EventResource::getUrl('calculation', ['record' => $record])"
+                    icon="heroicon-o-calculator"
+                    color="gray"
+                >
+                    Kalkulacja
                 </x-filament::button>
                 <span class="text-sm text-gray-600 dark:text-gray-400">
-                    Kalkulacja: {{ $financials['calc'] }} · Wpłaty klientów: {{ $financials['clients_paid'] }}
+                    Plan: {{ $financials['calc'] }}
+                    · Za osobę: {{ $financials['per_person'] }}
+                    · Wpłaty klientów: {{ $financials['clients_paid'] }}
                 </span>
             </div>
         </x-filament::section>

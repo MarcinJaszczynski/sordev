@@ -19,16 +19,20 @@ class TagsRelationManager extends RelationManager
     public function form(Form $form): Form
     {
         return $form->schema([
-            TextInput::make('name')->required()->maxLength(255),
-            TextInput::make('slug')->required()->maxLength(255),
+            TextInput::make('name')->label('Nazwa')->required()->maxLength(255),
+            TextInput::make('slug')
+                ->label('Identyfikator URL')
+                ->helperText('Fragment adresu tagu w URL.')
+                ->required()
+                ->maxLength(255),
         ]);
     }
 
     public function table(Table $table): Table
     {
         return $table->columns([
-            TextColumn::make('name')->searchable(),
-            TextColumn::make('slug')->label('Slug'),
+            TextColumn::make('name')->label('Nazwa')->searchable(),
+            TextColumn::make('slug')->label('Identyfikator URL'),
         ])->headerActions([
             AttachAction::make(),
         ])->actions([

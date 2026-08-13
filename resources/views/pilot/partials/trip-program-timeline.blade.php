@@ -4,11 +4,6 @@
     $service = app(EventProgramPointOrderService::class);
     $points = $service->pilotProgramPoints($event);
     $financeHintsByPointId = $financeHintsByPointId ?? [];
-    $pilotSetFinanceCards = $pilotSetFinanceCards ?? [];
-    $setsOutsideProgram = collect($pilotSetFinanceCards)
-        ->filter(fn ($card) => ! $card->inProgram && ($card->hasPilotObligation || $card->memberLines !== []))
-        ->sortBy([['day', 'asc'], ['order', 'asc']])
-        ->values();
     $baseDate = $event->start_date?->copy()->startOfDay() ?? now()->startOfDay();
     $byDay = $points->groupBy(fn ($point) => max(1, (int) ($point->day ?? 1)));
     $eventPilotNotes = filled($event->pilot_notes ?? null) ? $event->pilot_notes : null;
@@ -42,6 +37,7 @@
                         $financeHint = $financeHintsByPointId[$point->id] ?? null;
                         $isSetParent = ($point->children_count ?? 0) > 0;
                         $isSetChild = filled($point->parent_id);
+                        $showPay = $financeHint && ! empty($financeHint['has_pilot_obligation']);
                     @endphp
                     <li @class([
                         'px-4 py-3',
@@ -58,42 +54,47 @@
                                     @if($isSetParent)
                                         <span class="ml-2 inline-flex items-center rounded-full bg-indigo-100 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-indigo-800 dark:bg-indigo-900/40 dark:text-indigo-200">Set</span>
                                     @endif
-                                    @if($financeHint && ! empty($financeHint['has_pilot_obligation']))
+                                    @if($showPay)
                                         <span class="ml-2 inline-flex items-center rounded-full bg-sky-100 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-sky-800 dark:bg-sky-900/40 dark:text-sky-200">👤 Pilot płaci</span>
                                     @endif
                                 </p>
                                 @if($start || $end)
-                                    <p class="mt-1 text-xs font-medium text-teal-700 dark:text-teal-400">
+                                    <p class="mt-1 text-xs font-medium text-[#0663fc]">
                                         {{ $start ?? '—' }}@if($end) – {{ $end }} @endif
                                     </p>
                                 @endif
                                 @if(filled($description))
                                     <div class="prose prose-sm mt-2 max-w-none text-gray-700 dark:prose-invert dark:text-gray-300">
-                                        {!! $description !!}
+                                        {!! \App\Support\AgreementHtml::sanitize((string) $description) !!}
                                     </div>
                                 @endif
                                 @if(filled($pilotNotes))
                                     <div class="mt-2 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 dark:border-amber-800 dark:bg-amber-950/30">
                                         <p class="text-[11px] font-semibold uppercase tracking-wide text-amber-800 dark:text-amber-200">Uwagi dla pilota</p>
-                                        <div class="prose prose-sm mt-1 max-w-none text-amber-900 dark:prose-invert dark:text-amber-100">{!! $pilotNotes !!}</div>
+                                        <div class="prose prose-sm mt-1 max-w-none text-amber-900 dark:prose-invert dark:text-amber-100">{!! \App\Support\AgreementHtml::sanitize((string) $pilotNotes) !!}</div>
                                     </div>
                                 @endif
-                                @if($isSetParent && isset($pilotSetFinanceCards[$point->id]))
-                                    @include('pilot.partials.pilot-set-finance-card', [
-                                        'card' => $pilotSetFinanceCards[$point->id],
-                                    ])
-                                @elseif($financeHint && ! empty($financeHint['is_set_child']) && empty($financeHint['has_pilot_obligation']))
+                                @if($showPay)
+                                    <div class="mt-2 rounded-lg border border-blue-200 bg-blue-50 px-3 py-2 text-sm text-blue-950 dark:border-blue-800 dark:bg-blue-950/30 dark:text-blue-100">
+                                        <p class="text-[11px] font-semibold uppercase tracking-wide text-blue-800 dark:text-blue-200">Do zapłaty</p>
+                                        @if(filled($financeHint['planned_label'] ?? null))
+                                            <p class="mt-1 font-semibold">{{ $financeHint['planned_label'] }}</p>
+                                        @endif
+                                        <ul class="mt-1 space-y-0.5 text-xs">
+                                            @foreach(($financeHint['lines'] ?? []) as $line)
+                                                <li>{{ $line }}</li>
+                                            @endforeach
+                                        </ul>
+                                        @if(! empty($settlementUrl))
+                                            <p class="mt-2">
+                                                <a href="{{ $settlementUrl }}" class="text-xs font-semibold text-[#0663fc] hover:underline">
+                                                    Przejdź do rozliczenia →
+                                                </a>
+                                            </p>
+                                        @endif
+                                    </div>
+                                @elseif($isSetChild && $financeHint && empty($financeHint['has_pilot_obligation']))
                                     <p class="mt-2 text-xs italic text-gray-500 dark:text-gray-400">wchodzi w set</p>
-                                @elseif($financeHint && ! empty($financeHint['is_set_child']) && ! empty($financeHint['has_pilot_obligation']))
-                                    @include('pilot.partials.pilot-finance-strip', [
-                                        'financeHint' => $financeHint,
-                                        'compact' => true,
-                                    ])
-                                @elseif($financeHint && ! empty($financeHint['has_pilot_obligation']))
-                                    @include('pilot.partials.pilot-finance-strip', [
-                                        'financeHint' => $financeHint,
-                                        'compact' => false,
-                                    ])
                                 @endif
                             </div>
                             @if($point->contractor)
@@ -103,7 +104,7 @@
                                     <x-contractor-contact-details
                                         :contractor="$point->contractor"
                                         :location="$point->contractorLocation"
-                                        address-label="Adres podjazdu"
+                                        address-label="Adres prowadzenia / podjazdu"
                                         class="mt-1 text-left text-[11px] leading-snug text-gray-600 dark:text-gray-300"
                                     />
                                 </div>
@@ -118,15 +119,4 @@
             Brak punktów programu dla tej wycieczki.
         </div>
     @endforelse
-
-    @if($setsOutsideProgram->isNotEmpty())
-        <section class="sor-lw-card">
-            <h3 class="sor-lw-title mb-3">Sety poza programem</h3>
-            <div class="space-y-3">
-                @foreach($setsOutsideProgram as $card)
-                    @include('pilot.partials.pilot-set-finance-card', ['card' => $card])
-                @endforeach
-            </div>
-        </section>
-    @endif
 </div>

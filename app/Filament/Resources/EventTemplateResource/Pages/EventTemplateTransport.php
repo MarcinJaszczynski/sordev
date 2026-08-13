@@ -684,10 +684,10 @@ class EventTemplateTransport extends Page implements HasForms
                             ->placeholder('Wybierz miejsce końcowe'),
 
                         \FilamentTiptapEditor\TiptapEditor::make('transport_notes')
-                            
+
                             ->columnSpanFull(),
                     ])
-                    ->columns(2),
+                    ->columns(['default' => 1, 'md' => 2]),
             ])
             ->statePath('data');
     }

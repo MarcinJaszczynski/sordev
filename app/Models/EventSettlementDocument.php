@@ -61,6 +61,7 @@ class EventSettlementDocument extends Model
 
     public static array $documentTypes = [
         'invoice' => 'Faktura',
+        'payment_proof' => 'Dowód zapłaty',
         'wz' => 'WZ (wydanie zewnętrzne)',
         'receipt' => 'Paragon',
         'other' => 'Inny dokument',
@@ -82,6 +83,15 @@ class EventSettlementDocument extends Model
     {
         static::creating(function (self $model) {
             $model->created_by ??= Auth::id();
+        });
+
+        static::deleting(function (self $document): void {
+            $disk = \Illuminate\Support\Facades\Storage::disk('public');
+            foreach ($document->files ?? [] as $path) {
+                if (is_string($path) && $path !== '' && $disk->exists($path)) {
+                    $disk->delete($path);
+                }
+            }
         });
     }
 

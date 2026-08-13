@@ -1,0 +1,659 @@
+<!DOCTYPE html>
+<html lang="pl">
+<head>
+  <meta charset="UTF-8" />
+  <title>Wycena systemu SORDEV — szacunek nakładu pracy</title>
+  <style>
+    @page {
+      size: A4;
+      margin: 18mm 16mm 18mm 16mm;
+    }
+
+    :root {
+      --ink: #1a1f24;
+      --muted: #5a6570;
+      --line: #d8dee4;
+      --accent: #0f4c5c;
+      --accent-soft: #e8f2f4;
+      --warn: #7a4a12;
+      --warn-bg: #f7f0e6;
+      --ok: #1f4d3a;
+      --ok-bg: #e8f3ee;
+    }
+
+    * { box-sizing: border-box; }
+
+    body {
+      font-family: "Segoe UI", "Liberation Sans", Arial, sans-serif;
+      color: var(--ink);
+      font-size: 10.5pt;
+      line-height: 1.45;
+      margin: 0;
+    }
+
+    h1, h2, h3 {
+      color: var(--accent);
+      page-break-after: avoid;
+      line-height: 1.25;
+    }
+
+    h1 {
+      font-size: 20pt;
+      margin: 0 0 6px;
+      letter-spacing: -0.02em;
+    }
+
+    h2 {
+      font-size: 13pt;
+      margin: 22px 0 8px;
+      padding-bottom: 4px;
+      border-bottom: 2px solid var(--accent);
+    }
+
+    h3 {
+      font-size: 11pt;
+      margin: 14px 0 6px;
+    }
+
+    p { margin: 0 0 8px; }
+
+    .muted { color: var(--muted); }
+    .small { font-size: 9pt; }
+
+    .cover-meta {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px 18px;
+      margin: 10px 0 16px;
+      padding: 10px 12px;
+      background: var(--accent-soft);
+      border-left: 4px solid var(--accent);
+    }
+
+    .cover-meta div strong {
+      display: block;
+      font-size: 8.5pt;
+      text-transform: uppercase;
+      letter-spacing: 0.04em;
+      color: var(--muted);
+      font-weight: 600;
+    }
+
+    .hero-box {
+      background: var(--ok-bg);
+      border: 1px solid #b7d7c8;
+      border-radius: 6px;
+      padding: 12px 14px;
+      margin: 12px 0 8px;
+    }
+
+    .hero-box .label {
+      font-size: 8.5pt;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      color: var(--ok);
+      font-weight: 700;
+      margin-bottom: 4px;
+    }
+
+    .hero-box .value {
+      font-size: 15pt;
+      font-weight: 700;
+      color: var(--ok);
+    }
+
+    .hero-box .sub {
+      margin-top: 4px;
+      color: var(--muted);
+      font-size: 9.5pt;
+    }
+
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      margin: 8px 0 12px;
+      font-size: 9.5pt;
+      page-break-inside: avoid;
+    }
+
+    th, td {
+      border: 1px solid var(--line);
+      padding: 5px 7px;
+      text-align: left;
+      vertical-align: top;
+    }
+
+    th {
+      background: var(--accent);
+      color: #fff;
+      font-weight: 600;
+      font-size: 8.5pt;
+      text-transform: uppercase;
+      letter-spacing: 0.03em;
+    }
+
+    td.num, th.num { text-align: right; white-space: nowrap; }
+    tr:nth-child(even) td { background: #f7f9fa; }
+    tr.total td {
+      background: var(--accent-soft);
+      font-weight: 700;
+    }
+    tr.highlight td {
+      background: var(--warn-bg);
+      font-weight: 600;
+    }
+
+    ul {
+      margin: 6px 0 10px 18px;
+      padding: 0;
+    }
+
+    li { margin-bottom: 3px; }
+
+    .note {
+      background: var(--warn-bg);
+      border-left: 4px solid #c48a3a;
+      padding: 8px 10px;
+      margin: 10px 0;
+      font-size: 9.5pt;
+    }
+
+    .two-col {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 12px;
+      margin: 8px 0 12px;
+    }
+
+    .card {
+      border: 1px solid var(--line);
+      border-radius: 6px;
+      padding: 10px 12px;
+      background: #fff;
+    }
+
+    .card h3 { margin-top: 0; }
+
+    .footer {
+      margin-top: 24px;
+      padding-top: 8px;
+      border-top: 1px solid var(--line);
+      font-size: 8.5pt;
+      color: var(--muted);
+    }
+
+    .page-break { page-break-before: always; }
+
+    .assumptions li strong { color: var(--accent); }
+  </style>
+</head>
+<body>
+
+  <h1>Wycena systemu SORDEV</h1>
+  <p class="muted" style="margin-top:0; font-size:11.5pt;">
+    Szacunek nakładu pracy oraz wartości developmentu (kod + prace koncepcyjne + zmiany + wdrożenie)
+  </p>
+
+  <div class="cover-meta">
+    <div>
+      <strong>Data</strong>
+      10 sierpnia 2026
+    </div>
+    <div>
+      <strong>Przedmiot</strong>
+      System operacyjno-finansowy imprez (Laravel 12 + Filament 4)
+    </div>
+    <div>
+      <strong>Cel dokumentu</strong>
+      Wycena odtworzenia / wartości nakładu pracy
+    </div>
+    <div>
+      <strong>Metoda</strong>
+      Analiza skali kodu + estymacja modułowa + narzuty projektowe
+    </div>
+  </div>
+
+  <div class="hero-box">
+    <div class="label">Rekomendowany szacunek całościowy</div>
+    <div class="value">≈ 8 500–9 000 godzin · ≈ 1,9–2,0 mln zł</div>
+    <div class="sub">
+      Przy stawce blended 220 zł/h. Obejmuje development, prace koncepcyjne, spotkania,
+      zmiany koncepcji, poprawki UAT, wdrożenie i koordynację.
+    </div>
+  </div>
+
+  <h2>1. Podsumowanie wykonawcze</h2>
+  <p>
+    SORDEV to nie klasyczny panel CRUD, lecz <strong>ERP operatora imprez</strong>: wyceny i szablony,
+    umowy z aneksami, rozliczenia, harmonogramy płatności, import bankowy, PayU, TFG,
+    portale klienta i pilota, rezerwacje/hotele/transport, pipeline sprzedażowy oraz raporty.
+  </p>
+
+  <div class="two-col">
+    <div class="card">
+      <h3>Skala systemu (orientacyjnie)</h3>
+      <ul>
+        <li>~112 modeli Eloquent</li>
+        <li>~170 serwisów domenowych</li>
+        <li>~45 resource’ów Filament</li>
+        <li>3 panele: admin / klient / pilot</li>
+        <li>~265 migracji, ~200 testów</li>
+        <li>rząd ~200k+ LOC (app + DB + testy + views)</li>
+      </ul>
+    </div>
+    <div class="card">
+      <h3>Trzy warstwy wyceny</h3>
+      <ul>
+        <li><strong>A.</strong> Sam development (kod)</li>
+        <li><strong>B.</strong> Narzut pozakodowy (koncepcja, spotkania, pivots, UAT, PM)</li>
+        <li><strong>C.</strong> Wartość całościowa przedsięwzięcia</li>
+      </ul>
+      <p class="small muted" style="margin:8px 0 0;">
+        W projektach tej klasy prace pozakodowe często dorównują nakładowi implementacji.
+      </p>
+    </div>
+  </div>
+
+  <h2>2. Założenia wyceny</h2>
+  <ul class="assumptions">
+    <li><strong>Stawka bazowa (blended):</strong> 220 zł/h (senior + mid, Filament + domena).</li>
+    <li><strong>Porównawczo:</strong> freelance senior 180 zł/h · software house 250–280 zł/h.</li>
+    <li><strong>Zakres:</strong> koszt odtworzenia kodu i logiki oraz typowych prac projektowych.</li>
+    <li><strong>Poza zakresem:</strong> hosting, utrzymanie 24/7, licencje SaaS, marketing produktu.</li>
+    <li><strong>Waluta:</strong> PLN; EUR orientacyjnie przy kursie ~4,3 zł.</li>
+  </ul>
+
+  <div class="note">
+    <strong>Uwaga metodologiczna:</strong> to szacunek ekspercki na podstawie skali i złożoności
+    istniejącego systemu, nie audyt księgowy ani wycena spółki. Widełki wynikają z niepewności
+    odkrywania domeny i historycznej zmienności koncepcji.
+  </div>
+
+  <h2>3. Wycena developmentu (modułowo)</h2>
+  <p class="small muted">Godziny = koszt odtworzenia implementacji „jak jest”, bez narzutu miękkiego.</p>
+
+  <table>
+    <thead>
+      <tr>
+        <th>#</th>
+        <th>Moduł</th>
+        <th>Zakres (skrót)</th>
+        <th class="num">Min</th>
+        <th class="num">Środek</th>
+        <th class="num">Max</th>
+        <th class="num">Wartość*</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td>1</td>
+        <td>Rdzeń imprezy + wyceny</td>
+        <td>Event, szablony, program, kalkulacje, qty, marże</td>
+        <td class="num">500</td>
+        <td class="num">700</td>
+        <td class="num">900</td>
+        <td class="num">154 tys.</td>
+      </tr>
+      <tr>
+        <td>2</td>
+        <td>Finanse i rozliczenia</td>
+        <td>Settlement, płatności, bank, faktury, P&amp;L, PayU</td>
+        <td class="num">700</td>
+        <td class="num">950</td>
+        <td class="num">1 200</td>
+        <td class="num">209 tys.</td>
+      </tr>
+      <tr>
+        <td>3</td>
+        <td>Umowy i aneksy</td>
+        <td>Contract/Agreement, generowanie, sync płatności</td>
+        <td class="num">350</td>
+        <td class="num">500</td>
+        <td class="num">650</td>
+        <td class="num">110 tys.</td>
+      </tr>
+      <tr>
+        <td>4</td>
+        <td>TFG / UFG</td>
+        <td>OAuth, CSV/feed, słowniki, joby, raporty</td>
+        <td class="num">150</td>
+        <td class="num">220</td>
+        <td class="num">300</td>
+        <td class="num">48 tys.</td>
+      </tr>
+      <tr>
+        <td>5</td>
+        <td>Portal klienta</td>
+        <td>Płatności, uczestnicy, umowa, extras, onboarding</td>
+        <td class="num">180</td>
+        <td class="num">260</td>
+        <td class="num">350</td>
+        <td class="num">57 tys.</td>
+      </tr>
+      <tr>
+        <td>6</td>
+        <td>Portal pilota</td>
+        <td>Checklist, zaliczka, dokumenty, rozliczenie</td>
+        <td class="num">150</td>
+        <td class="num">220</td>
+        <td class="num">300</td>
+        <td class="num">48 tys.</td>
+      </tr>
+      <tr>
+        <td>7</td>
+        <td>Rezerwacje / hotel / transport</td>
+        <td>Rezerwacje, pokoje, busy, dystanse, koszty</td>
+        <td class="num">220</td>
+        <td class="num">320</td>
+        <td class="num">420</td>
+        <td class="num">70 tys.</td>
+      </tr>
+      <tr>
+        <td>8</td>
+        <td>CRM / sprzedaż</td>
+        <td>Kontakty, zapytania, pipeline, inboxy</td>
+        <td class="num">120</td>
+        <td class="num">180</td>
+        <td class="num">250</td>
+        <td class="num">40 tys.</td>
+      </tr>
+      <tr>
+        <td>9</td>
+        <td>Operacje / taski / kalendarz</td>
+        <td>Taski, checklisty, kalendarz, statusy</td>
+        <td class="num">150</td>
+        <td class="num">220</td>
+        <td class="num">300</td>
+        <td class="num">48 tys.</td>
+      </tr>
+      <tr>
+        <td>10</td>
+        <td>Dokumenty / PDF / paczki</td>
+        <td>Generatory PDF, folder księgowy, package docs</td>
+        <td class="num">120</td>
+        <td class="num">180</td>
+        <td class="num">250</td>
+        <td class="num">40 tys.</td>
+      </tr>
+      <tr>
+        <td>11</td>
+        <td>Kontrahenci / słowniki</td>
+        <td>Contractor, place, geocode, media, tax, markup</td>
+        <td class="num">100</td>
+        <td class="num">150</td>
+        <td class="num">200</td>
+        <td class="num">33 tys.</td>
+      </tr>
+      <tr>
+        <td>12</td>
+        <td>Front / blog / CMS</td>
+        <td>Widoki publiczne, blog, sitemap</td>
+        <td class="num">80</td>
+        <td class="num">120</td>
+        <td class="num">160</td>
+        <td class="num">26 tys.</td>
+      </tr>
+      <tr>
+        <td>13</td>
+        <td>Integracje + infrastruktura</td>
+        <td>SMS, maile, backup, import/export, legacy</td>
+        <td class="num">150</td>
+        <td class="num">220</td>
+        <td class="num">300</td>
+        <td class="num">48 tys.</td>
+      </tr>
+      <tr>
+        <td>14</td>
+        <td>Testy / stabilizacja / QA</td>
+        <td>~200 testów + regresja domenowa</td>
+        <td class="num">250</td>
+        <td class="num">350</td>
+        <td class="num">500</td>
+        <td class="num">77 tys.</td>
+      </tr>
+      <tr class="total">
+        <td></td>
+        <td colspan="2">RAZEM — development</td>
+        <td class="num">3 220</td>
+        <td class="num">4 590</td>
+        <td class="num">6 080</td>
+        <td class="num">~1,01 mln</td>
+      </tr>
+    </tbody>
+  </table>
+  <p class="small muted">* Wartość przy środku godzin × 220 zł/h.</p>
+
+  <h2>4. Wycena developmentu według stawek</h2>
+  <table>
+    <thead>
+      <tr>
+        <th>Stawka</th>
+        <th>Profil</th>
+        <th class="num">Koszt (środek 4 590 h)</th>
+        <th class="num">Widełki (min–max h)</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td>180 zł/h</td>
+        <td>Senior freelance</td>
+        <td class="num">~826 tys. zł</td>
+        <td class="num">580k – 1,09 mln</td>
+      </tr>
+      <tr class="highlight">
+        <td>220 zł/h</td>
+        <td>Blended (rekomendowane)</td>
+        <td class="num">~1,01 mln zł</td>
+        <td class="num">708k – 1,34 mln</td>
+      </tr>
+      <tr>
+        <td>250 zł/h</td>
+        <td>Senior + odpowiedzialność domenowa</td>
+        <td class="num">~1,15 mln zł</td>
+        <td class="num">805k – 1,52 mln</td>
+      </tr>
+      <tr>
+        <td>280 zł/h</td>
+        <td>Software house</td>
+        <td class="num">~1,29 mln zł</td>
+        <td class="num">902k – 1,70 mln</td>
+      </tr>
+    </tbody>
+  </table>
+
+  <div class="page-break"></div>
+
+  <h2>5. Prace koncepcyjne, spotkania, zmiany i poprawki</h2>
+  <p>
+    Sam kod zwykle stanowi tylko część całkowitego nakładu. W ERP finansowo-operacyjnym
+    typowy narzut pozakodowy wynosi <strong>ok. 70–120%</strong> developmentu.
+  </p>
+
+  <table>
+    <thead>
+      <tr>
+        <th>Kategoria</th>
+        <th>Co wchodzi</th>
+        <th class="num">% od dev</th>
+        <th class="num">Godziny*</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td>Prace koncepcyjne / discovery</td>
+        <td>Mapowanie procesów, model domeny, decyzje o statusach/płatnościach/umowach, UX flow</td>
+        <td class="num">15–25%</td>
+        <td class="num">700–1 150</td>
+      </tr>
+      <tr>
+        <td>Spotkania / synchronizacja</td>
+        <td>Warsztaty z biznesem, statusy, ustalenia z księgowością/operacjami, review decyzji</td>
+        <td class="num">8–15%</td>
+        <td class="num">370–690</td>
+      </tr>
+      <tr>
+        <td>Zmiany koncepcji / pivots</td>
+        <td>Przeróbki po feedbacku, zmiana modelu rozliczeń, redesign flow umów</td>
+        <td class="num">20–35%</td>
+        <td class="num">920–1 610</td>
+      </tr>
+      <tr>
+        <td>Poprawki po UAT / stabilizacja</td>
+        <td>Bugi domenowe, edge case’y, dopięcie po realnych imprezach</td>
+        <td class="num">12–20%</td>
+        <td class="num">550–920</td>
+      </tr>
+      <tr>
+        <td>Dokumentacja / wdrożenie / szkolenie</td>
+        <td>Instrukcje, onboarding, migracja legacy, go-live</td>
+        <td class="num">8–12%</td>
+        <td class="num">370–550</td>
+      </tr>
+      <tr>
+        <td>PM / koordynacja</td>
+        <td>Planowanie, priorytety, ryzyko, komunikacja</td>
+        <td class="num">8–12%</td>
+        <td class="num">370–550</td>
+      </tr>
+      <tr class="total">
+        <td colspan="2">Suma narzutu pozakodowego</td>
+        <td class="num">~70–120%</td>
+        <td class="num">~3 300–5 500</td>
+      </tr>
+    </tbody>
+  </table>
+  <p class="small muted">* Przy bazie developmentu ~4 600 h.</p>
+
+  <div class="note">
+    <strong>Reguła praktyczna:</strong> 1 h dobrego kodu domenowego ≈ 0,8–1,2 h pracy koncepcyjnej,
+    uzgodnień i poprawek. Dlatego baza ~4,5k h kodu przekłada się na całość ~8,5–9k h.
+  </div>
+
+  <h2>6. Scenariusze całościowe</h2>
+
+  <h3>A. Sprawny przebieg, mało pivotaów</h3>
+  <p>Development ~3 500 h + narzut ~70% → <strong>~6 000 h · ~1,32 mln zł</strong> (220 zł/h).</p>
+
+  <h3>B. Realistyczny — rekomendowany</h3>
+  <table>
+    <thead>
+      <tr>
+        <th>Składnik</th>
+        <th class="num">Godziny</th>
+        <th class="num">Wartość (220 zł/h)</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td>Development</td>
+        <td class="num">4 600</td>
+        <td class="num">1,01 mln</td>
+      </tr>
+      <tr>
+        <td>Koncepcja + spotkania</td>
+        <td class="num">1 200</td>
+        <td class="num">0,26 mln</td>
+      </tr>
+      <tr>
+        <td>Zmiany koncepcji / rework</td>
+        <td class="num">1 300</td>
+        <td class="num">0,29 mln</td>
+      </tr>
+      <tr>
+        <td>UAT / poprawki</td>
+        <td class="num">700</td>
+        <td class="num">0,15 mln</td>
+      </tr>
+      <tr>
+        <td>Wdrożenie + PM</td>
+        <td class="num">800</td>
+        <td class="num">0,18 mln</td>
+      </tr>
+      <tr class="total">
+        <td>RAZEM</td>
+        <td class="num">~8 600</td>
+        <td class="num">~1,9 mln zł</td>
+      </tr>
+    </tbody>
+  </table>
+
+  <h3>C. Duża zmienność koncepcji</h3>
+  <p>Development ~6 000 h + narzut ~110–120% → <strong>~12 000–13 000 h · ~2,6–3,2 mln zł</strong>
+  (220–250 zł/h).</p>
+
+  <h2>7. Widełki wartości całego przedsięwzięcia</h2>
+  <table>
+    <thead>
+      <tr>
+        <th>Poziom</th>
+        <th class="num">Godziny łącznie</th>
+        <th class="num">Stawka</th>
+        <th class="num">Wartość</th>
+        <th class="num">EUR (≈)</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td>Dolny (optymistyczny)</td>
+        <td class="num">6 000</td>
+        <td class="num">200 zł</td>
+        <td class="num">1,2 mln zł</td>
+        <td class="num">~280k</td>
+      </tr>
+      <tr class="highlight">
+        <td>Bazowy (najbardziej prawdopodobny)</td>
+        <td class="num">8 500–9 000</td>
+        <td class="num">220 zł</td>
+        <td class="num">1,9–2,0 mln zł</td>
+        <td class="num">~450k</td>
+      </tr>
+      <tr>
+        <td>Górny (chaos koncepcyjny + legacy)</td>
+        <td class="num">12 000–13 000</td>
+        <td class="num">250 zł</td>
+        <td class="num">3,0–3,3 mln zł</td>
+        <td class="num">~700–750k</td>
+      </tr>
+    </tbody>
+  </table>
+
+  <h2>8. Wartość zastąpienia (IP / sprzedaż gotowego produktu)</h2>
+  <p>
+    Przy wycenie IP lub sprzedaży gotowego produktu często stosuje się mnożnik
+    <strong>1,2–1,5×</strong> względem kosztu odtworzenia (ryzyko, time-to-market, know-how domenowe).
+  </p>
+  <ul>
+    <li>Baza odtworzenia: <strong>~1,9–2,0 mln zł</strong></li>
+    <li>Wartość zastąpienia z mnożnikiem: <strong>~2,3–3,0 mln zł</strong></li>
+    <li>Przy stawce software house (250–280 zł/h) całość projektowa: <strong>~2,1–2,5 mln zł</strong>
+        przed mnożnikiem IP</li>
+  </ul>
+
+  <h2>9. Dlaczego narzut pozakodowy jest wysoki</h2>
+  <ol>
+    <li><strong>Finanse i umowy</strong> — decyzje biznesowe dojrzewają dopiero przy realnych rozliczeniach.</li>
+    <li><strong>Trzy panele</strong> (admin / klient / pilot) — różni stakeholderzy i różne koncepcje UX.</li>
+    <li><strong>TFG + bank + PayU</strong> — integracje generują poprawki także po go-live.</li>
+    <li><strong>Legacy / migracje</strong> — zwykle 1–2 duże zmiany koncepcji danych w trakcie projektu.</li>
+    <li><strong>Spotkania operacyjno-księgowe</strong> — bywają droższe czasowo niż sam CRUD UI.</li>
+  </ol>
+
+  <h2>10. Jedna liczba do rozmowy biznesowej</h2>
+  <div class="hero-box">
+    <div class="label">Najuczciwszy szacunek całościowy</div>
+    <div class="value">≈ 8 500–9 000 h ≈ 1,9–2,0 mln zł</div>
+    <div class="sub">
+      Stawka 220 zł/h. Przy 250–280 zł/h: ok. 2,1–2,5 mln zł.
+      Wartość zastąpienia IP: ok. 2,3–3,0 mln zł.
+    </div>
+  </div>
+
+  <div class="footer">
+    Dokument przygotowany jako ekspercki szacunek nakładu pracy na podstawie analizy skali
+    i złożoności systemu SORDEV (Laravel 12 + Filament 4). Nie stanowi oferty handlowej ani
+    wyceny formalnej do celów księgowych / due diligence bez osobnej walidacji.
+    <br />Data: 10.08.2026
+  </div>
+
+</body>
+</html>

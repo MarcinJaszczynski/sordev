@@ -7,12 +7,12 @@ use App\Filament\Resources\EventResource;
 use App\Filament\Resources\EventResource\Concerns\HasEventDocumentsSubNavigation;
 use App\Filament\Resources\EventResource\Concerns\HasEventWorkflowContext;
 use App\Filament\Resources\EventResource\RelationManagers\DocumentsRelationManager;
-use Filament\Navigation\NavigationItem;
 use App\Models\EventDocument;
 use App\Models\EventPackageDocument;
 use App\Services\EventPackageDocumentService;
 use Filament\Actions;
 use Filament\Forms;
+use Filament\Navigation\NavigationItem;
 use Filament\Notifications\Notification;
 use Illuminate\Support\Facades\Schema;
 
@@ -236,7 +236,7 @@ class ManageEventDocuments extends SingleRelationManagerPage
                 Forms\Components\CheckboxList::make('hide_sections')
                     ->label('Ukryj sekcje')
                     ->options(EventPackageDocument::$hideSectionLabels)
-                    ->columns(2)
+                    ->columns(['default' => 1, 'md' => 2])
                     ->visible(fn (Forms\Get $get): bool => in_array(
                         $get('edit_mode'),
                         [EventPackageDocument::EDIT_OVERRIDES, EventPackageDocument::EDIT_LIVE],

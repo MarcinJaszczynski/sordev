@@ -35,7 +35,7 @@ class ReservationsRelationManager extends RelationManager
                 showHotelNotes: true,
                 allowContractorCreate: true,
             )))
-            ->columns(2);
+            ->columns(['default' => 1, 'md' => 2]);
     }
 
     public function table(Table $table): Table
@@ -167,13 +167,9 @@ class ReservationsRelationManager extends RelationManager
                     ->label('Dodaj rezerwację')
                     ->modalWidth(ReservationFormFields::MODAL_WIDTH)
                     ->using(function (array $data): Reservation {
-                        return app(UpsertReservationAction::class)(new UpsertReservationData(
-                            attributes: [
-                                ...$data,
-                                'event_id' => $this->getOwnerRecord()->id,
-                            ],
-                            attachmentData: $data,
-                            createdBy: auth()->id(),
+                        return app(UpsertReservationAction::class)(UpsertReservationData::fromForm(
+                            formData: $data,
+                            attributeOverrides: ['event_id' => $this->getOwnerRecord()->id],
                         ));
                     }),
             ])
@@ -185,13 +181,9 @@ class ReservationsRelationManager extends RelationManager
                     ->icon('heroicon-m-plus')
                     ->modalWidth(ReservationFormFields::MODAL_WIDTH)
                     ->using(function (array $data): Reservation {
-                        return app(UpsertReservationAction::class)(new UpsertReservationData(
-                            attributes: [
-                                ...$data,
-                                'event_id' => $this->getOwnerRecord()->id,
-                            ],
-                            attachmentData: $data,
-                            createdBy: auth()->id(),
+                        return app(UpsertReservationAction::class)(UpsertReservationData::fromForm(
+                            formData: $data,
+                            attributeOverrides: ['event_id' => $this->getOwnerRecord()->id],
                         ));
                     }),
             ])
@@ -199,11 +191,9 @@ class ReservationsRelationManager extends RelationManager
                 Tables\Actions\EditAction::make()
                     ->modalWidth(ReservationFormFields::MODAL_WIDTH)
                     ->using(function (Reservation $record, array $data): Reservation {
-                        return app(UpsertReservationAction::class)(new UpsertReservationData(
-                            attributes: $data,
+                        return app(UpsertReservationAction::class)(UpsertReservationData::fromForm(
+                            formData: $data,
                             reservation: $record,
-                            attachmentData: $data,
-                            createdBy: auth()->id(),
                         ));
                     }),
                 Tables\Actions\DeleteAction::make(),

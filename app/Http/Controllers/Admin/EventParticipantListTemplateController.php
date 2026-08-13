@@ -14,6 +14,8 @@ class EventParticipantListTemplateController extends Controller
 {
     public function __invoke(Event $event, string $format = 'csv'): StreamedResponse|BinaryFileResponse
     {
+        \Illuminate\Support\Facades\Gate::authorize('view', $event);
+
         $format = strtolower($format);
 
         if ($format === 'csv') {

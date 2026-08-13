@@ -31,7 +31,7 @@ class ResignationsRelationManager extends RelationManager
     {
         return $form->schema([
             Forms\Components\Section::make('Uczestnik')
-                ->columns(2)
+                ->columns(['default' => 1, 'md' => 2])
                 ->schema([
                     Forms\Components\Select::make('contract_id')
                         ->label('Umowa / kontrakt')
@@ -105,7 +105,7 @@ class ResignationsRelationManager extends RelationManager
                 ]),
 
             Forms\Components\Section::make('Kwoty')
-                ->columns(3)
+                ->columns(['default' => 1, 'md' => 2, 'xl' => 3])
                 ->schema([
                     Forms\Components\Placeholder::make('paying_participants_hint')
                         ->label('Liczba płacących w imprezie')
@@ -166,7 +166,7 @@ class ResignationsRelationManager extends RelationManager
 
             Forms\Components\Section::make('Ubezpieczenie kosztów rezygnacji')
                 ->visible(fn (Get $get) => $get('resignation_type') === 'insurance')
-                ->columns(2)
+                ->columns(['default' => 1, 'md' => 2])
                 ->schema([
                     Forms\Components\TextInput::make('insurance_policy_number')
                         ->label('Nr polisy / zgłoszenia')
@@ -223,7 +223,7 @@ class ResignationsRelationManager extends RelationManager
                                 ->rows(2)
                                 ->columnSpanFull(),
                         ])
-                        ->columns(2)
+                        ->columns(['default' => 1, 'md' => 2])
                         ->defaultItems(0)
                         ->addActionLabel('Dodaj świadczenie')
                         ->collapsible(),

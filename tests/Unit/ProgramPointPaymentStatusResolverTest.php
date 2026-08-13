@@ -132,4 +132,100 @@ class ProgramPointPaymentStatusResolverTest extends TestCase
 
         $this->assertSame('orange', $badge['color']);
     }
+
+    public function test_paid_flag_without_amounts_is_not_green(): void
+    {
+        $user = User::factory()->create();
+        $event = Event::factory()->create(['client_name' => 'Test']);
+        $point = EventProgramPoint::create([
+            'event_id' => $event->id,
+            'name' => 'Muzeum',
+            'day' => 1,
+            'order' => 1,
+            'unit_price' => 100,
+            'quantity' => 1,
+            'active' => true,
+            'include_in_calculation' => true,
+        ]);
+
+        $settlement = EventSettlement::create([
+            'event_id' => $event->id,
+            'status' => 'active',
+            'created_by' => $user->id,
+        ]);
+
+        EventSettlementCost::create([
+            'settlement_id' => $settlement->id,
+            'source_type' => 'program_point',
+            'source_id' => $point->id,
+            'name' => 'Muzeum',
+            'planned_amount' => 100,
+            'planned_amount_pln' => 100,
+            'actual_amount_pln' => null,
+            'payment_status' => 'paid',
+            'paid_by' => 'office',
+            'advance_type' => 'full',
+        ]);
+
+        $badge = app(ProgramPointPaymentStatusResolver::class)->resolve($point->fresh(), $event);
+
+        $this->assertNotSame('green', $badge['color']);
+    }
+
+    public function test_two_payment_rows_sum_to_green(): void
+    {
+        $user = User::factory()->create();
+        $event = Event::factory()->create(['client_name' => 'Test']);
+        $point = EventProgramPoint::create([
+            'event_id' => $event->id,
+            'name' => 'Muzeum',
+            'day' => 1,
+            'order' => 1,
+            'unit_price' => 100,
+            'quantity' => 1,
+            'active' => true,
+            'include_in_calculation' => true,
+        ]);
+
+        $settlement = EventSettlement::create([
+            'event_id' => $event->id,
+            'status' => 'active',
+            'created_by' => $user->id,
+        ]);
+
+        EventSettlementCost::create([
+            'settlement_id' => $settlement->id,
+            'source_type' => 'program_point',
+            'source_id' => $point->id,
+            'name' => 'Muzeum',
+            'planned_amount' => 100,
+            'planned_amount_pln' => 100,
+            'payment_status' => 'partially_paid',
+            'paid_by' => 'office',
+            'advance_type' => 'advance',
+        ]);
+
+        EventSettlementCost::create([
+            'settlement_id' => $settlement->id,
+            'source_type' => 'program_point_payment',
+            'source_id' => $point->id,
+            'name' => 'Zaliczka',
+            'actual_amount_pln' => 40,
+            'payment_status' => 'advance_paid',
+            'paid_by' => 'office',
+        ]);
+        EventSettlementCost::create([
+            'settlement_id' => $settlement->id,
+            'source_type' => 'program_point_payment',
+            'source_id' => $point->id,
+            'name' => 'Dopłata',
+            'actual_amount_pln' => 60,
+            'payment_status' => 'paid',
+            'paid_by' => 'office',
+        ]);
+
+        $badge = app(ProgramPointPaymentStatusResolver::class)->resolve($point->fresh(), $event);
+
+        $this->assertSame('green', $badge['color']);
+    }
 }

@@ -1,5 +1,6 @@
 <div class="space-y-6">
-    <div class="sticky top-0 z-10 space-y-3 rounded-xl border border-gray-200 bg-white/95 p-4 shadow-sm backdrop-blur-sm">
+    <x-filament-actions::modals />
+    <div class="sor-sticky-toolbar space-y-3 bg-white/95 dark:bg-gray-900/95">
         <div class="flex flex-wrap items-center justify-between gap-3">
             <div>
                 <p class="text-sm font-semibold text-gray-900">Lista uczestników — {{ $this->event->name }}</p>
@@ -23,6 +24,15 @@
                 </x-filament::button>
                 <x-filament::button wire:click="propagateToHotel" color="gray" icon="heroicon-o-building-office-2">
                     → Hotele
+                </x-filament::button>
+                <x-filament::button wire:click="sendBulkNotice('overdue')" color="warning" icon="heroicon-o-envelope" wire:confirm="Wysłać mail do zalegających (z adresem e-mail)?">
+                    Mail: zalegający
+                </x-filament::button>
+                <x-filament::button wire:click="sendBulkNotice('missing_consents')" color="warning" icon="heroicon-o-envelope" wire:confirm="Wysłać mail do osób bez wymaganych zgód?">
+                    Mail: bez zgód
+                </x-filament::button>
+                <x-filament::button wire:click="sendBulkNotice('all')" color="gray" icon="heroicon-o-envelope" wire:confirm="Wysłać mail do całej aktywnej listy z e-mailem?">
+                    Mail: wszyscy
                 </x-filament::button>
             </div>
         </div>
@@ -53,9 +63,9 @@
         <div class="grid gap-6 xl:grid-cols-[minmax(0,1fr)_20rem]">
             <x-filament::section heading="Uczestnicy">
                 @if ($participants === [])
-                    <p class="text-sm text-gray-600">Brak uczestników. Zaimportuj plik CSV/Excel lub dodaj ręcznie.</p>
+                    <p class="text-sm text-gray-600">Brak uczestników. Zaimportuj plik CSV/Excel lub dodaj ręcznie — trafią też na listę wpłat.</p>
                 @else
-                    <div class="overflow-x-auto">
+                    <div class="sor-scroll-hint overflow-x-auto">
                         <table class="w-full min-w-[40rem] text-left text-sm">
                             <thead class="border-b text-xs uppercase text-gray-500">
                                 <tr>
@@ -64,7 +74,8 @@
                                     <th class="px-2 py-2">PESEL</th>
                                     <th class="px-2 py-2">Kontakt</th>
                                     <th class="px-2 py-2">Dieta</th>
-                                    <th class="px-2 py-2">Zgoda</th>
+                                    <th class="px-2 py-2">Zgody</th>
+                                    <th class="px-2 py-2">Wpłata</th>
                                     <th class="px-2 py-2">Źródło</th>
                                     <th class="px-2 py-2"></th>
                                 </tr>
@@ -88,16 +99,30 @@
                                         </td>
                                         <td class="px-2 py-2 text-gray-700">{{ $participant['diet'] ?: '—' }}</td>
                                         <td class="px-2 py-2">
-                                            @if ($participant['parent_consent'] ?? false)
-                                                <span class="text-emerald-700">Tak</span>
+                                            <span @class([
+                                                'text-emerald-700' => $participant['parent_consent'] ?? false,
+                                                'text-gray-400' => ! ($participant['parent_consent'] ?? false),
+                                            ])>{{ $participant['consents_label'] ?? '—' }}</span>
+                                        </td>
+                                        <td class="px-2 py-2 text-gray-700 text-xs">
+                                            @if ($participant['due_amount_pln'] !== null)
+                                                {{ number_format((float) ($participant['paid_amount_pln'] ?? 0), 2, ',', ' ') }}
+                                                /
+                                                {{ number_format((float) $participant['due_amount_pln'], 2, ',', ' ') }}
                                             @else
-                                                <span class="text-gray-400">Nie</span>
+                                                —
                                             @endif
                                         </td>
                                         <td class="px-2 py-2 text-gray-600">{{ $participant['source'] }}</td>
                                         <td class="px-2 py-2 text-right">
-                                            <button type="button" wire:click="startEdit({{ $participant['id'] }})" class="text-primary-600 hover:underline">Edytuj</button>
-                                            <button type="button" wire:click="deleteParticipant({{ $participant['id'] }})" wire:confirm="Usunąć uczestnika z listy?" class="ml-2 text-danger-600 hover:underline">Usuń</button>
+                                            <div class="flex flex-wrap items-center justify-end gap-2">
+                                                @if (\Illuminate\Support\Facades\Schema::hasTable('client_invoice_requests'))
+                                                    {{ ($this->createInvoiceRequestAction)(['participantId' => $participant['id']]) }}
+                                                @endif
+                                                <button type="button" wire:click="startEdit({{ $participant['id'] }})" class="text-primary-600 hover:underline">Edytuj</button>
+                                                <button type="button" wire:click="copyParentLink({{ $participant['id'] }})" class="text-primary-600 hover:underline">Link rodzica</button>
+                                                <button type="button" wire:click="deleteParticipant({{ $participant['id'] }})" wire:confirm="Usunąć uczestnika z listy?" class="ml-2 text-danger-600 hover:underline">Usuń</button>
+                                            </div>
                                         </td>
                                     </tr>
                                 @endforeach
@@ -141,10 +166,43 @@
                         <label class="mb-1 block text-xs font-medium text-gray-700">Dieta</label>
                         <input type="text" wire:model.live.debounce.500ms="formDiet" class="fi-input block w-full rounded-lg border-gray-300 text-sm" placeholder="np. wegetariańska" />
                     </div>
-                    <label class="flex items-center gap-2 text-sm text-gray-700">
-                        <input type="checkbox" wire:model.live="formParentConsent" class="rounded border-gray-300" />
-                        Zgoda rodzica / opiekuna
-                    </label>
+
+                    <fieldset class="space-y-2 rounded-lg border border-gray-200 p-3">
+                        <legend class="px-1 text-xs font-semibold text-gray-700">Zgody</legend>
+                        @foreach ($this->consentLabels as $key => $label)
+                            <label class="flex items-center gap-2 text-sm text-gray-700">
+                                <input type="checkbox" wire:model.live="formConsents.{{ $key }}" class="rounded border-gray-300" />
+                                {{ $label }}
+                            </label>
+                        @endforeach
+                    </fieldset>
+
+                    @if ($detailPanel)
+                        <div class="space-y-1 rounded-lg border border-amber-200 bg-amber-50/60 p-3 text-xs text-gray-700">
+                            <p class="font-semibold text-gray-900">Panel 360°</p>
+                            <p>Zgody: {{ $detailPanel['consents_label'] }}</p>
+                            <p>
+                                Wpłata:
+                                @if ($detailPanel['due'] !== null)
+                                    {{ number_format((float) ($detailPanel['paid'] ?? 0), 2, ',', ' ') }} /
+                                    {{ number_format((float) $detailPanel['due'], 2, ',', ' ') }} PLN
+                                    · <a href="{{ $detailPanel['payments_url'] }}" class="text-primary-600 underline">Finanse → Wpłaty</a>
+                                @else
+                                    brak powiązania
+                                @endif
+                            </p>
+                            <p>
+                                Umowa:
+                                @if ($detailPanel['contract_number'] ?? null)
+                                    {{ $detailPanel['contract_number'] }}
+                                    · <a href="{{ $detailPanel['contracts_url'] }}" class="text-primary-600 underline">Umowy</a>
+                                @else
+                                    —
+                                @endif
+                            </p>
+                        </div>
+                    @endif
+
                     <div class="flex gap-2">
                         <x-filament::button wire:click="saveParticipant" color="primary" class="flex-1">
                             {{ $editParticipantId ? 'Zapisz' : 'Dodaj' }}
@@ -264,3 +322,13 @@
         </x-filament::section>
     @endif
 </div>
+
+@script
+<script>
+    $wire.on('copy-to-clipboard', ({ url }) => {
+        if (navigator.clipboard && url) {
+            navigator.clipboard.writeText(url).catch(() => {});
+        }
+    });
+</script>
+@endscript

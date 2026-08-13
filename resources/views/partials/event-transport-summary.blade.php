@@ -15,7 +15,8 @@
     <div class="mb-4 rounded border border-amber-200 bg-amber-50 p-3 text-sm text-amber-950">
         <b>Transport (impreza):</b> {{ $record->bus->name }}
         — {{ number_format((float) ($eventTransportKm ?? 0), 0, ',', ' ') }} km
-        (2× transfer {{ number_format((float) ($record->transfer_km ?? 0), 0, ',', ' ') }} km + program {{ number_format((float) ($record->program_km ?? 0), 0, ',', ' ') }} km),
+        (1,1 × (transfer {{ number_format((float) ($record->transfer_km ?? 0), 0, ',', ' ') }} km
+        + program {{ number_format((float) ($record->program_km ?? 0), 0, ',', ' ') }} km) + 50),
         koszt autokaru: <b>{{ number_format((float) $transportCost, 2, ',', ' ') }} PLN</b>
         (w tabeli poniżej jako „Koszt transportu (autokar)”).
     </div>

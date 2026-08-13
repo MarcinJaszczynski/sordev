@@ -9,7 +9,7 @@ Przypominamy o pozostałej płatności za wycieczkę **{{ $event->name ?: $event
 | --- | ---: |
 | Należne | {{ \App\Support\MoneyFormatter::format($amounts['due_pln'] ?? 0) }} |
 | Wpłacone | {{ \App\Support\MoneyFormatter::format($amounts['paid_pln'] ?? 0) }} |
-| **Pozostało** | **{{ \App\Support\MoneyFormatter::format($amounts['remaining_pln'] ?? 0) }}** |
+| **Różnica** | **{{ \App\Support\MoneyFormatter::format($amounts['remaining_pln'] ?? 0) }}** |
 
 @if (filled($portalUrl))
 W szczegółach płatności możesz też zajrzeć do [portalu klienta]({{ $portalUrl }}).

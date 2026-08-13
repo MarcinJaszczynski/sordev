@@ -3,6 +3,7 @@
 namespace App\Filament\Resources\EventResource\Concerns;
 
 use App\Filament\Concerns\HasWorkflowRecordContext;
+use App\Filament\Concerns\InteractsWithTaskEditModal;
 use App\Filament\Resources\EventResource;
 use App\Filament\Resources\EventTemplateResource;
 use App\Models\Event;
@@ -12,6 +13,27 @@ use Illuminate\Support\Str;
 trait HasEventWorkflowContext
 {
     use HasWorkflowRecordContext;
+    use InteractsWithTaskEditModal;
+
+    /**
+     * @return array<string, mixed>
+     */
+    protected function createTaskDefaultFormData(): array
+    {
+        if (! isset($this->record) || ! $this->record instanceof Event) {
+            return [];
+        }
+
+        return [
+            'taskable_type' => Event::class,
+            'taskable_id' => (int) $this->record->getKey(),
+        ];
+    }
+
+    public function openEventCreateTaskModal(): void
+    {
+        $this->openCreateTaskModal($this->createTaskDefaultFormData());
+    }
 
     public function getWorkflowContext(): ?array
     {
@@ -35,6 +57,19 @@ trait HasEventWorkflowContext
                 'icon' => 'heroicon-o-rectangle-stack',
             ];
         }
+
+        $links[] = [
+            'label' => 'Oferta Word',
+            'url' => route('admin.events.offer.word', $event),
+            'icon' => 'heroicon-o-document-arrow-down',
+            'external' => true,
+        ];
+
+        $links[] = [
+            'label' => 'Nowe zadanie',
+            'wire_click' => 'openEventCreateTaskModal',
+            'icon' => 'heroicon-o-plus-circle',
+        ];
 
         $statusLabel = Event::getStatusOptions()[$event->status] ?? $event->status;
 

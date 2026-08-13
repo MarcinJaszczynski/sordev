@@ -5,14 +5,17 @@ namespace App\Filament\Resources\EventResource\RelationManagers;
 use App\Filament\Forms\EventProgramPointPricingFields;
 use App\Filament\Forms\ContractorWithLocationFields;
 use App\Filament\Forms\TypedContractorSelect;
+use App\Filament\Resources\EventResource\Concerns\InteractsWithSettlementCostDrawer;
 use App\Filament\Resources\EventResource\Concerns\ManagesProgramPointSettlementFinance;
 use App\Models\ContractorType;
 use App\Models\Currency;
 use App\Models\EventHotelStay;
 use App\Models\EventProgramPoint;
+use App\Models\EventSettlementCost;
 use App\Services\ContractorLocationService;
 use App\Services\EventHotelServiceDuplicator;
-use App\Services\ProgramPointPaymentStatusResolver;
+use App\Services\ProgramPointListFinanceDisplay;
+use App\Services\ProgramPointSettlementCostCache;
 use App\Support\CurrencyAmountDisplay;
 use Filament\Forms;
 use Filament\Forms\Form;
@@ -20,10 +23,13 @@ use Filament\Notifications\Notification;
 use Filament\Resources\RelationManagers\RelationManager;
 use Filament\Tables;
 use Filament\Tables\Table;
+use Livewire\WithFileUploads;
 
 class EventHotelServicesRelationManager extends RelationManager
 {
+    use InteractsWithSettlementCostDrawer;
     use ManagesProgramPointSettlementFinance;
+    use WithFileUploads;
 
     protected static string $relationship = 'hotelServiceProgramPoints';
 
@@ -33,7 +39,69 @@ class EventHotelServicesRelationManager extends RelationManager
 
     protected static ?string $icon = 'heroicon-o-sparkles';
 
+    protected static string $view = 'filament.resources.event-resource.relation-managers.hotel-services';
+
     protected bool $pendingApplyToAllDays = false;
+
+    /** @var ProgramPointSettlementCostCache|null */
+    protected ?ProgramPointSettlementCostCache $settlementCostCache = null;
+
+    /** @var array<int, array<string, mixed>> */
+    protected array $programPointFinanceViewDataCache = [];
+
+    public function mount(): void
+    {
+        parent::mount();
+        $this->initializeSettlementCostDrawerForms();
+    }
+
+    protected function invalidateSettlementCostCaches(): void
+    {
+        unset($this->selectedRow);
+        $this->settlementCostCache = null;
+        $this->programPointFinanceViewDataCache = [];
+        $this->resetTable();
+    }
+
+    protected function settlementCosts(): ProgramPointSettlementCostCache
+    {
+        if ($this->settlementCostCache === null) {
+            $this->settlementCostCache = new ProgramPointSettlementCostCache;
+            $points = $this->getOwnerRecord()->hotelServiceProgramPoints()->get();
+            $this->settlementCostCache->warm($points, $this->getOwnerRecord());
+        }
+
+        return $this->settlementCostCache;
+    }
+
+    /**
+     * @return array<string, mixed>
+     */
+    protected function hotelFinanceViewData(EventProgramPoint $record): array
+    {
+        $id = (int) $record->id;
+        if (isset($this->programPointFinanceViewDataCache[$id])) {
+            return $this->programPointFinanceViewDataCache[$id];
+        }
+
+        $summary = app(ProgramPointListFinanceDisplay::class)->summarizePoint(
+            $record,
+            $this->settlementCosts(),
+            max(1, (int) ($this->getOwnerRecord()->participant_count ?? 1)),
+        );
+        $baseCost = $this->settlementCosts()->baseCost($id);
+        $statusRaw = $baseCost?->payment_status;
+        $summary['statusLabel'] = $statusRaw
+            ? (EventSettlementCost::$paymentStatuses[$statusRaw] ?? $statusRaw)
+            : '—';
+        $summary['statusColor'] = match ($statusRaw) {
+            'paid' => 'success',
+            'partially_paid', 'advance_paid' => 'warning',
+            default => 'gray',
+        };
+
+        return $this->programPointFinanceViewDataCache[$id] = $summary;
+    }
 
     public function form(Form $form): Form
     {
@@ -41,7 +109,7 @@ class EventHotelServicesRelationManager extends RelationManager
             ->schema([
                 Forms\Components\TextInput::make('name')
                     ->label('Nazwa usługi')
-                    ->placeholder('np. Bankiet, Obiadokolacja, DJ, Śniadanie')
+                    ->placeholder('Wpisz nazwę usługi')
                     ->required()
                     ->maxLength(255)
                     ->columnSpanFull(),
@@ -149,67 +217,44 @@ class EventHotelServicesRelationManager extends RelationManager
                         );
                     }),
 
-                Tables\Columns\TextColumn::make('planned_price')
-                    ->label('Planowana')
-                    ->state(function (EventProgramPoint $record): string {
-                        $amount = (float) ($record->planned_price ?? $record->total_price ?? 0);
-
-                        return CurrencyAmountDisplay::format(
-                            $amount,
-                            $record->currency,
-                            (bool) ($record->convert_to_pln ?? true),
-                        );
-                    }),
-
-                Tables\Columns\TextColumn::make('calculated_price')
+                Tables\Columns\TextColumn::make('finance_calc')
                     ->label('Kalkulacja')
-                    ->state(function (EventProgramPoint $record): string {
-                        $amount = (float) ($record->calculated_price ?? $record->total_price ?? 0);
+                    ->alignEnd()
+                    ->state(fn (EventProgramPoint $record): string => $this->hotelFinanceViewData($record)['calc']),
 
-                        return CurrencyAmountDisplay::format(
-                            $amount,
-                            $record->currency,
-                            (bool) ($record->convert_to_pln ?? true),
-                        );
+                Tables\Columns\TextColumn::make('finance_plan')
+                    ->label('Plan')
+                    ->alignEnd()
+                    ->state(fn (EventProgramPoint $record): string => $this->hotelFinanceViewData($record)['planned']),
+
+                Tables\Columns\TextColumn::make('finance_paid')
+                    ->label('Zapłacone')
+                    ->alignEnd()
+                    ->html()
+                    ->state(function (EventProgramPoint $record): string {
+                        $s = $this->hotelFinanceViewData($record);
+                        $html = '<div class="text-xs leading-snug tabular-nums text-right"><div>'.e($s['paid']).'</div>';
+                        if (! empty($s['paymentHint'])) {
+                            $html .= '<div class="text-[11px] text-sky-700">'.e($s['paymentHint']).'</div>';
+                        }
+                        if (! empty($s['pilotDueHint'])) {
+                            $html .= '<div class="text-[11px] text-blue-700">'.e($s['pilotDueHint']).'</div>';
+                        }
+                        $html .= '</div>';
+
+                        return $html;
                     }),
 
-                Tables\Columns\TextColumn::make('paid_price')
-                    ->label('Zapłacona')
-                    ->state(function (EventProgramPoint $record): string {
-                        return CurrencyAmountDisplay::format(
-                            (float) ($record->paid_price ?? 0),
-                            $record->currency,
-                            (bool) ($record->convert_to_pln ?? true),
-                        );
-                    }),
-
-                Tables\Columns\TextColumn::make('settlement')
-                    ->label('Rozliczenie')
-                    ->state(function (EventProgramPoint $record): string {
-                        $planned = (float) ($record->planned_price ?? $record->total_price ?? 0);
-                        $paid = (float) ($record->paid_price ?? 0);
-
-                        return number_format($paid, 2, ',', ' ').' / '.number_format($planned, 2, ',', ' ').' PLN';
-                    }),
-
-                Tables\Columns\TextColumn::make('payment_status')
+                Tables\Columns\TextColumn::make('finance_status')
                     ->label('Status')
                     ->badge()
-                    ->state(fn (EventProgramPoint $record): string => app(ProgramPointPaymentStatusResolver::class)
-                        ->resolve($record, $this->getOwnerRecord())['code'])
-                    ->color(function (EventProgramPoint $record): string {
-                        $color = app(ProgramPointPaymentStatusResolver::class)
-                            ->resolve($record, $this->getOwnerRecord())['color'];
+                    ->state(fn (EventProgramPoint $record): string => $this->hotelFinanceViewData($record)['statusLabel'] ?? '—')
+                    ->color(fn (EventProgramPoint $record): string => $this->hotelFinanceViewData($record)['statusColor'] ?? 'gray'),
 
-                        return match ($color) {
-                            'green' => 'success',
-                            'red' => 'danger',
-                            'orange' => 'warning',
-                            default => 'gray',
-                        };
-                    })
-                    ->tooltip(fn (EventProgramPoint $record): string => app(ProgramPointPaymentStatusResolver::class)
-                        ->resolve($record, $this->getOwnerRecord())['tooltip']),
+                Tables\Columns\TextColumn::make('finance_doc')
+                    ->label('Dok.')
+                    ->alignCenter()
+                    ->state(fn (EventProgramPoint $record): string => $this->hotelFinanceViewData($record)['documentHint'] ?? '—'),
             ])
             ->filters([
                 Tables\Filters\SelectFilter::make('hotel_scope')
@@ -337,6 +382,8 @@ class EventHotelServicesRelationManager extends RelationManager
         $event = $this->getOwnerRecord();
         $event->calculateTotalCost();
         $event->refreshActiveSettlementCosts();
+        $this->settlementCostCache = null;
+        $this->programPointFinanceViewDataCache = [];
 
         // Atrybucja kontrahenta (hotel) w aktywnym rozliczeniu dla tej usługi.
         if ($record) {

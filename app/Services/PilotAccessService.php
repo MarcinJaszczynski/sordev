@@ -9,6 +9,7 @@ use Carbon\Carbon;
 use Filament\Facades\Filament;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Support\Facades\Schema;
+use Symfony\Component\HttpKernel\Exception\HttpException;
 
 class PilotAccessService
 {
@@ -37,9 +38,74 @@ class PilotAccessService
         return now()->greaterThan($expiresAt);
     }
 
+    public function previewPilotUser(): ?User
+    {
+        if (! PilotPreviewMiddleware::isActive()) {
+            return null;
+        }
+
+        $id = PilotPreviewMiddleware::previewUserId();
+        if (! $id) {
+            return null;
+        }
+
+        return User::query()->find($id);
+    }
+
+    public function isPreviewReadOnly(): bool
+    {
+        if (! PilotPreviewMiddleware::isActive()) {
+            return false;
+        }
+
+        // Admin z rolą pilot podglądający własne konto — normalna sesja (formularze aktywne).
+        $previewId = PilotPreviewMiddleware::previewUserId();
+        $authId = auth()->id();
+
+        if ($previewId && $authId && (int) $previewId === (int) $authId) {
+            return false;
+        }
+
+        return true;
+    }
+
+    public function assertPilotMutationsAllowed(): void
+    {
+        if ($this->isPreviewReadOnly()) {
+            throw new HttpException(403, 'Podgląd portalu pilota jest tylko do odczytu.');
+        }
+    }
+
+    /**
+     * @return array{title: string, description: string, exitUrl: string}|null
+     */
+    public function previewBannerContext(): ?array
+    {
+        if (! PilotPreviewMiddleware::isActive()) {
+            return null;
+        }
+
+        $pilot = $this->previewPilotUser();
+        $name = $pilot?->name ?? 'biuro (lista)';
+
+        return [
+            'title' => 'Podgląd: '.$name.' · tylko odczyt',
+            'description' => $pilot
+                ? 'Widzisz portal jak przypisany pilot (także przed „Udostępnij”). Mutacje są zablokowane.'
+                : 'Tryb podglądu biura bez konkretnego pilota — lista wycieczek. Wybierz „Podgląd jako ten pilot” z imprezy.',
+            'exitUrl' => url('/pilot/pilot-events?exit_preview=1'),
+        ];
+    }
+
     public function hasFullAccess(Event $event, ?User $user = null): bool
     {
-        if ($user && $this->isOfficePreview($user)) {
+        $user ??= auth()->user();
+
+        if ($this->previewPilotUser()) {
+            return ! $this->isArchived($event);
+        }
+
+        if ($user && $this->isOfficePreview($user) && ! PilotPreviewMiddleware::previewUserId()) {
             return true;
         }
 
@@ -67,6 +133,14 @@ class PilotAccessService
      */
     public function visibleTripsQuery(User $user): Builder
     {
+        $previewPilot = $this->previewPilotUser();
+        if ($previewPilot) {
+            // Podgląd biura: wszystkie przypisane do tego pilota (także przed „Udostępnij”).
+            return Event::query()
+                ->where('assigned_to', $previewPilot->id)
+                ->where('status', '!=', Event::STATUS_CANCELLED);
+        }
+
         if ($this->isOfficePreview($user)) {
             return Event::query()->where('status', '!=', Event::STATUS_CANCELLED);
         }
@@ -142,18 +216,18 @@ class PilotAccessService
 
     public function canViewTrip(User $user, Event $event): bool
     {
-        if ($this->isOfficePreview($user)) {
+        $previewPilot = $this->previewPilotUser();
+        if ($previewPilot) {
+            return (int) $event->assigned_to === (int) $previewPilot->id
+                && $event->status !== Event::STATUS_CANCELLED;
+        }
+
+        if ($this->isOfficePreview($user) && ! PilotPreviewMiddleware::previewUserId()) {
             return true;
         }
 
         if ($user->hasRole('pilot')) {
-            $assigned = (int) $event->assigned_to === (int) $user->id;
-
-            if (! Schema::hasColumn('events', 'shared_with_pilot')) {
-                return $assigned;
-            }
-
-            return $assigned && (bool) $event->shared_with_pilot;
+            return $this->pilotOwnsTrip($user, $event);
         }
 
         if ($user->hasRole(['admin', 'super_admin', 'biuro'])) {
@@ -161,6 +235,17 @@ class PilotAccessService
         }
 
         return false;
+    }
+
+    public function pilotOwnsTrip(User $pilot, Event $event): bool
+    {
+        $assigned = (int) $event->assigned_to === (int) $pilot->id;
+
+        if (! Schema::hasColumn('events', 'shared_with_pilot')) {
+            return $assigned;
+        }
+
+        return $assigned && (bool) $event->shared_with_pilot;
     }
 
     /**

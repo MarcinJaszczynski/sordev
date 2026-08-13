@@ -2,12 +2,12 @@
 
 namespace App\Filament\Resources\EventResource\Widgets;
 
+use App\Filament\Resources\EventResource;
 use App\Filament\Resources\EventSettlementResource;
 use App\Models\Event;
 use App\Models\EventPricePerPerson;
 use App\Models\EventSettlement;
 use App\Services\EventManualPricePerPersonService;
-use App\Services\EventTransportCostCalculator;
 use Filament\Widgets\Widget;
 use Livewire\Attributes\On;
 
@@ -59,76 +59,19 @@ class EventPriceTable extends Widget
 
     public function loadCalculations()
     {
-        // Załaduj punkty programu z kosztami
-        $this->programPoints = $this->record->programPoints()
-            ->with(['templatePoint', 'currency'])
-            ->where('active', true)
-            ->orderBy('day')
-            ->orderBy('order')
-            ->get();
+        $snapshot = app(\App\Services\EventCalculationSnapshotBuilder::class)->build($this->record);
 
-        // Oblicz koszty transportu (podobnie jak w EventTemplate)
-        $this->calculateTransportCost();
-
-        // Oblicz koszty według dni
-        $this->costsByDay = $this->programPoints
-            ->groupBy('day')
-            ->map(function ($points) {
-                $totalCost = \App\Services\ProgramPointHelper::sumIncluded($points, 'total_price');
-                $programCost = $points->where('include_in_program', true)->sum('total_price');
-
-                return [
-                    'points_count' => $points->count(),
-                    'total_cost' => $totalCost,
-                    'program_cost' => $programCost,
-                    'calculation_points' => $points->filter(function ($p) {
-                        return (bool) ($p->include_in_calculation ?? true);
-                    })->count(),
-                    'program_points' => $points->where('include_in_program', true)->count(),
-                    'points' => $points,
-                ];
-            });
-
-        // Oblicz główne kalkulacje
-        $totalProgramCost = \App\Services\ProgramPointHelper::sumIncluded($this->programPoints, 'total_price');
-        $totalCostWithTransport = $totalProgramCost + $this->transportCost;
-
-        $this->calculations = [
-            'total_points' => $this->programPoints->count(),
-            'active_points' => $this->programPoints->where('active', true)->count(),
-            'calculation_points' => \App\Services\ProgramPointHelper::countIncluded($this->programPoints),
-            'program_points' => $this->programPoints->where('include_in_program', true)->count(),
-            'total_program_cost' => $totalProgramCost,
-            'transport_cost' => $this->transportCost,
-            'total_cost' => $totalCostWithTransport,
-            'program_cost' => $this->programPoints->where('include_in_program', true)->sum('total_price'),
-            'cost_per_person' => $this->record->participant_count > 0
-                ? $totalCostWithTransport / $this->record->participant_count
-                : 0,
-            'days_count' => $this->costsByDay->count(),
-            'event_data' => [
-                'name' => $this->record->name,
-                'client_name' => $this->record->client_name,
-                'participant_count' => $this->record->participant_count,
-                'start_date' => $this->record->start_date,
-                'end_date' => $this->record->end_date,
-                'duration_days' => $this->record->duration_days,
-                'transfer_km' => $this->record->transfer_km,
-                'program_km' => $this->record->program_km,
-                'status' => $this->record->status,
-                'template_name' => $this->record->eventTemplate?->name,
-                'bus_name' => $this->record->bus?->name,
-                'markup_name' => $this->record->markup?->name,
-            ],
-        ];
-
-        $this->priceRows = $this->record->pricePerPerson()
-            ->with('eventTemplateQty:id,qty,gratis,staff,driver')
-            ->orderByDesc('id')
-            ->get();
-
-        // Oblicz szczegółowe kalkulacje z uwzględnieniem różnych wariantów
-        $this->calculateDetailedPricing();
+        $this->programPoints = $snapshot['program_points'];
+        $this->costsByDay = $snapshot['costs_by_day'];
+        $this->transportCost = $snapshot['transport_cost'];
+        $this->eventTransportKm = $snapshot['event_transport_km'];
+        $this->calculations = $snapshot['calculations'];
+        $this->priceRows = $snapshot['price_rows'];
+        $this->detailedCalculations = $snapshot['detailed_calculations'];
+        $this->qtyVariants = $snapshot['qty_variants'];
+        $this->currentVariant = $snapshot['current_variant'];
+        $this->nearestVariants = $snapshot['nearest_variants'];
+        $this->eventOnlyPointsForDetails = $snapshot['event_only_points_for_details'];
 
         $this->syncManualPricePerPersonState();
 
@@ -348,319 +291,6 @@ class EventPriceTable extends Widget
         return [$payload, $errors];
     }
 
-    protected function transportCalculator(): EventTransportCostCalculator
-    {
-        return new EventTransportCostCalculator($this->record);
-    }
-
-    public function calculateTransportCost(): void
-    {
-        $calculator = $this->transportCalculator();
-        $this->eventTransportKm = $calculator->resolveTransportKm();
-        $this->transportCost = 0;
-
-        $variant = $this->currentVariant ?? [
-            'qty' => max(1, (int) ($this->record->participant_count ?? 1)),
-            'gratis' => 0,
-            'staff' => 1,
-            'driver' => 1,
-        ];
-
-        if ($calculator->usesManualTransportCost()) {
-            $this->transportCost = $calculator->effectiveTransportCost($variant);
-
-            return;
-        }
-
-        if (! $this->record->bus) {
-            return;
-        }
-
-        $this->transportCost = $calculator->effectiveTransportCost($variant);
-    }
-
-    protected function resolveEventTransportKm(): float
-    {
-        return $this->transportCalculator()->resolveTransportKm();
-    }
-
-    public function calculateDetailedPricing()
-    {
-        $this->detailedCalculations = [];
-        $this->eventOnlyPointsForDetails = [];
-        $this->qtyVariants = [];
-        $this->currentVariant = null;
-        $this->nearestVariants = [];
-
-        $template = $this->record?->eventTemplate;
-        if (! $template) {
-            return;
-        }
-
-        $participantCount = max(1, (int) ($this->record->participant_count ?? 1));
-        $eventVariants = $this->record->qtyVariants()->get(['qty', 'gratis', 'staff', 'driver']);
-
-        $exactEventVariant = $eventVariants->firstWhere('qty', $participantCount);
-        $closestEventVariant = $eventVariants
-            ->sortBy(fn ($variant) => abs(((int) ($variant->qty ?? 0)) - $participantCount))
-            ->first();
-
-        $customVariant = [
-            'qty' => $participantCount,
-            'gratis' => max(0, (int) ($exactEventVariant->gratis ?? $closestEventVariant->gratis ?? 0)),
-            'staff' => max(0, (int) ($exactEventVariant->staff ?? $closestEventVariant->staff ?? 1)),
-            'driver' => max(0, (int) ($exactEventVariant->driver ?? $closestEventVariant->driver ?? 1)),
-        ];
-
-        $selectedVariants = [$customVariant];
-
-        $this->currentVariant = $customVariant;
-        $this->nearestVariants = [];
-
-        try {
-            $sourceWidget = app(\App\Filament\Resources\EventTemplateResource\Widgets\EventTemplatePriceTable::class);
-            $sourceWidget->record = $template;
-            $sourceWidget->startPlaceId = $this->record->start_place_id;
-            $sourceWidget->busOverride = $this->record->bus ?? $template->bus;
-            $resolvedKm = $this->resolveEventTransportKm();
-            $sourceWidget->transportKm = $resolvedKm > 0 ? $resolvedKm : null;
-            $sourceWidget->variantOverrides = $selectedVariants;
-
-            $this->qtyVariants = $sourceWidget->getQtyVariantsProperty();
-            $this->detailedCalculations = $sourceWidget->getDetailedCalculations();
-            if ($this->record->hotelStays()->exists()) {
-                app(\App\Services\EventHotelPlanService::class)
-                    ->applyEventHotelStructureToCalculations($this->detailedCalculations, $this->record);
-            }
-            $this->syncTransportInDetailedCalculations();
-            $this->appendEventOnlyPointsToDetailedCalculations();
-            $this->calculateTransportCost();
-            $this->recomputePerPersonInDetailedCalculations();
-        } catch (\Throwable $e) {
-            report($e);
-            $this->qtyVariants = [];
-            $this->detailedCalculations = [];
-            $this->eventOnlyPointsForDetails = [];
-        }
-    }
-
-    private function syncTransportInDetailedCalculations(): void
-    {
-        $this->transportCalculator()->syncTransportInDetailedCalculations(
-            $this->detailedCalculations,
-            $this->qtyVariants,
-            $this->currentVariant,
-            fn (int|string $qty, float $delta) => $this->applyPlnDeltaToDetailedTotals($qty, $delta),
-        );
-    }
-
-    private function appendEventOnlyPointsToDetailedCalculations(): void
-    {
-        // Gdy istnieje plan hotelowy, nocleg pochodzi z niego — nie doliczamy
-        // punktów programu typu nocleg (unikamy podwójnego liczenia).
-        $hasHotelPlan = $this->record->hotelStays()->exists();
-
-        $eventPoints = collect($this->programPoints ?? [])
-            ->filter(function ($point) use ($hasHotelPlan) {
-                if (! (bool) ($point->active ?? true) || ! (bool) ($point->include_in_calculation ?? true)) {
-                    return false;
-                }
-
-                if ($hasHotelPlan && $this->isAccommodationProgramPoint($point)) {
-                    return false;
-                }
-
-                return true;
-            })
-            ->sortBy(['day', 'order'])
-            ->values();
-
-        if ($eventPoints->isEmpty() || empty($this->detailedCalculations)) {
-            return;
-        }
-
-        foreach ($this->detailedCalculations as $qty => $currencies) {
-            $plnPoints = collect($currencies['PLN']['points'] ?? []);
-            $existingNames = $plnPoints
-                ->map(fn ($point) => $this->normalizePointName((string) ($point['name'] ?? '')))
-                ->filter()
-                ->values();
-
-            $missingForPln = collect();
-
-            $pointsForVariant = $eventPoints
-                ->map(function ($point) use ($existingNames, $missingForPln) {
-                    $name = (string) ($point->templatePoint?->name ?? $point->name ?? 'Bez nazwy');
-
-                    $normalized = $this->normalizePointName($name);
-                    $isMissingInPln = $normalized !== '' && ! $existingNames->contains($normalized);
-
-                    if ($isMissingInPln) {
-                        $missingForPln->push([
-                            'name' => $name,
-                            'unit_price' => (float) ($point->unit_price ?? 0),
-                            'group_size' => (float) ($point->group_size ?? 1),
-                            'cost' => (float) ($point->total_price ?? 0),
-                            'is_child' => (bool) ($point->parent_id ?? false),
-                            'currency_symbol' => $point->currency?->symbol ?? 'PLN',
-                        ]);
-                    }
-
-                    return [
-                        'name' => $name,
-                        'day' => (int) ($point->day ?? 0),
-                        'order' => (float) ($point->order ?? 0),
-                        'unit_price' => (float) ($point->unit_price ?? 0),
-                        'quantity' => (float) ($point->quantity ?? 1),
-                        'cost' => (float) ($point->total_price ?? 0),
-                        'currency_symbol' => $point->currency?->symbol ?? 'PLN',
-                    ];
-                })
-                ->values()
-                ->all();
-
-            if (! empty($pointsForVariant)) {
-                $this->eventOnlyPointsForDetails[(string) $qty] = $pointsForVariant;
-            }
-
-            if ($missingForPln->isNotEmpty()) {
-                $baseDelta = (float) $missingForPln
-                    ->filter(fn ($point) => ($point['currency_symbol'] ?? 'PLN') === 'PLN')
-                    ->sum('cost');
-
-                $mergedPlnPoints = $plnPoints
-                    ->concat($missingForPln->filter(fn ($point) => ($point['currency_symbol'] ?? 'PLN') === 'PLN')->values())
-                    ->values()
-                    ->all();
-
-                $this->detailedCalculations[$qty]['PLN']['points'] = $mergedPlnPoints;
-
-                if ($baseDelta > 0) {
-                    $this->applyPlnDeltaToDetailedTotals($qty, $baseDelta);
-                }
-            }
-        }
-    }
-
-    private function isAccommodationProgramPoint($point): bool
-    {
-        if ((bool) ($point->is_hotel ?? false)) {
-            return true;
-        }
-
-        $name = mb_strtolower((string) ($point->templatePoint?->name ?? $point->name ?? ''));
-
-        foreach (['nocleg', 'zakwaterowanie', 'hotel', 'pobyt'] as $keyword) {
-            if (str_contains($name, $keyword)) {
-                return true;
-            }
-        }
-
-        return false;
-    }
-
-    /**
-     * Po wszystkich modyfikacjach sum (transport, punkty eventu, struktura hotelu)
-     * przelicz cenę za osobę = SUMA KOŃCOWA ÷ liczba osób, aby była spójna z totalem.
-     */
-    private function recomputePerPersonInDetailedCalculations(): void
-    {
-        if (empty($this->detailedCalculations)) {
-            return;
-        }
-
-        foreach ($this->detailedCalculations as $qty => $currencies) {
-            $divisor = (int) $qty;
-            if ($divisor <= 0) {
-                continue;
-            }
-
-            foreach ($currencies as $code => $data) {
-                if (! is_array($data) || ! array_key_exists('total', $data)) {
-                    continue; // pomiń klucze 'markup', 'taxes', 'hotel_structure'
-                }
-
-                $raw = (float) ($data['total'] ?? 0) / $divisor;
-                $this->detailedCalculations[$qty][$code]['price_per_person_raw'] = round($raw, 2);
-                $this->detailedCalculations[$qty][$code]['price_per_person_rounded'] =
-                    \App\Services\PriceRoundingService::roundPerPerson($raw, (string) $code);
-            }
-        }
-    }
-
-    private function normalizePointName(string $name): string
-    {
-        $name = trim($name);
-        $name = ltrim($name, "\xE2\x86\x92 ");
-        $name = rtrim($name, '.');
-
-        return mb_strtolower(trim($name));
-    }
-
-    private function applyPlnDeltaToDetailedTotals(int|string $qty, float $baseDelta): void
-    {
-        $pln = $this->detailedCalculations[$qty]['PLN'] ?? null;
-        if (! is_array($pln)) {
-            return;
-        }
-
-        $markupPercent = (float) ($this->detailedCalculations[$qty]['markup']['percent_applied'] ?? 0);
-        $markupDelta = round($baseDelta * ($markupPercent / 100), 2);
-
-        if (isset($this->detailedCalculations[$qty]['markup']['amount'])) {
-            $this->detailedCalculations[$qty]['markup']['amount'] = round(
-                (float) $this->detailedCalculations[$qty]['markup']['amount'] + $markupDelta,
-                2
-            );
-        }
-
-        $taxDeltaTotal = 0.0;
-        if (! empty($this->detailedCalculations[$qty]['taxes']['breakdown']) && is_array($this->detailedCalculations[$qty]['taxes']['breakdown'])) {
-            foreach ($this->detailedCalculations[$qty]['taxes']['breakdown'] as $idx => $tax) {
-                $percent = (float) ($tax['percentage'] ?? 0);
-                $applyToBase = (bool) ($tax['apply_to_base'] ?? false);
-                $applyToMarkup = (bool) ($tax['apply_to_markup'] ?? false);
-
-                $taxDelta = 0.0;
-                if ($applyToBase) {
-                    $taxDelta += $baseDelta * ($percent / 100);
-                }
-                if ($applyToMarkup) {
-                    $taxDelta += $markupDelta * ($percent / 100);
-                }
-
-                if ($taxDelta > 0) {
-                    $taxDelta = round($taxDelta, 2);
-                    $taxDeltaTotal += $taxDelta;
-                    $this->detailedCalculations[$qty]['taxes']['breakdown'][$idx]['amount'] = round(
-                        (float) ($tax['amount'] ?? 0) + $taxDelta,
-                        2
-                    );
-                }
-            }
-        }
-
-        if (isset($this->detailedCalculations[$qty]['taxes']['total_amount'])) {
-            $this->detailedCalculations[$qty]['taxes']['total_amount'] = round(
-                (float) $this->detailedCalculations[$qty]['taxes']['total_amount'] + $taxDeltaTotal,
-                2
-            );
-        }
-
-        $this->detailedCalculations[$qty]['PLN']['total_before_markup'] = round(
-            (float) ($pln['total_before_markup'] ?? 0) + $baseDelta,
-            2
-        );
-        $this->detailedCalculations[$qty]['PLN']['total_before_tax'] = round(
-            (float) ($pln['total_before_tax'] ?? 0) + $baseDelta + $markupDelta,
-            2
-        );
-        $this->detailedCalculations[$qty]['PLN']['total'] = round(
-            (float) ($pln['total'] ?? 0) + $baseDelta + $markupDelta + $taxDeltaTotal,
-            2
-        );
-    }
-
     public function refreshCalculations()
     {
         $this->record->refresh();
@@ -698,7 +328,8 @@ class EventPriceTable extends Widget
         $settlement = EventSettlement::findOrCreateActiveForEvent($this->record);
         $settlement->upsertCostFromProgramPoint($programPoint);
 
-        return redirect(EventSettlementResource::getUrl('edit', ['record' => $settlement]));
+        return redirect(EventSettlementResource::getEventFinanceUrlForSettlement($settlement)
+            ?? EventResource::getUrl('finance', ['record' => $this->record]));
     }
 
     // --- Price editing helpers (can be called from front-end Livewire actions) ---

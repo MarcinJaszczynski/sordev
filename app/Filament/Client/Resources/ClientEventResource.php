@@ -2,15 +2,12 @@
 
 namespace App\Filament\Client\Resources;
 
-use App\Filament\Client\Pages\ClientAgreementPage;
-use App\Filament\Client\Pages\ClientProgramPage;
 use App\Filament\Client\Resources\ClientEventResource\Pages;
 use App\Models\Event;
 use App\Services\ClientAccessService;
 use Filament\Infolists;
 use Filament\Infolists\Infolist;
 use Filament\Resources\Resource;
-use Filament\Tables;
 use Filament\Tables\Table;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Model;
@@ -40,12 +37,29 @@ class ClientEventResource extends Resource
             return parent::getEloquentQuery()->whereRaw('1 = 0');
         }
 
-        return app(ClientAccessService::class)->visibleTripsQuery($user);
+        return app(ClientAccessService::class)
+            ->visibleTripsQuery($user)
+            ->with(['eventTemplate', 'startPlace']);
     }
 
     public static function canCreate(): bool
     {
         return false;
+    }
+
+    public static function canViewAny(): bool
+    {
+        $user = Auth::user();
+        if (! $user) {
+            return false;
+        }
+
+        if ($user->hasRole(['client_participant', 'client_guardian'])) {
+            return true;
+        }
+
+        return $user->hasRole(['admin', 'super_admin', 'biuro'])
+            && \App\Http\Middleware\ClientPreviewMiddleware::isActive();
     }
 
     public static function canView(Model $record): bool
@@ -65,75 +79,10 @@ class ClientEventResource extends Resource
 
     public static function table(Table $table): Table
     {
+        // Lista używa custom view z kartami — tabela zostaje tylko jako API zasobu.
         return $table
-            ->columns([
-                Tables\Columns\TextColumn::make('name')
-                    ->label('Nazwa')
-                    ->searchable()
-                    ->wrap()
-                    ->sortable()
-                    ->description(function (Event $record): ?string {
-                        $parts = [];
-                        if ($record->start_date) {
-                            $parts[] = $record->start_date->format('d.m.Y')
-                                .($record->end_date ? ' – '.$record->end_date->format('d.m.Y') : '');
-                        }
-                        if (app(ClientAccessService::class)->isArchived($record)) {
-                            $parts[] = 'Archiwum — pełny dostęp wygasł';
-                        }
-
-                        return $parts !== [] ? implode(' · ', $parts) : null;
-                    }),
-                Tables\Columns\TextColumn::make('start_date')
-                    ->label('Start')
-                    ->date('d.m.Y')
-                    ->sortable()
-                    ->visibleFrom('md'),
-                Tables\Columns\TextColumn::make('end_date')
-                    ->label('Koniec')
-                    ->date('d.m.Y')
-                    ->visibleFrom('lg'),
-                Tables\Columns\TextColumn::make('status')
-                    ->label('Status')
-                    ->badge(),
-            ])
-            ->filters([
-                Tables\Filters\SelectFilter::make('trip_phase')
-                    ->label('Faza')
-                    ->options([
-                        'upcoming' => 'Nadchodzące',
-                        'in_progress' => 'W trakcie',
-                        'past' => 'Zakończone',
-                    ])
-                    ->query(function (Builder $query, array $data) {
-                        $value = $data['value'] ?? null;
-                        if ($value === 'upcoming') {
-                            return $query->where('start_date', '>', now());
-                        }
-                        if ($value === 'in_progress') {
-                            return $query->where('start_date', '<=', now())->where('end_date', '>=', now()->startOfDay());
-                        }
-                        if ($value === 'past') {
-                            return $query->where('end_date', '<', now()->startOfDay());
-                        }
-
-                        return $query;
-                    }),
-            ])
-            ->defaultSort('start_date', 'desc')
-            ->actions([
-                Tables\Actions\ViewAction::make(),
-                Tables\Actions\Action::make('program')
-                    ->label('Program')
-                    ->icon('heroicon-o-calendar-days')
-                    ->url(fn (Event $record) => ClientProgramPage::urlFor($record))
-                    ->visible(fn (Event $record): bool => Auth::user()?->can('viewClientPortalDetails', $record) ?? false),
-                Tables\Actions\Action::make('agreement')
-                    ->label('Umowa')
-                    ->icon('heroicon-o-document-text')
-                    ->url(fn (Event $record) => ClientAgreementPage::urlFor($record))
-                    ->visible(fn (Event $record): bool => Auth::user()?->can('viewClientPortalDetails', $record) ?? false),
-            ]);
+            ->columns([])
+            ->paginated(false);
     }
 
     public static function infolist(Infolist $infolist): Infolist
@@ -168,7 +117,7 @@ class ClientEventResource extends Resource
                     ->visible(fn (Event $record): bool => $detailsVisible($record) && filled($record->diet_info))
                     ->schema([
                         Infolists\Components\TextEntry::make('diet_info')
-                            ->label('Diety specjalne')
+                            ->label('Informacje o dietach (organizacyjne)')
                             ->placeholder('—')
                             ->columnSpanFull(),
                     ]),

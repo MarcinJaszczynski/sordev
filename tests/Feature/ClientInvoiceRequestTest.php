@@ -10,6 +10,7 @@ use App\Models\EventPortalAccess;
 use App\Models\User;
 use Filament\Facades\Filament;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Facades\Mail;
 use Illuminate\Support\Facades\Schema;
 use Livewire\Livewire;
 use Spatie\Permission\Models\Role;
@@ -22,6 +23,8 @@ class ClientInvoiceRequestTest extends TestCase
     protected function setUp(): void
     {
         parent::setUp();
+
+        Mail::fake();
 
         Role::firstOrCreate(['name' => 'client_guardian']);
         Role::firstOrCreate(['name' => 'client_participant']);
@@ -65,6 +68,7 @@ class ClientInvoiceRequestTest extends TestCase
 
         Livewire::test(ClientInvoiceRequestPage::class, ['event' => $event])
             ->fillForm([
+                'buyer_type' => ClientInvoiceRequest::BUYER_COMPANY,
                 'company_name' => 'Szkoła Podstawowa nr 1',
                 'nip' => '1234567890',
                 'invoice_email' => 'faktury@szkola.pl',
@@ -121,6 +125,7 @@ class ClientInvoiceRequestTest extends TestCase
 
         Livewire::test(ClientInvoiceRequestPage::class, ['event' => $event])
             ->fillForm([
+                'buyer_type' => ClientInvoiceRequest::BUYER_COMPANY,
                 'company_name' => 'Anna Test',
                 'nip' => '9876543210',
                 'invoice_email' => 'participant@test.local',

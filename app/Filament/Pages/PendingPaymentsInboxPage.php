@@ -2,12 +2,21 @@
 
 namespace App\Filament\Pages;
 
+use App\Actions\Finance\CompletePendingPaymentAction;
+use App\Actions\Finance\GenerateInstallmentPaymentLinkAction;
+use App\Actions\Finance\RecordSettlementCostPaymentAction;
+use App\Data\CompletePendingPaymentData;
+use App\Data\GenerateInstallmentPaymentLinkData;
+use App\Data\RecordSettlementCostPaymentData;
+use App\Filament\Actions\HelpArticleAction;
 use App\Filament\Concerns\AuthorizesVendorInvoices;
+use App\Models\EventSettlementCost;
 use App\Services\PendingPaymentAggregator;
 use App\Support\FilamentNavigation;
 use App\Support\FinanceModuleNavigation;
 use Filament\Notifications\Notification;
 use Filament\Pages\Page;
+use Illuminate\Support\Carbon;
 use Livewire\Attributes\Computed;
 
 class PendingPaymentsInboxPage extends Page
@@ -22,15 +31,31 @@ class PendingPaymentsInboxPage extends Page
 
     protected static ?string $navigationGroup = FilamentNavigation::GROUP_FINANCE;
 
-    protected static ?string $navigationLabel = 'Sterta płatności';
+    protected static ?string $navigationLabel = 'Skrzynka płatności';
 
-    protected static ?int $navigationSort = 6;
+    protected static ?int $navigationSort = 2;
+
+    public static function shouldRegisterNavigation(): bool
+    {
+        return true;
+    }
 
     public string $displayMode = 'list';
 
     public string $typeFilter = 'all';
 
     public string $payerFilter = 'all';
+
+    public bool $showCostPaymentModal = false;
+
+    public ?string $completingRowId = null;
+
+    /** @var array<string, mixed> */
+    public array $costPaymentForm = [];
+
+    public ?string $costPaymentContextTitle = null;
+
+    public ?string $costPaymentContextMeta = null;
 
     /** @var array{entries: array<int, array<string, mixed>>, truncated: bool}|null */
     protected ?array $aggregatedInboxCache = null;
@@ -53,6 +78,15 @@ class PendingPaymentsInboxPage extends Page
             $this->typeFilter = is_string($saved['typeFilter'] ?? null) ? $saved['typeFilter'] : 'all';
             $this->payerFilter = is_string($saved['payerFilter'] ?? null) ? $saved['payerFilter'] : 'all';
         }
+
+        $this->resetCostPaymentForm();
+    }
+
+    protected function getHeaderActions(): array
+    {
+        return [
+            HelpArticleAction::make('wplaty-i-linki'),
+        ];
     }
 
     public function updatedDisplayMode(string $value): void
@@ -74,7 +108,7 @@ class PendingPaymentsInboxPage extends Page
 
     public function getTitle(): string
     {
-        return 'Sterta płatności';
+        return 'Skrzynka płatności';
     }
 
     public function getNavigationTabs(): array
@@ -82,10 +116,153 @@ class PendingPaymentsInboxPage extends Page
         return FinanceModuleNavigation::tabs('pending-payments');
     }
 
+    public function beginComplete(string $rowId): void
+    {
+        $row = $this->findInboxRow($rowId);
+        if (! $row) {
+            Notification::make()->title('Nie znaleziono pozycji')->warning()->send();
+
+            return;
+        }
+
+        if (($row['complete_mode'] ?? 'quick') === 'cost_payment_form' || str_starts_with($rowId, 'cost-')) {
+            $this->openCostPaymentModal($row);
+
+            return;
+        }
+
+        $this->markCompleted($rowId);
+    }
+
+    public function openCostPaymentModal(array $row): void
+    {
+        $this->completingRowId = (string) $row['id'];
+        $this->costPaymentContextTitle = (string) ($row['title'] ?? 'Wpłata kosztowa');
+        $this->costPaymentContextMeta = trim(implode(' · ', array_filter([
+            $row['event_label'] ?? $row['event_name'] ?? null,
+            $row['context'] ?? null,
+            isset($row['amount_label']) ? 'Do zapłaty: '.$row['amount_label'] : null,
+        ])));
+
+        $paidBy = (string) ($row['suggested_paid_by'] ?? $row['paid_by'] ?? 'office');
+        $this->costPaymentForm = [
+            'amount_pln' => round((float) ($row['suggested_amount_pln'] ?? $row['amount'] ?? 0), 2),
+            'payment_method' => $paidBy === 'pilot' ? 'cash' : 'transfer',
+            'paid_by' => $paidBy,
+            'advance_type' => 'advance',
+            'paid_at' => now()->toDateString(),
+            'due_date' => $row['suggested_due_date'] ?? $row['due_date'] ?? null,
+            'document_number' => '',
+            'notes' => '',
+        ];
+        $this->showCostPaymentModal = true;
+    }
+
+    public function closeCostPaymentModal(): void
+    {
+        $this->showCostPaymentModal = false;
+        $this->completingRowId = null;
+        $this->costPaymentContextTitle = null;
+        $this->costPaymentContextMeta = null;
+        $this->resetCostPaymentForm();
+    }
+
+    public function updatedCostPaymentFormPaidBy(?string $value): void
+    {
+        if ($value === 'pilot') {
+            $this->costPaymentForm['payment_method'] = 'cash';
+        }
+    }
+
+    public function saveCostPayment(): void
+    {
+        $this->validate([
+            'costPaymentForm.amount_pln' => ['required', 'numeric', 'min:0.01'],
+            'costPaymentForm.payment_method' => ['required', 'in:cash,transfer,card,other'],
+            'costPaymentForm.paid_by' => ['required', 'in:office,pilot'],
+            'costPaymentForm.advance_type' => ['required', EventSettlementCost::userSelectableAdvanceTypesValidationRule()],
+        ], [], [
+            'costPaymentForm.amount_pln' => 'kwota',
+            'costPaymentForm.payment_method' => 'metoda',
+            'costPaymentForm.paid_by' => 'płatnik',
+            'costPaymentForm.advance_type' => 'rodzaj',
+        ]);
+
+        $rowId = (string) $this->completingRowId;
+        if (! str_starts_with($rowId, 'cost-')) {
+            Notification::make()->title('Ta pozycja nie obsługuje formularza wpłaty')->warning()->send();
+
+            return;
+        }
+
+        $cost = EventSettlementCost::query()
+            ->with(['settlement', 'plannedCurrency', 'contractor'])
+            ->find((int) substr($rowId, 5));
+
+        if (! $cost) {
+            Notification::make()->title('Nie znaleziono kosztu')->danger()->send();
+
+            return;
+        }
+
+        $plan = $cost->resolvePlanCostForPayment();
+        if (EventSettlementCost::isPaymentSourceType($plan->source_type)) {
+            Notification::make()
+                ->title('Brak pozycji planu do zaksięgowania wpłaty')
+                ->body('Otwórz Finanse imprezy i dodaj wpłatę ręcznie.')
+                ->warning()
+                ->send();
+
+            return;
+        }
+
+        $form = $this->costPaymentForm;
+        $paidBy = (string) ($form['paid_by'] ?? 'office');
+        $method = $paidBy === 'pilot' ? 'cash' : (string) ($form['payment_method'] ?? 'transfer');
+
+        try {
+            app(RecordSettlementCostPaymentAction::class)(new RecordSettlementCostPaymentData(
+                planCost: $plan,
+                amountPln: (float) $form['amount_pln'],
+                paymentMethod: $method,
+                paidBy: $paidBy,
+                advanceType: (string) $form['advance_type'],
+                paidAt: filled($form['paid_at'] ?? null) ? Carbon::parse($form['paid_at']) : now(),
+                dueDate: filled($form['due_date'] ?? null) ? Carbon::parse($form['due_date']) : null,
+                documentNumber: filled($form['document_number'] ?? null) ? (string) $form['document_number'] : null,
+                notes: filled($form['notes'] ?? null) ? (string) $form['notes'] : null,
+                paidByUserId: auth()->id(),
+                currencyId: $plan->planned_currency_id,
+            ));
+        } catch (\Throwable $e) {
+            Notification::make()->title('Nie udało się zapisać wpłaty')->body($e->getMessage())->danger()->send();
+
+            return;
+        }
+
+        $this->closeCostPaymentModal();
+        $this->forgetInboxCache();
+
+        Notification::make()
+            ->title('Zaksięgowano wpłatę')
+            ->body('Wpis trafił do Finansów imprezy (stos wpłat).')
+            ->success()
+            ->send();
+    }
+
     public function markCompleted(string $rowId): void
     {
-        app(\App\Actions\Finance\CompletePendingPaymentAction::class)(
-            new \App\Data\CompletePendingPaymentData(rowId: $rowId)
+        if (str_starts_with($rowId, 'cost-')) {
+            $row = $this->findInboxRow($rowId);
+            if ($row) {
+                $this->openCostPaymentModal($row);
+
+                return;
+            }
+        }
+
+        app(CompletePendingPaymentAction::class)(
+            new CompletePendingPaymentData(rowId: $rowId)
         );
 
         $this->forgetInboxCache();
@@ -105,8 +282,8 @@ class PendingPaymentsInboxPage extends Page
             return;
         }
 
-        $result = app(\App\Actions\Finance\GenerateInstallmentPaymentLinkAction::class)(
-            new \App\Data\GenerateInstallmentPaymentLinkData(schedule: $schedule)
+        $result = app(GenerateInstallmentPaymentLinkAction::class)(
+            new GenerateInstallmentPaymentLinkData(schedule: $schedule)
         );
 
         $this->dispatch('copy-to-clipboard', text: $result['url']);
@@ -131,6 +308,32 @@ class PendingPaymentsInboxPage extends Page
         return null;
     }
 
+    /** @return array<string, mixed>|null */
+    protected function findInboxRow(string $rowId): ?array
+    {
+        foreach ($this->inboxEntries as $row) {
+            if (($row['id'] ?? null) === $rowId) {
+                return $row;
+            }
+        }
+
+        return null;
+    }
+
+    protected function resetCostPaymentForm(): void
+    {
+        $this->costPaymentForm = [
+            'amount_pln' => null,
+            'payment_method' => 'transfer',
+            'paid_by' => 'office',
+            'advance_type' => 'advance',
+            'paid_at' => now()->toDateString(),
+            'due_date' => null,
+            'document_number' => '',
+            'notes' => '',
+        ];
+    }
+
     #[Computed]
     public function wasTruncated(): bool
     {
@@ -149,11 +352,14 @@ class PendingPaymentsInboxPage extends Page
         return collect($this->inboxEntries)
             ->map(fn (array $row): array => [
                 'id' => $row['id'],
-                'title' => ($row['event_code'] ? $row['event_code'].' · ' : '').$row['title'],
+                'title' => trim(($row['event_label'] ?? $row['event_code'] ?? '').' · '.$row['title'], ' ·'),
                 'start' => $row['due_date'],
                 'backgroundColor' => $row['color'],
                 'borderColor' => $row['color'],
                 'url' => $row['url'],
+                'extendedProps' => [
+                    'descriptionPreview' => $row['context'] ?? null,
+                ],
             ])
             ->all();
     }

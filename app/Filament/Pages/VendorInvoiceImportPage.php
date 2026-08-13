@@ -3,16 +3,26 @@
 namespace App\Filament\Pages;
 
 use App\Filament\Concerns\AuthorizesVendorInvoices;
+use App\Filament\Concerns\InteractsWithVendorInvoiceReview;
+use App\Filament\Resources\VendorInvoiceResource;
+use App\Models\VendorInvoice;
 use App\Services\Invoices\VendorInvoiceBatchImportService;
 use App\Support\FilamentNavigation;
 use Filament\Notifications\Notification;
 use Filament\Pages\Page;
+use Filament\Tables;
+use Filament\Tables\Concerns\InteractsWithTable;
+use Filament\Tables\Contracts\HasTable;
+use Filament\Tables\Table;
+use Illuminate\Database\Eloquent\Builder;
 use Livewire\Features\SupportFileUploads\TemporaryUploadedFile;
 use Livewire\WithFileUploads;
 
-class VendorInvoiceImportPage extends Page
+class VendorInvoiceImportPage extends Page implements HasTable
 {
     use AuthorizesVendorInvoices;
+    use InteractsWithTable;
+    use InteractsWithVendorInvoiceReview;
     use WithFileUploads;
 
     protected static ?string $navigationIcon = 'heroicon-o-arrow-up-tray';
@@ -25,6 +35,11 @@ class VendorInvoiceImportPage extends Page
 
     protected static ?int $navigationSort = 4;
 
+    public static function shouldRegisterNavigation(): bool
+    {
+        return false;
+    }
+
     /** @var TemporaryUploadedFile|null */
     public $csvFile = null;
 
@@ -35,6 +50,9 @@ class VendorInvoiceImportPage extends Page
     public $pdfFile = null;
 
     public ?array $lastResult = null;
+
+    /** @var array<int, int> */
+    public array $lastBatchIds = [];
 
     public static function canAccess(): bool
     {
@@ -89,7 +107,13 @@ class VendorInvoiceImportPage extends Page
                 pdfName: $this->pdfFile?->getClientOriginalName(),
             );
 
+            $this->lastBatchIds = array_values(array_unique(array_map(
+                'intval',
+                $this->lastResult['batch_ids'] ?? []
+            )));
+
             $this->reset('csvFile', 'xmlFile', 'pdfFile');
+            $this->resetTable();
 
             Notification::make()
                 ->title('Import zakończony')
@@ -111,9 +135,110 @@ class VendorInvoiceImportPage extends Page
         }
     }
 
+    public function table(Table $table): Table
+    {
+        return $table
+            ->query($this->importedInvoicesQuery())
+            ->defaultSort('id', 'desc')
+            ->columns([
+                Tables\Columns\TextColumn::make('invoice_number')
+                    ->label('Numer')
+                    ->searchable()
+                    ->description(fn (VendorInvoice $record) => $record->ksef_number),
+                Tables\Columns\TextColumn::make('seller_name')
+                    ->label('Wystawca')
+                    ->limit(32)
+                    ->description(fn (VendorInvoice $record) => $record->seller_nip ? 'NIP '.$record->seller_nip : null)
+                    ->searchable(),
+                Tables\Columns\TextColumn::make('gross_amount')
+                    ->label('Brutto')
+                    ->money('PLN')
+                    ->sortable(),
+                Tables\Columns\TextColumn::make('lines_count')
+                    ->counts('lines')
+                    ->label('Poz.')
+                    ->alignCenter(),
+                Tables\Columns\TextColumn::make('sale_date')
+                    ->label('Sprzedaż')
+                    ->date('d.m.Y')
+                    ->toggleable(),
+                Tables\Columns\BadgeColumn::make('payment_status')
+                    ->label('Płatność')
+                    ->formatStateUsing(fn ($state) => VendorInvoice::$paymentStatuses[$state] ?? $state)
+                    ->colors([
+                        'warning' => 'due',
+                        'success' => 'paid',
+                        'info' => 'partial',
+                        'danger' => 'cancelled',
+                    ]),
+                Tables\Columns\BadgeColumn::make('matching_status')
+                    ->label('Dopasowanie')
+                    ->formatStateUsing(fn ($state) => VendorInvoice::$matchingStatuses[$state] ?? $state)
+                    ->colors([
+                        'success' => 'auto_matched',
+                        'info' => 'manual',
+                        'warning' => 'needs_review',
+                        'gray' => 'unmatched',
+                    ]),
+                Tables\Columns\TextColumn::make('event.code')
+                    ->label('Impreza')
+                    ->placeholder('—')
+                    ->description(fn (VendorInvoice $record) => $record->event?->name),
+                Tables\Columns\TextColumn::make('contractor.name')
+                    ->label('Kontrahent')
+                    ->placeholder('—')
+                    ->toggleable(),
+                Tables\Columns\IconColumn::make('pdf_path')
+                    ->label('PDF')
+                    ->boolean()
+                    ->trueIcon('heroicon-o-document-check')
+                    ->falseIcon('heroicon-o-document'),
+            ])
+            ->filters([
+                Tables\Filters\SelectFilter::make('matching_status')
+                    ->label('Dopasowanie')
+                    ->options(VendorInvoice::$matchingStatuses),
+                Tables\Filters\SelectFilter::make('payment_status')
+                    ->label('Płatność')
+                    ->options(VendorInvoice::$paymentStatuses),
+            ])
+            ->actions($this->vendorInvoiceReviewActions())
+            ->emptyStateHeading($this->lastBatchIds === []
+                ? 'Brak wyników importu'
+                : 'Brak faktur w tym batchu')
+            ->emptyStateDescription($this->lastBatchIds === []
+                ? 'Po wczytaniu CSV/XML pojawi się tu lista faktur do podglądu i przypisania.'
+                : 'Batch nie zawiera faktur albo zostały usunięte.')
+            ->paginated([10, 25, 50]);
+    }
+
+    public function getInboxUrl(): string
+    {
+        return VendorInvoiceInboxPage::getUrl();
+    }
+
+    public function getRegistryUrl(): string
+    {
+        return VendorInvoiceResource::getUrl('index');
+    }
+
     public function getNavigationTabs(): array
     {
         return \App\Support\FinanceModuleNavigation::tabs('import');
+    }
+
+    /**
+     * @return Builder<VendorInvoice>
+     */
+    private function importedInvoicesQuery(): Builder
+    {
+        $query = VendorInvoice::query()->with(['event', 'contractor', 'lines']);
+
+        if ($this->lastBatchIds === []) {
+            return $query->whereRaw('1 = 0');
+        }
+
+        return $query->whereIn('import_batch_id', $this->lastBatchIds);
     }
 
     private function resolveTempPath(?TemporaryUploadedFile $file): ?string

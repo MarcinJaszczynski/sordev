@@ -2,6 +2,8 @@
 
 namespace App\Filament\Resources\EventResource\Concerns;
 
+use App\Actions\Finance\UpdateSettlementCostPlanAction;
+use App\Data\UpdateSettlementCostPlanData;
 use App\Filament\Forms\ProgramPointSettlementFinanceFields;
 use App\Models\Currency;
 use App\Models\Event;
@@ -12,6 +14,7 @@ use App\Services\ProgramPointPricingCalculator;
 use App\Services\ProgramPointSettlementDocumentSync;
 use App\Services\SettlementFinanceFormSupport;
 use App\Support\CurrencyAmountDisplay;
+use Carbon\Carbon;
 use Filament\Actions\StaticAction;
 use Filament\Forms;
 use Filament\Tables;
@@ -46,198 +49,44 @@ trait ManagesProgramPointSettlementFinance
         $cost = $settlement->upsertCostFromProgramPoint(
             $record->loadMissing('templatePoint', 'currency', 'event', 'reservations'),
         );
-        $cost->update(['paid_by' => $paidBy]);
 
-        $settlement->costs()
-            ->where('source_type', self::PROGRAM_POINT_PAYMENT_SOURCE_TYPE)
-            ->where('source_id', $record->id)
-            ->update(['paid_by' => $paidBy]);
+        // Tylko plan — historyczne wpłaty zachowują swojego płatnika (zaliczka biura ≠ dopłata pilota).
+        app(\App\Actions\Finance\ChangeSettlementCostPayerAction::class)(
+            new \App\Data\ChangeSettlementCostPayerData(planCost: $cost, paidBy: $paidBy),
+        );
 
-        $settlement->recalculateTotals();
+        app(\App\Services\PilotSettlementService::class)->refreshCashFromCosts($settlement->fresh() ?? $settlement);
     }
 
     /**
+     * Otwiera wspólny drawer kosztów (na tym RM / stronie hosta).
+     *
      * @return array<int, Tables\Actions\Action>
      */
     protected function programPointFinanceTableActions(bool $includePricingBreakdown = true): array
     {
+        unset($includePricingBreakdown);
+
         return [
-            $this->applySettlementFinanceModalSubmitSync(
-                Tables\Actions\Action::make('settle_point_plan')
-                ->label('Plan')
+            Tables\Actions\Action::make('open_finance')
+                ->label('Płatności')
                 ->icon('heroicon-o-banknotes')
-                ->color('warning')
+                ->color('primary')
                 ->button()
                 ->extraAttributes(['class' => 'epp-finance-action'])
-                ->modalHeading(fn (EventProgramPoint $record): string => 'Finanse (plan): '.($record->name ?: $record->templatePoint?->name ?? ('Punkt #'.$record->id)))
-                ->modalDescription('Kalkulacja i plan rozliczenia.')
-                ->modalWidth('3xl')
-                ->fillForm(fn (EventProgramPoint $record): array => $this->buildSettlePointFormData($record))
-                ->form(function (EventProgramPoint $record) use ($includePricingBreakdown): array {
-                    $sections = [];
+                ->action(function (EventProgramPoint $record): void {
+                    $event = $this->settlementOwnerEvent();
+                    $settlement = EventSettlement::findOrCreateActiveForEvent($event);
+                    $cost = $settlement->upsertCostFromProgramPoint(
+                        $record->loadMissing('templatePoint', 'currency', 'event', 'reservations'),
+                    );
 
-                    if ($includePricingBreakdown) {
-                        $event = $this->settlementOwnerEvent();
-                        $participantCount = max(1, (int) ($event->participant_count ?? 1));
-                        $breakdown = ProgramPointPricingCalculator::breakdownForEventPoint($record, $participantCount);
-
-                        $sections[] = Forms\Components\Section::make('Wycena punktu')
-                            ->description('Algorytm jak w bibliotece szablonu.')
-                            ->columns(2)
-                            ->schema([
-                                Forms\Components\Placeholder::make('pricing_breakdown_display')
-                                    ->label('Wyliczenie')
-                                    ->content(ProgramPointPricingCalculator::describeBreakdown($breakdown))
-                                    ->extraAttributes(['class' => 'epp-pricing-preview whitespace-pre-line'])
-                                    ->columnSpanFull(),
-                                Forms\Components\Placeholder::make('calculation_total_display')
-                                    ->label('Kalkulacja (szablon)')
-                                    ->content($record->formatAmount((float) ($record->calculated_price ?? 0))),
-                                Forms\Components\Placeholder::make('event_point_total_display')
-                                    ->label('Suma imprezy')
-                                    ->content($record->formatAmount($record->resolveEffectiveTotalPrice($participantCount))),
-                            ]);
-                    } else {
-                        $event = $this->settlementOwnerEvent();
-                        $participantCount = max(1, (int) ($event->participant_count ?? 1));
-
-                        $sections[] = Forms\Components\Section::make('Kwoty referencyjne')
-                            ->columns(2)
-                            ->schema([
-                                Forms\Components\Placeholder::make('event_point_total_display')
-                                    ->label('Kosztorys')
-                                    ->content($record->formatAmount($record->resolveEffectiveTotalPrice($participantCount))),
-                            ]);
-                    }
-
-                    $sections[] = Forms\Components\Section::make('Plan rozliczenia')
-                        ->columns(2)
-                        ->schema(ProgramPointSettlementFinanceFields::planFields());
-
-                    return $sections;
+                    \App\Services\EventFinanceOverviewService::forgetOverviewCacheForEvent((int) $event->id);
+                    unset($this->selectedRow);
+                    $this->openCost((int) $cost->id);
                 })
-                ->action(function (array $data, EventProgramPoint $record): void {
-                    $summary = $this->persistSettlePointFinance($record, $data, false);
-
-                    \Filament\Notifications\Notification::make()
-                        ->success()
-                        ->title('Plan finansowy zapisany')
-                        ->body(SettlementFinanceFormSupport::notificationBody($summary))
-                        ->send();
-                })
-                ->visible(fn (EventProgramPoint $record): bool => (bool) $record->active)
-            ),
-
-            $this->applySettlementFinanceModalSubmitSync(
-                Tables\Actions\Action::make('settle_point_advance')
-                ->label('Zaliczka')
-                ->icon('heroicon-o-credit-card')
-                ->color('gray')
-                ->button()
-                ->extraAttributes(['class' => 'epp-finance-action'])
-                ->modalHeading(fn (EventProgramPoint $record): string => 'Finanse (zaliczka): '.($record->name ?: $record->templatePoint?->name ?? ('Punkt #'.$record->id)))
-                ->modalWidth('3xl')
-                ->fillForm(fn (EventProgramPoint $record): array => $this->buildSettlePointFormData($record))
-                ->form([
-                    Forms\Components\Section::make('Kwoty referencyjne')
-                        ->columns(2)
-                        ->schema([
-                            Forms\Components\Placeholder::make('event_point_total_ref')
-                                ->label('Kosztorys punktu')
-                                ->content(fn (Forms\Get $get): string => $this->formatFormAmountLabel(
-                                    (float) ($get('event_point_total') ?? 0),
-                                    $get('settlement_planned_currency_id'),
-                                    (bool) ($get('settlement_planned_convert_to_pln') ?? true),
-                                )),
-                            Forms\Components\Placeholder::make('planned_amount_ref')
-                                ->label('Planowana kwota')
-                                ->content(fn (Forms\Get $get): string => $this->formatFormAmountLabel(
-                                    (float) ($get('settlement_planned_amount') ?? 0),
-                                    $get('settlement_planned_currency_id'),
-                                    (bool) ($get('settlement_planned_convert_to_pln') ?? true),
-                                )),
-                        ]),
-                    Forms\Components\Section::make('Zaliczki')
-                        ->schema([
-                            Forms\Components\Repeater::make('advance_entries')
-                                ->label('')
-                                ->addActionLabel('Dodaj zaliczkę')
-                                ->defaultItems(0)
-                                ->reorderable()
-                                ->schema(ProgramPointSettlementFinanceFields::advanceEntryFields())
-                                ->columns(3)
-                                ->columnSpanFull(),
-                        ]),
-                ])
-                ->action(function (array $data, EventProgramPoint $record): void {
-                    $summary = $this->persistSettlePointFinance($record, $data, syncPaymentEntries: false, syncAdvanceEntries: true);
-
-                    \Filament\Notifications\Notification::make()
-                        ->success()
-                        ->title('Zaliczka zapisana')
-                        ->body(SettlementFinanceFormSupport::notificationBody($summary))
-                        ->send();
-                })
-                ->visible(fn (EventProgramPoint $record): bool => (bool) $record->active)
-            ),
-
-            $this->applySettlementFinanceModalSubmitSync(
-                Tables\Actions\Action::make('settle_point_payments')
-                ->label('Wpłaty')
-                ->icon('heroicon-o-receipt-percent')
-                ->color('success')
-                ->button()
-                ->extraAttributes(['class' => 'epp-finance-action'])
-                ->modalHeading(fn (EventProgramPoint $record): string => 'Finanse (wpłaty): '.($record->name ?: $record->templatePoint?->name ?? ('Punkt #'.$record->id)))
-                ->modalWidth('4xl')
-                ->fillForm(fn (EventProgramPoint $record): array => $this->buildSettlePointFormData($record))
-                ->form([
-                    Forms\Components\Section::make('Podsumowanie')
-                        ->columns(2)
-                        ->schema([
-                            Forms\Components\Placeholder::make('event_point_total_ref')
-                                ->label('Kosztorys punktu')
-                                ->content(fn (Forms\Get $get): string => $this->formatFormAmountLabel(
-                                    (float) ($get('event_point_total') ?? 0),
-                                    $get('settlement_planned_currency_id'),
-                                    (bool) ($get('settlement_planned_convert_to_pln') ?? true),
-                                )),
-                            Forms\Components\Placeholder::make('planned_amount_ref')
-                                ->label('Planowana kwota')
-                                ->content(fn (Forms\Get $get): string => $this->formatFormAmountLabel(
-                                    (float) ($get('settlement_planned_amount') ?? 0),
-                                    $get('settlement_planned_currency_id'),
-                                    (bool) ($get('settlement_planned_convert_to_pln') ?? true),
-                                )),
-                            Forms\Components\Placeholder::make('payments_summary')
-                                ->label('')
-                                ->content(fn (Forms\Get $get): HtmlString => $this->buildFinancePaymentsSummary($get))
-                                ->columnSpanFull(),
-                        ]),
-                    Forms\Components\Section::make('Wpłaty i dopłaty')
-                        ->schema([
-                            Forms\Components\Repeater::make('payment_entries')
-                                ->label('')
-                                ->addActionLabel('Dodaj wpis')
-                                ->defaultItems(1)
-                                ->live(debounce: 800)
-                                ->reorderable()
-                                ->schema(ProgramPointSettlementFinanceFields::paymentEntryFields())
-                                ->columns(3)
-                                ->columnSpanFull(),
-                        ]),
-                ])
-                ->action(function (array $data, EventProgramPoint $record): void {
-                    $summary = $this->persistSettlePointFinance($record, $data, syncPaymentEntries: true);
-
-                    \Filament\Notifications\Notification::make()
-                        ->success()
-                        ->title('Wpłaty zapisane')
-                        ->body(SettlementFinanceFormSupport::notificationBody($summary))
-                        ->send();
-                })
-                ->visible(fn (EventProgramPoint $record): bool => (bool) $record->active)
-            ),
+                ->visible(fn (EventProgramPoint $record): bool => (bool) $record->active
+                    && ! (bool) $record->getAttribute('_is_set_parent')),
         ];
     }
 
@@ -465,27 +314,29 @@ trait ManagesProgramPointSettlementFinance
             $plannedAmountPln = round($plannedAmount, 2);
         }
 
-        $costUpdate = [
-            'planned_amount' => $plannedAmount,
-            'planned_currency_id' => $plannedCurrencyId,
-            'planned_convert_to_pln' => $plannedConvertToPln,
-            'planned_rate' => $plannedRate,
-            'planned_amount_pln' => $plannedAmountPln,
-            'contractor_id' => $settlementContractorId,
-            'paid_by' => $data['settlement_paid_by'] ?? $cost->paid_by,
-            'payment_status' => $cost->payment_status,
-            'payment_method' => $data['settlement_payment_method'] ?? $cost->payment_method,
-            'notes' => $data['settlement_notes'] ?? $cost->notes,
-            'advance_due_date' => array_key_exists('settlement_payment_due_date', $data)
-                ? $data['settlement_payment_due_date']
-                : $cost->advance_due_date,
-        ];
+        $dueDateRaw = array_key_exists('settlement_payment_due_date', $data)
+            ? $data['settlement_payment_due_date']
+            : $cost->advance_due_date;
 
-        if (array_key_exists('settlement_advance_type', $data)) {
-            $costUpdate['advance_type'] = $data['settlement_advance_type'];
-        }
+        $cost = app(UpdateSettlementCostPlanAction::class)(new UpdateSettlementCostPlanData(
+            planCost: $cost,
+            plannedAmountPln: (float) ($plannedAmountPln ?? 0),
+            paidBy: (string) ($data['settlement_paid_by'] ?? $cost->paid_by ?? 'office'),
+            notes: $data['settlement_notes'] ?? $cost->notes,
+            dueDate: filled($dueDateRaw) ? Carbon::parse($dueDateRaw) : null,
+            plannedAmount: $plannedAmount,
+            plannedCurrencyId: $plannedCurrencyId,
+            plannedConvertToPln: $plannedConvertToPln,
+            plannedRate: $plannedRate,
+            touchContractor: true,
+            contractorId: $settlementContractorId,
+            paymentMethod: $data['settlement_payment_method'] ?? $cost->payment_method,
+            advanceType: array_key_exists('settlement_advance_type', $data)
+                ? $data['settlement_advance_type']
+                : null,
+        ));
 
-        $cost->update($costUpdate);
+        $cost = $cost->fresh() ?? $cost;
 
         $totalAdvanceAmount = (float) ($cost->advance_amount ?? 0);
         $nearestAdvanceDueDate = $cost->advance_due_date;
@@ -525,7 +376,7 @@ trait ManagesProgramPointSettlementFinance
             }
 
             $baseName = $cost->name ?: ($record->name ?? ('Punkt #'.$record->id));
-            $advancePaidBy = $data['settlement_paid_by'] ?? $cost->paid_by ?? 'office';
+            $advancePaidBy = $data['settlement_advance_paid_by'] ?? $data['settlement_paid_by'] ?? $cost->paid_by ?? 'office';
 
             foreach ($advanceEntries as $index => $entry) {
                 $advanceAmount = (float) ($entry['advance_amount'] ?? 0);
@@ -559,7 +410,7 @@ trait ManagesProgramPointSettlementFinance
                     'actual_amount_pln' => $actualAmountPln,
                     'paid_by' => $advancePaidBy,
                     'advance_type' => 'advance',
-                    'payment_method' => null,
+                    'payment_method' => $advancePaidBy === 'pilot' ? 'cash' : null,
                     'document_number' => $entry['document_number'] ?? null,
                     'paid_at' => $paidAt,
                     'payment_status' => $isPaid ? 'advance_paid' : 'advance_required',
@@ -656,8 +507,10 @@ trait ManagesProgramPointSettlementFinance
                     'actual_rate' => $actualRate,
                     'actual_amount_pln' => $actualAmountPln,
                     'paid_by' => $entry['paid_by'] ?? 'office',
-                    'advance_type' => $cost->advance_type ?? 'full',
-                    'payment_method' => $entry['payment_method'] ?? null,
+                    'advance_type' => EventSettlementCost::normalizeUserAdvanceType($entry['advance_type'] ?? null),
+                    'payment_method' => (($entry['paid_by'] ?? 'office') === 'pilot')
+                        ? 'cash'
+                        : ($entry['payment_method'] ?? null),
                     'document_number' => $entry['document_number'] ?? null,
                     'paid_at' => $entry['paid_at'] ?? null,
                     'payment_status' => (filled($entry['paid_at'] ?? null) || $actualAmount !== null) ? 'paid' : 'planned',
@@ -724,6 +577,7 @@ trait ManagesProgramPointSettlementFinance
         $remainingForeign = max(0, $plannedAmount - $paidForeign);
 
         $settlement->recalculateTotals();
+        app(\App\Services\PilotSettlementService::class)->refreshCashFromCosts($settlement);
         $cost->loadMissing('plannedCurrency');
 
         $this->afterSettlePointFinanceSaved();

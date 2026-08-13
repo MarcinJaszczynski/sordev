@@ -2,7 +2,6 @@
 
 namespace App\Livewire;
 
-use App\Filament\Resources\TaskResource;
 use App\Models\EventTemplate;
 use App\Models\EventTemplateProgramPoint;
 use App\Support\Tasks\TaskNavigation;
@@ -379,53 +378,48 @@ class EventProgramTreeEditor extends Component
 
     public function deletePoint($pivotId)
     {
-        Log::info("DeletePoint called with pivotId: $pivotId");
+        $pivotId = (int) $pivotId;
+        if ($pivotId <= 0) {
+            $this->dispatch('notify', ['type' => 'error', 'message' => 'Nieprawidłowy identyfikator punktu programu.']);
+
+            return;
+        }
+
         try {
-            $pointPivot = DB::table('event_template_event_template_program_point')->where('id', $pivotId)->first();
-            Log::info('Found pointPivot: '.json_encode($pointPivot));
+            DB::transaction(function () use ($pivotId): void {
+                $pointPivot = DB::table('event_template_event_template_program_point')
+                    ->where('id', $pivotId)
+                    ->first();
 
-            if (! $pointPivot) {
-                $this->dispatch('notify', ['type' => 'error', 'message' => 'Nie znaleziono punktu programu do usunięcia.']);
+                if (! $pointPivot) {
+                    throw new \RuntimeException('Nie znaleziono punktu programu do usunięcia.');
+                }
 
-                return;
-            }
+                // Usuwamy wiersz pivota — FK wskazują na istniejące szablon/punkt, nie na ten wiersz.
+                DB::table('event_template_event_template_program_point')
+                    ->where('id', $pivotId)
+                    ->delete();
 
-            // Kompletnie wyłącz foreign keys PRZED rozpoczęciem transakcji
-            DB::unprepared('PRAGMA foreign_keys = OFF');
-
-            DB::beginTransaction();
-
-            $dayOfDeletedPoint = $pointPivot->day;
-            $orderOfDeletedPoint = $pointPivot->order;
-            $eventTemplateId = $pointPivot->event_template_id;
-
-            // Usuń punkt programu - bezpośrednio przez SQL
-            $deleted = DB::unprepared("DELETE FROM event_template_event_template_program_point WHERE id = $pivotId");
-            Log::info('Direct SQL delete executed');
-
-            // Aktualizuj kolejność pozostałych punktów - bezpośrednio przez SQL
-            DB::unprepared("UPDATE event_template_event_template_program_point 
-                           SET `order` = `order` - 1 
-                           WHERE event_template_id = $eventTemplateId 
-                           AND day = $dayOfDeletedPoint 
-                           AND `order` > $orderOfDeletedPoint");
-            Log::info('Order updated for remaining points');
-
-            DB::commit();
-            Log::info('Transaction committed successfully');
-
-            // Ponownie włącz foreign keys
-            DB::unprepared('PRAGMA foreign_keys = ON');
+                DB::table('event_template_event_template_program_point')
+                    ->where('event_template_id', $pointPivot->event_template_id)
+                    ->where('day', $pointPivot->day)
+                    ->where('order', '>', $pointPivot->order)
+                    ->decrement('order');
+            });
 
             $this->loadProgramByDays();
             $this->dispatch('notify', ['type' => 'success', 'message' => 'Punkt programu usunięty.']);
+        } catch (\RuntimeException $e) {
+            $this->dispatch('notify', ['type' => 'error', 'message' => $e->getMessage()]);
         } catch (\Exception $e) {
-            DB::rollBack();
-            // Ponownie włącz foreign keys nawet w przypadku błędu
-            DB::unprepared('PRAGMA foreign_keys = ON');
-            Log::error('Błąd usuwania punktu programu: '.$e->getMessage());
-            Log::error('Stack trace: '.$e->getTraceAsString());
-            $this->dispatch('notify', ['type' => 'error', 'message' => 'Wystąpił błąd podczas usuwania punktu programu: '.$e->getMessage()]);
+            Log::error('Błąd usuwania punktu programu: '.$e->getMessage(), [
+                'pivot_id' => $pivotId,
+                'trace' => $e->getTraceAsString(),
+            ]);
+            $this->dispatch('notify', [
+                'type' => 'error',
+                'message' => 'Wystąpił błąd podczas usuwania punktu programu: '.$e->getMessage(),
+            ]);
         }
     }
 

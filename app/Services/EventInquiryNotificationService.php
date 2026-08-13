@@ -3,14 +3,13 @@
 namespace App\Services;
 
 use App\Enums\TaskPriority;
-use App\Enums\TaskSource;
-use App\Filament\Resources\EventResource;
 use App\Models\Event;
 use App\Models\Task;
 use App\Models\User;
+use App\Support\AdminPanelUrls;
 use App\Support\Tasks\OfficeTaskRecipients;
+use App\Support\Tasks\SystemTaskFactory;
 use Illuminate\Support\Collection;
-use Illuminate\Support\Facades\Auth;
 
 class EventInquiryNotificationService
 {
@@ -20,38 +19,19 @@ class EventInquiryNotificationService
             return;
         }
 
-        $statusId = Task::getDefaultStatusId();
+        $fingerprint = 'event-inquiry:'.$event->id;
 
-        if (! $statusId) {
-            return;
-        }
-
-        $recipients = OfficeTaskRecipients::users();
-
-        if ($recipients->isEmpty()) {
-            return;
-        }
-
-        $title = $this->buildTitle($event);
-        $description = $this->buildDescription($event);
-        $eventUrl = EventResource::getUrl('edit', ['record' => $event]);
-        $maxOrder = (int) Task::query()->where('status_id', $statusId)->max('order');
-
-        foreach ($recipients as $recipient) {
-            Task::create([
-                'title' => $title,
-                'description' => $description."\n\nLink do imprezy: ".$eventUrl,
-                'due_date' => now()->addDay(),
-                'status_id' => $statusId,
-                'priority' => TaskPriority::Urgent->value,
-                'source' => TaskSource::System->value,
-                'author_id' => $recipient->id,
-                'assignee_id' => $recipient->id,
-                'taskable_type' => Event::class,
-                'taskable_id' => $event->id,
-                'order' => ++$maxOrder,
-            ]);
-        }
+        SystemTaskFactory::upsertShared(
+            taskable: $event,
+            fingerprint: $fingerprint,
+            title: $this->buildTitle($event),
+            description: $this->buildDescription($event),
+            priority: TaskPriority::Urgent,
+            dueDate: now()->addDay(),
+            eventForAssignee: $event,
+            preferredAssigneeId: $author?->id,
+            url: AdminPanelUrls::eventEdit($event),
+        );
     }
 
     /**

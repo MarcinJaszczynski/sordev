@@ -22,16 +22,17 @@ use App\Models\EventSettlementParticipantPayment;
 use App\Models\EventTemplate;
 use App\Models\EventTemplateProgramPoint;
 use App\Models\PilotCashPreparation;
+use App\Models\Reservation;
 use App\Models\Task;
 use App\Models\TaskStatus;
 use App\Models\User;
+use App\Support\Tasks\TaskAuthorization;
+use App\Support\Tasks\TaskQueryFilters;
 use Filament\Actions;
 use Filament\Forms\Concerns\InteractsWithForms;
 use Filament\Forms\Contracts\HasForms;
 use Filament\Notifications\Notification;
 use Filament\Resources\Pages\Page;
-use App\Support\Tasks\TaskAuthorization;
-use App\Support\Tasks\TaskQueryFilters;
 use Illuminate\Support\Arr;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\Auth;
@@ -52,7 +53,7 @@ class TasksKanbanBoardPage extends Page implements HasForms
 
     protected static ?string $slug = 'board';
 
-    protected static ?string $title = 'Kanban - Zarządzanie zadaniami';
+    protected static ?string $title = 'Tablica zadań';
 
     protected ?string $maxContentWidth = 'full';
 
@@ -153,7 +154,32 @@ class TasksKanbanBoardPage extends Page implements HasForms
     public function tasks()
     {
         $query = Task::query()
-            ->with(['status', 'assignee', 'author', 'parent', 'subtasks', 'attachments', 'comments.author', 'taskable']);
+            ->with([
+                'status',
+                'assignee',
+                'author',
+                'parent',
+                'subtasks',
+                'attachments',
+                'comments' => fn ($comments) => $comments->orderBy('created_at')->with('author'),
+                'taskable' => function ($morphTo): void {
+                    $morphTo->morphWith([
+                        EventProgramPoint::class => ['event:id,name,start_date', 'templatePoint:id,name'],
+                        EventTemplateProgramPoint::class => [],
+                        EventDocument::class => ['event:id,name,start_date'],
+                        EventSettlementCost::class => ['settlement.event:id,name,start_date'],
+                        EventSettlementDocument::class => ['settlement.event:id,name,start_date'],
+                        EventSettlementParticipantPayment::class => ['settlement.event:id,name,start_date'],
+                        PilotCashPreparation::class => ['settlement.event:id,name,start_date', 'currency:id,name,symbol'],
+                        Reservation::class => [
+                            'event:id,name,start_date',
+                            'contractor:id,name',
+                            'programPoint:id,name,event_id',
+                        ],
+                    ]);
+                },
+            ])
+            ->withCount(['comments', 'attachments']);
 
         TaskQueryFilters::officeOnly($query);
         TaskQueryFilters::excludeArchived($query);
@@ -639,16 +665,16 @@ class TasksKanbanBoardPage extends Page implements HasForms
                 ? EventResource::getUrl('edit', ['record' => $context->event_id])
                 : null,
             $context instanceof EventSettlementCost => $context->settlement_id
-                ? EventSettlementResource::getUrl('edit', ['record' => $context->settlement_id])
+                ? EventSettlementResource::getEventFinanceUrlForSettlement($context->settlement_id)
                 : null,
             $context instanceof EventSettlementDocument => $context->settlement_id
-                ? EventSettlementResource::getUrl('edit', ['record' => $context->settlement_id])
+                ? EventSettlementResource::getEventFinanceUrlForSettlement($context->settlement_id)
                 : null,
             $context instanceof EventSettlementParticipantPayment => $context->settlement_id
-                ? EventSettlementResource::getUrl('edit', ['record' => $context->settlement_id])
+                ? EventSettlementResource::getEventFinanceUrlForSettlement($context->settlement_id)
                 : null,
             $context instanceof PilotCashPreparation => $context->settlement_id
-                ? EventSettlementResource::getUrl('edit', ['record' => $context->settlement_id])
+                ? EventSettlementResource::getEventFinanceUrlForSettlement($context->settlement_id)
                 : null,
             default => null,
         };
@@ -722,12 +748,12 @@ class TasksKanbanBoardPage extends Page implements HasForms
                 ] : null,
                 $context->settlement_id ? [
                     'label' => 'Rozliczenie #'.$context->settlement_id,
-                    'url' => EventSettlementResource::getUrl('edit', ['record' => $context->settlement_id]),
+                    'url' => EventSettlementResource::getEventFinanceUrlForSettlement($context->settlement_id),
                 ] : null,
                 $context->settlement_id ? [
                     'label' => 'Pozycja kosztu #'.$context->getKey(),
                     'url' => $this->appendQuery(
-                        EventSettlementResource::getUrl('edit', ['record' => $context->settlement_id]),
+                        EventSettlementResource::getEventFinanceUrlForSettlement($context->settlement_id),
                         ['activeRelationManager' => 0]
                     ),
                 ] : null,
@@ -740,12 +766,12 @@ class TasksKanbanBoardPage extends Page implements HasForms
                 ] : null,
                 $context->settlement_id ? [
                     'label' => 'Rozliczenie #'.$context->settlement_id,
-                    'url' => EventSettlementResource::getUrl('edit', ['record' => $context->settlement_id]),
+                    'url' => EventSettlementResource::getEventFinanceUrlForSettlement($context->settlement_id),
                 ] : null,
                 $context->settlement_id ? [
                     'label' => 'Dokument rozliczenia #'.$context->getKey(),
                     'url' => $this->appendQuery(
-                        EventSettlementResource::getUrl('edit', ['record' => $context->settlement_id]),
+                        EventSettlementResource::getEventFinanceUrlForSettlement($context->settlement_id),
                         ['activeRelationManager' => 1]
                     ),
                 ] : null,
@@ -758,12 +784,12 @@ class TasksKanbanBoardPage extends Page implements HasForms
                 ] : null,
                 $context->settlement_id ? [
                     'label' => 'Rozliczenie #'.$context->settlement_id,
-                    'url' => EventSettlementResource::getUrl('edit', ['record' => $context->settlement_id]),
+                    'url' => EventSettlementResource::getEventFinanceUrlForSettlement($context->settlement_id),
                 ] : null,
                 $context->settlement_id ? [
                     'label' => 'Wpłata uczestnika #'.$context->getKey(),
                     'url' => $this->appendQuery(
-                        EventSettlementResource::getUrl('edit', ['record' => $context->settlement_id]),
+                        EventSettlementResource::getEventFinanceUrlForSettlement($context->settlement_id),
                         ['activeRelationManager' => 2]
                     ),
                 ] : null,
@@ -776,12 +802,12 @@ class TasksKanbanBoardPage extends Page implements HasForms
                 ] : null,
                 $context->settlement_id ? [
                     'label' => 'Rozliczenie #'.$context->settlement_id,
-                    'url' => EventSettlementResource::getUrl('edit', ['record' => $context->settlement_id]),
+                    'url' => EventSettlementResource::getEventFinanceUrlForSettlement($context->settlement_id),
                 ] : null,
                 $context->settlement_id ? [
                     'label' => 'Gotówka pilota #'.$context->getKey(),
                     'url' => $this->appendQuery(
-                        EventSettlementResource::getUrl('edit', ['record' => $context->settlement_id]),
+                        EventSettlementResource::getEventFinanceUrlForSettlement($context->settlement_id),
                         ['activeRelationManager' => 3]
                     ),
                 ] : null,

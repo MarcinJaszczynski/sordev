@@ -10,6 +10,7 @@ use App\Support\CurrencyAmountDisplay;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Database\Eloquent\Relations\BelongsToMany;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Database\Eloquent\SoftDeletes;
 use Illuminate\Support\Facades\Schema;
@@ -132,13 +133,17 @@ class EventProgramPoint extends Model
             // Automatycznie oblicz total_price
             $point->total_price = $point->resolveEffectiveTotalPrice($participants);
 
-            // Kalkulacja punktu ma używać tego samego algorytmu co w szablonie:
-            // cena jednostkowa × liczba osób / grup.
+            // Kalkulacja (kosztorys) — zawsze live z unit_price × osoby.
+            // Plan (ustalenia) NIE jest tu nadpisywany przy zmianie ceny.
             $point->calculated_price = $point->resolveCalculationTotal($participants);
+        });
 
-            // Domyślnie planned_price = calculated_price jeśli nie nadpisano
-            if (is_null($point->planned_price) || $point->planned_price == 0) {
-                $point->planned_price = $point->calculated_price;
+        // Seed planu tylko przy tworzeniu — default = kosztorys; potem plan żyje osobno.
+        static::creating(function ($point) {
+            if (is_null($point->planned_price) || (float) $point->planned_price == 0.0) {
+                $participants = max(1, (int) ($point->event?->participant_count ?? 1));
+                $point->planned_price = $point->calculated_price
+                    ?? $point->resolveCalculationTotal($participants);
             }
         });
 
@@ -287,7 +292,18 @@ class EventProgramPoint extends Model
         return $this->belongsTo(ContractorLocation::class, 'contractor_location_id');
     }
 
-    public function vendorInvoices(): HasMany
+    public function vendorInvoices(): BelongsToMany
+    {
+        return $this->belongsToMany(
+            VendorInvoice::class,
+            'vendor_invoice_program_point'
+        )->withTimestamps();
+    }
+
+    /**
+     * Legacy: faktury z kolumny event_program_point_id (główny punkt).
+     */
+    public function primaryVendorInvoices(): HasMany
     {
         return $this->hasMany(VendorInvoice::class, 'event_program_point_id');
     }

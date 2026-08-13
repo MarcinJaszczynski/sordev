@@ -2,6 +2,7 @@
 
 namespace App\Livewire;
 
+use App\Filament\Concerns\InteractsWithBankPaymentAssignment;
 use App\Models\BankPaymentImportBatch;
 use App\Models\BankPaymentImportLine;
 use App\Services\BankPayments\BankPaymentImportEventScope;
@@ -14,6 +15,7 @@ use Livewire\WithFileUploads;
 
 class EventBankPaymentImportPanel extends Component
 {
+    use InteractsWithBankPaymentAssignment;
     use WithFileUploads;
 
     public int $eventId;
@@ -175,12 +177,16 @@ class EventBankPaymentImportPanel extends Component
             ->orderBy('id')
             ->get();
 
+        $visible = $lines->filter(
+            fn (BankPaymentImportLine $line): bool => BankPaymentImportEventScope::lineBelongsToEvent($line, $this->eventId)
+                || BankPaymentImportEventScope::isUnassigned($line)
+        );
+
         $this->hiddenOtherEventsCount = $lines
-            ->reject(fn (BankPaymentImportLine $line): bool => BankPaymentImportEventScope::lineBelongsToEvent($line, $this->eventId))
+            ->reject(fn (BankPaymentImportLine $line): bool => $visible->contains('id', $line->id))
             ->count();
 
-        $this->previewLines = $lines
-            ->filter(fn (BankPaymentImportLine $line): bool => BankPaymentImportEventScope::lineBelongsToEvent($line, $this->eventId))
+        $this->previewLines = $visible
             ->map(fn (BankPaymentImportLine $line): array => [
                 'id' => $line->id,
                 'operation_date' => $line->operation_date?->format('d.m.Y') ?? '—',
@@ -195,6 +201,27 @@ class EventBankPaymentImportPanel extends Component
             ])
             ->values()
             ->all();
+    }
+
+    protected function defaultAssignEventId(): ?int
+    {
+        return $this->eventId;
+    }
+
+    protected function afterBankPaymentAssignmentSaved(): void
+    {
+        $this->loadPreviewLines();
+        $this->dispatch('settlement-data-changed');
+    }
+
+    protected function canManageBankPaymentLine(BankPaymentImportLine $line): bool
+    {
+        if (! $this->batchId || (int) $line->batch_id !== (int) $this->batchId) {
+            return false;
+        }
+
+        return BankPaymentImportEventScope::lineBelongsToEvent($line, $this->eventId)
+            || BankPaymentImportEventScope::isUnassigned($line);
     }
 
     private function resolveTargetLabel(BankPaymentImportLine $line): string
@@ -232,7 +259,7 @@ class EventBankPaymentImportPanel extends Component
             ->whereKey($lineId)
             ->first();
 
-        if (! $line || ! BankPaymentImportEventScope::lineBelongsToEvent($line, $this->eventId)) {
+        if (! $line || ! $this->canManageBankPaymentLine($line)) {
             return null;
         }
 

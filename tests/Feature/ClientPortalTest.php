@@ -43,34 +43,40 @@ class ClientPortalTest extends TestCase
             ->assertForbidden();
     }
 
-    public function test_provisioning_from_group_agreement_creates_guardian_access(): void
+    public function test_provisioning_from_group_agreement_creates_participant_access(): void
     {
         if (! Schema::hasTable('contracts') || ! Schema::hasTable('event_portal_accesses')) {
             $this->markTestSkipped('Brak tabel contracts lub event_portal_accesses.');
         }
 
-        $event = Event::factory()->create();
+        $event = Event::factory()->create([
+            'client_name' => 'Szkoła Test',
+            'client_email' => 'opiekun@test.local',
+        ]);
+
         $contract = Contract::create([
             'event_id' => $event->id,
             'contract_type' => Contract::TYPE_GROUP,
             'title' => 'Umowa grupowa',
             'contract_date' => now()->toDateString(),
-            'customer_name' => 'Szkoła',
-            'signer_name' => 'Jan Opiekun',
-            'signer_email' => 'opiekun@test.local',
-            'participant_count' => 20,
-            'total_price' => 5000,
+            'participant_count' => 10,
+            'unit_price' => 100,
+            'total_price' => 1000,
+            'amount_due' => 1000,
             'currency' => 'PLN',
             'status' => 'signed',
             'payment_status' => 'pending',
+            'signer_email' => 'opiekun@test.local',
+            'signer_name' => 'Opiekun Test',
+            'customer_email' => 'opiekun@test.local',
+            'customer_name' => 'Szkoła Test',
         ]);
 
         $access = app(ClientPortalProvisioningService::class)->provisionFromAgreement($contract);
 
         $this->assertNotNull($access);
-        $this->assertSame(EventPortalAccess::ROLE_GUARDIAN, $access->role);
-        $this->assertDatabaseHas('users', ['email' => 'opiekun@test.local']);
-        $this->assertTrue(User::where('email', 'opiekun@test.local')->first()->hasRole('client_guardian'));
+        $this->assertSame(EventPortalAccess::ROLE_PARTICIPANT, $access->role);
+        $this->assertTrue(User::where('email', 'opiekun@test.local')->first()->hasRole('client_participant'));
     }
 
     public function test_guardian_sees_group_payments_participant_does_not(): void
@@ -177,5 +183,99 @@ class ClientPortalTest extends TestCase
         $this->actingAs($user)
             ->get('/portal/group-payments/'.$event->id)
             ->assertForbidden();
+    }
+
+    public function test_visible_trips_require_portal_access_even_for_admin(): void
+    {
+        if (! Schema::hasTable('event_portal_accesses')) {
+            $this->markTestSkipped('Brak tabeli event_portal_accesses.');
+        }
+
+        Role::firstOrCreate(['name' => 'pilot']);
+
+        $mine = Event::factory()->create(['status' => Event::STATUS_CONFIRMED, 'name' => 'Moja wycieczka']);
+        $other = Event::factory()->create(['status' => Event::STATUS_CONFIRMED, 'name' => 'Obca wycieczka']);
+
+        $user = User::factory()->create(['status' => 'active']);
+        $user->assignRole(['client_participant', 'admin', 'pilot']);
+
+        EventPortalAccess::create([
+            'event_id' => $mine->id,
+            'user_id' => $user->id,
+            'role' => EventPortalAccess::ROLE_PARTICIPANT,
+            'shared_at' => now(),
+            'source' => EventPortalAccess::SOURCE_ADMIN,
+        ]);
+
+        $ids = app(\App\Services\ClientAccessService::class)
+            ->visibleTripsQuery($user)
+            ->pluck('id')
+            ->all();
+
+        $this->assertContains($mine->id, $ids);
+        $this->assertNotContains($other->id, $ids);
+        $this->assertFalse(app(\App\Services\ClientAccessService::class)->canViewTrip($user, $other));
+        $this->assertTrue(app(\App\Services\ClientAccessService::class)->canViewTrip($user, $mine));
+    }
+
+    public function test_client_role_keeps_own_trips_even_with_preview_session(): void
+    {
+        if (! Schema::hasTable('event_portal_accesses')) {
+            $this->markTestSkipped('Brak tabeli event_portal_accesses.');
+        }
+
+        $mine = Event::factory()->create(['status' => Event::STATUS_CONFIRMED]);
+        $other = Event::factory()->create(['status' => Event::STATUS_CONFIRMED]);
+        $user = User::factory()->create(['status' => 'active']);
+        $user->assignRole(['client_participant', 'admin']);
+
+        EventPortalAccess::create([
+            'event_id' => $mine->id,
+            'user_id' => $user->id,
+            'role' => EventPortalAccess::ROLE_PARTICIPANT,
+            'shared_at' => now(),
+            'source' => EventPortalAccess::SOURCE_ADMIN,
+        ]);
+
+        session(['client_preview_mode' => true]);
+
+        $ids = app(\App\Services\ClientAccessService::class)
+            ->visibleTripsQuery($user)
+            ->pluck('id')
+            ->all();
+
+        $this->assertSame([$mine->id], $ids);
+        session()->forget('client_preview_mode');
+    }
+
+    public function test_trip_list_renders_portal_cards(): void
+    {
+        if (! Schema::hasTable('event_portal_accesses')) {
+            $this->markTestSkipped('Brak tabeli event_portal_accesses.');
+        }
+
+        $user = User::factory()->create(['status' => 'active']);
+        $user->assignRole('client_participant');
+        $event = Event::factory()->create(['name' => 'Wycieczka Portal Cards']);
+
+        EventPortalAccess::create([
+            'event_id' => $event->id,
+            'user_id' => $user->id,
+            'role' => EventPortalAccess::ROLE_PARTICIPANT,
+            'shared_at' => now(),
+            'source' => EventPortalAccess::SOURCE_ADMIN,
+        ]);
+
+        \Filament\Facades\Filament::setServingStatus(true);
+        \Filament\Facades\Filament::setCurrentPanel(\Filament\Facades\Filament::getPanel('portal'));
+
+        $this->actingAs($user)
+            ->get('/portal/client-events')
+            ->assertOk()
+            ->assertSee('Wycieczka Portal Cards', false)
+            ->assertSee('client-portal-card', false);
+
+        \Filament\Facades\Filament::setServingStatus(false);
+        \Filament\Facades\Filament::setCurrentPanel(null);
     }
 }

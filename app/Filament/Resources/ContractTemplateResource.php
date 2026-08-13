@@ -2,6 +2,7 @@
 
 namespace App\Filament\Resources;
 
+use App\Filament\Forms\ContractTemplateFormFields;
 use App\Filament\Resources\ContractTemplateResource\Pages;
 use App\Models\ContractTemplate;
 use App\Services\ContractAttachmentCatalogService;
@@ -19,49 +20,60 @@ use Illuminate\Database\Eloquent\Model;
 class ContractTemplateResource extends Resource
 {
     /**
-     * Powiązany model Eloquent
-     *
      * @var class-string<ContractTemplate>
      */
     protected static ?string $model = ContractTemplate::class;
 
-    // Ikona i etykieta nawigacji w panelu
     protected static ?string $navigationIcon = 'heroicon-o-document-text';
 
     protected static ?string $navigationLabel = 'Szablony umów';
 
+    protected static ?string $modelLabel = 'szablon umowy';
+
+    protected static ?string $pluralModelLabel = 'szablony umów';
+
     protected static ?string $navigationGroup = FilamentNavigation::GROUP_CONFIG;
 
-    /**
-     * Definicja formularza do edycji/dodawania szablonu umowy
-     */
     public static function form(Forms\Form $form): Forms\Form
     {
-        return $form->schema([
-            Forms\Components\TextInput::make('name')
-                ->label('Nazwa szablonu')
-                ->required(),
-            Forms\Components\Textarea::make('content')
-                ->label('Treść szablonu')
-                ->rows(16)
-                ->required()
-                ->helperText('Dostępne znaczniki: [NUMER_UMOWY], [DATA_UMOWY], [TYP_UMOWY], [NAZWA_IMPREZY], [DATA_START], [DATA_KONIEC], [KWOTA], [WALUTA], [ZAMAWIAJACY_IMIE_NAZWISKO], [ZAMAWIAJACY_INSTYTUCJA], [ZAMAWIAJACY_ADRES], [ZAMAWIAJACY_EMAIL], [ZAMAWIAJACY_TELEFON], [OPIEKUN], [UCZESTNIK], [PODOPIECZNY], [DATA_URODZENIA], [DODATKOWE_UBEZPIECZENIE], [LINK_UMOWY].'),
-            Forms\Components\CheckboxList::make('default_attachments')
-                ->label('Domyślne załączniki dla tego szablonu')
-                ->options(fn (): array => app(ContractAttachmentCatalogService::class)->getOptions())
-                ->columns(1)
-                ->helperText('Po wybraniu tego szablonu przy tworzeniu umowy te pliki będą domyślnie zaznaczone. Puste pole oznacza użycie ustawień globalnych.'),
-        ]);
+        return $form->schema(ContractTemplateFormFields::schema());
     }
 
-    /**
-     * Definicja tabeli szablonów umów w panelu
-     */
     public static function table(Tables\Table $table): Tables\Table
     {
         return $table
             ->columns([
-                Tables\Columns\TextColumn::make('name')->label('Nazwa'),
+                Tables\Columns\TextColumn::make('name')->label('Nazwa')->searchable()->sortable(),
+                Tables\Columns\TextColumn::make('version')
+                    ->label('Wersja')
+                    ->badge()
+                    ->formatStateUsing(fn ($state): string => 'v'.(int) $state),
+                Tables\Columns\IconColumn::make('is_active')
+                    ->label('Aktywny')
+                    ->boolean(),
+                Tables\Columns\TextColumn::make('applies_to')
+                    ->label('Typy')
+                    ->formatStateUsing(function ($state): string {
+                        if (! is_array($state) || $state === []) {
+                            return 'Wszystkie';
+                        }
+
+                        return collect($state)
+                            ->map(fn ($key) => ContractTemplate::$appliesToOptions[$key] ?? $key)
+                            ->implode(', ');
+                    })
+                    ->wrap(),
+                Tables\Columns\TextColumn::make('custom_placeholders')
+                    ->label('Pola własne')
+                    ->formatStateUsing(function ($state): string {
+                        if (! is_array($state) || $state === []) {
+                            return '—';
+                        }
+
+                        return (string) count($state);
+                    })
+                    ->badge()
+                    ->color(fn ($state): string => (is_array($state) && $state !== []) ? 'success' : 'gray'),
                 Tables\Columns\TextColumn::make('default_attachments')
                     ->label('Domyślne załączniki')
                     ->formatStateUsing(fn (?array $state): string => filled($state) ? (string) count($state) : 'Globalne')
@@ -69,8 +81,34 @@ class ContractTemplateResource extends Resource
                     ->color(fn (?array $state): string => filled($state) ? 'success' : 'gray'),
                 Tables\Columns\TextColumn::make('updated_at')->label('Ostatnia edycja')->dateTime('d.m.Y H:i'),
             ])
+            ->filters([
+                Tables\Filters\TernaryFilter::make('is_active')
+                    ->label('Aktywny')
+                    ->boolean()
+                    ->trueLabel('Tylko aktywne')
+                    ->falseLabel('Tylko nieaktywne')
+                    ->placeholder('Wszystkie'),
+            ])
             ->actions([
                 Tables\Actions\EditAction::make(),
+                Tables\Actions\Action::make('new_version')
+                    ->label('Nowa wersja')
+                    ->icon('heroicon-o-document-duplicate')
+                    ->form([
+                        Forms\Components\Textarea::make('version_notes')
+                            ->label('Notatka do nowej wersji')
+                            ->rows(3),
+                    ])
+                    ->action(function (ContractTemplate $record, array $data) {
+                        $clone = $record->createNewVersion($data['version_notes'] ?? null);
+
+                        Notification::make()
+                            ->title('Utworzono wersję v'.$clone->version)
+                            ->success()
+                            ->send();
+
+                        return redirect(static::getUrl('edit', ['record' => $clone]));
+                    }),
                 Tables\Actions\DeleteAction::make(),
             ])
             ->headerActions([
@@ -101,9 +139,6 @@ class ContractTemplateResource extends Resource
             ]);
     }
 
-    /**
-     * Rejestracja stron powiązanych z tym resource (zgodnie z Filament 3)
-     */
     public static function getPages(): array
     {
         return [
@@ -112,9 +147,6 @@ class ContractTemplateResource extends Resource
         ];
     }
 
-    /**
-     * Uprawnienia do widoczności resource w panelu
-     */
     public static function canEdit(Model $record): bool
     {
         if (blank($record->getRouteKey())) {

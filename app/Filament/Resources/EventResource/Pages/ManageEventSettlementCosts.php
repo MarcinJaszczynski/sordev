@@ -1,23 +1,14 @@
 <?php
 
+declare(strict_types=1);
+
 namespace App\Filament\Resources\EventResource\Pages;
 
-use App\Filament\Resources\EventSettlementResource\RelationManagers\ProgramPointsCostsRelationManager;
-use App\Filament\Resources\EventSettlementResource\RelationManagers\SettlementCostsRelationManager;
-
-class ManageEventSettlementCosts extends ManageEventSettlementFinanceSection
+/** @deprecated Bookmark → EventFinance */
+class ManageEventSettlementCosts extends RedirectEventToFinance
 {
-    protected static ?string $navigationLabel = 'Koszty';
-
-    protected static ?string $title = 'Koszty rozliczenia';
-
-    protected static ?string $navigationIcon = 'heroicon-o-banknotes';
-
-    protected static function settlementRelationManagers(): array
+    public static function getResourcePageName(): string
     {
-        return [
-            SettlementCostsRelationManager::class,
-            ProgramPointsCostsRelationManager::class,
-        ];
+        return 'settlement-costs';
     }
 }

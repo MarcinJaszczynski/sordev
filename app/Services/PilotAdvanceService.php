@@ -142,6 +142,8 @@ class PilotAdvanceService
             ]]);
         }
 
+        $usedCurrencyIds = [];
+
         foreach ($lines as $line) {
             $currencyId = (int) ($line['currency_id'] ?? 0);
             $amount = round((float) ($line['amount'] ?? 0), 2);
@@ -149,6 +151,8 @@ class PilotAdvanceService
             if ($currencyId <= 0 || $amount <= 0) {
                 continue;
             }
+
+            $usedCurrencyIds[] = $currencyId;
 
             $cash = PilotCashPreparation::query()->firstOrCreate(
                 [
@@ -160,16 +164,190 @@ class PilotAdvanceService
                 ],
             );
 
-            $provided = max((float) ($cash->provided_amount ?? 0), $amount);
-
             $cash->update([
-                'provided_amount' => $provided,
+                'provided_amount' => $amount,
                 'status' => 'provided',
                 'provided_at' => $cash->provided_at ?? ($event->pilot_funds_paid_at ?? now()),
             ]);
         }
 
         $settlement->recalculatePilotCash();
+        app(PilotSettlementService::class)->syncPilotCashSpentFromCosts($settlement->fresh() ?? $settlement);
+    }
+
+    /**
+     * Biuro wypłaca gotówkę pilotowi (kwota + waluta + data).
+     * Można wołać wielokrotnie (kolejne waluty / korekta kwoty w danej walucie).
+     *
+     * @param  array{
+     *     amount: float|int|string,
+     *     currency_id: int,
+     *     provided_at?: \DateTimeInterface|string|null,
+     *     comment?: string|null,
+     *     notes?: string|null,
+     * }  $data
+     */
+    public function recordOfficeCashPayout(Event $event, array $data): Event
+    {
+        if (! $event->assigned_to) {
+            throw new \InvalidArgumentException('Przypisz pilota do imprezy przed wypłatą gotówki.');
+        }
+
+        $amount = round((float) str_replace([' ', ','], ['', '.'], (string) ($data['amount'] ?? 0)), 2);
+        $currencyId = (int) ($data['currency_id'] ?? 0);
+
+        if ($amount <= 0 || $currencyId <= 0) {
+            throw new \InvalidArgumentException('Podaj kwotę i walutę wypłaty.');
+        }
+
+        $providedAt = $data['provided_at'] ?? now();
+        if (is_string($providedAt)) {
+            $providedAt = \Illuminate\Support\Carbon::parse($providedAt);
+        }
+
+        $comment = filled($data['comment'] ?? null)
+            ? (string) $data['comment']
+            : ($data['notes'] ?? null);
+
+        $existing = $this->paidLines($event)
+            ->map(fn (array $line) => [
+                'amount' => (float) $line['amount'],
+                'currency_id' => (int) $line['currency_id'],
+            ])
+            ->values()
+            ->all();
+
+        $merged = [];
+        $replaced = false;
+        foreach ($existing as $line) {
+            if ((int) $line['currency_id'] === $currencyId) {
+                $merged[] = ['amount' => $amount, 'currency_id' => $currencyId];
+                $replaced = true;
+            } else {
+                $merged[] = $line;
+            }
+        }
+        if (! $replaced) {
+            $merged[] = ['amount' => $amount, 'currency_id' => $currencyId];
+        }
+
+        if (Schema::hasTable('pilot_advance_lines')) {
+            $this->replaceLines($event, PilotAdvanceLine::PHASE_PAID, $merged);
+        }
+
+        $payload = [
+            'pilot_funds_paid' => true,
+            'pilot_advance_paid_amount' => $amount,
+            'pilot_advance_paid_currency_id' => $currencyId,
+            'pilot_advance_paid_comment' => $comment,
+        ];
+
+        if (! $event->pilot_funds_paid) {
+            $payload['pilot_funds_paid_at'] = $providedAt;
+            $payload['pilot_funds_paid_by'] = Auth::id();
+        } else {
+            // Korekta / dopłata w innej walucie — zachowaj pierwszą datę, zaktualizuj provided_at na cash.
+            $payload['pilot_funds_paid_at'] = $event->pilot_funds_paid_at ?? $providedAt;
+        }
+
+        if (! $event->pilot_advance_planned_at) {
+            $payload['pilot_advance_planned_at'] = $providedAt;
+            $payload['pilot_advance_planned_by'] = Auth::id();
+            $payload['pilot_advance_planned_amount'] = $amount;
+        }
+
+        $event->update($payload);
+
+        $settlement = EventSettlement::findOrCreateActiveForEvent($event->fresh());
+        $cash = PilotCashPreparation::query()->firstOrCreate(
+            [
+                'settlement_id' => $settlement->id,
+                'currency_id' => $currencyId,
+            ],
+            ['status' => 'provided'],
+        );
+
+        $cash->update([
+            'provided_amount' => $amount,
+            'status' => 'provided',
+            'provided_at' => $providedAt,
+            'notes' => $comment ?: $cash->notes,
+        ]);
+
+        $settlement->recalculatePilotCash();
+        app(PilotSettlementService::class)->syncPilotCashSpentFromCosts($settlement->fresh() ?? $settlement);
+
+        return $event->fresh(['pilotAdvanceLines.currency', 'pilotAdvancePaidCurrency']);
+    }
+
+    /**
+     * Usuwa wypłatę gotówki w danej walucie (omyłka / korekta).
+     */
+    public function clearOfficeCashPayout(Event $event, int $currencyId): Event
+    {
+        if ($currencyId <= 0) {
+            throw new \InvalidArgumentException('Podaj walutę wypłaty do usunięcia.');
+        }
+
+        $remaining = $this->paidLines($event)
+            ->filter(fn (array $line): bool => (int) $line['currency_id'] !== $currencyId)
+            ->map(fn (array $line) => [
+                'amount' => (float) $line['amount'],
+                'currency_id' => (int) $line['currency_id'],
+            ])
+            ->values()
+            ->all();
+
+        $settlement = EventSettlement::findOrCreateActiveForEvent($event->fresh());
+
+        // Nie pozwól skasować wypłaty, jeśli wymiany zostawiłyby ujemne saldo w tej walucie.
+        $exchangeOut = (float) $settlement->currencyExchanges()->where('from_currency_id', $currencyId)->sum('from_amount');
+        $exchangeIn = (float) $settlement->currencyExchanges()->where('to_currency_id', $currencyId)->sum('to_amount');
+        if (round($exchangeIn - $exchangeOut, 2) < -0.009) {
+            throw new \InvalidArgumentException(
+                'Nie można usunąć wypłaty — najpierw usuń lub popraw wymiany walut w tej walucie (inaczej saldo będzie ujemne).'
+            );
+        }
+
+        $cash = PilotCashPreparation::query()
+            ->where('settlement_id', $settlement->id)
+            ->where('currency_id', $currencyId)
+            ->first();
+
+        if ($cash) {
+            $cash->update([
+                'provided_amount' => null,
+                'provided_at' => null,
+                'status' => ((float) ($cash->calculated_amount ?? 0) > 0) ? 'calculated' : ($cash->status ?: 'calculated'),
+            ]);
+        }
+
+        if (Schema::hasTable('pilot_advance_lines')) {
+            $this->replaceLines($event, PilotAdvanceLine::PHASE_PAID, $remaining);
+        }
+
+        if ($remaining === []) {
+            $event->update([
+                'pilot_funds_paid' => false,
+                'pilot_funds_paid_at' => null,
+                'pilot_funds_paid_by' => null,
+                'pilot_advance_paid_amount' => null,
+                'pilot_advance_paid_currency_id' => null,
+                'pilot_advance_paid_comment' => null,
+            ]);
+        } else {
+            $primary = $remaining[0];
+            $event->update([
+                'pilot_funds_paid' => true,
+                'pilot_advance_paid_amount' => $primary['amount'],
+                'pilot_advance_paid_currency_id' => $primary['currency_id'],
+            ]);
+        }
+
+        $settlement->recalculatePilotCash();
+        app(PilotSettlementService::class)->syncPilotCashSpentFromCosts($settlement->fresh() ?? $settlement);
+
+        return $event->fresh(['pilotAdvanceLines.currency', 'pilotAdvancePaidCurrency', 'pilotFundsPaidByUser']);
     }
 
     /**

@@ -8,4 +8,5 @@ return [
     'email' => env('COMPANY_EMAIL', env('MAIL_FROM_ADDRESS', 'kontakt@example.com')),
     'website' => env('COMPANY_WEBSITE', config('app.url', 'https://example.com')),
     'logo_path' => env('COMPANY_LOGO_PATH', 'uploads/logo.png'),
+    'nip' => env('COMPANY_NIP', env('INVOICES_AGENCY_NIP', '7162508761')),
 ];

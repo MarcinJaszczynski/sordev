@@ -98,4 +98,74 @@ class EventProgramDayRouteTest extends TestCase
         $this->assertSame('Warszawa – Poznań', $event->programDayRoute(1));
         $this->assertSame('Poznań – Gdańsk', $event->programDayRoute(2));
     }
+
+    public function test_transport_page_shows_route_fields_for_program_days_when_duration_is_wrong(): void
+    {
+        if (! Schema::hasColumn('events', 'program_day_routes')) {
+            $this->markTestSkipped('Kolumna program_day_routes nie istnieje.');
+        }
+
+        $admin = User::factory()->create(['status' => 'active']);
+        $admin->assignRole('admin');
+
+        $event = Event::factory()->create([
+            'duration_days' => 1,
+            'start_date' => now()->startOfDay(),
+            'end_date' => now()->startOfDay(),
+        ]);
+
+        \App\Models\EventProgramPoint::query()->create([
+            'event_id' => $event->id,
+            'day' => 1,
+            'order' => 1,
+            'name' => 'Dzień 1',
+            'active' => true,
+        ]);
+        \App\Models\EventProgramPoint::query()->create([
+            'event_id' => $event->id,
+            'day' => 3,
+            'order' => 1,
+            'name' => 'Dzień 3',
+            'active' => true,
+        ]);
+
+        $this->actingAs($admin);
+
+        Livewire::test(ManageEventTransport::class, ['record' => $event->getKey()])
+            ->assertFormFieldExists('program_day_routes.1')
+            ->assertFormFieldExists('program_day_routes.2')
+            ->assertFormFieldExists('program_day_routes.3')
+            ->assertSee('Wysłano do kierowcy')
+            ->assertSee('Wyślij do kierowcy');
+    }
+
+    public function test_transport_page_can_mark_driver_pickup_info_as_sent(): void
+    {
+        if (! Schema::hasColumn('events', 'driver_pickup_info_sent_at')) {
+            $this->markTestSkipped('Kolumna driver_pickup_info_sent_at nie istnieje.');
+        }
+
+        $admin = User::factory()->create(['status' => 'active']);
+        $admin->assignRole('admin');
+
+        $event = Event::factory()->create([
+            'bus_id' => null,
+            'driver_pickup_info_sent_at' => null,
+            'driver_pickup_info_sent_by' => null,
+        ]);
+
+        $this->actingAs($admin);
+
+        Livewire::test(ManageEventTransport::class, ['record' => $event->getKey()])
+            ->fillForm([
+                'driver_pickup_info_sent' => true,
+            ])
+            ->call('save')
+            ->assertHasNoFormErrors();
+
+        $event->refresh();
+
+        $this->assertTrue($event->isDriverPickupInfoSent());
+        $this->assertSame($admin->id, $event->driver_pickup_info_sent_by);
+    }
 }

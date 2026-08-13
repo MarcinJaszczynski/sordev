@@ -19,6 +19,7 @@ class Insurance extends Model
 
     protected $fillable = [
         'name',
+        'coverage_type',
         'description',
         'price_per_person',
         'active',
@@ -26,6 +27,27 @@ class Insurance extends Model
         'insurance_per_person',
         'insurance_enabled',
     ];
+
+    public const COVERAGE_NNW = 'nnw';
+
+    public const COVERAGE_KL = 'kl';
+
+    public static function coverageTypeOptions(): array
+    {
+        return [
+            self::COVERAGE_NNW => 'NNW',
+            self::COVERAGE_KL => 'KL',
+        ];
+    }
+
+    public static function coverageTypeLabel(?string $type): ?string
+    {
+        if ($type === null || $type === '') {
+            return null;
+        }
+
+        return self::coverageTypeOptions()[$type] ?? strtoupper($type);
+    }
 
     protected $casts = [
         'price_per_person' => 'decimal:2',

@@ -2,16 +2,18 @@
 
 namespace App\Filament\Forms;
 
+use App\Models\Contractor;
 use App\Models\Event;
 use App\Services\PilotAdvanceService;
 use Filament\Forms;
+use Filament\Forms\Get;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Schema;
 
 class EventReadinessFields
 {
     /**
-     * Odprawa, ubezpieczenie i uwagi wewnętrzne biura.
+     * Uwagi wewnętrzne biura (ubezpieczenie: Operacje → Ubezpieczenia).
      *
      * @return array<int, Forms\Components\Component>
      */
@@ -20,11 +22,37 @@ class EventReadinessFields
         return [
             Forms\Components\Section::make('Biuro')
                 ->icon('heroicon-o-building-office')
-                ->description('Odprawa, ubezpieczenie i uwagi wewnętrzne dla pracowników biura.')
-                ->columns(2)
+                ->description('Uwagi wewnętrzne dla pracowników biura. Ubezpieczenie i gotowość polisy: Operacje → Ubezpieczenia. Odprawa pilota: Operacje → Pilot.')
+                ->columns(['default' => 1, 'md' => 2])
                 ->schema([
-                    ...self::checkInFields(),
-                    ...self::insuranceFields(),
+                    Forms\Components\Placeholder::make('check_in_moved_hint')
+                        ->label('Odprawa pilota')
+                        ->content(function (?Event $record): \Illuminate\Support\HtmlString {
+                            if (! $record) {
+                                return new \Illuminate\Support\HtmlString('Edycja odprawy: Impreza → Operacje → Pilot.');
+                            }
+
+                            $url = e(\App\Filament\Resources\EventResource::getUrl('pilot', ['record' => $record]));
+
+                            return new \Illuminate\Support\HtmlString(
+                                'Edycja odprawy jest w <a href="'.$url.'" class="text-primary-600 underline font-medium">Operacje → Pilot</a>.'
+                            );
+                        })
+                        ->columnSpanFull(),
+                    Forms\Components\Placeholder::make('insurance_moved_hint')
+                        ->label('Ubezpieczenie')
+                        ->content(function (?Event $record): \Illuminate\Support\HtmlString {
+                            if (! $record) {
+                                return new \Illuminate\Support\HtmlString('Polisa, gotowość i koszty NNW/KL: Impreza → Operacje → Ubezpieczenia.');
+                            }
+
+                            $url = e(\App\Filament\Resources\EventResource::getUrl('day-insurances', ['record' => $record]));
+
+                            return new \Illuminate\Support\HtmlString(
+                                'Polisa, gotowość i koszty NNW/KL są w <a href="'.$url.'" class="text-primary-600 underline font-medium">Operacje → Ubezpieczenia</a>.'
+                            );
+                        })
+                        ->columnSpanFull(),
                     EventNotesFields::officeNotes()
                         ->columnSpanFull(),
                 ]),
@@ -32,7 +60,7 @@ class EventReadinessFields
     }
 
     /**
-     * Pilot, zaliczka i uwagi dla opiekuna wycieczki.
+     * Pilot, zaliczka i uwagi — z nagłówkiem (modal / inne ekrany).
      *
      * @param  (callable(Forms\Components\Section): void)|null  $configureSection
      * @return array<int, Forms\Components\Component>
@@ -41,27 +69,16 @@ class EventReadinessFields
     {
         $section = Forms\Components\Section::make('Pilot wycieczki')
             ->icon('heroicon-o-user-circle')
-            ->description('Przypisanie pilota wycieczki, zaliczka gotówkowa i uwagi operacyjne.')
-            ->columns(2)
+            ->description('Przypisanie pilota, zaliczka i uwagi operacyjne.')
+            ->columns(['default' => 1, 'md' => 2])
             ->schema([
-                Forms\Components\Placeholder::make('pilot_portal_settings_toolbar')
-                    ->hiddenLabel()
-                    ->content(fn (?Event $record): \Illuminate\Support\HtmlString => new \Illuminate\Support\HtmlString(
-                        $record
-                            ? \Illuminate\Support\Facades\Blade::render(
-                                '@livewire(\'pilot-portal-settings-toolbar\', [\'eventId\' => '.$record->getKey().'], key(\'pilot-portal-toolbar-'.$record->getKey().'\'))'
-                            )
-                            : ''
-                    ))
-                    ->columnSpanFull(),
-
                 Forms\Components\Fieldset::make('Przypisanie')
-                    ->columns(2)
+                    ->columns(['default' => 1, 'md' => 2])
                     ->columnSpanFull()
                     ->schema(EventKeyInfoFields::pilotFields()),
 
                 Forms\Components\Fieldset::make('Zaliczka pilota')
-                    ->columns(2)
+                    ->columns(['default' => 1, 'md' => 2])
                     ->columnSpanFull()
                     ->visible(fn (): bool => Schema::hasColumn('events', 'pilot_funds_paid'))
                     ->schema(self::pilotAdvanceFields()),
@@ -78,21 +95,124 @@ class EventReadinessFields
     }
 
     /**
+     * Schemat na stronę Operacje → Pilot (bez powtórzenia „Pilot wycieczki” w H1/sekcji).
+     *
+     * @return array<int, Forms\Components\Component>
+     */
+    public static function pilotPageSchema(): array
+    {
+        return [
+            Forms\Components\Placeholder::make('pilot_portal_settings_toolbar')
+                ->hiddenLabel()
+                ->content(fn (?Event $record): \Illuminate\Support\HtmlString => new \Illuminate\Support\HtmlString(
+                    $record
+                        ? \Illuminate\Support\Facades\Blade::render(
+                            '@livewire(\'pilot-portal-settings-toolbar\', [\'eventId\' => '.$record->getKey().'], key(\'pilot-portal-toolbar-'.$record->getKey().'\'))'
+                        )
+                        : ''
+                ))
+                ->columnSpanFull(),
+
+            Forms\Components\Placeholder::make('pilot_participant_count')
+                ->label('Uczestnicy')
+                ->content(function (?Event $record): string {
+                    if (! $record) {
+                        return '—';
+                    }
+
+                    $paying = max(0, (int) ($record->participant_count ?? 0));
+                    $gratis = max(0, (int) $record->resolveGratisCountForParticipantCount($paying ?: null));
+
+                    return $gratis > 0
+                        ? sprintf('%d + %d (płacący + opiekunowie)', $paying, $gratis)
+                        : (string) $paying;
+                })
+                ->columnSpanFull(),
+
+            Forms\Components\Section::make('Odprawa')
+                ->columns(['default' => 1, 'md' => 2])
+                ->schema(self::checkInInputComponents()),
+
+            Forms\Components\Section::make('Przypisanie')
+                ->columns(['default' => 1, 'md' => 2])
+                ->schema(EventKeyInfoFields::pilotFields()),
+
+            Forms\Components\Section::make('Gotówka — Planowana / Wypłacona')
+                ->description('Planowana zaliczka (krok 1) vs rzeczywista wypłata (krok 2). Sumy gotówki pilota poniżej w sekcji Rozliczenie.')
+                ->columns(['default' => 1, 'md' => 2])
+                ->visible(fn (): bool => Schema::hasColumn('events', 'pilot_funds_paid'))
+                ->schema(self::pilotAdvanceFields()),
+
+            Forms\Components\Section::make('Uwagi dla pilota')
+                ->schema([
+                    EventNotesFields::pilotNotes()->hiddenLabel(),
+                ]),
+        ];
+    }
+
+    /**
      * Dane kierowcy i miejsca podstawienia (bez godzin — godziny tylko w EventTransportFields).
      *
      * @return array<int, Forms\Components\Component>
      */
     public static function driverFields(): array
     {
-        return [
-            Forms\Components\TextInput::make('driver_name')
-                ->label('Kierowca')
-                ->maxLength(255)
-                ->visible(fn (): bool => Schema::hasColumn('events', 'driver_name')),
+        $driverSelect = Schema::hasColumn('events', 'driver_contractor_id')
+            ? [
+                ...TypedContractorSelect::make(
+                    field: 'driver_contractor_id',
+                    label: 'Kierowca',
+                    typeNames: ['kierowca'],
+                    searchAllField: 'driver_contractor_search_all',
+                    defaultTypeOnCreate: 'kierowca',
+                    helperText: 'Wybierz kierowcę z kontrahentów albo dodaj nowego (typ „kierowca”).',
+                    searchAllHelperText: 'Domyślnie tylko typ „kierowca”. Zaznacz, gdy kontrahent ma źle przypisany typ.',
+                    afterStateUpdated: function ($state, callable $set): void {
+                        if (! $state) {
+                            $set('driver_name', null);
+                            $set('driver_phone', null);
 
-            PhoneInput::make('driver_phone')
-                ->label('Telefon kierowcy')
-                ->visible(fn (): bool => Schema::hasColumn('events', 'driver_phone')),
+                            return;
+                        }
+
+                        $contractor = Contractor::query()->find($state);
+                        $set('driver_name', $contractor?->name);
+                        $set('driver_phone', $contractor?->phone);
+                    },
+                    columnSpan: 'full',
+                ),
+                Forms\Components\Hidden::make('driver_name')
+                    ->dehydrated()
+                    ->visible(fn (): bool => Schema::hasColumn('events', 'driver_name')),
+                Forms\Components\Hidden::make('driver_phone')
+                    ->dehydrated()
+                    ->visible(fn (): bool => Schema::hasColumn('events', 'driver_phone')),
+                ...TransportContractorContactsFields::make(
+                    contractorField: 'driver_contractor_id',
+                    prefix: 'transport_driver',
+                    afterContractorCardUpdated: function (Contractor $contractor, callable $set): void {
+                        if (Schema::hasColumn('events', 'driver_name')) {
+                            $set('driver_name', $contractor->name);
+                        }
+                        if (Schema::hasColumn('events', 'driver_phone')) {
+                            $set('driver_phone', $contractor->phone);
+                        }
+                    },
+                ),
+            ]
+            : [
+                Forms\Components\TextInput::make('driver_name')
+                    ->label('Kierowca')
+                    ->maxLength(255)
+                    ->visible(fn (): bool => Schema::hasColumn('events', 'driver_name')),
+
+                PhoneInput::make('driver_phone')
+                    ->label('Telefon kierowcy')
+                    ->visible(fn (): bool => Schema::hasColumn('events', 'driver_phone')),
+            ];
+
+        return [
+            ...$driverSelect,
 
             Forms\Components\TextInput::make('vehicle_registration')
                 ->label('Nr rejestracyjny')
@@ -106,8 +226,18 @@ class EventReadinessFields
                 ->helperText('Np. dokładny adres, brama, punkt orientacyjny. Godziny podstawienia/odjazdu/powrotu są w sekcji Impreza.'),
 
             Forms\Components\Toggle::make('driver_pickup_info_sent')
-                ->label('Wysłano kierowcy informację o podstawieniu')
-                ->helperText('Zaznacz po przekazaniu kierowcy godziny, miejsca i danych kontaktowych.')
+                ->label('Wysłano do kierowcy')
+                ->helperText(function (?Event $record): string {
+                    if (! $record?->isDriverPickupInfoSent()) {
+                        return 'Gotowość operacyjna — zaznacz ręcznie albo użyj „Wyślij do kierowcy”.';
+                    }
+
+                    $by = $record->driverPickupInfoSentByUser?->name ?? '—';
+                    $when = $record->driver_pickup_info_sent_at?->format('d.m.Y H:i') ?? '—';
+
+                    return "Oznaczone jako wysłane: {$when} · {$by}";
+                })
+                ->dehydrated()
                 ->columnSpanFull()
                 ->visible(fn (): bool => Schema::hasColumn('events', 'driver_pickup_info_sent_at')),
         ];
@@ -133,26 +263,18 @@ class EventReadinessFields
     {
         return [
             Forms\Components\Fieldset::make('Odprawa')
-                ->columns(2)
+                ->columns(['default' => 1, 'md' => 2])
                 ->columnSpanFull()
-                ->schema(self::checkInFields()),
+                ->schema(self::checkInInputComponents()),
 
             Forms\Components\Fieldset::make('Zaliczka pilota')
-                ->columns(2)
+                ->columns(['default' => 1, 'md' => 2])
                 ->columnSpanFull()
                 ->visible(fn (): bool => Schema::hasColumn('events', 'pilot_funds_paid'))
                 ->schema(self::pilotAdvanceFields()),
 
-            ...self::insuranceFields(),
-
-            Forms\Components\Placeholder::make('insurance_not_required')
-                ->label('Ubezpieczenie')
-                ->content('Brak wymogu ubezpieczenia dla tej imprezy.')
-                ->columnSpanFull()
-                ->visible(fn (?Event $record): bool => $record && ! $record->requiresInsuranceWorkflow()),
-
             Forms\Components\Fieldset::make('Kierowca — podstawienie')
-                ->columns(2)
+                ->columns(['default' => 1, 'md' => 2])
                 ->columnSpanFull()
                 ->visible(fn (?Event $record): bool => $record?->requiresDriverPickupInfo() ?? true)
                 ->schema([
@@ -184,6 +306,7 @@ class EventReadinessFields
             'return_time' => $event->return_time,
             'driver_name' => $event->driver_name,
             'driver_phone' => $event->driver_phone,
+            'driver_contractor_id' => $event->driver_contractor_id,
             'vehicle_registration' => $event->vehicle_registration,
             'pickup_place_details' => $event->pickup_place_details,
             'driver_pickup_info_sent' => $event->isDriverPickupInfoSent(),
@@ -216,13 +339,41 @@ class EventReadinessFields
             }
         }
 
-        foreach (['substitution_time', 'departure_time', 'return_time', 'driver_name', 'driver_phone', 'vehicle_registration', 'pickup_place_details'] as $field) {
+        if (Schema::hasColumn('events', 'driver_contractor_id') && array_key_exists('driver_contractor_id', $data)) {
+            $contractorId = filled($data['driver_contractor_id'] ?? null) ? (int) $data['driver_contractor_id'] : null;
+            $payload['driver_contractor_id'] = $contractorId;
+
+            if ($contractorId) {
+                $contractor = Contractor::query()->find($contractorId);
+                if (Schema::hasColumn('events', 'driver_name')) {
+                    $payload['driver_name'] = $contractor?->name;
+                }
+                if (Schema::hasColumn('events', 'driver_phone')) {
+                    $payload['driver_phone'] = $contractor?->phone;
+                }
+            } else {
+                if (Schema::hasColumn('events', 'driver_name') && array_key_exists('driver_name', $data)) {
+                    $payload['driver_name'] = $data['driver_name'];
+                }
+                if (Schema::hasColumn('events', 'driver_phone') && array_key_exists('driver_phone', $data)) {
+                    $payload['driver_phone'] = $data['driver_phone'];
+                }
+            }
+        } else {
+            foreach (['driver_name', 'driver_phone'] as $field) {
+                if (Schema::hasColumn('events', $field) && array_key_exists($field, $data)) {
+                    $payload[$field] = $data[$field];
+                }
+            }
+        }
+
+        foreach (['substitution_time', 'departure_time', 'return_time', 'vehicle_registration', 'pickup_place_details'] as $field) {
             if (Schema::hasColumn('events', $field) && array_key_exists($field, $data)) {
                 $payload[$field] = $data[$field];
             }
         }
 
-        if (Schema::hasColumn('events', 'driver_pickup_info_sent_at')) {
+        if (Schema::hasColumn('events', 'driver_pickup_info_sent_at') && array_key_exists('driver_pickup_info_sent', $data)) {
             $sent = (bool) ($data['driver_pickup_info_sent'] ?? false);
 
             if ($sent && ! $event->driver_pickup_info_sent_at) {
@@ -245,9 +396,7 @@ class EventReadinessFields
             app(PilotAdvanceService::class)->approvePayment($event->fresh());
         }
 
-        if ($event->requiresInsuranceWorkflow()) {
-            $event->updateInsuranceFromFormData($data);
-        }
+        $event->updateInsuranceFromFormData($data);
     }
 
     /**
@@ -257,22 +406,30 @@ class EventReadinessFields
     {
         return [
             Forms\Components\Fieldset::make('Odprawa')
-                ->columns(2)
+                ->columns(['default' => 1, 'md' => 2])
                 ->columnSpanFull()
-                ->schema([
-                    Forms\Components\Select::make('check_in_status')
-                        ->label('Status odprawy')
-                        ->options(Event::getCheckInStatusOptions())
-                        ->default('pending')
-                        ->required()
-                        ->visible(fn (): bool => Schema::hasColumn('events', 'check_in_status')),
+                ->schema(self::checkInInputComponents()),
+        ];
+    }
 
-                    Forms\Components\Textarea::make('check_in_notes')
-                        ->label('Uwagi do odprawy')
-                        ->rows(2)
-                        ->columnSpanFull()
-                        ->visible(fn (): bool => Schema::hasColumn('events', 'check_in_notes')),
-                ]),
+    /**
+     * @return array<int, Forms\Components\Component>
+     */
+    protected static function checkInInputComponents(): array
+    {
+        return [
+            Forms\Components\Select::make('check_in_status')
+                ->label('Status odprawy')
+                ->options(Event::getCheckInStatusOptions())
+                ->default('pending')
+                ->required()
+                ->visible(fn (): bool => Schema::hasColumn('events', 'check_in_status')),
+
+            Forms\Components\Textarea::make('check_in_notes')
+                ->label('Uwagi do odprawy')
+                ->rows(2)
+                ->columnSpanFull()
+                ->visible(fn (): bool => Schema::hasColumn('events', 'check_in_notes')),
         ];
     }
 
@@ -284,6 +441,22 @@ class EventReadinessFields
     public static function insuranceSection(): array
     {
         return self::insuranceFields();
+    }
+
+    /**
+     * Schema modala „Ubezpieczenie imprezy” (umowy / kontrakty / uczestnicy).
+     * Bez widoczności zależnej od $record relacji — akcja sama decyduje o show.
+     *
+     * @return array<int, Forms\Components\Component>
+     */
+    public static function insuranceModalSchema(): array
+    {
+        return [
+            Forms\Components\Fieldset::make('Ubezpieczenie')
+                ->columns(['default' => 1, 'md' => 2])
+                ->columnSpanFull()
+                ->schema(self::insuranceInputComponents()),
+        ];
     }
 
     /**
@@ -304,10 +477,8 @@ class EventReadinessFields
 
     public static function persistInsurance(Event $event, array $data): void
     {
-        if ($event->requiresInsuranceWorkflow()) {
-            $event->updateInsuranceFromFormData($data);
-            $event->refresh();
-        }
+        $event->updateInsuranceFromFormData($data);
+        $event->refresh();
     }
 
     /**
@@ -317,58 +488,63 @@ class EventReadinessFields
     {
         return [
             Forms\Components\Fieldset::make('Ubezpieczenie')
-                ->columns(2)
+                ->columns(['default' => 1, 'md' => 2])
                 ->columnSpanFull()
-                ->visible(fn (?Event $record): bool => $record?->requiresInsuranceWorkflow() ?? false)
-                ->schema([
-                    Forms\Components\TextInput::make('insurance_policy_number')
-                        ->label('Nr polisy')
-                        ->maxLength(255),
+                ->schema(self::insuranceInputComponents()),
+        ];
+    }
 
-                    Forms\Components\Select::make('insurance_status')
-                        ->label('Status ubezpieczenia')
-                        ->options(Event::getInsuranceStatusOptions())
-                        ->default('pending')
-                        ->required(),
+    /**
+     * Pola workflow polisy (jedna definicja — EditEvent, modal uczestników, umowy, kontrakty).
+     *
+     * @return array<int, Forms\Components\Component>
+     */
+    protected static function insuranceInputComponents(): array
+    {
+        return [
+            Forms\Components\TextInput::make('insurance_policy_number')
+                ->label('Nr polisy')
+                ->maxLength(255),
 
-                    Forms\Components\Select::make('insurance_payment_status')
-                        ->label('Status płatności')
-                        ->options(Event::getInsurancePaymentStatusOptions())
-                        ->default('pending')
-                        ->required(),
+            Forms\Components\Select::make('insurance_status')
+                ->label('Status ubezpieczenia')
+                ->options(Event::getInsuranceStatusOptions())
+                ->default('pending')
+                ->required()
+                ->helperText('Ustaw „Gotowe”, gdy polisa jest domknięta — wtedy gotowość imprezy pokazuje OK (Operacje → Ubezpieczenia).'),
 
-                    Forms\Components\TextInput::make('insurance_amount')
-                        ->label('Kwota')
-                        ->numeric()
-                        ->suffix('PLN')
-                        ->nullable(),
+            Forms\Components\Select::make('insurance_payment_status')
+                ->label('Status płatności')
+                ->options(Event::getInsurancePaymentStatusOptions())
+                ->default('pending')
+                ->required(),
 
-                    Forms\Components\DateTimePicker::make('insurance_paid_at')
-                        ->label('Data płatności')
-                        ->native(false)
-                        ->nullable(),
+            Forms\Components\TextInput::make('insurance_amount')
+                ->label('Kwota')
+                ->numeric()
+                ->suffix('PLN')
+                ->nullable()
+                ->helperText('Kwota operacyjna polisy (może różnić się od wyliczenia NNW w ofercie).'),
 
-                    Forms\Components\FileUpload::make('insurance_document_path')
-                        ->label('Dokument')
-                        ->disk('public')
-                        ->directory('event-insurance')
-                        ->downloadable()
-                        ->openable()
-                        ->acceptedFileTypes(['application/pdf', 'image/png', 'image/jpeg', 'image/webp'])
-                        ->columnSpanFull()
-                        ->nullable(),
+            Forms\Components\DateTimePicker::make('insurance_paid_at')
+                ->label('Data płatności')
+                ->native(false)
+                ->nullable(),
 
-                    Forms\Components\Textarea::make('insurance_terms')
-                        ->label('Warunki ubezpieczenia')
-                        ->rows(3)
-                        ->columnSpanFull(),
-                ]),
-
-            Forms\Components\Placeholder::make('insurance_not_required')
-                ->label('Ubezpieczenie')
-                ->content('Brak wymogu ubezpieczenia dla tej imprezy.')
+            Forms\Components\FileUpload::make('insurance_document_path')
+                ->label('Dokument')
+                ->disk('public')
+                ->directory('event-insurance')
+                ->downloadable()
+                ->openable()
+                ->acceptedFileTypes(['application/pdf', 'image/png', 'image/jpeg', 'image/webp'])
                 ->columnSpanFull()
-                ->visible(fn (?Event $record): bool => $record && ! $record->requiresInsuranceWorkflow()),
+                ->nullable(),
+
+            Forms\Components\Textarea::make('insurance_terms')
+                ->label('Warunki ubezpieczenia')
+                ->rows(3)
+                ->columnSpanFull(),
         ];
     }
 
@@ -382,8 +558,8 @@ class EventReadinessFields
         $plannedFields = $hasAdvanceLines
             ? [
                 Forms\Components\Repeater::make('pilot_advance_planned_lines')
-                    ->label('Planowana zaliczka')
-                    ->helperText('Możesz zaplanować kilka walut naraz, np. 1000 PLN i 50 EUR.')
+                    ->label('Planowana')
+                    ->helperText('Planowana gotówka u pilota — możesz zaplanować kilka walut, np. 1000 PLN i 50 EUR.')
                     ->schema([
                         Forms\Components\TextInput::make('amount')
                             ->label('Kwota')
@@ -397,7 +573,7 @@ class EventReadinessFields
                             ->required()
                             ->default(fn () => \App\Models\Currency::query()->where('code', 'PLN')->orWhere('symbol', 'PLN')->value('id')),
                     ])
-                    ->columns(2)
+                    ->columns(['default' => 1, 'md' => 2])
                     ->defaultItems(0)
                     ->addActionLabel('Dodaj walutę')
                     ->columnSpanFull()
@@ -406,12 +582,12 @@ class EventReadinessFields
             ]
             : [
                 Forms\Components\TextInput::make('pilot_advance_planned_amount')
-                    ->label('Planowana zaliczka')
+                    ->label('Planowana')
                     ->numeric()
                     ->suffix('PLN')
                     ->minValue(0)
                     ->nullable()
-                    ->helperText('Krok 1 — plan widoczny w finansach, bez zasilenia salda pilota.')
+                    ->helperText('Planowana gotówka — widoczna w finansach, bez zasilenia salda pilota.')
                     ->visible(fn (): bool => Schema::hasColumn('events', 'pilot_advance_planned_amount'))
                     ->disabled(fn (?Event $record): bool => (bool) ($record?->pilot_funds_paid)),
             ];
@@ -467,8 +643,8 @@ class EventReadinessFields
                     && ! (bool) ($record?->pilot_funds_paid)),
 
             Forms\Components\Toggle::make('pilot_funds_paid')
-                ->label('Zatwierdź rzeczywistą wypłatę')
-                ->helperText('Krok 2 — oznacza fizyczną wypłatę i zasila saldo gotówki pilota we wszystkich zaplanowanych walutach.')
+                ->label('Wypłacona — zatwierdź rzeczywistą wypłatę')
+                ->helperText('Oznacza fizyczną wypłatę (Wypłacona) i zasila saldo gotówki pilota we wszystkich zaplanowanych walutach.')
                 ->columnSpanFull()
                 ->disabled(fn (Forms\Get $get, ?Event $record): bool => (
                     $hasAdvanceLines
@@ -477,7 +653,7 @@ class EventReadinessFields
                 ) || (bool) ($record?->pilot_funds_paid)),
 
             Forms\Components\Placeholder::make('pilot_funds_paid_info')
-                ->label('Wypłacono')
+                ->label('Wypłacona')
                 ->content(function (?Event $record): string {
                     if (! $record?->pilot_funds_paid) {
                         return '—';

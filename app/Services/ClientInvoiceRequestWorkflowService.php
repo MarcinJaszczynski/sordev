@@ -3,11 +3,14 @@
 namespace App\Services;
 
 use App\Actions\Finance\CreateVatMarginInvoiceDraftAction;
+use App\Actions\Finance\PushSalesInvoiceToFakturowniaAction;
 use App\Data\CreateVatMarginInvoiceDraftData;
 use App\Models\ClientInvoiceRequest;
+use App\Models\Event;
 use App\Models\SalesInvoice;
 use App\Models\User;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Schema;
 use InvalidArgumentException;
 
@@ -15,10 +18,27 @@ class ClientInvoiceRequestWorkflowService
 {
     public function __construct(
         private readonly CreateVatMarginInvoiceDraftAction $createVatMarginInvoiceDraft,
+        private readonly PushSalesInvoiceToFakturowniaAction $pushToFakturownia,
     ) {}
+
+    public function attachEvent(ClientInvoiceRequest $request, Event $event): ClientInvoiceRequest
+    {
+        return DB::transaction(function () use ($request, $event): ClientInvoiceRequest {
+            $request->update([
+                'event_id' => $event->id,
+                'event_code_entered' => $request->event_code_entered ?: $event->code,
+            ]);
+
+            return $request->fresh(['event', 'contract', 'user', 'processedByUser']);
+        });
+    }
 
     public function markProcessed(ClientInvoiceRequest $request, User $actor, ?string $adminNotes = null): ClientInvoiceRequest
     {
+        if (! $request->event_id) {
+            throw new InvalidArgumentException('Przed realizacją powiąż wniosek z imprezą.');
+        }
+
         return $this->transition($request, ClientInvoiceRequest::STATUS_PROCESSED, $actor, $adminNotes, createDraft: true);
     }
 
@@ -73,12 +93,22 @@ class ClientInvoiceRequestWorkflowService
             $request->update($payload);
 
             if ($createDraft && Schema::hasTable('sales_invoices') && $request->event) {
-                ($this->createVatMarginInvoiceDraft)(new CreateVatMarginInvoiceDraftData(
+                $draft = ($this->createVatMarginInvoiceDraft)(new CreateVatMarginInvoiceDraftData(
                     event: $request->event,
                     type: SalesInvoice::TYPE_FINAL,
                     request: $request->fresh(),
                     createdBy: $actor->id,
                 ));
+
+                try {
+                    ($this->pushToFakturownia)($draft);
+                } catch (\Throwable $e) {
+                    Log::warning('Fakturownia push failed after invoice request processing', [
+                        'request_id' => $request->id,
+                        'sales_invoice_id' => $draft->id,
+                        'error' => $e->getMessage(),
+                    ]);
+                }
             }
 
             return $request->fresh(['event', 'contract', 'user', 'processedByUser']);

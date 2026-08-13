@@ -73,7 +73,7 @@ class ContractResource extends Resource
                     ->default(Contract::TYPE_GROUP),
                 Forms\Components\Select::make('status')->label('Status')->options(Contract::$statuses),
                 Forms\Components\Select::make('payment_status')->label('Status płatności')->options(Contract::$paymentStatuses),
-            ])->columns(2),
+            ])->columns(['default' => 1, 'md' => 2]),
 
             Forms\Components\Section::make('Warianty realizacji (max 50)')->schema([
                 Forms\Components\Repeater::make('variants')
@@ -97,7 +97,7 @@ class ContractResource extends Resource
                                     ->options(fn () => TfgDictionaryItem::optionsFor(TfgDictionaryItem::TYPE_COUNTRY))
                                     ->searchable(),
                                 Forms\Components\TextInput::make('locality')->label('Miejscowość'),
-                            ])->columns(3)->columnSpanFull(),
+                            ])->columns(['default' => 1, 'md' => 2, 'xl' => 3])->columnSpanFull(),
                         Forms\Components\Repeater::make('transports')
                             ->relationship()
                             ->label('Transport (max 3)')
@@ -110,10 +110,10 @@ class ContractResource extends Resource
                                     ->live(),
                                 Forms\Components\TagsInput::make('icao_codes')
                                     ->label('Kody ICAO (lot)')
-                                    ->placeholder('np. EPWA')
+                                    ->placeholder('Wpisz kod ICAO')
                                     ->visible(fn (Get $get) => TfgDictionaryItem::requiresIcao((string) $get('transport_code')))
                                     ->required(fn (Get $get) => TfgDictionaryItem::requiresIcao((string) $get('transport_code'))),
-                            ])->columns(2)->columnSpanFull(),
+                            ])->columns(['default' => 1, 'md' => 2])->columnSpanFull(),
                     ])->collapsible(),
             ]),
 
@@ -129,7 +129,7 @@ class ContractResource extends Resource
                             ->label('Forma')
                             ->options(fn () => TfgDictionaryItem::optionsFor(TfgDictionaryItem::TYPE_PAYMENT_METHOD)),
                         Forms\Components\TextInput::make('description')->label('Opis'),
-                    ])->columns(4),
+                    ])->columns(['default' => 1, 'md' => 2, 'xl' => 4]),
                 Forms\Components\Repeater::make('refunds')
                     ->relationship()
                     ->label('Zwroty (max 286)')
@@ -138,7 +138,7 @@ class ContractResource extends Resource
                         Forms\Components\TextInput::make('amount')->label('Kwota')->numeric()->required(),
                         Forms\Components\DatePicker::make('refunded_at')->label('Data zwrotu'),
                         Forms\Components\TextInput::make('description')->label('Opis'),
-                    ])->columns(3),
+                    ])->columns(['default' => 1, 'md' => 2, 'xl' => 3]),
             ]),
 
             Forms\Components\Section::make('Status TFG')->schema([
@@ -154,7 +154,7 @@ class ContractResource extends Resource
                 Forms\Components\Placeholder::make('tfg_deadline_display')
                     ->label('Termin korekty (+14 dni)')
                     ->content(fn (?Contract $record) => optional($record?->tfg_update_deadline_at)?->format('d.m.Y H:i') ?: '—'),
-            ])->columns(2)->visibleOn('edit'),
+            ])->columns(['default' => 1, 'md' => 2])->visibleOn('edit'),
         ]);
     }
 

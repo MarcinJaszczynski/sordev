@@ -2,7 +2,9 @@
 
 namespace Tests\Feature;
 
-use App\Filament\Resources\EventResource\Pages\ManageEventSettlementDocuments;
+use App\Filament\Resources\EventResource;
+use App\Filament\Resources\EventResource\Pages\EventFinance;
+use App\Filament\Resources\EventResource\Pages\EventFinanceSettlementDocuments;
 use App\Models\Event;
 use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
@@ -21,16 +23,21 @@ class EventSettlementDocumentsTest extends TestCase
         Role::firstOrCreate(['name' => 'admin']);
     }
 
-    public function test_finance_sub_navigation_has_single_documents_tab(): void
+    public function test_finance_sub_navigation_includes_settlement_documents_tab(): void
     {
-        $tabs = ManageEventSettlementDocuments::financeSubNavigationTabs(1);
+        $tabs = EventFinance::financeSubNavigationTabs(1);
         $labels = collect($tabs)->pluck('label')->all();
+        $keys = collect($tabs)->pluck('key')->all();
 
-        $this->assertContains('Dokumenty', $labels);
+        $this->assertContains('Dok. rozliczenia', $labels);
+        $this->assertContains('settlement-documents', $keys);
         $this->assertNotContains('Faktury', $labels);
+        $this->assertContains('Koszty', $labels);
+        $this->assertContains('Wpłaty', $labels);
+        $this->assertContains('Gotówka pilota', $labels);
     }
 
-    public function test_legacy_vendor_invoices_route_redirects_to_unified_documents(): void
+    public function test_legacy_vendor_invoices_route_redirects_to_event_finance(): void
     {
         if (! Schema::hasTable('vendor_invoices')) {
             $this->markTestSkipped('Brak tabeli vendor_invoices.');
@@ -41,25 +48,30 @@ class EventSettlementDocumentsTest extends TestCase
         $admin->assignRole('admin');
         $this->actingAs($admin);
 
-        $this->get(\App\Filament\Resources\EventResource::getUrl('vendor-invoices', ['record' => $event->id]))
-            ->assertRedirect(\App\Filament\Resources\EventResource::getUrl('settlement-documents', [
+        $this->get(EventResource::getUrl('vendor-invoices', ['record' => $event->id]))
+            ->assertRedirect(EventResource::getUrl('finance', [
                 'record' => $event->id,
-                'filter' => 'invoices',
             ]));
     }
 
-    public function test_document_filter_controls_visible_sections(): void
+    public function test_legacy_settlement_documents_redirects_to_finance_settlement_documents(): void
     {
-        $page = new ManageEventSettlementDocuments;
-        $page->documentFilter = 'all';
-        $this->assertTrue($page->showsSettlementDocuments());
+        $event = Event::factory()->create();
+        $admin = User::factory()->create(['status' => 'active']);
+        $admin->assignRole('admin');
+        $this->actingAs($admin);
 
-        $page->documentFilter = 'receipt';
-        $this->assertTrue($page->showsSettlementDocuments());
-        $this->assertFalse($page->showsVendorInvoices());
-        $this->assertSame('receipt', $page->settlementDocumentTypeFilter());
+        $this->get(EventResource::getUrl('settlement-documents', ['record' => $event->id]))
+            ->assertRedirect(EventResource::getUrl('finance-settlement-documents', [
+                'record' => $event->id,
+            ]));
+    }
 
-        $page->documentFilter = 'invoices';
-        $this->assertSame('invoice', $page->settlementDocumentTypeFilter());
+    public function test_finance_settlement_documents_page_is_registered(): void
+    {
+        $this->assertSame(
+            'finance-settlement-documents',
+            EventFinanceSettlementDocuments::getResourcePageName()
+        );
     }
 }

@@ -19,13 +19,13 @@ class ChecklistTemplateResource extends Resource
 
     protected static ?string $navigationIcon = 'heroicon-o-clipboard-document-check';
 
-    protected static ?string $navigationLabel = 'Szablony checklisty pilota';
+    protected static ?string $navigationLabel = 'Szablony listy kontrolnej pilota';
 
     protected static ?string $navigationGroup = FilamentNavigation::GROUP_EVENTS;
 
-    protected static ?string $modelLabel = 'Szablon checklisty';
+    protected static ?string $modelLabel = 'Szablon listy kontrolnej';
 
-    protected static ?string $pluralModelLabel = 'Szablony checklisty';
+    protected static ?string $pluralModelLabel = 'Szablony listy kontrolnej';
 
     protected static ?int $navigationSort = 80;
 
@@ -73,7 +73,7 @@ class ChecklistTemplateResource extends Resource
                     ->label('Kolejność')
                     ->numeric()
                     ->default(0),
-            ])->columns(2),
+            ])->columns(['default' => 1, 'md' => 2]),
 
             Forms\Components\Section::make('Punkty checklisty')->schema([
                 Forms\Components\Repeater::make('items')

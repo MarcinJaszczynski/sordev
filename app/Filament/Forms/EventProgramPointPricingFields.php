@@ -6,7 +6,6 @@ use App\Models\Currency;
 use App\Models\EventProgramPoint;
 use App\Models\EventTemplateProgramPoint;
 use App\Services\ProgramPointPricingCalculator;
-use App\Support\CurrencyAmountDisplay;
 use Filament\Forms;
 use Filament\Forms\Get;
 use Filament\Forms\Set;
@@ -18,12 +17,14 @@ class EventProgramPointPricingFields
      * @param  array{
      *     default_participant_count?: int,
      *     pricing_basis_selector?: bool,
+     *     for_template?: bool,
      * }  $options
      */
     public static function section(array $options = []): Forms\Components\Section
     {
         $defaultParticipants = max(1, (int) ($options['default_participant_count'] ?? 1));
         $showBasisSelector = (bool) ($options['pricing_basis_selector'] ?? false);
+        $forTemplate = (bool) ($options['for_template'] ?? false);
 
         $schema = [];
 
@@ -40,8 +41,8 @@ class EventProgramPointPricingFields
                 ->live()
                 ->dehydrated(false)
                 ->columnSpanFull()
-                ->afterStateHydrated(function (Forms\Components\ToggleButtons $component, $state, ?EventProgramPoint $record): void {
-                    if ($record) {
+                ->afterStateHydrated(function (Forms\Components\ToggleButtons $component, $state, $record) use ($forTemplate): void {
+                    if ($record instanceof EventProgramPoint || ($forTemplate && $record instanceof EventTemplateProgramPoint)) {
                         $component->state(ProgramPointPricingCalculator::pricingBasisFromGroupSize($record->group_size));
                     }
                 })
@@ -52,7 +53,7 @@ class EventProgramPointPricingFields
             $schema[] = Forms\Components\Hidden::make('group_size')
                 ->dehydrated()
                 ->default(1)
-                ->afterStateHydrated(function (Forms\Components\Hidden $component, $state, ?EventProgramPoint $record): void {
+                ->afterStateHydrated(function (Forms\Components\Hidden $component, $state, $record): void {
                     if ($record) {
                         $component->state($record->group_size ?? 1);
                     }
@@ -68,7 +69,7 @@ class EventProgramPointPricingFields
                     === ProgramPointPricingCalculator::BASIS_PER_GROUP)
                 ->dehydrated(false)
                 ->live(onBlur: true)
-                ->afterStateHydrated(function (Forms\Components\TextInput $component, $state, ?EventProgramPoint $record, Get $get): void {
+                ->afterStateHydrated(function (Forms\Components\TextInput $component, $state, $record, Get $get): void {
                     $component->state(max(2, (int) ($get('group_size') ?: ($record?->group_size ?? 20))));
                 })
                 ->afterStateUpdated(function ($state, Set $set, Get $get) use ($defaultParticipants): void {
@@ -80,14 +81,14 @@ class EventProgramPointPricingFields
         $groupSizeField = $showBasisSelector
             ? null
             : Forms\Components\TextInput::make('group_size')
-            ->label('Wielkość grupy')
-            ->numeric()
-            ->minValue(fn (Get $get): int => 0)
-            ->default(1)
-            ->helperText('1 = cena za osobę. >1 = cena za grupę (np. 20). 0 = liczba sztuk poniżej.')
-            ->visible(true)
-            ->live(onBlur: true)
-            ->afterStateUpdated(fn ($state, Set $set, Get $get) => self::syncTotals($set, $get, $defaultParticipants));
+                ->label('Wielkość grupy')
+                ->numeric()
+                ->minValue(fn (Get $get): int => 0)
+                ->default(1)
+                ->helperText('1 = cena za osobę. >1 = cena za grupę (np. 20). 0 = liczba sztuk poniżej.')
+                ->visible(true)
+                ->live(onBlur: true)
+                ->afterStateUpdated(fn ($state, Set $set, Get $get) => self::syncTotals($set, $get, $defaultParticipants));
 
         $pricingFields = [
             Forms\Components\TextInput::make('unit_price')
@@ -106,12 +107,15 @@ class EventProgramPointPricingFields
                 ->minValue(0)
                 ->step(0.01)
                 ->default(0)
+                ->required($forTemplate)
                 ->live(onBlur: true)
                 ->afterStateUpdated(fn ($state, Set $set, Get $get) => self::syncTotals($set, $get, $defaultParticipants)),
 
             ...($groupSizeField ? [$groupSizeField] : []),
+        ];
 
-            Forms\Components\TextInput::make('quantity')
+        if (! $forTemplate) {
+            $pricingFields[] = Forms\Components\TextInput::make('quantity')
                 ->label($showBasisSelector ? 'Liczba sztuk' : 'Ilość (stała)')
                 ->numeric()
                 ->minValue(1)
@@ -129,9 +133,9 @@ class EventProgramPointPricingFields
                     return (int) ($get('group_size') ?? 1) <= 0;
                 })
                 ->live(onBlur: true)
-                ->afterStateUpdated(fn ($state, Set $set, Get $get) => self::syncTotals($set, $get, $defaultParticipants)),
+                ->afterStateUpdated(fn ($state, Set $set, Get $get) => self::syncTotals($set, $get, $defaultParticipants));
 
-            Forms\Components\Select::make('unit')
+            $pricingFields[] = Forms\Components\Select::make('unit')
                 ->label('Jednostka')
                 ->options([
                     'szt.' => 'szt.',
@@ -143,8 +147,10 @@ class EventProgramPointPricingFields
                 ])
                 ->default('szt.')
                 ->visible(fn (): bool => Schema::hasColumn((new EventProgramPoint)->getTable(), 'unit'))
-                ->searchable(),
+                ->searchable();
+        }
 
+        $pricingFields = array_merge($pricingFields, [
             CurrencyConversionFields::currencySelect(),
             CurrencyConversionFields::convertToggle()->live(),
             CurrencyConversionFields::plnPreview('unit_price'),
@@ -154,37 +160,43 @@ class EventProgramPointPricingFields
                 ->content(fn (Get $get): string => self::previewText($get, $defaultParticipants))
                 ->extraAttributes(['class' => 'epp-pricing-preview whitespace-pre-line'])
                 ->columnSpanFull(),
+        ]);
 
-            Forms\Components\TextInput::make('calculated_price')
-                ->label('Kalkulacja')
-                ->numeric()
-                ->disabled()
-                ->dehydrated()
-                ->helperText('Zapis przy zapisie punktu.'),
+        if (! $forTemplate) {
+            $pricingFields = array_merge($pricingFields, [
+                Forms\Components\TextInput::make('calculated_price')
+                    ->label('Kalkulacja')
+                    ->numeric()
+                    ->disabled()
+                    ->dehydrated()
+                    ->helperText('Zapis przy zapisie punktu.'),
 
-            Forms\Components\TextInput::make('planned_price')
-                ->label('Planowana')
-                ->numeric()
-                ->minValue(0)
-                ->step(0.01)
-                ->live(onBlur: true),
+                Forms\Components\TextInput::make('planned_price')
+                    ->label('Planowana')
+                    ->numeric()
+                    ->minValue(0)
+                    ->step(0.01)
+                    ->live(onBlur: true),
 
-            Forms\Components\TextInput::make('paid_price')
-                ->label('Rozliczona')
-                ->numeric()
-                ->minValue(0)
-                ->step(0.01)
-                ->default(0),
-        ];
+                Forms\Components\TextInput::make('paid_price')
+                    ->label('Rozliczona')
+                    ->numeric()
+                    ->minValue(0)
+                    ->step(0.01)
+                    ->default(0),
+            ]);
+        }
 
         $schema = array_merge($schema, $pricingFields);
 
         return Forms\Components\Section::make($showBasisSelector ? 'Wycena i rozliczenie' : 'Wycena')
             ->description($showBasisSelector
                 ? 'Wybierz rodzaj ceny — kwota trafi do kalkulacji imprezy i kosztów rozliczenia.'
-                : 'Ten sam algorytm co w bibliotece punktów szablonu.')
+                : ($forTemplate
+                    ? 'Ustawienia finansowe punktu programu w bibliotece szablonu.'
+                    : 'Ten sam algorytm co w bibliotece punktów szablonu.'))
             ->icon('heroicon-o-currency-dollar')
-            ->columns(3)
+            ->columns($forTemplate ? 2 : 3)
             ->schema($schema);
     }
 

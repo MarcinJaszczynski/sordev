@@ -2,8 +2,8 @@
 
 namespace App\Filament\Resources;
 
-use App\Filament\Forms\PhoneInput;
 use App\Filament\Forms\ContractorLocationFields;
+use App\Filament\Forms\PhoneInput;
 use App\Filament\Resources\ContractorResource\Pages;
 use App\Filament\Resources\ContractorResource\RelationManagers\ContactsRelationManager;
 use App\Filament\Resources\ContractorResource\RelationManagers\LocationsRelationManager;
@@ -100,7 +100,7 @@ class ContractorResource extends Resource
     {
         return $form->schema([
             Forms\Components\Section::make('Dane podstawowe')
-                ->columns(2)
+                ->columns(['default' => 1, 'md' => 2])
                 ->schema([
                     Forms\Components\TextInput::make('name')
                         ->label('Nazwa kontrahenta')
@@ -129,7 +129,7 @@ class ContractorResource extends Resource
                 ]),
 
             Forms\Components\Section::make('Dane kontaktowe')
-                ->columns(2)
+                ->columns(['default' => 1, 'md' => 2])
                 ->schema([
                     PhoneInput::make('phone')
                         ->label('Telefon'),
@@ -147,7 +147,7 @@ class ContractorResource extends Resource
                 ]),
 
             Forms\Components\Section::make('Osoba kontaktowa')
-                ->columns(2)
+                ->columns(['default' => 1, 'md' => 2])
                 ->collapsed()
                 ->schema([
                     Forms\Components\TextInput::make('firstname')
@@ -175,7 +175,7 @@ class ContractorResource extends Resource
                 ->description(fn (Get $get): string => (bool) $get('uses_business_locations')
                     ? 'Adres do faktur. Poniżej dodaj oddziały operacyjne z adresami podjazdu.'
                     : 'Adres do faktur i rozliczeń. Włącz „Wiele miejsc prowadzenia”, aby dodać oddziały operacyjne.')
-                ->columns(4)
+                ->columns(['default' => 1, 'md' => 2, 'xl' => 4])
                 ->schema([
                     Forms\Components\Toggle::make('uses_business_locations')
                         ->label('Wiele miejsc prowadzenia działalności')
@@ -216,7 +216,7 @@ class ContractorResource extends Resource
                         ->label('Miejsca prowadzenia działalności')
                         ->relationship()
                         ->schema(ContractorLocationFields::schema())
-                        ->columns(4)
+                        ->columns(['default' => 1, 'md' => 2, 'xl' => 4])
                         ->columnSpanFull()
                         ->visible(fn (Get $get, string $operation): bool => $operation === 'edit'
                             && (bool) $get('uses_business_locations')
@@ -268,6 +268,12 @@ class ContractorResource extends Resource
                     ->label('Nazwa kontrahenta')
                     ->searchable()
                     ->description(fn ($record) => trim(($record->firstname ?? '').' '.($record->surname ?? '')) ?: null),
+                Tables\Columns\TextColumn::make('types.name')
+                    ->label('Typ kontrahenta')
+                    ->badge()
+                    ->separator(',')
+                    ->placeholder('—')
+                    ->toggleable(),
                 Tables\Columns\TextColumn::make('phone')
                     ->label('Telefon')
                     ->searchable()
@@ -319,6 +325,12 @@ class ContractorResource extends Resource
                     ->toggleable(isToggledHiddenByDefault: true),
             ])
             ->filters([
+                Tables\Filters\SelectFilter::make('types')
+                    ->label('Typ kontrahenta')
+                    ->relationship('types', 'name')
+                    ->multiple()
+                    ->preload()
+                    ->searchable(),
                 Tables\Filters\SelectFilter::make('status')
                     ->label('Status')
                     ->options([

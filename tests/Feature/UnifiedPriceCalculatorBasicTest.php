@@ -36,7 +36,7 @@ class UnifiedPriceCalculatorBasicTest extends TestCase
     {
         return new class extends EventTemplateCalculationEngine
         {
-            public function calculateDetailed(\App\Models\EventTemplate $template, ?int $startPlaceId = null, ?float $transportKm = null, bool $debug = false, \Traversable|array|null $qtyVariantsOverride = null): array
+            public function calculateDetailed(\App\Models\EventTemplate $template, ?int $startPlaceId = null, ?float $transportKm = null, bool $debug = false, \Traversable|array|null $qtyVariantsOverride = null, mixed $busOverride = null): array
             {
                 $rows = \App\Models\EventTemplatePricePerPerson::with(['eventTemplateQty', 'currency'])
                     ->where('event_template_id', $template->id)
@@ -113,7 +113,7 @@ class UnifiedPriceCalculatorBasicTest extends TestCase
                 $this->arr = $arr;
             }
 
-            public function calculateDetailed(\App\Models\EventTemplate $template, ?int $startPlaceId = null, ?float $transportKm = null, bool $debug = false, \Traversable|array|null $qtyVariantsOverride = null): array
+            public function calculateDetailed(\App\Models\EventTemplate $template, ?int $startPlaceId = null, ?float $transportKm = null, bool $debug = false, \Traversable|array|null $qtyVariantsOverride = null, mixed $busOverride = null): array
             {
                 return $this->arr;
             }

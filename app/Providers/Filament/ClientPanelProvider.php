@@ -30,15 +30,15 @@ class ClientPanelProvider extends PanelProvider
             ->id('portal')
             ->path('portal')
             ->login()
-            ->brandName('Portal klienta')
-            ->brandLogo(asset('images/bprafa-pilot-logo.svg'))
-            ->brandLogoHeight('2.25rem')
+            ->brandName('BP RAFA')
+            ->brandLogo(asset('uploads/logo.png'))
+            ->brandLogoHeight('2.1rem')
             ->font('Inter')
-            ->maxContentWidth(MaxWidth::Full)
+            ->maxContentWidth(MaxWidth::SevenExtraLarge)
             ->darkMode(condition: false, isForced: true)
             ->defaultThemeMode(ThemeMode::Light)
             ->colors([
-                'primary' => Color::hex('#2563EB'),
+                'primary' => Color::hex('#0663fc'),
                 'gray' => Color::Slate,
                 'success' => Color::Emerald,
                 'warning' => Color::Amber,
@@ -82,7 +82,8 @@ class ClientPanelProvider extends PanelProvider
             })
             ->renderHook(
                 PanelsRenderHook::HEAD_END,
-                fn (): string => view('filament.components.admin-readability-styles')->render(),
+                fn (): string => view('filament.components.admin-readability-styles')->render()
+                    .view('filament.client.components.portal-styles')->render(),
             )
             ->renderHook(
                 PanelsRenderHook::PAGE_START,
@@ -90,9 +91,16 @@ class ClientPanelProvider extends PanelProvider
                     $html = '';
 
                     if (\App\Http\Middleware\ClientPreviewMiddleware::isActive()) {
+                        $banner = app(\App\Services\ClientAccessService::class)->previewBannerContext()
+                            ?? [
+                                'title' => 'Podgląd portalu klienta',
+                                'description' => 'Tryb podglądu biurowego.',
+                                'exitUrl' => url('/portal/client-events?exit_preview=1'),
+                            ];
                         $html .= view('filament.components.preview-mode-banner', [
-                            'title' => 'Podgląd portalu klienta',
-                            'description' => 'Widzisz portal tak jak uczestnik lub opiekun. To nie jest Twoje konto klienta — zmiany i płatności mogą działać inaczej niż w biurze.',
+                            'title' => $banner['title'],
+                            'description' => $banner['description'],
+                            'exitUrl' => $banner['exitUrl'] ?? null,
                             'accentClass' => 'border-blue-200 bg-blue-50 text-blue-950',
                         ])->render();
                     }

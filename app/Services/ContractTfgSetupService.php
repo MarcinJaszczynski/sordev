@@ -28,7 +28,7 @@ class ContractTfgSetupService
         $participantCount = max(1, (int) ($event->participant_count ?? 1));
         $countryCode = $this->resolveCountryCodeFromEvent($event);
 
-        return [
+        $heuristics = [
             'subject_code' => 'IT',
             'payment_method_code' => 'WPLATAPRZED',
             'reservation_number' => $this->resolveReservationNumberFromEvent($event),
@@ -41,6 +41,16 @@ class ContractTfgSetupService
             'tfg_transport_code' => $this->resolveTransportCodeFromEvent($event),
             'tfg_icao_codes' => [],
         ];
+
+        $saved = [];
+        if (Schema::hasColumn('events', 'tfg_defaults') && is_array($event->tfg_defaults)) {
+            $saved = array_filter(
+                $event->tfg_defaults,
+                static fn ($value) => $value !== null && $value !== '',
+            );
+        }
+
+        return array_merge($heuristics, $saved);
     }
 
     /**
@@ -271,11 +281,21 @@ class ContractTfgSetupService
             'customer_name' => $parent->customer_name,
             'customer_email' => $parent->customer_email,
             'customer_phone' => $parent->customer_phone,
+            'signer_name' => $parent->signer_name,
+            'signer_email' => $parent->signer_email,
+            'signer_phone' => $parent->signer_phone,
+            'participant_name' => $parent->participant_name,
+            'participant_birth_date' => $parent->participant_birth_date,
+            'participant_email' => $parent->participant_email,
+            'participant_phone' => $parent->participant_phone,
+            'participant_payment_id' => $parent->participant_payment_id,
             'participant_count' => (int) ($data['participant_count'] ?? $parent->participant_count ?? 1),
+            'unit_price' => $parent->unit_price,
             'total_price' => (float) ($data['amount_due'] ?? $data['total_price'] ?? $parent->total_price),
             'currency' => $parent->currency ?? 'PLN',
             'status' => $data['status'] ?? 'sent',
             'payment_status' => $data['payment_status'] ?? 'pending',
+            'payment_scheme' => $parent->payment_scheme ?: Contract::PAYMENT_SCHEME_LUMP_SUM,
             'attachments' => $data['attachments'] ?? $parent->attachments,
             'body_edit_mode' => $data['body_edit_mode'] ?? Contract::BODY_EDIT_TEMPLATE,
             'created_by' => auth()->id(),

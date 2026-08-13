@@ -66,9 +66,96 @@ class ClientAccessService
             && $user->hasRole(['admin', 'super_admin', 'biuro']);
     }
 
+    /**
+     * Podgląd jako konkretny EventPortalAccess (sesja biura).
+     */
+    public function previewAccess(): ?EventPortalAccess
+    {
+        if (! ClientPreviewMiddleware::isActive() || ! Schema::hasTable('event_portal_accesses')) {
+            return null;
+        }
+
+        $staff = auth()->user();
+        if (! $staff || ! $staff->hasRole(['admin', 'super_admin', 'biuro'])) {
+            return null;
+        }
+
+        // Konta klientów nie dziedziczą cudzego preview_access_id.
+        if ($staff->hasRole(['client_participant', 'client_guardian'])) {
+            return null;
+        }
+
+        $id = ClientPreviewMiddleware::accessId();
+        if (! $id) {
+            return null;
+        }
+
+        return EventPortalAccess::query()
+            ->active()
+            ->with(['user', 'event', 'contract'])
+            ->find($id);
+    }
+
+    public function previewAccessForEvent(Event $event): ?EventPortalAccess
+    {
+        $access = $this->previewAccess();
+        if (! $access || (int) $access->event_id !== (int) $event->id) {
+            return null;
+        }
+
+        return $access;
+    }
+
+    public function isPreviewReadOnly(?User $user = null): bool
+    {
+        return $this->isOfficePreview($user);
+    }
+
+    public function assertPortalMutationsAllowed(): void
+    {
+        if ($this->isPreviewReadOnly()) {
+            abort(403, 'Podgląd portalu jest tylko do odczytu — zapisy i płatności są wyłączone.');
+        }
+    }
+
+    public function previewBannerContext(): ?array
+    {
+        if (! $this->isOfficePreview()) {
+            return null;
+        }
+
+        $access = $this->previewAccess();
+        $exitUrl = url('/portal/client-events?exit_preview=1');
+
+        if ($access) {
+            $roleLabel = $access->isGuardian() ? 'opiekun' : 'uczestnik';
+            $name = $access->user?->name ?: $access->user?->email ?: ('Access #'.$access->id);
+
+            return [
+                'title' => 'Podgląd: '.$name.' · '.$roleLabel,
+                'description' => 'Tryb tylko do odczytu. Widzisz portal jak to konto klienta — bez płatności i zapisów.',
+                'exitUrl' => $exitUrl,
+            ];
+        }
+
+        return [
+            'title' => 'Podgląd portalu klienta',
+            'description' => 'Tryb biurowy bez wybranego konta — lista imprez. Wybierz dostęp „Podgląd jako…”, żeby zobaczyć rolę uczestnika/opiekuna.',
+            'exitUrl' => $exitUrl,
+        ];
+    }
+
     public function visibleTripsQuery(User $user): Builder
     {
-        if ($this->isOfficePreview($user)) {
+        // Konto z rolą uczestnika/opiekuna zawsze widzi tylko swoje accessy.
+        if ($this->isOfficePreview($user)
+            && ! $user->hasRole(['client_participant', 'client_guardian'])
+        ) {
+            $access = $this->previewAccess();
+            if ($access) {
+                return Event::query()->whereKey($access->event_id);
+            }
+
             return Event::query()->where('status', '!=', Event::STATUS_CANCELLED);
         }
 
@@ -76,19 +163,11 @@ class ClientAccessService
             return Event::query()->whereRaw('1 = 0');
         }
 
-        if ($user->hasRole(['client_participant', 'client_guardian'])) {
-            return Event::query()
-                ->where('status', '!=', Event::STATUS_CANCELLED)
-                ->whereHas('portalAccesses', function (Builder $query) use ($user): void {
-                    $query->active()->where('user_id', $user->id);
-                });
-        }
-
-        if ($user->hasRole(['admin', 'super_admin', 'biuro'])) {
-            return Event::query()->where('status', '!=', Event::STATUS_CANCELLED);
-        }
-
-        return Event::query()->whereRaw('1 = 0');
+        return Event::query()
+            ->where('status', '!=', Event::STATUS_CANCELLED)
+            ->whereHas('portalAccesses', function (Builder $query) use ($user): void {
+                $query->active()->where('user_id', $user->id);
+            });
     }
 
     public function currentPanelId(): ?string
@@ -156,23 +235,29 @@ class ClientAccessService
 
     public function canViewTrip(User $user, Event $event): bool
     {
-        if ($this->isOfficePreview($user)) {
-            return $event->status !== Event::STATUS_CANCELLED;
-        }
-
-        if ($user->hasRole(['client_participant', 'client_guardian'])) {
-            return $this->accessFor($user, $event) !== null;
-        }
-
-        if ($user->hasRole(['admin', 'super_admin', 'biuro'])) {
+        if ($this->previewAccessForEvent($event)) {
             return true;
         }
 
-        return false;
+        if ($this->isOfficePreview($user)
+            && ! $user->hasRole(['client_participant', 'client_guardian'])
+        ) {
+            return $event->status !== Event::STATUS_CANCELLED;
+        }
+
+        return $this->accessFor($user, $event) !== null;
     }
 
     public function accessFor(User $user, Event $event, ?string $role = null): ?EventPortalAccess
     {
+        if ($preview = $this->previewAccessForEvent($event)) {
+            if ($role !== null && $preview->role !== $role) {
+                return null;
+            }
+
+            return $preview;
+        }
+
         if (! Schema::hasTable('event_portal_accesses')) {
             return null;
         }
@@ -193,6 +278,10 @@ class ClientAccessService
 
     public function accessesFor(User $user, Event $event)
     {
+        if ($preview = $this->previewAccessForEvent($event)) {
+            return collect([$preview]);
+        }
+
         if (! Schema::hasTable('event_portal_accesses')) {
             return collect();
         }
@@ -232,6 +321,68 @@ class ClientAccessService
             ->first();
     }
 
+    public function participantContract(User $user, Event $event): ?Contract
+    {
+        if (! $this->isParticipant($user, $event)) {
+            return null;
+        }
+
+        return $this->accessibleContract($user, $event, EventPortalAccess::ROLE_PARTICIPANT);
+    }
+
+    /**
+     * @return \Illuminate\Database\Eloquent\Builder<\App\Models\EventParticipant>
+     */
+    public function guardianParticipantsQuery(User $user, Event $event): \Illuminate\Database\Eloquent\Builder
+    {
+        $query = \App\Models\EventParticipant::query()
+            ->where('event_id', $event->id)
+            ->where('status', \App\Models\EventParticipant::STATUS_ACTIVE);
+
+        $access = $this->accessFor($user, $event, EventPortalAccess::ROLE_GUARDIAN);
+        $contractId = $access?->contract_id;
+
+        if ($contractId && Schema::hasColumn('event_participants', 'contract_id')) {
+            $scoped = (clone $query)->where('contract_id', $contractId);
+
+            if ($scoped->exists()) {
+                return $scoped->orderBy('last_name')->orderBy('first_name');
+            }
+
+            $contract = Contract::query()->whereKey($contractId)->first();
+            $paymentId = $contract?->participant_payment_id;
+            if ($paymentId && Schema::hasColumn('event_participants', 'participant_payment_id')) {
+                $byPayment = (clone $query)->where('participant_payment_id', $paymentId);
+                if ($byPayment->exists()) {
+                    return $byPayment->orderBy('last_name')->orderBy('first_name');
+                }
+            }
+        }
+
+        return $query->orderBy('last_name')->orderBy('first_name');
+    }
+
+    public function userOwnsContractSchedule(User $user, Event $event, int $scheduleId): bool
+    {
+        if (! Schema::hasTable('contract_payment_schedules')) {
+            return false;
+        }
+
+        $contractIds = collect([
+            $this->accessibleContract($user, $event, EventPortalAccess::ROLE_PARTICIPANT)?->id,
+            $this->accessibleContract($user, $event, EventPortalAccess::ROLE_GUARDIAN)?->id,
+        ])->filter()->unique()->values()->all();
+
+        if ($contractIds === []) {
+            return false;
+        }
+
+        return \App\Models\ContractPaymentSchedule::query()
+            ->whereKey($scheduleId)
+            ->whereIn('contract_id', $contractIds)
+            ->exists();
+    }
+
     public function participantPayment(User $user, Event $event): ?EventSettlementParticipantPayment
     {
         if (! $this->isParticipant($user, $event)) {
@@ -245,6 +396,16 @@ class ClientAccessService
             return null;
         }
 
+        $contract = $this->accessibleContract($user, $event, EventPortalAccess::ROLE_PARTICIPANT);
+        if ($contract?->participant_payment_id) {
+            $fromContract = EventSettlementParticipantPayment::query()
+                ->whereKey($contract->participant_payment_id)
+                ->first();
+            if ($fromContract) {
+                return $fromContract;
+            }
+        }
+
         if ($access->event_participant_id && Schema::hasTable('event_participants')) {
             $participant = $access->eventParticipant;
 
@@ -253,14 +414,6 @@ class ClientAccessService
                     ->whereKey($participant->participant_payment_id)
                     ->first();
             }
-        }
-
-        $contract = $this->accessibleContract($user, $event);
-
-        if ($contract?->participant_payment_id) {
-            return EventSettlementParticipantPayment::query()
-                ->whereKey($contract->participant_payment_id)
-                ->first();
         }
 
         return null;
@@ -297,10 +450,17 @@ class ClientAccessService
                 .' ('.$days.' dni po zakończeniu). Widoczne są tylko podstawowe informacje.';
         }
 
-        if ($expiresAt) {
-            return 'Pełny dostęp do wycieczki do '.$expiresAt->format('d.m.Y').'.';
+        return '';
+    }
+
+    public function accessUntilHint(Event $event): string
+    {
+        $expiresAt = $this->accessExpiresAt($event);
+
+        if (! $expiresAt || $this->isArchived($event)) {
+            return '';
         }
 
-        return '';
+        return 'Dostęp do szczegółów do '.$expiresAt->format('d.m.Y').'.';
     }
 }

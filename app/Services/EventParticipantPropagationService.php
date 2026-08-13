@@ -10,6 +10,7 @@ use App\Models\EventSettlement;
 use App\Models\EventSettlementParticipantPayment;
 use App\Support\EventAgreementParticipant;
 use App\Support\EventHotelPlanFormatting;
+use App\Support\EventParticipantGroupLabels;
 use App\Support\ParticipantNameMatcher;
 use Illuminate\Support\Facades\Schema;
 
@@ -113,6 +114,69 @@ class EventParticipantPropagationService
     }
 
     /**
+     * Przypisuje pilot/kierowcę/obsługę/opiekunów do slotów operacyjnych — bez listy uczestników.
+     *
+     * @return array{assigned: int, warnings: array<int, string>}
+     */
+    public function assignOperationalOccupants(Event $event): array
+    {
+        if (! Schema::hasTable('event_hotel_stays')) {
+            return ['assigned' => 0, 'warnings' => []];
+        }
+
+        $this->hotelPlanService->ensureStaysForEvent($event);
+        $this->hotelPlanService->syncAllRoomUnitsForEvent($event);
+        $event->load(['hotelStays.roomLines.hotelRoom', 'hotelStays.roomLines.occupants', 'assignedUser', 'driverContractor']);
+
+        $stayPayloads = $this->hotelPlanService->staysToPayload($event);
+        if ($stayPayloads === []) {
+            return ['assigned' => 0, 'warnings' => ['Brak noclegów w planie imprezy.']];
+        }
+
+        $operationalPeople = $this->resolveOperationalOccupants($event);
+        $assigned = 0;
+        $warnings = [];
+
+        foreach ($stayPayloads as &$stay) {
+            $assignedInStay = $this->collectAssignedHotelNamesForStay($stay);
+
+            foreach ($operationalPeople as $person) {
+                $name = $person['name'];
+                $normalized = ParticipantNameMatcher::normalizeKey($name);
+
+                if (isset($assignedInStay[$normalized])) {
+                    continue;
+                }
+
+                $slot = $this->findFirstEmptySlotForStay($stay, $person['role']);
+                if ($slot === null) {
+                    $day = $stay['day'] ?? '?';
+                    $roleLabel = EventParticipantGroupLabels::hotelRoleLabels()[$person['role']] ?? $person['role'];
+                    $warnings[] = "Noc {$day}: brak wolnego miejsca ({$roleLabel}) dla „{$name}”.";
+
+                    continue;
+                }
+
+                $stay['room_lines'][$slot['line_index']]['occupants'][] = $this->buildOccupantPayload(
+                    $name,
+                    $slot,
+                    $person['source'] ?? 'manual',
+                );
+
+                $assignedInStay[$normalized] = true;
+                $assigned++;
+            }
+        }
+        unset($stay);
+
+        if ($assigned > 0) {
+            $this->hotelPlanService->savePlan($event, $stayPayloads);
+        }
+
+        return compact('assigned', 'warnings');
+    }
+
+    /**
      * @return array{assigned: int, skipped: int, warnings: array<int, string>}
      */
     public function propagateToHotelPlan(Event $event): array
@@ -122,6 +186,8 @@ class EventParticipantPropagationService
         }
 
         $this->hotelPlanService->ensureStaysForEvent($event);
+        $this->assignOperationalOccupants($event);
+
         $this->hotelPlanService->syncAllRoomUnitsForEvent($event);
         $event->load(['hotelStays.roomLines.hotelRoom', 'hotelStays.roomLines.occupants']);
 
@@ -135,44 +201,41 @@ class EventParticipantPropagationService
         $skipped = 0;
         $warnings = [];
 
-        $assignedNames = $this->collectAssignedHotelNames($stayPayloads);
+        foreach ($stayPayloads as &$stay) {
+            $assignedInStay = $this->collectAssignedHotelNamesForStay($stay);
 
-        foreach ($participants as $participant) {
-            $name = $participant->fullName();
-            $normalized = ParticipantNameMatcher::normalizeKey($name);
+            foreach ($participants as $participant) {
+                $name = $participant->fullName();
+                $normalized = ParticipantNameMatcher::normalizeKey($name);
 
-            if (isset($assignedNames[$normalized])) {
-                $skipped++;
+                if (isset($assignedInStay[$normalized])) {
+                    $skipped++;
 
-                continue;
+                    continue;
+                }
+
+                $slot = $this->findFirstEmptySlotForStay($stay, 'qty');
+                if ($slot === null) {
+                    $day = $stay['day'] ?? '?';
+                    $warnings[] = "Noc {$day}: brak wolnych miejsc uczestników dla „{$name}”.";
+                    $skipped++;
+
+                    continue;
+                }
+
+                $stay['room_lines'][$slot['line_index']]['occupants'][] = $this->buildOccupantPayload(
+                    $name,
+                    $slot,
+                    $participant->contract_id || $participant->event_agreement_id ? 'agreement' : 'manual',
+                    $participant->event_agreement_id,
+                    $participant->contract_id,
+                );
+
+                $assignedInStay[$normalized] = true;
+                $assigned++;
             }
-
-            $slot = $this->findFirstEmptySlot($stayPayloads);
-            if ($slot === null) {
-                $warnings[] = "Brak wolnych miejsc dla „{$name}”.";
-                $skipped++;
-
-                continue;
-            }
-
-            $occupantPayload = [
-                'id' => null,
-                'name' => $name,
-                'source' => $participant->contract_id || $participant->event_agreement_id ? 'agreement' : 'manual',
-                'unit_index' => $slot['unit_index'],
-                'bed_index' => $slot['bed_index'],
-                'event_agreement_id' => $participant->event_agreement_id,
-                'contract_id' => $participant->contract_id,
-                'reservation_id' => null,
-                'participant_key' => $participant->contract_id
-                    ? 'contract:'.$participant->contract_id
-                    : ($participant->event_agreement_id ? 'agreement:'.$participant->event_agreement_id : null),
-            ];
-
-            $stayPayloads[$slot['stay_index']]['room_lines'][$slot['line_index']]['occupants'][] = $occupantPayload;
-            $assignedNames[$normalized] = true;
-            $assigned++;
         }
+        unset($stay);
 
         if ($assigned > 0) {
             $this->hotelPlanService->savePlan($event, $stayPayloads);
@@ -247,20 +310,95 @@ class EventParticipantPropagationService
     }
 
     /**
-     * @param  array<int, array<string, mixed>>  $stayPayloads
+     * Osoby operacyjne (pilot, kierowca, obsługa, opiekunowie) — przypisywane do linii wg roli pokoju.
+     *
+     * @return list<array{name: string, role: string, source?: string}>
+     */
+    private function resolveOperationalOccupants(Event $event): array
+    {
+        $groupCounts = $this->hotelPlanService->resolveGroupCounts($event);
+        $people = [];
+
+        $pilotName = trim((string) ($event->assignedUser?->name ?? ''));
+        $staffSlotsUsed = 0;
+
+        if ($pilotName !== '') {
+            $people[] = ['name' => $pilotName, 'role' => 'staff', 'source' => 'manual'];
+            $staffSlotsUsed++;
+        }
+
+        $driverName = trim((string) ($event->driver_name ?? ''));
+        if ($driverName === '' && $event->relationLoaded('driverContractor') === false) {
+            $event->loadMissing('driverContractor');
+        }
+        if ($driverName === '' && $event->driverContractor) {
+            $driverName = trim((string) ($event->driverContractor->name ?? ''));
+        }
+        if ($driverName !== '') {
+            $people[] = ['name' => $driverName, 'role' => 'driver', 'source' => 'manual'];
+        }
+
+        $staffCount = max(0, (int) ($groupCounts['staff'] ?? 0));
+        for ($i = $staffSlotsUsed + 1; $i <= $staffCount; $i++) {
+            $people[] = [
+                'name' => $staffCount === 1 ? 'Obsługa' : "Obsługa {$i}",
+                'role' => 'staff',
+                'source' => 'manual',
+            ];
+        }
+
+        $gratisCount = max(0, (int) ($groupCounts['gratis'] ?? 0));
+        for ($i = 1; $i <= $gratisCount; $i++) {
+            $label = EventParticipantGroupLabels::GRATIS;
+            $people[] = [
+                'name' => $gratisCount === 1 ? $label : "{$label} {$i}",
+                'role' => 'gratis',
+                'source' => 'manual',
+            ];
+        }
+
+        return $people;
+    }
+
+    /**
+     * @param  array<string, mixed>  $slot
+     * @return array<string, mixed>
+     */
+    private function buildOccupantPayload(
+        string $name,
+        array $slot,
+        string $source,
+        ?int $eventAgreementId = null,
+        ?int $contractId = null,
+    ): array {
+        return [
+            'id' => null,
+            'name' => $name,
+            'source' => $source,
+            'unit_index' => $slot['unit_index'],
+            'bed_index' => $slot['bed_index'],
+            'event_agreement_id' => $eventAgreementId,
+            'contract_id' => $contractId,
+            'reservation_id' => null,
+            'participant_key' => $contractId
+                ? 'contract:'.$contractId
+                : ($eventAgreementId ? 'agreement:'.$eventAgreementId : null),
+        ];
+    }
+
+    /**
+     * @param  array<string, mixed>  $stay
      * @return array<string, true>
      */
-    private function collectAssignedHotelNames(array $stayPayloads): array
+    private function collectAssignedHotelNamesForStay(array $stay): array
     {
         $names = [];
 
-        foreach ($stayPayloads as $stay) {
-            foreach ($stay['room_lines'] ?? [] as $line) {
-                foreach ($line['occupants'] ?? [] as $occupant) {
-                    $name = trim((string) ($occupant['name'] ?? ''));
-                    if ($name !== '') {
-                        $names[ParticipantNameMatcher::normalizeKey($name)] = true;
-                    }
+        foreach ($stay['room_lines'] ?? [] as $line) {
+            foreach ($line['occupants'] ?? [] as $occupant) {
+                $name = trim((string) ($occupant['name'] ?? ''));
+                if ($name !== '') {
+                    $names[ParticipantNameMatcher::normalizeKey($name)] = true;
                 }
             }
         }
@@ -269,24 +407,30 @@ class EventParticipantPropagationService
     }
 
     /**
-     * @param  array<int, array<string, mixed>>  $stayPayloads
-     * @return array{stay_index: int, line_index: int, unit_index: int, bed_index: int}|null
+     * @param  array<string, mixed>  $stay
+     * @return array{line_index: int, unit_index: int, bed_index: int}|null
      */
-    private function findFirstEmptySlot(array $stayPayloads): ?array
+    private function findFirstEmptySlotForStay(array $stay, ?string $role = null): ?array
     {
-        foreach ($stayPayloads as $stayIndex => $stay) {
-            $hotelRoomsById = collect($stay['room_lines'] ?? [])
-                ->pluck('hotel_room_id')
-                ->filter()
-                ->mapWithKeys(fn ($id) => [$id => \App\Models\HotelRoom::find($id)])
-                ->filter();
+        $hotelRoomsById = collect($stay['room_lines'] ?? [])
+            ->pluck('hotel_room_id')
+            ->filter()
+            ->mapWithKeys(fn ($id) => [$id => \App\Models\HotelRoom::find($id)])
+            ->filter();
 
-            foreach (EventHotelPlanFormatting::expandedPersonSlots($stay, $hotelRoomsById) as $slot) {
+        foreach ($stay['room_lines'] ?? [] as $lineIndex => $line) {
+            if ($role !== null && ($line['role'] ?? 'qty') !== $role) {
+                continue;
+            }
+
+            foreach (EventHotelPlanFormatting::expandedPersonSlots(
+                ['room_lines' => [$line]],
+                $hotelRoomsById,
+            ) as $slot) {
                 $occupantName = trim((string) ($slot['occupant']['name'] ?? ''));
                 if ($occupantName === '') {
                     return [
-                        'stay_index' => (int) $stayIndex,
-                        'line_index' => (int) $slot['line_index'],
+                        'line_index' => (int) $lineIndex,
                         'unit_index' => (int) $slot['unit_index'],
                         'bed_index' => (int) $slot['bed_index'],
                     ];

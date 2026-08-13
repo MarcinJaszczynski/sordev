@@ -4,6 +4,7 @@ namespace App\Filament\Pages;
 
 use App\Support\FilamentNavigation;
 use Filament\Pages\Page;
+use Illuminate\Support\Facades\Auth;
 use Maatwebsite\Excel\Facades\Excel;
 
 class ImportExportPanel extends Page
@@ -12,19 +13,17 @@ class ImportExportPanel extends Page
 
     protected static string $view = 'filament.pages.import-export-panel';
 
-    protected static ?string $navigationLabel = 'Import / Export danych';
+    protected static ?string $navigationLabel = 'Import / eksport danych';
 
     protected static ?string $navigationGroup = FilamentNavigation::GROUP_SYSTEM;
 
     public $models = [
         'Event' => \App\Models\Event::class,
-        'User' => \App\Models\User::class,
         'Contractor' => \App\Models\Contractor::class,
         'Contact' => \App\Models\Contact::class,
         'Bus' => \App\Models\Bus::class,
         'HotelRoom' => \App\Models\HotelRoom::class,
         'Payer' => \App\Models\Payer::class,
-        // Dodaj kolejne modele tutaj
     ];
 
     public $selectedModel = null;
@@ -33,8 +32,17 @@ class ImportExportPanel extends Page
 
     public $importResult = null;
 
+    public static function canAccess(): bool
+    {
+        $user = Auth::user();
+
+        return (bool) $user?->hasRole(['admin', 'super_admin']);
+    }
+
     public function mount()
     {
+        abort_unless(static::canAccess(), 403);
+
         $this->selectedModel = array_key_first($this->models);
     }
 
@@ -45,6 +53,8 @@ class ImportExportPanel extends Page
 
     public function import()
     {
+        abort_unless(static::canAccess(), 403);
+
         $modelClass = $this->models[$this->selectedModel] ?? null;
         if (! $modelClass || ! $this->importFile) {
             $this->importResult = 'Wybierz model i plik CSV.';
@@ -61,6 +71,8 @@ class ImportExportPanel extends Page
 
     public function export()
     {
+        abort_unless(static::canAccess(), 403);
+
         $modelClass = $this->models[$this->selectedModel] ?? null;
         if (! $modelClass) {
             return null;

@@ -9,7 +9,6 @@ use Filament\Resources\RelationManagers\RelationManager;
 use Filament\Tables;
 use Filament\Tables\Table;
 use Illuminate\Database\Eloquent\Model;
-use Illuminate\Support\Facades\Schema;
 
 class LocationsRelationManager extends RelationManager
 {
@@ -41,7 +40,7 @@ class LocationsRelationManager extends RelationManager
     {
         return $form
             ->schema(ContractorLocationFields::schema())
-            ->columns(4);
+            ->columns(['default' => 1, 'md' => 2, 'xl' => 4]);
     }
 
     public function table(Table $table): Table

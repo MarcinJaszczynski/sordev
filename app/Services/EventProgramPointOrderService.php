@@ -93,17 +93,68 @@ class EventProgramPointOrderService
     }
 
     /**
-     * Program widoczny w portalu pilota — bez dnia fakultatywnego (day > duration_days).
+     * Program widoczny w portalu pilota — bez dnia fakultatywnego (day > horyzontu trwania).
+     *
+     * Horyzont bierze max(event.duration_days, szablon, span dat), żeby błędne duration_days=1
+     * nie obcinało całego programu (szablon zwykle ma prawidłową długość).
+     * Świadomie bez maxPointDay — dzień fakultatywny (po horyzoncie) zostaje ukryty.
      *
      * @return EloquentCollection<int, EventProgramPoint>
      */
     public function pilotProgramPoints(Event $event, bool $requireActive = true): EloquentCollection
     {
-        $durationDays = max(1, (int) ($event->duration_days ?? $event->eventTemplate?->duration_days ?? 1));
+        $event->loadMissing('eventTemplate');
+
+        $fromDates = 1;
+        if ($event->start_date && $event->end_date) {
+            $fromDates = max(1, (int) $event->start_date->copy()->startOfDay()
+                ->diffInDays($event->end_date->copy()->startOfDay()) + 1);
+        }
+
+        $durationDays = max(
+            1,
+            (int) ($event->duration_days ?? 0),
+            (int) ($event->eventTemplate?->duration_days ?? 0),
+            $fromDates,
+        );
 
         return new EloquentCollection(
             $this->visibleProgramPoints($event, $requireActive)
-                ->filter(fn (EventProgramPoint $point) => (int) $point->day <= $durationDays)
+                ->filter(fn (EventProgramPoint $point) => (int) ($point->day ?? 1) <= $durationDays)
+                ->values()
+                ->all()
+        );
+    }
+
+    /**
+     * Program dla portalu klienta — wszystkie dni programu (bez obcinania po błędnym duration_days=1).
+     *
+     * @return EloquentCollection<int, EventProgramPoint>
+     */
+    public function clientProgramPoints(Event $event, bool $requireActive = true): EloquentCollection
+    {
+        $event->loadMissing('eventTemplate');
+
+        $fromDates = 1;
+        if ($event->start_date && $event->end_date) {
+            $fromDates = max(1, (int) $event->start_date->copy()->startOfDay()
+                ->diffInDays($event->end_date->copy()->startOfDay()) + 1);
+        }
+
+        $visible = $this->visibleProgramPoints($event, $requireActive);
+        $maxPointDay = (int) ($visible->max(fn (EventProgramPoint $point) => (int) ($point->day ?? 1)) ?: 1);
+
+        $durationDays = max(
+            1,
+            (int) ($event->duration_days ?? 0),
+            (int) ($event->eventTemplate?->duration_days ?? 0),
+            $fromDates,
+            $maxPointDay,
+        );
+
+        return new EloquentCollection(
+            $visible
+                ->filter(fn (EventProgramPoint $point) => (int) ($point->day ?? 1) <= $durationDays)
                 ->values()
                 ->all()
         );

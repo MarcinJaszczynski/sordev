@@ -2,15 +2,15 @@
 
 namespace App\Services;
 
-use App\Filament\Pages\ClientInvoiceRequestsInboxPage;
-use App\Filament\Resources\EventResource;
-use App\Filament\Resources\TaskResource;
+use App\Enums\TaskSource;
 use App\Models\ClientInvoiceRequest;
 use App\Models\Event;
 use App\Models\Task;
 use App\Models\TaskComment;
 use App\Models\User;
 use App\Models\UserNotificationRead;
+use App\Support\AdminPanelUrls;
+use App\Support\Tasks\OfficeTaskRecipients;
 use App\Support\Tasks\TaskListColumn;
 use App\Support\Tasks\TaskNavigation;
 use App\Support\Tasks\TaskQueryFilters;
@@ -85,7 +85,7 @@ class NotificationService
             'title' => Str::limit($event->name ?? ('Impreza #'.$event->id), 60),
             'meta' => ($event->status_label ?: $fallbackLabel).' | Start: '.$startDate,
             'time' => optional($event->updated_at)->diffForHumans() ?? 'teraz',
-            'url' => EventResource::getUrl('edit', ['record' => $event->id]),
+            'url' => AdminPanelUrls::eventEdit($event),
             'at' => optional($event->updated_at)?->timestamp ?? now()->timestamp,
             'color' => match ($type) {
                 'new_event' => 'amber',
@@ -99,14 +99,16 @@ class NotificationService
     {
         $startDate = $event->start_date ? $event->start_date->format('d.m.Y') : 'bez daty';
 
+        // Osobny type niż "event", żeby fingerprint nie kolidował z powiadomieniem
+        // o potwierdzeniu tej samej imprezy (Alpine x-for pada na zduplikowanych :key).
         return [
-            'type' => 'event',
+            'type' => 'insurance_alert',
             'id' => (int) $event->id,
             'revision' => (string) (optional($event->updated_at)?->timestamp ?? now()->timestamp),
             'title' => 'Ubezpieczenie do domknięcia: '.Str::limit($event->name ?? ('Impreza #'.$event->id), 42),
             'meta' => 'Brak kompletu danych/płatności ubezpieczenia | Start: '.$startDate,
             'time' => optional($event->updated_at)->diffForHumans() ?? 'teraz',
-            'url' => EventResource::getUrl('edit', ['record' => $event->id]),
+            'url' => AdminPanelUrls::eventEdit($event),
             'at' => optional($event->updated_at)?->timestamp ?? now()->timestamp,
             'color' => 'blue',
         ];
@@ -177,6 +179,7 @@ class NotificationService
     {
         return collect($items)
             ->filter(fn (array $item): bool => ! ($item['is_read'] ?? false))
+            ->unique(fn (array $item): string => (string) ($item['fingerprint'] ?? ($item['type'].'|'.$item['id'].'|'.$item['revision'])))
             ->sortByDesc(fn (array $item): int => (int) ($item['revision'] ?? 0))
             ->take($limit)
             ->values()
@@ -184,17 +187,67 @@ class NotificationService
     }
 
     /**
+     * Zadania widoczne w topbarze: moje + wspólne systemowe (dla biura/admina).
+     * Podzadania są pełnoprawnymi Task — wchodzą do listy i licznika.
+     */
+    private static function visibleTasksQueryFor(User $user)
+    {
+        $query = Task::query();
+        TaskQueryFilters::officeOnly($query);
+        TaskQueryFilters::excludeCompleted($query);
+        TaskQueryFilters::excludeArchived($query);
+
+        return $query->where(function ($inner) use ($user): void {
+            $inner->where('author_id', $user->id)
+                ->orWhere('assignee_id', $user->id);
+
+            if ($user->hasRole(['super_admin', 'admin', 'biuro'])) {
+                $inner->orWhere('source', TaskSource::System->value);
+            }
+        });
+    }
+
+    /**
+     * Pełna liczba nieprzeczytanych zadań (bez limitu listy topbara).
+     */
+    private static function unreadTaskCountFor(User $user): int
+    {
+        $tasks = static::visibleTasksQueryFor($user)->get(['id', 'updated_at']);
+
+        if ($tasks->isEmpty()) {
+            return 0;
+        }
+
+        if (! Schema::hasTable('user_notification_reads')) {
+            return $tasks->count();
+        }
+
+        $fingerprints = $tasks
+            ->map(fn (Task $task): string => UserNotificationRead::fingerprintFor([
+                'type' => 'task',
+                'id' => (int) $task->id,
+                'revision' => (string) ($task->updated_at?->timestamp ?? 0),
+            ]))
+            ->all();
+
+        $readSet = UserNotificationRead::query()
+            ->where('user_id', $user->id)
+            ->whereIn('fingerprint', $fingerprints)
+            ->pluck('fingerprint')
+            ->flip()
+            ->all();
+
+        return collect($fingerprints)
+            ->reject(fn (string $fingerprint): bool => isset($readSet[$fingerprint]))
+            ->count();
+    }
+
+    /**
      * @return list<array<string, mixed>>
      */
     private static function taskNotificationsFor(User $user, int $queryLimit = 30): array
     {
-        $query = Task::query();
-        TaskQueryFilters::officeOnly($query);
-        TaskQueryFilters::mine($query, $user->id);
-        TaskQueryFilters::excludeCompleted($query);
-        TaskQueryFilters::excludeArchived($query);
-
-        return $query
+        return static::visibleTasksQueryFor($user)
             ->with('status')
             ->orderByDesc('updated_at')
             ->limit($queryLimit)
@@ -217,6 +270,28 @@ class NotificationService
             ->all();
     }
 
+    public static function clearCacheForTaskStakeholders(Task $task): void
+    {
+        $task->loadMissing('parent');
+
+        collect([
+            $task->assignee_id,
+            $task->author_id,
+            $task->parent?->assignee_id,
+            $task->parent?->author_id,
+        ])
+            ->filter()
+            ->map(fn ($id): int => (int) $id)
+            ->unique()
+            ->each(fn (int $userId) => static::clearCacheForUser($userId));
+    }
+
+    public static function clearCacheForOfficeUsers(): void
+    {
+        OfficeTaskRecipients::users()
+            ->each(fn (User $user) => static::clearCacheForUser((int) $user->id));
+    }
+
     /**
      * @return list<array<string, mixed>>
      */
@@ -237,6 +312,7 @@ class NotificationService
             ->limit($queryLimit)
             ->get()
             ->map(function (TaskComment $comment): array {
+                $authorName = $comment->author?->name ?? 'Użytkownik';
                 $taskTitle = Str::limit($comment->task?->title ?? ('Zadanie #'.$comment->task_id), 40);
 
                 return [
@@ -244,12 +320,12 @@ class NotificationService
                     'id' => (int) $comment->id,
                     'task_id' => (int) $comment->task_id,
                     'revision' => (string) ($comment->created_at?->timestamp ?? 0),
-                    'title' => 'Nowy komentarz: '.$taskTitle,
-                    'meta' => ($comment->author?->name ?? 'Użytkownik').': '.TaskListColumn::sanitizeTaskText($comment->content ?? '', 70),
+                    'title' => $authorName.' skomentował zadanie '.$taskTitle,
+                    'meta' => TaskListColumn::sanitizeTaskText($comment->content ?? '', 70),
                     'time' => optional($comment->created_at)->diffForHumans() ?? 'teraz',
                     'url' => $comment->task
                         ? TaskNavigation::fullViewUrl($comment->task)
-                        : TaskResource::getUrl('index'),
+                        : AdminPanelUrls::taskBoard(),
                     'at' => optional($comment->created_at)?->timestamp ?? now()->timestamp,
                     'color' => 'sky',
                 ];
@@ -363,7 +439,9 @@ class NotificationService
                     'title' => Str::limit($request->company_name, 50),
                     'meta' => 'NIP: '.$request->nip.' | '.$eventName,
                     'time' => optional($request->created_at)->diffForHumans() ?? 'teraz',
-                    'url' => ClientInvoiceRequestsInboxPage::getUrl(['tableFilters' => ['status' => ['value' => ClientInvoiceRequest::STATUS_PENDING]]]),
+                    'url' => AdminPanelUrls::clientInvoiceRequestsInbox([
+                        'status' => ['value' => ClientInvoiceRequest::STATUS_PENDING],
+                    ]),
                     'at' => optional($request->created_at)?->timestamp ?? now()->timestamp,
                     'color' => 'indigo',
                 ];
@@ -418,7 +496,8 @@ class NotificationService
 
                 $invoiceItems = static::finalizeItems(static::invoiceRequestNotificationsFor($user, $queryLimit), $userId);
 
-                $tasksCount = static::unreadCount($taskItems);
+                // Licznik niezależny od limitu listy (podzadanie / 31. zadanie musi podbić badge).
+                $tasksCount = static::unreadTaskCountFor($user);
                 $commentsCount = static::unreadCount($commentItems);
                 $newEventsCount = static::unreadCount($newEventItems);
                 $confirmedEventsCount = static::unreadCount($eventItems);
@@ -537,10 +616,16 @@ class NotificationService
             return;
         }
 
-        collect([$task->assignee_id, $task->author_id])
+        // Touch → revision w topbarze (Aktywność/Zadania) rośnie także gdy
+        // autor komentarza = owner/assignee (własny komentarz nie jest w counts.comments).
+        $task->touch();
+
+        // Czyść cache wszystkich stakeholderów, w tym autora komentarza —
+        // gdy owner=assignee=autor, inaczej nikt nie dostaje odświeżenia topbara.
+        collect([$task->assignee_id, $task->author_id, $comment->user_id])
             ->filter()
+            ->map(fn ($id): int => (int) $id)
             ->unique()
-            ->reject(fn (int $userId): bool => $userId === (int) $comment->user_id)
             ->each(fn (int $userId) => static::clearCacheForUser($userId));
     }
 
@@ -619,6 +704,7 @@ class NotificationService
             'comment' => 'Komentarze',
             'new_event' => 'Nowe imprezy',
             'event' => 'Nowe potwierdzenia',
+            'insurance_alert' => 'Ubezpieczenie',
             'pending_cancellation_event' => 'Do anulacji',
             'invoice_request' => 'Wnioski o fakturę',
             'message' => 'Wiadomości',

@@ -20,7 +20,11 @@ class DocumentResource extends Resource
 
     protected static ?string $navigationIcon = 'heroicon-o-document-text';
 
-    protected static ?string $navigationLabel = 'Dokumenty';
+    protected static ?string $navigationLabel = 'Dokumenty CMS';
+
+    protected static ?string $modelLabel = 'dokument CMS';
+
+    protected static ?string $pluralModelLabel = 'dokumenty CMS';
 
     protected static ?string $navigationGroup = FilamentNavigation::GROUP_SYSTEM;
 
@@ -35,7 +39,11 @@ class DocumentResource extends Resource
                 ->required(),
 
             Forms\Components\TextInput::make('title')->required()->maxLength(255),
-            Forms\Components\TextInput::make('slug')->required()->maxLength(255),
+            Forms\Components\TextInput::make('slug')
+                ->label('Identyfikator URL')
+                ->helperText('Fragment adresu strony, np. regulamin-wyjazdu.')
+                ->required()
+                ->maxLength(255),
             Forms\Components\Textarea::make('excerpt')->rows(3),
             \FilamentTiptapEditor\TiptapEditor::make('content')->label('Treść'),
             Forms\Components\Toggle::make('is_published')->label('Opublikowany')->default(true),

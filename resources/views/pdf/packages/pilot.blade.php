@@ -28,6 +28,8 @@
 
     <hr class="divider">
 
+    @include('pdf.packages._package_overrides_intro')
+
     <div class="section">
         <div class="section-title">Podstawowe informacje</div>
         <div class="section-body">
@@ -166,7 +168,7 @@
         </div>
     </div>
 
-    @if(isset($hotelPlan) && $hotelPlan->isNotEmpty())
+    @if(isset($hotelPlan) && $hotelPlan->isNotEmpty() && ! in_array('hotel_plan', $hide_sections ?? [], true))
         <div class="section">
             <div class="section-title">Pokoje (szablon noclegów)</div>
             <div class="section-body">
@@ -182,7 +184,7 @@
                     <tbody>
                     @foreach($hotelPlan as $day)
                         <tr>
-                            <td colspan="4" style="font-weight:700; padding-top:8px;">Dzień {{ $day['day'] }}</td>
+                            <td colspan="4" style="font-weight: bold; padding-top:8px;">Dzień {{ $day['day'] }}</td>
                         </tr>
                         <tr>
                             <td style="text-align:center; vertical-align:top;">
@@ -226,34 +228,44 @@
         </div>
     @endif
 
-    @include('pdf.packages._program_imprezy')
+    @unless(in_array('program', $hide_sections ?? [], true))
+        @include('pdf.packages._program_imprezy')
+    @endunless
 
-    @include('pdf.packages._pilot_set_finances', ['pilotSetFinanceCards' => $pilotSetFinanceCards ?? []])
+    @unless(in_array('pilot_set_finance', $hide_sections ?? [], true))
+        @include('pdf.packages._pilot_set_finances', ['pilotSetFinanceCards' => $pilotSetFinanceCards ?? []])
+    @endunless
 
-    <div class="section">
-        <div class="section-title">Notatki dla pilota</div>
-        <div class="section-body">
-            <div class="notes-field">
-                @php
-                    $pn = trim(strip_tags((string) ($event->pilot_notes ?? '')));
-                    $on = trim(strip_tags((string) ($event->office_notes ?? '')));
-                @endphp
-                @if($pn === '' && $on === '')
-                    —
-                @else
-                    @if($pn !== '')
-                        <strong>Pilot:</strong> {!! nl2br(e($pn)) !!}
+    @unless(in_array('notes', $hide_sections ?? [], true))
+        <div class="section">
+            <div class="section-title">Notatki dla pilota</div>
+            <div class="section-body">
+                <div class="notes-field">
+                    @php
+                        $pn = trim(strip_tags((string) ($event->pilot_notes ?? '')));
+                        $on = trim(strip_tags((string) ($event->office_notes ?? '')));
+                    @endphp
+                    @if($pn === '' && $on === '')
+                        —
+                    @else
+                        @if($pn !== '')
+                            <strong>Pilot:</strong> {!! nl2br(e($pn)) !!}
+                        @endif
+                        @if($on !== '')
+                            @if($pn !== '')<br><br>@endif
+                            <strong>Biuro:</strong> {!! nl2br(e($on)) !!}
+                        @endif
                     @endif
-                    @if($on !== '')
-                        @if($pn !== '')<br><br>@endif
-                        <strong>Biuro:</strong> {!! nl2br(e($on)) !!}
-                    @endif
-                @endif
+                </div>
             </div>
         </div>
-    </div>
+    @endunless
 
-    @include('pdf.packages._attachments')
+    @include('pdf.packages._package_overrides_extra')
+
+    @unless(in_array('attachments_list', $hide_sections ?? [], true))
+        @include('pdf.packages._attachments')
+    @endunless
     @include('pdf.packages._footer')
 </div>
 </body>

@@ -4,7 +4,7 @@
     </div>
     
     <div class="p-6 space-y-6">
-        <div class="grid grid-cols-3 gap-4 text-sm">
+        <div class="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-4 text-sm">
             <div class="text-gray-600 dark:text-gray-400">
                 <span class="font-medium">Selected ID:</span> {{ $selectedConversationId ?? 'null' }}
             </div>

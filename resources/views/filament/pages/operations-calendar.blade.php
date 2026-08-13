@@ -1,17 +1,27 @@
 <x-filament-panels::page>
 
     <div class="mb-4 space-y-3">
+        <div class="rounded-lg border border-primary-200 bg-primary-50/60 px-4 py-3 text-sm text-gray-700 dark:border-primary-500/30 dark:bg-primary-500/10 dark:text-gray-200">
+            <p class="font-medium text-gray-900 dark:text-white">Kalendarz operacyjny biura</p>
+            <p class="mt-1 text-gray-600 dark:text-gray-300">
+                Wspólny widok terminów: imprezy, zadania, płatności, rezerwacje, transport i hotele.
+                Kliknij wpis, aby otworzyć powiązane ekrany (np. kartę imprezy lub finanse).
+            </p>
+        </div>
+
         <div class="flex flex-wrap gap-2">
             <x-filament::button
                 size="sm"
                 :color="$layoutMode === 'calendar' ? 'primary' : 'gray'"
                 wire:click="setLayoutMode('calendar')"
-            >Miesiąc / lista</x-filament::button>
+                title="Klasyczny kalendarz miesięczny / lista wydarzeń."
+            >Kalendarz</x-filament::button>
             <x-filament::button
                 size="sm"
                 :color="$layoutMode === 'resources' ? 'primary' : 'gray'"
                 wire:click="setLayoutMode('resources')"
-            >Zasoby (Gantt-lite)</x-filament::button>
+                title="Lista zasobów (piloci, autokary, hotele) z przypisanymi terminami."
+            >Widok zasobów</x-filament::button>
         </div>
 
         <div class="rounded-xl border border-gray-200 bg-white p-3 dark:border-gray-700 dark:bg-gray-900">
@@ -22,14 +32,14 @@
 
             <div class="flex flex-wrap items-center gap-2">
                 @foreach([
-                    'events' => ['label' => 'Imprezy', 'color' => '#2563eb'],
-                    'tasks' => ['label' => 'Zadania', 'color' => '#7c3aed'],
-                    'ksef' => ['label' => 'KSeF', 'color' => '#dc2626'],
-                    'payments' => ['label' => 'Płatności', 'color' => '#ea580c'],
-                    'pilots' => ['label' => 'Zaliczki pilota', 'color' => '#0d9488'],
-                    'reservations' => ['label' => 'Rezerwacje', 'color' => '#0891b2'],
-                    'transport' => ['label' => 'Transport', 'color' => '#4f46e5'],
-                    'hotels' => ['label' => 'Hotele', 'color' => '#be185d'],
+                    'events' => ['label' => 'Imprezy', 'color' => '#2563eb', 'tip' => 'Terminy imprez i wyjazdy.'],
+                    'tasks' => ['label' => 'Zadania', 'color' => '#7c3aed', 'tip' => 'Terminy zadań biurowych.'],
+                    'ksef' => ['label' => 'KSeF', 'color' => '#dc2626', 'tip' => 'Faktury z KSeF.'],
+                    'payments' => ['label' => 'Płatności', 'color' => '#ea580c', 'tip' => 'Terminy płatności kosztów.'],
+                    'pilots' => ['label' => 'Zaliczki pilota', 'color' => '#0d9488', 'tip' => 'Planowane wypłaty zaliczek dla pilota.'],
+                    'reservations' => ['label' => 'Rezerwacje', 'color' => '#0891b2', 'tip' => 'Rezerwacje u kontrahentów.'],
+                    'transport' => ['label' => 'Transport', 'color' => '#4f46e5', 'tip' => 'Przypisany transport / autokar.'],
+                    'hotels' => ['label' => 'Hotele', 'color' => '#be185d', 'tip' => 'Noclegi w planie hotelowym.'],
                 ] as $type => $meta)
                     @php
                         $isEnabled = in_array($type, $enabledTypes, true);
@@ -37,7 +47,7 @@
                     <button
                         type="button"
                         wire:click="toggleType('{{ $type }}')"
-                        title="{{ $isEnabled ? 'Wyłącz z kalendarza' : 'Pokaż w kalendarzu' }}: {{ $meta['label'] }}"
+                        title="{{ $meta['tip'] }} {{ $isEnabled ? '(włączone — kliknij, aby ukryć)' : '(wyłączone — kliknij, aby pokazać)' }}"
                         class="rounded-full px-3 py-1 text-sm font-medium border transition {{ $isEnabled ? '' : 'opacity-45' }}"
                         style="border-color: {{ $meta['color'] }}; {{ $isEnabled ? 'background:'.$meta['color'].';color:#fff;' : 'background:#fff;color:'.$meta['color'].';' }}"
                         @if($isEnabled) aria-pressed="true" @else aria-pressed="false" @endif
@@ -60,8 +70,9 @@
                         type="button"
                         wire:click="resetTaskFilters"
                         class="rounded-full border border-violet-400 bg-white px-3 py-1 text-xs font-semibold text-violet-800 hover:bg-violet-100 dark:border-violet-600 dark:bg-gray-900 dark:text-violet-200 dark:hover:bg-violet-900/40"
+                        title="Przywróć domyślne filtry zadań (wszystkie, bez pilnych/zakończonych)."
                     >
-                        Reset filtrów zadań
+                        Wyczyść filtry zadań
                     </button>
                 @endif
             </div>
@@ -69,12 +80,12 @@
             <div class="flex flex-wrap items-center gap-2">
                 @include('filament.tasks.ownership-quick-filters', ['tasksScope' => $this->tasksScope])
 
-                <label class="flex items-center gap-2 rounded-full border border-violet-300 bg-white px-3 py-1 text-sm dark:border-violet-700 dark:bg-gray-900">
+                <label class="flex items-center gap-2 rounded-full border border-violet-300 bg-white px-3 py-1 text-sm dark:border-violet-700 dark:bg-gray-900" title="Pokaż tylko zadania oznaczone jako pilne.">
                     <input type="checkbox" wire:model.live="tasksOnlyUrgent" class="rounded border-gray-400" />
                     <span class="text-violet-800 dark:text-violet-200">Tylko pilne</span>
                 </label>
 
-                <label class="flex items-center gap-2 rounded-full border border-violet-300 bg-white px-3 py-1 text-sm dark:border-violet-700 dark:bg-gray-900">
+                <label class="flex items-center gap-2 rounded-full border border-violet-300 bg-white px-3 py-1 text-sm dark:border-violet-700 dark:bg-gray-900" title="Domyślnie zakończone i anulowane zadania są ukryte.">
                     <input type="checkbox" wire:model.live="showFinishedTasks" class="rounded border-gray-400" />
                     <span class="text-violet-800 dark:text-violet-200">Pokaż zakończone i anulowane</span>
                 </label>
@@ -88,8 +99,8 @@
             <table class="min-w-full text-sm">
                 <thead class="bg-gray-50 text-left text-xs uppercase text-gray-500 dark:bg-gray-800">
                     <tr>
-                        <th class="px-3 py-2">Zasób</th>
-                        <th class="px-3 py-2">Przypisania</th>
+                        <th class="px-3 py-2" title="Pilot, autokar lub hotel przypisany do terminów.">Zasób</th>
+                        <th class="px-3 py-2" title="Terminy powiązane z tym zasobem w wybranym okresie.">Przypisania</th>
                     </tr>
                 </thead>
                 <tbody class="divide-y divide-gray-100 dark:divide-gray-800">

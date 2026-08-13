@@ -221,12 +221,22 @@ final class PilotSetFinanceDisplay
             );
         }
 
-        if ($paidStatus === EventProgramPointPricesSummary::STATUS_FULL || $paid > 0) {
+        if ($paidStatus === EventProgramPointPricesSummary::STATUS_FULL) {
             return new PilotSetFinanceMemberLine(
                 pointId: (int) $member->id,
                 name: $name,
                 status: PilotSetFinanceMemberLine::STATUS_OFFICE_PAID,
                 displayLabel: $name.' — opłacone przez biuro',
+                inProgram: $inProgram,
+            );
+        }
+
+        if ($paid > 0 && $paidStatus !== EventProgramPointPricesSummary::STATUS_FULL) {
+            return new PilotSetFinanceMemberLine(
+                pointId: (int) $member->id,
+                name: $name,
+                status: PilotSetFinanceMemberLine::STATUS_OFFICE_DUE,
+                displayLabel: $name.' — częściowo opłacone przez biuro',
                 inProgram: $inProgram,
             );
         }

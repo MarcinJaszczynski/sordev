@@ -88,6 +88,12 @@ class GenerateSitemap extends Command
                 ->setLastModificationDate(now())
                 ->setChangeFrequency(Url::CHANGE_FREQUENCY_MONTHLY)
                 ->setPriority(0.6));
+
+            // Wniosek o fakturę
+            $sitemap->add(Url::create(route('invoice-request', ['regionSlug' => $slug]))
+                ->setLastModificationDate(now())
+                ->setChangeFrequency(Url::CHANGE_FREQUENCY_MONTHLY)
+                ->setPriority(0.6));
         }
 
         // Dodaj strony globalne (bez regionSlug)

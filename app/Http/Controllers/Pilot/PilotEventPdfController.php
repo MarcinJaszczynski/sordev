@@ -18,6 +18,6 @@ class PilotEventPdfController extends Controller
 
         Gate::authorize('viewPilotDetails', $event);
 
-        return app(EventPrintPdfController::class)->download($event, $audience);
+        return app(EventPrintPdfController::class)->download($request, $event, $audience);
     }
 }

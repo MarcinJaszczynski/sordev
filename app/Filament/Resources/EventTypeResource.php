@@ -21,6 +21,10 @@ class EventTypeResource extends Resource
 
     protected static ?string $navigationLabel = 'Typy imprez';
 
+    protected static ?string $modelLabel = 'typ imprezy';
+
+    protected static ?string $pluralModelLabel = 'typy imprez';
+
     protected static ?int $navigationSort = 40;
 
     public static function form(Form $form): Form

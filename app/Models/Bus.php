@@ -19,4 +19,21 @@ class Bus extends Model
         'currency',
         'convert_to_pln',
     ];
+
+    /**
+     * Czy model ma atrybuty potrzebne do wyceny transportu
+     * (odróżnia pełny rekord od eager load typu bus:id,name).
+     */
+    public function hasTransportPricingAttributesLoaded(): bool
+    {
+        $attrs = $this->getAttributes();
+
+        foreach (['capacity', 'package_price_per_day', 'package_km_per_day', 'extra_km_price', 'currency'] as $key) {
+            if (! array_key_exists($key, $attrs)) {
+                return false;
+            }
+        }
+
+        return true;
+    }
 }

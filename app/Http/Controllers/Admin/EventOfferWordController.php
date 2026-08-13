@@ -14,6 +14,8 @@ class EventOfferWordController extends Controller
 {
     public function __invoke(Event $event)
     {
+        \Illuminate\Support\Facades\Gate::authorize('view', $event);
+
         $event->load([
             'startPlace',
             'eventTemplate',
@@ -68,8 +70,12 @@ class EventOfferWordController extends Controller
             $section->addText('Program szczegółowy przygotujemy pod wymagania grupy.');
         } else {
             $byDay = $programPoints->groupBy(fn ($point) => (int) ($point->day ?? 1))->sortKeys();
+            $isSingleDay = $byDay->count() === 1;
+
             foreach ($byDay as $day => $points) {
-                $section->addText('Dzień '.$day, ['bold' => true, 'color' => '0070C0']);
+                if (! $isSingleDay) {
+                    $section->addText('Dzień '.$day, ['bold' => true, 'color' => '0070C0']);
+                }
                 foreach ($points as $point) {
                     $line = trim((string) $point->name);
                     $desc = trim((string) ($point->description ?? ''));
@@ -78,6 +84,11 @@ class EventOfferWordController extends Controller
                     }
                     $section->addListItem($line, 0, null, ['listType' => \PhpOffice\PhpWord\Style\ListItem::TYPE_BULLET_FILLED]);
                 }
+                if (! $isSingleDay) {
+                    $section->addTextBreak(1);
+                }
+            }
+            if ($isSingleDay) {
                 $section->addTextBreak(1);
             }
         }

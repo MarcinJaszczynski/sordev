@@ -2,19 +2,34 @@
 
 namespace App\Livewire;
 
+use App\Actions\Events\UpsertEventParticipantAction;
+use App\Data\UpsertEventParticipantData;
+use App\Filament\Resources\EventResource;
 use App\Models\Event;
+use App\Models\EventMessageLog;
 use App\Models\EventParticipant;
+use App\Services\EventBulkMessageService;
 use App\Services\EventParticipantImporter;
 use App\Services\EventParticipantPropagationService;
 use App\Services\EventParticipantVerificationService;
+use App\Services\ParentParticipantAccessService;
+use App\Filament\Concerns\InteractsWithClientInvoiceRequestActions;
+use App\Support\EventParticipantConsents;
+use Filament\Actions\Concerns\InteractsWithActions;
+use Filament\Actions\Contracts\HasActions;
+use Filament\Forms\Concerns\InteractsWithForms;
+use Filament\Forms\Contracts\HasForms;
 use Filament\Notifications\Notification;
 use Illuminate\Support\Facades\Schema;
 use Livewire\Component;
 use Livewire\Features\SupportFileUploads\TemporaryUploadedFile;
 use Livewire\WithFileUploads;
 
-class EventParticipantListEditor extends Component
+class EventParticipantListEditor extends Component implements HasActions, HasForms
 {
+    use InteractsWithActions;
+    use InteractsWithClientInvoiceRequestActions;
+    use InteractsWithForms;
     use WithFileUploads;
 
     public int $eventId;
@@ -55,9 +70,16 @@ class EventParticipantListEditor extends Component
 
     public bool $formParentConsent = false;
 
+    /** @var array<string, bool> */
+    public array $formConsents = [];
+
+    /** @var array<string, mixed>|null */
+    public ?array $detailPanel = null;
+
     public function mount(int $eventId): void
     {
         $this->eventId = $eventId;
+        $this->formConsents = array_fill_keys(EventParticipantConsents::allKeys(), false);
         $this->loadParticipants();
     }
 
@@ -71,6 +93,7 @@ class EventParticipantListEditor extends Component
 
         $this->participants = EventParticipant::query()
             ->where('event_id', $this->eventId)
+            ->with(['participantPayment', 'contract'])
             ->orderBy('last_name')
             ->orderBy('first_name')
             ->get()
@@ -86,6 +109,18 @@ class EventParticipantListEditor extends Component
                 'booking_reference' => $participant->booking_reference,
                 'diet' => $participant->diet,
                 'parent_consent' => $participant->hasParentConsent(),
+                'consents_label' => $participant->consentsCompletedLabel(),
+                'consents' => $participant->consentChecklist(),
+                'payment_id' => $participant->participant_payment_id,
+                'paid_amount_pln' => $participant->participantPayment
+                    ? (float) $participant->participantPayment->paid_amount_pln
+                    : null,
+                'due_amount_pln' => $participant->participantPayment
+                    ? (float) $participant->participantPayment->due_amount_pln
+                    : null,
+                'contract_id' => $participant->contract_id,
+                'contract_number' => $participant->contract?->contract_number
+                    ?? $participant->contract?->operational_number,
                 'source' => EventParticipant::$sources[$participant->source] ?? $participant->source,
                 'status' => EventParticipant::$statuses[$participant->status] ?? $participant->status,
             ])
@@ -127,6 +162,7 @@ class EventParticipantListEditor extends Component
 
         try {
             $result = app(EventParticipantImporter::class)->importFromPath($event, $path, $this->importMode);
+            app(EventParticipantPropagationService::class)->propagateToPayments($event);
             $this->importFile = null;
             $this->loadParticipants();
             $this->activeTab = 'list';
@@ -138,6 +174,7 @@ class EventParticipantListEditor extends Component
             if ($result['skipped'] > 0) {
                 $body .= " Pominięto {$result['skipped']} wierszy.";
             }
+            $body .= ' Widoczni też na liście wpłat.';
 
             Notification::make()->title('Import zakończony')->body($body)->success()->send();
 
@@ -201,9 +238,32 @@ class EventParticipantListEditor extends Component
             ->send();
     }
 
+    public function sendBulkNotice(string $segment): void
+    {
+        if (! in_array($segment, [
+            EventMessageLog::SEGMENT_ALL,
+            EventMessageLog::SEGMENT_OVERDUE,
+            EventMessageLog::SEGMENT_MISSING_CONSENTS,
+        ], true)) {
+            Notification::make()->title('Nieznany segment')->danger()->send();
+
+            return;
+        }
+
+        $event = Event::findOrFail($this->eventId);
+        $result = app(EventBulkMessageService::class)->send($event, $segment);
+
+        Notification::make()
+            ->title('Wysłano komunikaty')
+            ->body("Adresaci: {$result['recipients']}, wysłano: {$result['sent']}, błędy: {$result['failed']}.")
+            ->success()
+            ->send();
+    }
+
     public function startEdit(int $participantId): void
     {
         $participant = EventParticipant::query()
+            ->with(['participantPayment', 'contract'])
             ->where('event_id', $this->eventId)
             ->findOrFail($participantId);
 
@@ -216,7 +276,49 @@ class EventParticipantListEditor extends Component
         $this->formPhone = (string) ($participant->phone ?? '');
         $this->formBookingReference = (string) ($participant->booking_reference ?? '');
         $this->formDiet = (string) ($participant->diet ?? '');
+        $this->formConsents = $participant->consentChecklist();
         $this->formParentConsent = $participant->hasParentConsent();
+        $this->detailPanel = [
+            'payment_id' => $participant->participant_payment_id,
+            'paid' => $participant->participantPayment
+                ? (float) $participant->participantPayment->paid_amount_pln
+                : null,
+            'due' => $participant->participantPayment
+                ? (float) $participant->participantPayment->due_amount_pln
+                : null,
+            'payments_url' => EventResource::getUrl('finance-participant-payments', ['record' => $this->eventId]),
+            'contract_id' => $participant->contract_id,
+            'contract_number' => $participant->contract?->contract_number
+                ?? $participant->contract?->operational_number,
+            'contracts_url' => EventResource::getUrl('contracts', ['record' => $this->eventId]),
+            'consents_label' => $participant->consentsCompletedLabel(),
+        ];
+    }
+
+    public function copyParentLink(int $participantId): void
+    {
+        if (! Schema::hasColumn('event_participants', 'parent_access_token')) {
+            Notification::make()
+                ->title('Brak migracji tokenów rodzica')
+                ->danger()
+                ->send();
+
+            return;
+        }
+
+        $participant = EventParticipant::query()
+            ->where('event_id', $this->eventId)
+            ->findOrFail($participantId);
+
+        $url = app(ParentParticipantAccessService::class)->urlFor($participant);
+
+        $this->dispatch('copy-to-clipboard', url: $url);
+
+        Notification::make()
+            ->title('Link dla rodzica')
+            ->body($url)
+            ->success()
+            ->send();
     }
 
     public function cancelEdit(): void
@@ -236,46 +338,37 @@ class EventParticipantListEditor extends Component
             'formBookingReference' => ['nullable', 'string', 'max:120'],
             'formDiet' => ['nullable', 'string', 'max:255'],
             'formParentConsent' => ['boolean'],
+            'formConsents' => ['array'],
         ]);
 
-        $payload = [
-            'first_name' => trim($this->formFirstName) ?: null,
-            'last_name' => trim($this->formLastName) ?: null,
-            'birth_date' => $this->formBirthDate ?: null,
-            'pesel' => preg_replace('/\D/', '', $this->formPesel) ?: null,
-            'email' => trim($this->formEmail) ?: null,
-            'phone' => trim($this->formPhone) ?: null,
-            'booking_reference' => trim($this->formBookingReference) ?: null,
-            'diet' => trim($this->formDiet) ?: null,
-        ];
-
-        if (Schema::hasColumn('event_participants', 'parent_consent_at')) {
-            if ($this->formParentConsent) {
-                $payload['parent_consent_at'] = now();
-                $payload['parent_consent_ip'] = request()->ip();
-            } else {
-                $payload['parent_consent_at'] = null;
-                $payload['parent_consent_ip'] = null;
-            }
-        }
-
-        if ($this->editParticipantId) {
-            EventParticipant::query()
+        $event = Event::findOrFail($this->eventId);
+        $existing = $this->editParticipantId
+            ? EventParticipant::query()
                 ->where('event_id', $this->eventId)
                 ->findOrFail((int) $this->editParticipantId)
-                ->update($payload);
+            : null;
 
-            Notification::make()->title('Zapisano zmiany')->success()->send();
-        } else {
-            EventParticipant::create([
-                ...$payload,
-                'event_id' => $this->eventId,
-                'source' => EventParticipant::SOURCE_MANUAL,
-                'status' => EventParticipant::STATUS_ACTIVE,
-            ]);
+        app(UpsertEventParticipantAction::class)(new UpsertEventParticipantData(
+            event: $event,
+            participant: $existing,
+            firstName: $this->formFirstName,
+            lastName: $this->formLastName,
+            birthDate: $this->formBirthDate,
+            pesel: $this->formPesel,
+            email: $this->formEmail,
+            phone: $this->formPhone,
+            bookingReference: $this->formBookingReference,
+            diet: $this->formDiet,
+            parentConsent: EventParticipantConsents::hasRequired($this->formConsents) || $this->formParentConsent,
+            consentFlags: $this->formConsents,
+            ensurePayment: true,
+        ));
 
-            Notification::make()->title('Dodano uczestnika')->success()->send();
-        }
+        Notification::make()
+            ->title($existing ? 'Zapisano zmiany' : 'Dodano uczestnika')
+            ->body($existing ? null : 'Uczestnik jest też widoczny na liście wpłat (bez pierwszej raty).')
+            ->success()
+            ->send();
 
         $this->resetForm();
         $this->loadParticipants();
@@ -319,6 +412,16 @@ class EventParticipantListEditor extends Component
         $this->formBookingReference = '';
         $this->formDiet = '';
         $this->formParentConsent = false;
+        $this->formConsents = array_fill_keys(EventParticipantConsents::allKeys(), false);
+        $this->detailPanel = null;
+    }
+
+    /**
+     * @return array<string, string>
+     */
+    public function getConsentLabelsProperty(): array
+    {
+        return EventParticipantConsents::labels();
     }
 
     public function render()

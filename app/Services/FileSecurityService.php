@@ -15,7 +15,6 @@ class FileSecurityService
         'image/gif',
         'image/webp',
         'image/bmp',
-        'image/svg+xml',
     ];
 
     // Niebezpieczne rozszerzenia
@@ -109,6 +108,73 @@ class FileSecurityService
                 'real_mime_type' => $realMimeType,
                 'extension' => $extension,
             ],
+        ];
+    }
+
+    /**
+     * Walidacja dokumentów rozliczeniowych (PDF / obrazy) — bez agresywnego skanu ZIP
+     * (PDF często zawiera sekwencje PK i dawałby false positive).
+     *
+     * @return array{safe: bool, errors: list<string>, warnings: list<string>}
+     */
+    public static function validateDocumentUpload(UploadedFile $file): array
+    {
+        $errors = [];
+        $warnings = [];
+
+        $maxSize = config('filesystems.max_file_size', 50 * 1024 * 1024);
+        if ($file->getSize() > $maxSize) {
+            $errors[] = 'Plik jest za duży. Maksymalny rozmiar: '.self::formatBytes($maxSize);
+        }
+
+        $extension = strtolower($file->getClientOriginalExtension());
+        if (in_array($extension, self::DANGEROUS_EXTENSIONS, true)) {
+            $errors[] = "Niebezpieczne rozszerzenie pliku: .{$extension}";
+        }
+
+        $allowedExtensions = ['pdf', 'jpg', 'jpeg', 'png', 'gif', 'webp'];
+        if (! in_array($extension, $allowedExtensions, true)) {
+            $errors[] = "Niedozwolony typ pliku: .{$extension}";
+        }
+
+        $allowedMimes = [
+            'application/pdf',
+            'image/jpeg',
+            'image/png',
+            'image/gif',
+            'image/webp',
+        ];
+        $mimeType = (string) $file->getMimeType();
+        if (! in_array($mimeType, $allowedMimes, true)) {
+            $errors[] = "Niedozwolony typ MIME: {$mimeType}";
+        }
+
+        if (str_starts_with($mimeType, 'image/')) {
+            if (! in_array($mimeType, self::ALLOWED_IMAGE_MIMES, true)) {
+                $errors[] = "Nieobsługiwany typ obrazu: {$mimeType}";
+            }
+            try {
+                if (@getimagesize($file->getRealPath()) === false) {
+                    $errors[] = 'Plik nie jest prawidłowym obrazem';
+                }
+            } catch (\Throwable $e) {
+                $errors[] = 'Błąd odczytu obrazu: '.$e->getMessage();
+            }
+        }
+
+        $head = (string) file_get_contents($file->getRealPath(), false, null, 0, 512);
+        if (str_contains(strtolower($head), '<?php') || str_contains(strtolower($head), '<script')) {
+            $errors[] = 'Wykryto podejrzaną zawartość w pliku';
+        }
+
+        if (! self::isValidFilename($file->getClientOriginalName())) {
+            $warnings[] = 'Podejrzana nazwa pliku: '.$file->getClientOriginalName();
+        }
+
+        return [
+            'safe' => $errors === [],
+            'errors' => $errors,
+            'warnings' => $warnings,
         ];
     }
 

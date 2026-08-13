@@ -43,7 +43,6 @@ class EditPilotChecklistTaskTest extends TestCase
 
         Livewire::actingAs($user)
             ->test(EditTask::class, ['record' => $task->id])
-            ->assertSuccessful()
-            ->assertSet('data.title', 'Potwierdzić autokar i dane kierowcy');
+            ->assertRedirect(\App\Support\Tasks\TaskNavigation::fullViewUrl($task));
     }
 }

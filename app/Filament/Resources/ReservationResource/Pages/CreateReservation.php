@@ -2,9 +2,11 @@
 
 namespace App\Filament\Resources\ReservationResource\Pages;
 
-use App\Filament\Forms\ReservationFormFields;
+use App\Actions\Reservations\UpsertReservationAction;
+use App\Data\UpsertReservationData;
 use App\Filament\Resources\ReservationResource;
 use Filament\Resources\Pages\CreateRecord;
+use Illuminate\Database\Eloquent\Model;
 
 class CreateReservation extends CreateRecord
 {
@@ -41,13 +43,14 @@ class CreateReservation extends CreateRecord
     {
         $this->pendingAttachments = $data['pending_attachments'] ?? [];
 
-        return ReservationFormFields::normalizeSaveData($data);
+        return $data;
     }
 
-    protected function afterCreate(): void
+    protected function handleRecordCreation(array $data): Model
     {
-        ReservationFormFields::persistAttachments($this->getRecord(), [
-            'pending_attachments' => $this->pendingAttachments,
-        ]);
+        return app(UpsertReservationAction::class)(UpsertReservationData::fromForm(
+            formData: $data,
+            attachmentData: ['pending_attachments' => $this->pendingAttachments],
+        ));
     }
 }

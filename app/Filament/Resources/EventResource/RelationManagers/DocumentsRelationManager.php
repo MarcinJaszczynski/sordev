@@ -2,7 +2,6 @@
 
 namespace App\Filament\Resources\EventResource\RelationManagers;
 
-use App\Filament\Resources\TaskResource;
 use App\Models\EventDocument;
 use App\Models\EventSettlementCost;
 use App\Support\StoragePath;
@@ -19,11 +18,11 @@ class DocumentsRelationManager extends RelationManager
 {
     protected static string $relationship = 'documents';
 
-    protected static ?string $title = 'Dokumenty';
+    protected static ?string $title = 'Załączniki';
 
-    protected static ?string $label = 'dokument';
+    protected static ?string $label = 'załącznik';
 
-    protected static ?string $pluralLabel = 'dokumenty';
+    protected static ?string $pluralLabel = 'załączniki';
 
     public static function canViewForRecord(Model $ownerRecord, string $pageClass): bool
     {
@@ -42,38 +41,10 @@ class DocumentsRelationManager extends RelationManager
                             ->maxLength(255)
                             ->columnSpanFull(),
 
-                        Forms\Components\Toggle::make('is_offer')
-                            ->label('To jest oferta dla klienta')
-                            ->inline(false)
-                            ->live()
-                            ->default(false),
-
                         Forms\Components\Toggle::make('is_invoice')
                             ->label('To jest faktura')
                             ->inline(false)
                             ->default(false),
-
-                        Forms\Components\Select::make('offer_status')
-                            ->label('Status oferty')
-                            ->options(EventDocument::$offerStatuses)
-                            ->default('draft')
-                            ->visible(fn (Forms\Get $get): bool => (bool) $get('is_offer')),
-
-                        Forms\Components\DateTimePicker::make('offer_sent_at')
-                            ->label('Wysłano ofertę')
-                            ->visible(fn (Forms\Get $get): bool => (bool) $get('is_offer')),
-
-                        Forms\Components\DateTimePicker::make('offer_response_at')
-                            ->label('Data odpowiedzi klienta')
-                            ->visible(fn (Forms\Get $get): bool => (bool) $get('is_offer')),
-
-                        \FilamentTiptapEditor\TiptapEditor::make('offer_response_notes')
-                            ->visible(fn (Forms\Get $get): bool => (bool) $get('is_offer'))
-                            ->columnSpanFull(),
-
-                        \FilamentTiptapEditor\TiptapEditor::make('offer_modification_notes')
-                            ->visible(fn (Forms\Get $get): bool => (bool) $get('is_offer'))
-                            ->columnSpanFull(),
 
                         \FilamentTiptapEditor\TiptapEditor::make('notes')
                             ->columnSpanFull(),
@@ -109,12 +80,12 @@ class DocumentsRelationManager extends RelationManager
                         Forms\Components\CheckboxList::make('pdf_attachment_targets')
                             ->label('Pakiety PDF')
                             ->options([
-                                'attach_to_pilot_pdf' => '✈ Pakiet pilota',
-                                'attach_to_hotel_pdf' => '🏨 Pakiet hotelu',
-                                'attach_to_driver_pdf' => '🚌 Pakiet kierowcy',
-                                'attach_to_folder_pdf' => '📁 Pakiet teczki',
+                                'attach_to_pilot_pdf' => 'Pakiet pilota',
+                                'attach_to_hotel_pdf' => 'Pakiet hotelu',
+                                'attach_to_driver_pdf' => 'Pakiet kierowcy',
+                                'attach_to_folder_pdf' => 'Pakiet teczki',
                             ])
-                            ->columns(2)
+                            ->columns(['default' => 1, 'md' => 2])
                             ->afterStateHydrated(function ($state, $record, $set) {
                                 if (! $record) {
                                     return;
@@ -135,6 +106,7 @@ class DocumentsRelationManager extends RelationManager
     public function table(Table $table): Table
     {
         return $table
+            ->modifyQueryUsing(fn ($query) => $query->where('is_offer', false))
             ->defaultSort('sort_order')
             ->reorderable('sort_order')
             ->recordTitleAttribute('name')
@@ -167,7 +139,7 @@ class DocumentsRelationManager extends RelationManager
 
                         $cost = EventSettlementCost::find($record->settlement_cost_id);
 
-                        return $cost ? '💰 '.$cost->name : '—';
+                        return $cost ? $cost->name : '—';
                     })
                     ->limit(40)
                     ->toggleable(isToggledHiddenByDefault: false),
@@ -181,14 +153,6 @@ class DocumentsRelationManager extends RelationManager
                         'danger' => 'rejected',
                     ]),
 
-                Tables\Columns\IconColumn::make('is_offer')
-                    ->label('Oferta')
-                    ->boolean()
-                    ->trueIcon('heroicon-o-check-circle')
-                    ->falseIcon('heroicon-o-minus-circle')
-                    ->trueColor('success')
-                    ->falseColor('gray'),
-
                 Tables\Columns\IconColumn::make('is_invoice')
                     ->label('Faktura')
                     ->boolean()
@@ -196,31 +160,6 @@ class DocumentsRelationManager extends RelationManager
                     ->falseIcon('heroicon-o-minus-circle')
                     ->trueColor('success')
                     ->falseColor('gray'),
-
-                Tables\Columns\BadgeColumn::make('offer_status')
-                    ->label('Status oferty')
-                    ->formatStateUsing(fn (?string $state) => EventDocument::$offerStatuses[$state ?? 'draft'] ?? $state)
-                    ->colors([
-                        'gray' => 'draft',
-                        'info' => 'sent',
-                        'warning' => 'changes_requested',
-                        'success' => 'accepted',
-                        'danger' => 'rejected',
-                        'primary' => 'responded',
-                    ])
-                    ->toggleable(isToggledHiddenByDefault: false),
-
-                Tables\Columns\TextColumn::make('offer_sent_at')
-                    ->label('Wysłano')
-                    ->dateTime('d.m.Y H:i')
-                    ->placeholder('—')
-                    ->toggleable(isToggledHiddenByDefault: false),
-
-                Tables\Columns\TextColumn::make('offer_response_at')
-                    ->label('Odpowiedź')
-                    ->dateTime('d.m.Y H:i')
-                    ->placeholder('—')
-                    ->toggleable(isToggledHiddenByDefault: false),
 
                 Tables\Columns\IconColumn::make('attach_to_pilot_pdf')
                     ->label('Pilot')
@@ -260,22 +199,10 @@ class DocumentsRelationManager extends RelationManager
                     ->limit(50)
                     ->toggleable(isToggledHiddenByDefault: true),
 
-                Tables\Columns\TextColumn::make('review_notes')
-                    ->label('Uwagi kontrolne')
-                    ->html(false)
-                    ->limit(60)
-                    ->toggleable(isToggledHiddenByDefault: true),
-
                 Tables\Columns\TextColumn::make('created_at')
                     ->label('Dodano')
                     ->dateTime('d.m.Y H:i')
                     ->sortable()
-                    ->toggleable(isToggledHiddenByDefault: true),
-
-                Tables\Columns\TextColumn::make('reviewed_at')
-                    ->label('Zweryfikowano')
-                    ->dateTime('d.m.Y H:i')
-                    ->placeholder('—')
                     ->toggleable(isToggledHiddenByDefault: true),
             ])
             ->filters([
@@ -295,17 +222,13 @@ class DocumentsRelationManager extends RelationManager
                     ->label('Pakiet teczki')
                     ->query(fn ($query) => $query->where('attach_to_folder_pdf', true)),
 
-                Tables\Filters\Filter::make('is_offer')
-                    ->label('Tylko oferty')
-                    ->query(fn ($query) => $query->where('is_offer', true)),
-
                 Tables\Filters\Filter::make('is_invoice')
                     ->label('Tylko faktury')
                     ->query(fn ($query) => $query->where('is_invoice', true)),
             ])
             ->headerActions([
                 Tables\Actions\CreateAction::make()
-                    ->label('Dodaj dokument')
+                    ->label('Dodaj załącznik')
                     ->icon('heroicon-o-plus')
                     ->mutateFormDataUsing(fn (array $data) => $this->mutateDataWithFlags($data)),
             ])
@@ -317,44 +240,6 @@ class DocumentsRelationManager extends RelationManager
                     ->visible(fn (EventDocument $record) => (bool) $record->file_path)
                     ->url(fn (EventDocument $record) => StoragePath::publicUrl($record->file_path))
                     ->openUrlInNewTab(),
-
-                Tables\Actions\Action::make('mark_offer_sent')
-                    ->label('Oznacz jako wysłaną')
-                    ->icon('heroicon-o-paper-airplane')
-                    ->color('info')
-                    ->requiresConfirmation()
-                    ->visible(fn (EventDocument $record) => (bool) $record->is_offer && blank($record->offer_sent_at))
-                    ->action(function (EventDocument $record): void {
-                        $record->update([
-                            'offer_status' => 'sent',
-                            'offer_sent_at' => now(),
-                        ]);
-                    }),
-
-                Tables\Actions\Action::make('register_offer_response')
-                    ->label('Zarejestruj odpowiedź')
-                    ->icon('heroicon-o-chat-bubble-left-right')
-                    ->color('warning')
-                    ->visible(fn (EventDocument $record) => (bool) $record->is_offer)
-                    ->form([
-                        Forms\Components\Select::make('offer_status')
-                            ->label('Status po odpowiedzi')
-                            ->options(EventDocument::$offerStatuses)
-                            ->required()
-                            ->default(fn (EventDocument $record) => $record->offer_status ?: 'responded'),
-                        \FilamentTiptapEditor\TiptapEditor::make('offer_response_notes')
-                            ->required(),
-                        Forms\Components\DateTimePicker::make('offer_response_at')
-                            ->label('Data odpowiedzi')
-                            ->default(now()),
-                    ])
-                    ->action(function (EventDocument $record, array $data): void {
-                        $record->update([
-                            'offer_status' => $data['offer_status'] ?? 'responded',
-                            'offer_response_notes' => $data['offer_response_notes'] ?? null,
-                            'offer_response_at' => $data['offer_response_at'] ?? now(),
-                        ]);
-                    }),
 
                 Tables\Actions\EditAction::make()
                     ->mutateFormDataUsing(fn (array $data) => $this->mutateDataWithFlags($data)),
@@ -443,18 +328,13 @@ class DocumentsRelationManager extends RelationManager
             $data[$column] = in_array($column, (array) $targets, true);
         }
 
-        $data['is_offer'] = (bool) ($data['is_offer'] ?? false);
+        $data['is_offer'] = false;
         $data['is_invoice'] = (bool) ($data['is_invoice'] ?? false);
-
-        if ($data['is_offer']) {
-            $data['offer_status'] = $data['offer_status'] ?? 'draft';
-        } else {
-            $data['offer_status'] = 'draft';
-            $data['offer_sent_at'] = null;
-            $data['offer_response_at'] = null;
-            $data['offer_response_notes'] = null;
-            $data['offer_modification_notes'] = null;
-        }
+        $data['offer_status'] = 'draft';
+        $data['offer_sent_at'] = null;
+        $data['offer_response_at'] = null;
+        $data['offer_response_notes'] = null;
+        $data['offer_modification_notes'] = null;
 
         unset($data['pdf_attachment_targets']);
 

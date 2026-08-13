@@ -20,6 +20,20 @@ final class CurrencyAmountDisplay
         return (float) ($currency?->exchange_rate ?? 1);
     }
 
+    /**
+     * Waluta inna niż PLN (po symbolu) — logika współdzielona z polami formularzy.
+     */
+    public static function isForeignCurrency(mixed $currencyId): bool
+    {
+        if (! $currencyId) {
+            return false;
+        }
+
+        $currency = Currency::find($currencyId);
+
+        return $currency && $currency->symbol !== 'PLN';
+    }
+
     public static function plnEquivalent(float $amount, ?Currency $currency, bool $convertToPln): ?float
     {
         if ($amount <= 0) {
@@ -63,6 +77,33 @@ final class CurrencyAmountDisplay
         }
 
         return $base.' (≈ '.number_format($pln, $decimals, ',', ' ').' PLN)';
+    }
+
+    /**
+     * Kwota w walucie źródłowej; dla obcej zawsze dopisuje orientacyjne PLN (kurs).
+     * Używane na Finanse — także gdy convert_to_pln = false (kwota nie wchodzi do sum PLN).
+     */
+    public static function formatIndicative(
+        float $amount,
+        ?Currency $currency,
+        ?float $rate = null,
+        int $decimals = 2,
+    ): string {
+        if ($amount <= 0) {
+            return '—';
+        }
+
+        $symbol = self::symbol($currency);
+        $formatted = number_format($amount, $decimals, ',', ' ');
+
+        if ($symbol === 'PLN') {
+            return $formatted.' PLN';
+        }
+
+        $effectiveRate = ($rate !== null && $rate > 0) ? $rate : self::rate($currency);
+        $pln = round($amount * $effectiveRate, $decimals);
+
+        return $formatted.' '.$symbol.' (≈ '.number_format($pln, $decimals, ',', ' ').' PLN)';
     }
 
     /**

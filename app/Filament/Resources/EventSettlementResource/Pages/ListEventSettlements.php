@@ -2,31 +2,23 @@
 
 namespace App\Filament\Resources\EventSettlementResource\Pages;
 
+use App\Filament\Pages\FinanceOverviewPage;
 use App\Filament\Resources\EventSettlementResource;
-use App\Filament\Widgets\FinanceModuleNavWidget;
-use Filament\Actions;
-use Filament\Resources\Pages\ListRecords;
+use Filament\Resources\Pages\Page;
 
-class ListEventSettlements extends ListRecords
+/**
+ * Legacy lista rozliczeń — kanoniczny UI to Finanse imprezy / pulpit finansowy.
+ */
+class ListEventSettlements extends Page
 {
     protected static string $resource = EventSettlementResource::class;
 
-    protected function getHeaderActions(): array
-    {
-        return [
-            Actions\CreateAction::make()->label('Nowe rozliczenie'),
-        ];
-    }
+    protected static string $view = 'filament.resources.event-resource.pages.event-finance-redirect';
 
-    protected function getHeaderWidgets(): array
-    {
-        return [
-            FinanceModuleNavWidget::make(['activeTab' => 'settlements']),
-        ];
-    }
+    protected static bool $shouldRegisterNavigation = false;
 
-    public function getSubheading(): ?string
+    public function mount(): void
     {
-        return 'Koszty imprez, gotówka pilota i dokumenty — otwórz rozliczenie, aby zatwierdzić pozycje.';
+        $this->redirect(FinanceOverviewPage::getUrl());
     }
 }

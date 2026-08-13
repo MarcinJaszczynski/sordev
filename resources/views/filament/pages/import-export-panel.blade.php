@@ -1,7 +1,7 @@
 
 <x-filament-panels::page>
     <div class="space-y-6 max-w-xl mx-auto">
-        <h1 class="text-2xl font-bold text-gray-900 dark:text-white">Import / Export danych</h1>
+        <h1 class="text-2xl font-bold text-gray-900 dark:text-white">Import / eksport danych</h1>
         <form wire:submit.prevent="import" class="space-y-4">
             <div>
                 <label for="model" class="block font-medium text-gray-900 dark:text-gray-200">Wybierz model:</label>

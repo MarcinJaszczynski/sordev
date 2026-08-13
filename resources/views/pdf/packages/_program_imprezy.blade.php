@@ -26,7 +26,9 @@
                             <tr>
                                 <td>
                                     @if($point->start_time || $point->end_time)
-                                        {{ $point->start_time ?: '—' }} – {{ $point->end_time ?: '—' }}
+                                        {{ $point->start_time ? \Illuminate\Support\Str::of((string) $point->start_time)->substr(0, 5) : '—' }}
+                                        –
+                                        {{ $point->end_time ? \Illuminate\Support\Str::of((string) $point->end_time)->substr(0, 5) : '—' }}
                                     @else
                                         —
                                     @endif

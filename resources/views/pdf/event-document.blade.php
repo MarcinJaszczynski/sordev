@@ -17,7 +17,7 @@
         .header-left { width: 70%; vertical-align: top; }
         .header-right { width: 30%; text-align: right; vertical-align: top; }
         .logo { max-height: 50px; max-width: 170px; }
-        .title { font-size: 20px; font-weight: 700; margin: 0 0 4px 0; color: #1e3a8a; }
+        .title { font-size: 20px; font-weight: bold; margin: 0 0 4px 0; color: #1e3a8a; }
         .subtitle { font-size: 13px; margin: 0; color: #334155; }
         .meta { font-size: 11px; color: #475569; margin-top: 6px; }
 
@@ -36,7 +36,7 @@
             border-bottom: 1px solid #e2e8f0;
             padding-bottom: 5px;
         }
-        .value { font-weight: 700; color: #0f172a; }
+        .value { font-weight: bold; color: #0f172a; }
         .muted { color: #64748b; }
 
         .list { margin: 0; padding-left: 16px; }
@@ -44,7 +44,7 @@
 
         .section-title {
             font-size: 14px;
-            font-weight: 700;
+            font-weight: bold;
             color: #1e3a8a;
             margin: 12px 0 8px 0;
             border-left: 4px solid #1e3a8a;
@@ -73,7 +73,7 @@
             border-radius: 999px;
             padding: 2px 7px;
             font-size: 10px;
-            font-weight: 700;
+            font-weight: bold;
         }
         .b-green { background: #dcfce7; color: #166534; }
         .b-blue { background: #dbeafe; color: #1d4ed8; }

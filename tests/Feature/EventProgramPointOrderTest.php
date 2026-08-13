@@ -258,7 +258,9 @@ class EventProgramPointOrderTest extends TestCase
 
     public function test_api_reorder_uses_order_service(): void
     {
+        \Spatie\Permission\Models\Role::firstOrCreate(['name' => 'admin', 'guard_name' => 'web']);
         $user = User::factory()->create();
+        $user->assignRole('admin');
         $event = $this->makeEvent();
 
         $p1 = EventProgramPoint::factory()->create(['event_id' => $event->id, 'day' => 1, 'order' => 1]);
@@ -279,7 +281,13 @@ class EventProgramPointOrderTest extends TestCase
 
     public function test_pilot_program_points_exclude_facultative_day(): void
     {
-        $event = $this->makeEvent(['duration_days' => 5]);
+        $template = EventTemplate::factory()->create(['duration_days' => 5]);
+        $event = Event::factory()->create([
+            'event_template_id' => $template->id,
+            'start_date' => '2026-06-01',
+            'end_date' => '2026-06-05',
+            'duration_days' => 5,
+        ]);
         $service = app(EventProgramPointOrderService::class);
 
         EventProgramPoint::factory()->create([
@@ -304,5 +312,40 @@ class EventProgramPointOrderTest extends TestCase
 
         $this->assertCount(1, $pilotPoints);
         $this->assertSame('Powrót', $pilotPoints->first()->name);
+    }
+
+    public function test_pilot_program_points_use_template_duration_when_event_duration_is_stale(): void
+    {
+        $template = EventTemplate::factory()->create(['duration_days' => 4]);
+        $event = Event::factory()->create([
+            'event_template_id' => $template->id,
+            'start_date' => '2026-06-01',
+            'end_date' => '2026-06-01',
+            'duration_days' => 1,
+        ]);
+        $service = app(EventProgramPointOrderService::class);
+
+        EventProgramPoint::factory()->create([
+            'event_id' => $event->id,
+            'day' => 3,
+            'order' => 1,
+            'name' => 'Dzień 3',
+            'include_in_program' => true,
+            'active' => true,
+        ]);
+
+        EventProgramPoint::factory()->create([
+            'event_id' => $event->id,
+            'day' => 5,
+            'order' => 1,
+            'name' => 'Fakultatywny',
+            'include_in_program' => true,
+            'active' => true,
+        ]);
+
+        $pilotPoints = $service->pilotProgramPoints($event);
+
+        $this->assertCount(1, $pilotPoints);
+        $this->assertSame('Dzień 3', $pilotPoints->first()->name);
     }
 }

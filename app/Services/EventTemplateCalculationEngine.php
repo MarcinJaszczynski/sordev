@@ -23,8 +23,14 @@ class EventTemplateCalculationEngine
     /**
      * Zwraca szczegółowe obliczenia keyed by qty
      */
-    public function calculateDetailed(EventTemplate $template, ?int $startPlaceId = null, ?float $transportKm = null, bool $debug = false, ?iterable $qtyVariantsOverride = null): array
-    {
+    public function calculateDetailed(
+        EventTemplate $template,
+        ?int $startPlaceId = null,
+        ?float $transportKm = null,
+        bool $debug = false,
+        ?iterable $qtyVariantsOverride = null,
+        mixed $busOverride = null,
+    ): array {
         // Load all program points for this template (we'll respect per-pivot include_in_calculation
         // flags individually for parents and children). This ensures parent/child inclusion is
         // independent: a child can be included even if its parent is excluded and vice-versa.
@@ -40,7 +46,7 @@ class EventTemplateCalculationEngine
             ? collect($qtyVariantsOverride)
             : $this->getQtyVariantsForTemplate($template);
 
-        $bus = $template->bus;
+        $bus = $busOverride ?? $template->bus;
         $programKm = $template->program_km ?? 0;
         $templateStartId = $template->start_place_id;
         $templateEndId = $template->end_place_id;
@@ -156,21 +162,12 @@ class EventTemplateCalculationEngine
                 }
             }
 
-            // insurance: for each day that has an assigned insurance, charge price_per_person
-            // multiplied by (qty + gratis) for that day and sum across days. This handles
-            // daily-varying insurance prices correctly.
-            $insuranceTotal = 0;
-            $dayInsurances = $template->dayInsurances ?? collect();
-            foreach ($dayInsurances as $dayInsurance) {
-                $insurance = $dayInsurance->insurance;
-                if ($insurance && $insurance->insurance_enabled) {
-                    // only consider insurances that are charged per-day or per-person
-                    if ($insurance->insurance_per_day || $insurance->insurance_per_person) {
-                        $countForInsurance = $qty + ($qtyVariant->gratis ?? 0);
-                        $insuranceTotal += $insurance->price_per_person * $countForInsurance;
-                    }
-                }
-            }
+            // insurance: SSoT InsuranceCostCalculator — (qty + gratis) × sum of day unit prices
+            $insuranceTotal = InsuranceCostCalculator::totalForDayAssignments(
+                $template->dayInsurances ?? collect(),
+                (int) $qty,
+                (int) ($qtyVariant->gratis ?? 0)
+            );
             if ($insuranceTotal > 0) {
                 $plnPoints[] = ['name' => 'Ubezpieczenie', 'cost' => $insuranceTotal];
                 $plnTotal += $insuranceTotal;
@@ -549,7 +546,8 @@ class EventTemplateCalculationEngine
         ?float $transportKm = null,
         bool $debug = false,
         ?int $staffCount = null,
-        ?int $driverCount = null
+        ?int $driverCount = null,
+        mixed $busOverride = null,
     ): array {
         $participantCount = max(1, $participantCount);
         $gratisCount = max(0, $gratisCount);
@@ -568,7 +566,8 @@ class EventTemplateCalculationEngine
             $startPlaceId,
             $transportKm,
             $debug,
-            [$customVariant]
+            [$customVariant],
+            $busOverride,
         );
 
         return $results[$participantCount] ?? [];

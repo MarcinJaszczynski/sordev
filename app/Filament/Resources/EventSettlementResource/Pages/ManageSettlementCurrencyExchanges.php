@@ -2,23 +2,20 @@
 
 namespace App\Filament\Resources\EventSettlementResource\Pages;
 
-use App\Filament\Concerns\SingleRelationManagerPage;
 use App\Filament\Resources\EventSettlementResource;
-use App\Filament\Resources\EventSettlementResource\Concerns\HasEventSettlementWorkflowContext;
-use App\Filament\Resources\EventSettlementResource\RelationManagers\PilotCurrencyExchangesRelationManager;
+use App\Filament\Resources\EventSettlementResource\Concerns\RedirectsToEventFinance;
+use Filament\Resources\Pages\Page;
 
-class ManageSettlementCurrencyExchanges extends SingleRelationManagerPage
+/** @deprecated Redirects to EventFinance — bookmark/legacy URL only. */
+class ManageSettlementCurrencyExchanges extends Page
 {
-    use HasEventSettlementWorkflowContext;
+    use RedirectsToEventFinance;
 
     protected static string $resource = EventSettlementResource::class;
 
+    protected static string $view = 'filament.resources.event-resource.pages.event-finance-redirect';
+
     protected static ?string $navigationLabel = 'Wymiany walut';
 
-    protected static ?string $navigationIcon = 'heroicon-o-arrows-right-left';
-
-    protected static function relationManager(): string
-    {
-        return PilotCurrencyExchangesRelationManager::class;
-    }
+    protected static bool $shouldRegisterNavigation = false;
 }

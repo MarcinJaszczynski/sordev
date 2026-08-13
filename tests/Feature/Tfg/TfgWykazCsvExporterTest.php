@@ -22,7 +22,12 @@ class TfgWykazCsvExporterTest extends TestCase
      */
     private function officialLines(string $file): array
     {
-        $raw = file_get_contents(base_path('pliki/tfg2/'.$file));
+        $path = base_path('pliki/tfg2/'.$file);
+        if (! is_file($path)) {
+            $this->markTestSkipped('Brak lokalnych fixture TFG (pliki/tfg2/'.$file.').');
+        }
+
+        $raw = file_get_contents($path);
 
         if (str_starts_with($raw, "\xEF\xBB\xBF")) {
             $raw = substr($raw, 3);

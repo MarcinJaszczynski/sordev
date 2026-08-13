@@ -2,13 +2,16 @@
 
 namespace App\Filament\Resources\UserResource\Pages;
 
+use App\Filament\Forms\ClientInvoiceRequestFormFields;
 use App\Filament\Resources\UserResource;
 use App\Services\PilotOnboardingService;
+use App\Support\ClientInvoiceRequestAdminHelper;
 use App\Support\UserRoleManagement;
 use Filament\Actions;
 use Filament\Forms;
 use Filament\Notifications\Notification;
 use Filament\Resources\Pages\EditRecord;
+use Illuminate\Support\Facades\Schema;
 
 class EditUser extends EditRecord
 {
@@ -18,6 +21,29 @@ class EditUser extends EditRecord
     {
         return [
             $this->makeSendPilotCredentialsAction(),
+            Actions\Action::make('create_invoice_request')
+                ->label('Wniosek o fakturę')
+                ->icon('heroicon-o-document-plus')
+                ->color('gray')
+                ->visible(fn (): bool => Schema::hasTable('client_invoice_requests')
+                    && filled($this->record->email))
+                ->modalHeading('Wniosek o fakturę dla użytkownika')
+                ->modalIcon('heroicon-o-receipt-percent')
+                ->modalWidth('3xl')
+                ->modalSubmitActionLabel('Zapisz wniosek')
+                ->fillForm(fn (): array => ClientInvoiceRequestAdminHelper::prefillFromUser($this->record))
+                ->form(ClientInvoiceRequestFormFields::adminCreateSchema())
+                ->action(function (array $data): void {
+                    ClientInvoiceRequestAdminHelper::createFromAdminForm(
+                        $data,
+                        linkedUser: $this->record,
+                    );
+
+                    Notification::make()
+                        ->title('Utworzono wniosek o fakturę')
+                        ->success()
+                        ->send();
+                }),
             Actions\DeleteAction::make(),
         ];
     }

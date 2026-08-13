@@ -185,4 +185,42 @@ class PilotPortalSettingsToolbarTest extends TestCase
             ->assertSee('Podgląd jako pilot')
             ->assertDontSee('Podgląd jako Jan');
     }
+
+    public function test_toggle_bus_collections_dispatches_visibility_event(): void
+    {
+        $admin = User::factory()->create(['status' => 'active']);
+        $admin->assignRole('admin');
+
+        $event = Event::factory()->create([
+            'status' => Event::STATUS_CONFIRMED,
+            'pilot_portal_show_bus_collections' => false,
+        ]);
+
+        $this->actingAs($admin);
+
+        Livewire::test(PilotPortalSettingsToolbar::class, ['eventId' => $event->id])
+            ->callAction('toggleBusCollections')
+            ->assertDispatched('pilot-portal-visibility-updated');
+
+        $this->assertTrue((bool) $event->fresh()->pilot_portal_show_bus_collections);
+    }
+
+    public function test_toggle_currency_exchange_dispatches_visibility_event(): void
+    {
+        $admin = User::factory()->create(['status' => 'active']);
+        $admin->assignRole('admin');
+
+        $event = Event::factory()->create([
+            'status' => Event::STATUS_CONFIRMED,
+            'pilot_portal_show_currency_exchange' => true,
+        ]);
+
+        $this->actingAs($admin);
+
+        Livewire::test(PilotPortalSettingsToolbar::class, ['eventId' => $event->id])
+            ->callAction('toggleCurrencyExchange')
+            ->assertDispatched('pilot-portal-visibility-updated');
+
+        $this->assertFalse((bool) $event->fresh()->pilot_portal_show_currency_exchange);
+    }
 }

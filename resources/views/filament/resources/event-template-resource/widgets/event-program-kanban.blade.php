@@ -3,7 +3,7 @@
     <div class="kanban-container">
         <!-- Header z tytułem i narzędziami -->
         <div class="mb-4 flex justify-between items-center">
-            <h2 class="text-xl font-bold text-gray-800">Program Wydarzeń - Kanban</h2>
+            <h2 class="text-xl font-bold text-gray-800">Program wydarzeń — tablica dni</h2>
             <div class="text-sm text-gray-600">
                 Przeciągnij i upuść punkty programu, aby zorganizować je w strukturę drzewa podobną do menu WordPress
             </div>

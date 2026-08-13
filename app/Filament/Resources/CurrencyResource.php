@@ -29,6 +29,10 @@ class CurrencyResource extends Resource
 
     protected static ?string $navigationLabel = 'Waluty';
 
+    protected static ?string $modelLabel = 'waluta';
+
+    protected static ?string $pluralModelLabel = 'waluty';
+
     protected static ?string $navigationGroup = FilamentNavigation::GROUP_CONFIG;
 
     protected static ?string $pluralLabel = 'Waluty';
@@ -53,7 +57,7 @@ class CurrencyResource extends Resource
                 ->default(1)
                 ->required()
                 ->step(0.00001),
-        ])->columns(3);
+        ])->columns(['default' => 1, 'md' => 2, 'xl' => 3]);
     }
 
     /**

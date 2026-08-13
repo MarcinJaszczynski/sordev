@@ -11,7 +11,7 @@ namespace App\Filament\Concerns;
  *     subtitle?: string|null,
  *     status?: string|null,
  *     statusColor?: string|null,
- *     links?: array<int, array{label: string, url: string, icon?: string|null}>,
+ *     links?: array<int, array{label: string, url?: string, wire_click?: string, icon?: string|null, external?: bool}>,
  *     meta?: array<int, array{label: string, value: string}>
  * }
  */

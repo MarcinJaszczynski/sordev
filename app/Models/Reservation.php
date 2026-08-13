@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use App\Services\ReservationTaskSyncService;
 use App\Support\ReservationAmountParser;
 use App\Support\Reservations\ReservationHistoryLogger;
 use Carbon\Carbon;
@@ -9,8 +10,8 @@ use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
+use Illuminate\Database\Eloquent\Relations\MorphMany;
 use Illuminate\Database\Eloquent\SoftDeletes;
-use Illuminate\Support\Facades\Schema;
 use Illuminate\Validation\ValidationException;
 
 class Reservation extends Model
@@ -96,6 +97,7 @@ class Reservation extends Model
 
         static::deleted(function (self $reservation): void {
             ReservationHistoryLogger::logDeleted($reservation);
+            app(ReservationTaskSyncService::class)->retireAll($reservation);
         });
 
         static::saved(function (self $reservation) {
@@ -153,6 +155,8 @@ class Reservation extends Model
             $reservation->syncSettlementDepositState();
 
             $reservation->settlementCost?->settlement?->recalculateTotals();
+
+            app(ReservationTaskSyncService::class)->sync($reservation);
         });
     }
 
@@ -249,6 +253,16 @@ class Reservation extends Model
     public function historyEntries(): HasMany
     {
         return $this->hasMany(ReservationHistory::class)->latest('created_at');
+    }
+
+    public function tasks(): MorphMany
+    {
+        return $this->morphMany(Task::class, 'taskable');
+    }
+
+    public function isActiveBooking(): bool
+    {
+        return ! in_array($this->status, ['cancelled', 'not_required'], true);
     }
 
     public function syncSettlementDepositState(): void

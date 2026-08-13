@@ -17,7 +17,7 @@ final class EventProgramDayRouteFields
             return [];
         }
 
-        $days = max(1, (int) ($record?->duration_days ?? 1));
+        $days = $record?->resolveProgramDaysCount() ?? 1;
         $fields = [];
 
         for ($day = 1; $day <= $days; $day++) {
@@ -36,7 +36,14 @@ final class EventProgramDayRouteFields
     {
         return Forms\Components\Section::make($heading)
             ->description('Trasa autokaru na każdy dzień imprezy. Te same dane edytujesz też w zakładce Program.')
-            ->schema(fn (?Event $record): array => self::fieldsForEvent($record))
+            ->schema(function (?Event $record, $livewire = null): array {
+                $event = $record
+                    ?? (is_object($livewire) && method_exists($livewire, 'getRecord')
+                        ? $livewire->getRecord()
+                        : null);
+
+                return self::fieldsForEvent($event instanceof Event ? $event : null);
+            })
             ->columns(1)
             ->collapsible();
     }

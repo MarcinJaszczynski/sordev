@@ -6,6 +6,7 @@ use App\Filament\Resources\TaskResource\Pages\EditTask;
 use App\Filament\Resources\TaskResource\RelationManagers\SubtasksRelationManager;
 use App\Models\Task;
 use App\Models\User;
+use App\Services\NotificationService;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Livewire\Livewire;
 use Spatie\Permission\Models\Role;
@@ -57,5 +58,50 @@ class SubtasksRelationManagerTest extends TestCase
             'author_id' => $author->id,
             'source' => 'office',
         ]);
+    }
+
+    public function test_creating_subtask_bumps_assignee_topbar_task_count(): void
+    {
+        $author = User::factory()->create();
+        $author->assignRole('admin');
+        $assignee = User::factory()->create();
+
+        $parent = Task::create([
+            'title' => 'Zadanie nadrzędne',
+            'status_id' => Task::getDefaultStatusId(),
+            'priority' => 'normal',
+            'author_id' => $author->id,
+            'assignee_id' => $assignee->id,
+        ]);
+        $parent->forceFill([
+            'created_at' => now()->subDay(),
+            'updated_at' => now()->subDay(),
+        ])->saveQuietly();
+
+        NotificationService::markTaskAsRead($assignee->id, $parent->fresh());
+        NotificationService::clearCacheForUser($assignee->id);
+
+        $before = NotificationService::getTopbarDataForUser($assignee->id, fresh: true);
+        $this->assertSame(0, $before['counts']['tasks']);
+
+        Livewire::actingAs($author)
+            ->test(SubtasksRelationManager::class, [
+                'ownerRecord' => $parent->fresh(),
+                'pageClass' => EditTask::class,
+            ])
+            ->callTableAction('create', data: [
+                'title' => 'Nowe podzadanie topbar',
+                'status_id' => Task::getDefaultStatusId(),
+                'assignee_id' => $assignee->id,
+            ])
+            ->assertHasNoTableActionErrors();
+
+        $after = NotificationService::getTopbarDataForUser($assignee->id, fresh: true);
+
+        $this->assertGreaterThanOrEqual(1, $after['counts']['tasks']);
+        $this->assertTrue(
+            collect($after['items_by_type']['task'])
+                ->contains(fn (array $row): bool => ($row['title'] ?? '') === 'Nowe podzadanie topbar')
+        );
     }
 }

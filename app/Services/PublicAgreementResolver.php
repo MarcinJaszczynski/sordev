@@ -5,6 +5,7 @@ namespace App\Services;
 use App\Models\Contract;
 use App\Models\EventAgreement;
 use App\Models\EventSettlement;
+use App\Services\ContractPaymentScheduleService;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Support\Facades\Schema;
 
@@ -48,7 +49,7 @@ class PublicAgreementResolver
             ? Contract::class
             : EventAgreement::class;
 
-        $agreement = $model::create([
+        $payload = [
             'event_id' => $template->event_id,
             'contract_template_id' => $template->contract_template_id,
             'agreement_type' => $template->agreement_type,
@@ -68,11 +69,62 @@ class PublicAgreementResolver
             'attachments' => $template->attachments,
             'admin_notes' => $template->admin_notes,
             'meta' => array_merge($template->meta ?? [], ['parent_template_id' => $template->id]),
-        ]);
+        ];
+
+        if ($model === Contract::class) {
+            $payload['unit_price'] = $template->unit_price ?? null;
+            $payload['payment_scheme'] = $template->payment_scheme ?? null;
+            $payload['subject_code'] = $template->subject_code ?? null;
+            $payload['payment_method_code'] = $template->payment_method_code ?? null;
+            $payload['reservation_number'] = $template->reservation_number ?? null;
+        }
+
+        $agreement = $model::create($payload);
+
+        if ($agreement instanceof Contract && $template instanceof Contract) {
+            $tfg = app(ContractTfgSetupService::class);
+            $tfg->cloneTfgStructureFromContract($template, $agreement);
+            $eventDefaults = $template->event
+                ? $tfg->defaultsFromEvent($template->event)
+                : [];
+            $tfg->applyToContract($agreement, array_merge(
+                $eventDefaults,
+                $tfg->defaultsFromContract($template),
+                [
+                    'tfg_travelers_count' => max(1, (int) ($agreement->participant_count ?? 1)),
+                ],
+            ));
+        }
+
+        if ($agreement instanceof Contract && Schema::hasTable('contract_payment_schedules')) {
+            $template->loadMissing('paymentSchedules');
+            $rows = $template->paymentSchedules
+                ->map(fn ($schedule): array => [
+                    'label' => $schedule->label,
+                    'amount' => (float) $schedule->amount,
+                    'amount_foreign' => isset($schedule->amount_foreign) ? (float) $schedule->amount_foreign : null,
+                    'currency_code' => $schedule->currency_code,
+                    'paid_by' => $schedule->paid_by,
+                    'due_date' => optional($schedule->due_date)?->toDateString(),
+                    'due_from' => optional($schedule->due_from ?? null)?->toDateString(),
+                    'due_to' => optional($schedule->due_to ?? null)?->toDateString()
+                        ?: optional($schedule->due_date)?->toDateString(),
+                    'notes' => $schedule->notes,
+                ])
+                ->all();
+
+            if ($rows !== []) {
+                app(ContractPaymentScheduleService::class)->syncForContract(
+                    $agreement,
+                    $rows,
+                    $agreement->payment_scheme ?? Contract::PAYMENT_SCHEME_INSTALLMENTS,
+                );
+            }
+        }
 
         $agreement->regenerateAgreementBody();
 
-        return $agreement;
+        return $agreement->fresh();
     }
 
     public function syncPayment(Contract|EventAgreement $agreement, ?EventSettlement $targetSettlement = null): void

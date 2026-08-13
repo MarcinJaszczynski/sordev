@@ -91,6 +91,60 @@ class Sprint2PilotFeaturesTest extends TestCase
         $this->assertSame(1500.0, (float) $cash->provided_amount);
     }
 
+    public function test_office_cash_payout_sets_provided_amount_and_date(): void
+    {
+        $pilot = User::factory()->create(['status' => 'active']);
+        $pilot->assignRole('pilot');
+
+        $event = Event::factory()->create([
+            'assigned_to' => $pilot->id,
+            'shared_with_pilot' => true,
+            'status' => Event::STATUS_CONFIRMED,
+            'pilot_funds_paid' => false,
+        ]);
+
+        $plnId = Currency::query()->create([
+            'name' => 'PLN', 'code' => 'PLN', 'symbol' => 'PLN', 'exchange_rate' => 1,
+        ])->id;
+        $eurId = Currency::query()->create([
+            'name' => 'EUR', 'code' => 'EUR', 'symbol' => 'EUR', 'exchange_rate' => 4.3,
+        ])->id;
+
+        $service = app(PilotAdvanceService::class);
+        $service->recordOfficeCashPayout($event, [
+            'amount' => 2000,
+            'currency_id' => $plnId,
+            'provided_at' => '2026-08-01',
+            'comment' => 'gotówka w biurze',
+        ]);
+        $service->recordOfficeCashPayout($event->fresh(), [
+            'amount' => 500,
+            'currency_id' => $eurId,
+            'provided_at' => '2026-08-02',
+            'comment' => 'EUR na start',
+        ]);
+
+        $event->refresh();
+        $this->assertTrue($event->pilot_funds_paid);
+
+        $settlement = \App\Models\EventSettlement::findOrCreateActiveForEvent($event);
+        $plnCash = PilotCashPreparation::query()
+            ->where('settlement_id', $settlement->id)
+            ->where('currency_id', $plnId)
+            ->first();
+        $eurCash = PilotCashPreparation::query()
+            ->where('settlement_id', $settlement->id)
+            ->where('currency_id', $eurId)
+            ->first();
+
+        $this->assertNotNull($plnCash);
+        $this->assertNotNull($eurCash);
+        $this->assertSame(2000.0, (float) $plnCash->provided_amount);
+        $this->assertSame(500.0, (float) $eurCash->provided_amount);
+        $this->assertSame('2026-08-01', $plnCash->provided_at?->format('Y-m-d'));
+        $this->assertSame('2026-08-02', $eurCash->provided_at?->format('Y-m-d'));
+    }
+
     public function test_manual_panel_access_email_records_sent_timestamp(): void
     {
         Mail::fake();

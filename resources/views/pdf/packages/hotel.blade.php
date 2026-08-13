@@ -28,6 +28,8 @@
 
     <hr class="divider">
 
+    @include('pdf.packages._package_overrides_intro')
+
     <div class="section">
         <div class="section-title">Kontakt operacyjny</div>
         <div class="section-body">
@@ -87,10 +89,11 @@
         </div>
     @endif
 
-    <div class="section">
-        <div class="section-title">Plan pokoi{{ !empty($usesEventHotelPlan) ? ' (impreza)' : ' (wg szablonu)' }}</div>
-        <div class="section-body">
-            @forelse($hotelPlan as $day)
+    @unless(in_array('hotel_plan', $hide_sections ?? [], true))
+        <div class="section">
+            <div class="section-title">Plan pokoi{{ !empty($usesEventHotelPlan) ? ' (impreza)' : ' (wg szablonu)' }}</div>
+            <div class="section-body">
+                @forelse($hotelPlan as $day)
                 <div class="program-day-title" style="margin-top:6px;">
                     Noc {{ $day['day'] }}
                     @if(!empty($day['hotel_name']))
@@ -175,8 +178,13 @@
             @endforelse
         </div>
     </div>
+    @endunless
 
-    @include('pdf.packages._attachments')
+    @include('pdf.packages._package_overrides_extra')
+
+    @unless(in_array('attachments_list', $hide_sections ?? [], true))
+        @include('pdf.packages._attachments')
+    @endunless
     @include('pdf.packages._footer')
 </div>
 </body>

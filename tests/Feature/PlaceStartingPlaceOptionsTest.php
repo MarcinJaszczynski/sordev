@@ -53,7 +53,7 @@ test('template start place options respect availability for template', function 
         ->and($options)->not->toHaveKey($warszawa->id);
 });
 
-test('template without availability falls back to all starting places', function () {
+test('template without availability returns empty start place options', function () {
     $kalisz = Place::query()->create(['name' => 'Kalisz', 'starting_place' => true]);
     $poznan = Place::query()->create(['name' => 'Poznań', 'starting_place' => true]);
 
@@ -61,6 +61,26 @@ test('template without availability falls back to all starting places', function
 
     $options = Place::startingPlaceSelectOptionsForTemplate($template->id);
 
+    expect($options)->not->toHaveKey($kalisz->id)
+        ->and($options)->not->toHaveKey($poznan->id)
+        ->and($options)->toBeEmpty();
+});
+
+test('template start place options can include legacy selected place outside availability', function () {
+    $kalisz = Place::query()->create(['name' => 'Kalisz', 'starting_place' => true]);
+    $legacy = Place::query()->create(['name' => 'Stare miasto', 'starting_place' => true]);
+
+    $template = EventTemplate::factory()->create();
+
+    EventTemplateStartingPlaceAvailability::query()->create([
+        'event_template_id' => $template->id,
+        'start_place_id' => $kalisz->id,
+        'end_place_id' => $kalisz->id,
+        'available' => true,
+    ]);
+
+    $options = Place::startingPlaceSelectOptionsForTemplate($template->id, $legacy->id);
+
     expect($options)->toHaveKey($kalisz->id)
-        ->and($options)->toHaveKey($poznan->id);
+        ->and($options)->toHaveKey($legacy->id);
 });

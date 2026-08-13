@@ -17,12 +17,19 @@ final class EventTransportCostCalculator
         private readonly Event $event,
     ) {}
 
+    /**
+     * Km do rozliczenia autokaru.
+     *
+     * Na imprezie `transfer_km` = dojazd + powrót (d1+d2), zapisane tak przy tworzeniu
+     * z szablonu / wyborze miejsca startu — NIE jest to jeden kierunek.
+     * Formuła jak w EventTemplateCalculationEngine: 1.1 × (transfer + program) + 50.
+     */
     public function resolveTransportKm(): float
     {
         $transferKm = (float) ($this->event->transfer_km ?? 0);
         $programKm = (float) ($this->event->program_km ?? 0);
 
-        return round((2 * $transferKm) + $programKm, 2);
+        return round((1.1 * ($transferKm + $programKm)) + 50, 2);
     }
 
     public function usesManualTransportCost(): bool
@@ -40,7 +47,7 @@ final class EventTransportCostCalculator
             return round((float) ($this->event->manual_transport_cost ?? 0), 2);
         }
 
-        if (! $this->event->bus) {
+        if (! $this->resolveBus()) {
             return 0.0;
         }
 
@@ -59,7 +66,7 @@ final class EventTransportCostCalculator
      */
     public function costForVariant(array|object $variant, ?Bus $bus = null): float
     {
-        $bus = $bus ?? $this->event->bus;
+        $bus = $bus ?? $this->resolveBus();
         if (! $bus) {
             return 0.0;
         }
@@ -99,6 +106,37 @@ final class EventTransportCostCalculator
     }
 
     /**
+     * Autokar z event.bus_id — odporny na stale null oraz partial select (bus:id,name).
+     */
+    public function resolveBus(): ?Bus
+    {
+        $busId = (int) ($this->event->bus_id ?? 0);
+        if ($busId <= 0) {
+            return null;
+        }
+
+        if ($this->event->relationLoaded('bus')) {
+            $loaded = $this->event->getRelation('bus');
+            if (
+                $loaded instanceof Bus
+                && (int) $loaded->getKey() === $busId
+                && $loaded->hasTransportPricingAttributesLoaded()
+            ) {
+                return $loaded;
+            }
+
+            // null, inny model albo okrojony select — przeładuj pełny rekord
+            $this->event->unsetRelation('bus');
+        }
+
+        $bus = $this->event->bus();
+        $resolved = $bus->getResults();
+        $this->event->setRelation('bus', $resolved);
+
+        return $resolved instanceof Bus ? $resolved : null;
+    }
+
+    /**
      * @return array{name:string,unit_price:null,group_size:null,cost:float,is_child:bool,currency_symbol:string}
      */
     public function transportPointLine(float $cost, bool $manual = false): array
@@ -128,7 +166,7 @@ final class EventTransportCostCalculator
         ?array $currentVariant,
         callable $applyPlnDelta,
     ): void {
-        if ((! $this->event->bus && ! $this->usesManualTransportCost()) || empty($detailedCalculations)) {
+        if ((! $this->resolveBus() && ! $this->usesManualTransportCost()) || empty($detailedCalculations)) {
             return;
         }
 

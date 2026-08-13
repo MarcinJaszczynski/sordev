@@ -350,7 +350,7 @@ class CalendarEventAggregator
                 'type' => 'pilots',
             ], [
                 CalendarEventLinks::link(
-                    \App\Filament\Resources\EventResource::getUrl('edit', ['record' => $event->id]).'/pilot',
+                    \App\Support\AdminPanelUrls::eventPilot($event),
                     'Zaliczka pilota',
                     'heroicon-o-banknotes',
                 ),
@@ -412,7 +412,7 @@ class CalendarEventAggregator
                     'type' => 'transport',
                 ], [
                     CalendarEventLinks::link(
-                        \App\Filament\Resources\EventResource::getUrl('edit', ['record' => $event->id]).'/transport',
+                        \App\Support\AdminPanelUrls::eventTransport($event),
                         'Transport imprezy',
                         'heroicon-o-truck',
                     ),
@@ -456,7 +456,7 @@ class CalendarEventAggregator
                     'type' => 'hotels',
                 ], [
                     CalendarEventLinks::link(
-                        \App\Filament\Resources\EventResource::getUrl('edit', ['record' => $event->id]).'/hotel-planning',
+                        \App\Support\AdminPanelUrls::eventHotelPlanning($event),
                         'Plan hotelu',
                         'heroicon-o-building-office-2',
                     ),

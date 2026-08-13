@@ -109,12 +109,6 @@ final class CurrencyConversionFields
 
     public static function isForeignCurrency(mixed $currencyId): bool
     {
-        if (! $currencyId) {
-            return false;
-        }
-
-        $currency = Currency::find($currencyId);
-
-        return $currency && $currency->symbol !== 'PLN';
+        return \App\Support\CurrencyAmountDisplay::isForeignCurrency($currencyId);
     }
 }

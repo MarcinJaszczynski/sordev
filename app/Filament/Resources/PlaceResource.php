@@ -26,6 +26,10 @@ class PlaceResource extends Resource
 
     protected static ?string $navigationGroup = FilamentNavigation::GROUP_CONFIG;
 
+    protected static ?string $modelLabel = 'miejsce';
+
+    protected static ?string $pluralModelLabel = 'miejsca';
+
     protected static ?string $pluralLabel = 'Miejsca';
 
     protected static ?string $label = 'Miejsce';
@@ -35,7 +39,7 @@ class PlaceResource extends Resource
         return $form
             ->schema([
                 Forms\Components\Section::make('Dane miejsca')
-                    ->columns(2)
+                    ->columns(['default' => 1, 'md' => 2])
                     ->schema([
                         TextInput::make('name')
                             ->label('Nazwa miejsca')
@@ -66,7 +70,7 @@ class PlaceResource extends Resource
                     ]),
 
                 Forms\Components\Section::make('Współrzędne GPS')
-                    ->columns(2)
+                    ->columns(['default' => 1, 'md' => 2])
                     ->schema([
                         TextInput::make('latitude')
                             ->label('Szerokość geograficzna')

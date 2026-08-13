@@ -19,6 +19,67 @@ class ProgramPointListFinanceDisplayTest extends TestCase
 {
     use RefreshDatabase;
 
+    public function test_planned_falls_back_to_point_price_when_settlement_plan_is_zero(): void
+    {
+        $eur = Currency::factory()->eur()->create(['exchange_rate' => 4.35]);
+        $event = Event::factory()->create(['participant_count' => 45]);
+        $settlement = EventSettlement::findOrCreateActiveForEvent($event);
+
+        $point = EventProgramPoint::factory()->create([
+            'event_id' => $event->id,
+            'unit_price' => 66,
+            'group_size' => 1,
+            'planned_price' => 66,
+            'currency_id' => $eur->id,
+            'convert_to_pln' => true,
+            'include_in_calculation' => true,
+            'active' => true,
+        ]);
+
+        $this->seedProgramPointCost($settlement, $point, [
+            'planned_amount' => 0,
+            'planned_amount_pln' => 0,
+            'planned_currency_id' => $eur->id,
+            'planned_convert_to_pln' => true,
+            'planned_rate' => 4.35,
+            'payment_status' => 'advance_paid',
+            'advance_amount' => 30,
+            'paid_by' => 'office',
+        ]);
+
+        EventSettlementCost::query()->create([
+            'settlement_id' => $settlement->id,
+            'source_type' => 'program_point_payment',
+            'source_id' => $point->id,
+            'name' => $point->name.' • zaliczka #1',
+            'planned_currency_id' => $eur->id,
+            'advance_type' => 'advance',
+            'advance_amount' => 30,
+            'actual_amount' => 30,
+            'actual_currency_id' => $eur->id,
+            'actual_rate' => 4.35,
+            'actual_amount_pln' => 130.5,
+            'payment_status' => 'advance_paid',
+            'paid_by' => 'office',
+            'paid_at' => now(),
+            'order' => 2,
+        ]);
+
+        $cache = new ProgramPointSettlementCostCache;
+        $cache->warm(collect([$point->fresh(['currency', 'event'])]), $event);
+
+        $summary = app(ProgramPointListFinanceDisplay::class)->summarizePoint(
+            $point->fresh(['currency', 'event']),
+            $cache,
+        );
+
+        $this->assertStringContainsString('66', $summary['planned']);
+        $this->assertStringContainsString('EUR', $summary['planned']);
+        $this->assertStringContainsString('30', $summary['paid']);
+        $this->assertSame('partial', $summary['paidStatus']);
+        $this->assertSame('Zaliczka wpłacona', $summary['statusLabel']);
+    }
+
     public function test_planned_label_uses_settlement_planned_amount_when_point_planned_price_differs(): void
     {
         $pln = Currency::factory()->pln()->create();
@@ -69,6 +130,8 @@ class ProgramPointListFinanceDisplayTest extends TestCase
     public function test_persist_settle_point_finance_syncs_planned_price_on_point(): void
     {
         $user = User::factory()->create();
+        \Spatie\Permission\Models\Role::firstOrCreate(['name' => 'admin', 'guard_name' => 'web']);
+        $user->assignRole('admin');
         $this->actingAs($user);
 
         $pln = Currency::factory()->pln()->create();
@@ -279,6 +342,7 @@ class ProgramPointListFinanceDisplayTest extends TestCase
             'planned_rate' => 1,
             'advance_type' => 'advance',
             'advance_amount' => 300,
+            'advance_due_date' => '2026-05-12',
             'actual_amount' => 300,
             'actual_currency_id' => $pln->id,
             'actual_rate' => 1,
@@ -318,9 +382,106 @@ class ProgramPointListFinanceDisplayTest extends TestCase
         );
 
         $this->assertNotNull($summary['advanceHtml']);
-        $this->assertStringContainsString('do dop.', $summary['advanceHtml']);
-        $this->assertStringContainsString('500', $summary['advanceHtml']);
         $this->assertStringContainsString('Zaliczka', $summary['advanceHtml']);
+        $this->assertStringContainsString('Biuro', $summary['advanceHtml']);
+        $this->assertStringContainsString('do 12.05.2026', $summary['advanceHtml']);
+        $this->assertSame('Do dopłaty 500,00 PLN', $summary['remainingHint']);
+    }
+
+    public function test_summarize_point_shows_pilot_due_after_office_advance(): void
+    {
+        $pln = Currency::factory()->pln()->create();
+        $event = Event::factory()->create(['participant_count' => 20]);
+        $settlement = EventSettlement::findOrCreateActiveForEvent($event);
+
+        $point = EventProgramPoint::factory()->create([
+            'event_id' => $event->id,
+            'planned_price' => 500,
+            'currency_id' => $pln->id,
+            'convert_to_pln' => true,
+            'include_in_calculation' => true,
+            'active' => true,
+        ]);
+
+        $this->seedProgramPointCost($settlement, $point, [
+            'planned_amount' => 500,
+            'planned_amount_pln' => 500,
+            'planned_currency_id' => $pln->id,
+            'planned_convert_to_pln' => true,
+            'planned_rate' => 1,
+            'paid_by' => 'pilot',
+        ]);
+
+        EventSettlementCost::query()->create([
+            'settlement_id' => $settlement->id,
+            'source_type' => 'program_point_payment',
+            'source_id' => $point->id,
+            'name' => $point->name.' • zaliczka biuro',
+            'planned_amount' => 0,
+            'planned_currency_id' => $pln->id,
+            'planned_convert_to_pln' => true,
+            'planned_rate' => 1,
+            'advance_type' => 'advance',
+            'actual_amount' => 100,
+            'actual_currency_id' => $pln->id,
+            'actual_rate' => 1,
+            'actual_amount_pln' => 100,
+            'payment_status' => 'advance_paid',
+            'paid_by' => 'office',
+            'paid_at' => now(),
+            'order' => 2,
+        ]);
+
+        $cache = new ProgramPointSettlementCostCache;
+        $cache->warm(collect([$point->fresh(['currency', 'event'])]), $event);
+
+        $summary = app(ProgramPointListFinanceDisplay::class)->summarizePoint(
+            $point->fresh(['currency', 'event']),
+            $cache,
+        );
+
+        $this->assertStringContainsString('Zaliczka Biuro', (string) $summary['paymentHint']);
+        $this->assertStringContainsString('Do pilota', (string) $summary['pilotDueHint']);
+        $this->assertStringContainsString('400', (string) $summary['pilotDueHint']);
+    }
+
+    public function test_program_points_relation_manager_opens_finance_drawer(): void
+    {
+        \Spatie\Permission\Models\Role::firstOrCreate(['name' => 'admin', 'guard_name' => 'web']);
+        $user = User::factory()->create();
+        $user->assignRole('admin');
+        $this->actingAs($user);
+
+        $pln = Currency::factory()->pln()->create();
+        $event = Event::factory()->create(['participant_count' => 10]);
+        $point = EventProgramPoint::factory()->create([
+            'event_id' => $event->id,
+            'name' => 'Muzeum',
+            'planned_price' => 500,
+            'currency_id' => $pln->id,
+            'convert_to_pln' => true,
+            'include_in_calculation' => true,
+            'active' => true,
+        ]);
+
+        $settlement = EventSettlement::findOrCreateActiveForEvent($event);
+        $cost = $settlement->upsertCostFromProgramPoint($point->fresh(['templatePoint', 'currency', 'event']));
+
+        \Livewire\Livewire::actingAs($user)
+            ->test(
+                \App\Filament\Resources\EventResource\RelationManagers\ProgramPointsRelationManager::class,
+                [
+                    'ownerRecord' => $event,
+                    'pageClass' => \App\Filament\Resources\EventResource\Pages\EditEventProgram::class,
+                ]
+            )
+            ->callTableAction('open_finance', $point)
+            ->assertSet('selectedCostId', (int) $cost->id)
+            ->assertSee('Zamknij')
+            ->call('startAddAdvance', 'office')
+            ->assertSet('showPaymentForm', true)
+            ->assertSet('paymentForm.paid_by', 'office')
+            ->assertSet('paymentForm.advance_type', 'advance');
     }
 
     /**

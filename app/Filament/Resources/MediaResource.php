@@ -19,7 +19,11 @@ class MediaResource extends Resource
 
     protected static ?string $navigationGroup = FilamentNavigation::GROUP_CONFIG;
 
-    protected static ?string $navigationLabel = 'Media';
+    protected static ?string $navigationLabel = 'Multimedia';
+
+    protected static ?string $modelLabel = 'plik multimedialny';
+
+    protected static ?string $pluralModelLabel = 'multimedia';
 
     protected static ?int $navigationSort = 60;
 

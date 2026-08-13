@@ -36,7 +36,7 @@ class CurrencyRateSnapshotResource extends Resource
     public static function form(Form $form): Form
     {
         return $form->schema([
-            Forms\Components\Section::make()->columns(2)->schema([
+            Forms\Components\Section::make()->columns(['default' => 1, 'md' => 2])->schema([
                 Forms\Components\Select::make('currency_id')
                     ->label('Waluta')
                     ->options(fn () => Currency::orderBy('name')->pluck('name', 'id'))

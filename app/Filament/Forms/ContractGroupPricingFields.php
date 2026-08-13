@@ -52,25 +52,56 @@ class ContractGroupPricingFields
                     Forms\Components\TextInput::make('label')
                         ->label('Opis transzy')
                         ->maxLength(255)
-                        ->placeholder('np. Zaliczka'),
+                        ->placeholder('Wpisz opis transzy'),
 
                     Forms\Components\TextInput::make('amount')
-                        ->label('Kwota')
+                        ->label('Kwota PLN')
                         ->numeric()
-                        ->minValue(0.01)
-                        ->required()
-                        ->suffix('PLN'),
+                        ->minValue(0)
+                        ->default(0)
+                        ->suffix('PLN')
+                        ->helperText('0 = rata tylko w walucie (np. dla pilota)'),
+
+                    Forms\Components\TextInput::make('amount_foreign')
+                        ->label('Kwota waluty')
+                        ->numeric()
+                        ->minValue(0)
+                        ->placeholder('Wpisz kwotę waluty (opcjonalnie)'),
+
+                    Forms\Components\TextInput::make('currency_code')
+                        ->label('Waluta')
+                        ->maxLength(8)
+                        ->placeholder('Wpisz kod waluty'),
+
+                    Forms\Components\Select::make('paid_by')
+                        ->label('Odbiorca')
+                        ->options([
+                            'office' => 'Biuro',
+                            'pilot' => 'Pilot',
+                        ])
+                        ->placeholder('Wybierz odbiorcę'),
+
+                    Forms\Components\DatePicker::make('due_from')
+                        ->label('Termin płatności od')
+                        ->native(false),
+
+                    Forms\Components\DatePicker::make('due_to')
+                        ->label('Termin płatności do')
+                        ->native(false)
+                        ->helperText('Deadline raty (UFG / przypomnienia).'),
 
                     Forms\Components\DatePicker::make('due_date')
-                        ->label('Termin płatności')
-                        ->native(false),
+                        ->label('Termin (legacy)')
+                        ->native(false)
+                        ->visible(false)
+                        ->dehydrated(true),
 
                     Forms\Components\Textarea::make('notes')
                         ->label('Uwagi')
                         ->rows(2)
                         ->columnSpanFull(),
                 ])
-                ->columns(2)
+                ->columns(['default' => 1, 'md' => 2, 'xl' => 3])
                 ->defaultItems(2)
                 ->addActionLabel('Dodaj transzę')
                 ->reorderable()
@@ -148,12 +179,15 @@ class ContractGroupPricingFields
 
         if (abs($sum - $target) > 0.01) {
             return sprintf(
-                'Suma transz: %s PLN (umowa: %s PLN)',
+                'Suma transz PLN: %s (umowa: %s PLN). Raty walutowe nie wchodzą do sumy PLN.',
                 number_format($sum, 2, ',', ' '),
                 number_format($target, 2, ',', ' '),
             );
         }
 
-        return sprintf('Suma transz zgadza się z kwotą umowy (%s PLN).', number_format($target, 2, ',', ' '));
+        return sprintf(
+            'Suma transz PLN zgadza się z kwotą umowy (%s PLN). Raty walutowe (pilot) są osobno.',
+            number_format($target, 2, ',', ' '),
+        );
     }
 }

@@ -40,5 +40,10 @@ class CreateEventFromTemplateTest extends TestCase
 
         $snapshot = \App\Models\EventSnapshot::where('event_id', $event->id)->first();
         $this->assertNotNull($snapshot->template_prices_snapshot);
+
+        // Impreza z szablonu ma od razu draft rozliczenia (wstępnie wypełniona ścieżka finansów).
+        $settlement = \App\Models\EventSettlement::findActiveForEvent($event);
+        $this->assertNotNull($settlement);
+        $this->assertContains($settlement->status, ['draft', 'active', 'pilot_settled']);
     }
 }

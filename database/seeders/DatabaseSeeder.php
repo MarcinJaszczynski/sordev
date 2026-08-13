@@ -28,6 +28,7 @@ class DatabaseSeeder extends Seeder
             ContractorsSeeder::class,
             ContractorContractorTypeSeeder::class,
             AgreementContractTemplateSeeder::class,
+            PaymentScheduleTemplateSeeder::class,
             TfgDictionarySeeder::class,
             ChecklistTemplateSeeder::class,
         ]);

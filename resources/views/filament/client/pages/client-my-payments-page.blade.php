@@ -26,11 +26,11 @@
                     <dd class="font-medium">{{ $payment->booking_reference ?: '—' }}</dd>
                 </div>
                 <div>
-                    <dt class="text-gray-500">Należność</dt>
+                    <dt class="text-gray-500">Należne</dt>
                     <dd class="font-medium">{{ MoneyFormatter::format((float) $payment->due_amount_pln, 'PLN') }}</dd>
                 </div>
                 <div>
-                    <dt class="text-gray-500">Wpłacono</dt>
+                    <dt class="text-gray-500">Wpłacone</dt>
                     <dd class="font-medium">{{ MoneyFormatter::format((float) $payment->paid_amount_pln, 'PLN') }}</dd>
                 </div>
                 <div>
@@ -39,7 +39,7 @@
                 </div>
                 @if($balance)
                     <div>
-                        <dt class="text-gray-500">Brakuje</dt>
+                        <dt class="text-gray-500">Różnica</dt>
                         <dd class="font-medium">{{ MoneyFormatter::format((float) ($balance['remaining_pln'] ?? 0), 'PLN') }}</dd>
                     </div>
                     <div>
@@ -53,7 +53,13 @@
                 @endif
                 <div>
                     <dt class="text-gray-500">Status</dt>
-                    <dd class="font-medium">{{ \App\Models\EventSettlementParticipantPayment::$paymentStatuses[$payment->payment_status] ?? $payment->payment_status }}</dd>
+                    <dd class="font-medium">
+                        @if($balance)
+                            {{ $balance['display_status_label'] ?? ($balance['coverage_label'] ?? '—') }}
+                        @else
+                            {{ \App\Models\EventSettlementParticipantPayment::$paymentStatuses[$payment->payment_status] ?? $payment->payment_status }}
+                        @endif
+                    </dd>
                 </div>
                 @if($payment->payment_date)
                     <div>
@@ -62,6 +68,23 @@
                     </div>
                 @endif
             </dl>
+
+            @if(! empty($balance['next_schedule_id']) && (float) ($balance['remaining_pln'] ?? 0) > 0)
+                <div class="mt-5">
+                    <x-filament::button
+                        wire:click="payInstallment({{ (int) $balance['next_schedule_id'] }})"
+                        icon="heroicon-o-credit-card"
+                    >
+                        {{ \App\Support\PaymentCta::label() }}
+                    </x-filament::button>
+                    <a
+                        href="{{ \App\Filament\Client\Pages\ClientPaymentSchedulePage::urlFor($event) }}"
+                        class="ml-3 text-sm font-medium text-primary-600 underline"
+                    >
+                        Harmonogram płatności
+                    </a>
+                </div>
+            @endif
         </section>
     @endif
 </x-filament-panels::page>

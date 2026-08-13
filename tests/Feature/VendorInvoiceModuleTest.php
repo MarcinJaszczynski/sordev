@@ -35,9 +35,24 @@ class VendorInvoiceModuleTest extends TestCase
         }
     }
 
+    private function requireKsefFixture(string $relativePath): string
+    {
+        $path = base_path('pliki/ksef/'.$relativePath);
+        if (! is_file($path)) {
+            $this->markTestSkipped('Brak lokalnych fixture KSeF (pliki/ksef/'.$relativePath.').');
+        }
+
+        $contents = file_get_contents($path);
+        if ($contents === false) {
+            $this->markTestSkipped('Nie można odczytać fixture KSeF: '.$relativePath);
+        }
+
+        return $contents;
+    }
+
     public function test_csv_importer_groups_multiline_invoice_rows(): void
     {
-        $csv = file_get_contents(base_path('pliki/ksef/CSV.csv'));
+        $csv = $this->requireKsefFixture('CSV.csv');
         $parsed = app(KsefCsvImporter::class)->parse($csv);
 
         $this->assertGreaterThanOrEqual(17, count($parsed));
@@ -50,7 +65,7 @@ class VendorInvoiceModuleTest extends TestCase
 
     public function test_xml_importer_uses_buyer_as_cost_vendor(): void
     {
-        $xml = file_get_contents(base_path('pliki/ksef/xml.xml'));
+        $xml = $this->requireKsefFixture('xml.xml');
         $parsed = app(KsefXmlImporter::class)->parse($xml);
 
         $first = $parsed[0];
@@ -62,7 +77,7 @@ class VendorInvoiceModuleTest extends TestCase
 
     public function test_import_is_idempotent_by_ksef_number(): void
     {
-        $csv = file_get_contents(base_path('pliki/ksef/CSV.csv'));
+        $csv = $this->requireKsefFixture('CSV.csv');
         $service = app(VendorInvoiceImportService::class);
 
         $first = $service->importFromContent($csv, 'csv', 'CSV.csv');
@@ -208,16 +223,12 @@ class VendorInvoiceModuleTest extends TestCase
 
     public function test_bulk_pdf_splitter_attaches_individual_files(): void
     {
-        Storage::disk('public')->put(
-            'vendor-invoices/test-bulk.pdf',
-            file_get_contents(base_path('pliki/ksef/Faktury pdf w jednym pliku.pdf'))
-        );
+        $pdf = $this->requireKsefFixture('Faktury pdf w jednym pliku.pdf');
+        $csv = $this->requireKsefFixture('CSV.csv');
 
-        app(VendorInvoiceImportService::class)->importFromContent(
-            file_get_contents(base_path('pliki/ksef/CSV.csv')),
-            'csv',
-            'CSV.csv'
-        );
+        Storage::disk('public')->put('vendor-invoices/test-bulk.pdf', $pdf);
+
+        app(VendorInvoiceImportService::class)->importFromContent($csv, 'csv', 'CSV.csv');
 
         $result = app(BulkPdfSplitter::class)->splitAndAttach('vendor-invoices/test-bulk.pdf');
 
@@ -229,6 +240,9 @@ class VendorInvoiceModuleTest extends TestCase
 
     public function test_batch_import_processes_csv_and_xml_together(): void
     {
+        $this->requireKsefFixture('CSV.csv');
+        $this->requireKsefFixture('xml.xml');
+
         $csv = base_path('pliki/ksef/CSV.csv');
         $xml = base_path('pliki/ksef/xml.xml');
 
@@ -240,10 +254,54 @@ class VendorInvoiceModuleTest extends TestCase
         );
 
         $this->assertGreaterThan(0, $result['imported']);
+        $this->assertNotEmpty($result['batch_ids'] ?? []);
         $this->assertSame(
             VendorInvoice::query()->whereNotNull('ksef_number')->count(),
             VendorInvoice::count(),
         );
+        $this->assertSame(
+            VendorInvoice::query()->whereIn('import_batch_id', $result['batch_ids'])->count(),
+            VendorInvoice::query()->whereNotNull('ksef_number')->count(),
+        );
+    }
+
+    public function test_demo_ksef_xml_import_returns_batch_and_lines(): void
+    {
+        $path = base_path('pliki/ksef/demo-ksef.xml');
+        if (! is_file($path)) {
+            $this->markTestSkipped('Brak lokalnego demo KSeF (pliki/ksef/demo-ksef.xml).');
+        }
+
+        $event = Event::factory()->create([
+            'code' => '26JGYZY7',
+            'name' => 'Paryż demo',
+            'start_date' => '2026-08-13',
+            'end_date' => '2026-08-16',
+        ]);
+
+        $this->assertSame('26JGYZY7', $event->fresh()->code);
+
+        $result = app(VendorInvoiceBatchImportService::class)->import(
+            xmlPath: $path,
+            xmlName: 'demo-ksef.xml',
+        );
+
+        $this->assertSame(5, $result['imported']);
+        $this->assertNotEmpty($result['batch_ids']);
+
+        $invoices = VendorInvoice::query()
+            ->whereIn('import_batch_id', $result['batch_ids'])
+            ->with('lines')
+            ->get();
+
+        $this->assertCount(5, $invoices);
+
+        $demo001 = $invoices->firstWhere('invoice_number', 'FV/DEMO/001');
+        $this->assertNotNull($demo001);
+        $this->assertCount(2, $demo001->lines);
+        $this->assertSame('auto_matched', $demo001->matching_status);
+        $this->assertSame($event->id, $demo001->event_id);
+        $this->assertTrue($invoices->contains(fn (VendorInvoice $i) => $i->matching_status === 'unmatched'));
     }
 
     public function test_invoice_permissions_exist_for_ksiegowosc_role(): void

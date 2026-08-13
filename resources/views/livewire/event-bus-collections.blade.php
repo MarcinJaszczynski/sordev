@@ -3,6 +3,17 @@
         Pilot zbiera zaliczki od uczestników w autokarze. Wpisz kwotę za osobę i liczbę osób — system policzy sumę przed zapisem.
     </p>
 
+    @if(filled($defaultsHint))
+        <p class="rounded-lg border border-sky-200 bg-sky-50 px-3 py-2 text-xs text-sky-900 dark:border-sky-900/40 dark:bg-sky-950/30 dark:text-sky-100">
+            {{ $defaultsHint }}
+            @if(! $readOnly)
+                <button type="button" wire:click="applyEventDefaults" class="ml-2 font-medium underline hover:no-underline">
+                    Przywróć z imprezy
+                </button>
+            @endif
+        </p>
+    @endif
+
     @if(! $readOnly)
         <div class="grid gap-3 rounded-xl border border-gray-200 bg-gray-50 p-4 dark:border-gray-700 dark:bg-gray-900/40 md:grid-cols-2">
             <div>

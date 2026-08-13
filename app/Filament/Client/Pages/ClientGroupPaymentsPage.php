@@ -56,7 +56,7 @@ class ClientGroupPaymentsPage extends Page
         $service = app(ClientGroupPaymentsService::class);
 
         return [
-            'event' => $this->event,
+            'event' => $this->event->loadMissing(['eventTemplate', 'startPlace']),
             'rows' => $service->rowsFor($user, $this->event),
             'summary' => $service->summaryFor($user, $this->event),
             'archiveMessage' => app(ClientAccessService::class)->archiveMessage($this->event),

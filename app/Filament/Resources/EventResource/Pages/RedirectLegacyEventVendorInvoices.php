@@ -20,9 +20,7 @@ class RedirectLegacyEventVendorInvoices extends Page
     {
         $this->record = $this->resolveRecord($record);
 
-        $this->redirect(EventResource::getUrl('settlement-documents', [
-            'record' => $this->record,
-            'filter' => 'invoices',
-        ]));
+        // Kanoniczny UI: Finanse imprezy (bez hopu przez settlement-documents).
+        $this->redirect(EventResource::getUrl('finance', ['record' => $this->record]));
     }
 }

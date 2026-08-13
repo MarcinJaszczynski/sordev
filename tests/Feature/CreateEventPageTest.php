@@ -22,7 +22,9 @@ class CreateEventPageTest extends TestCase
     {
         parent::setUp();
 
-        Role::firstOrCreate(['name' => 'admin']);
+        foreach (['admin', 'super_admin', 'biuro'] as $role) {
+            Role::firstOrCreate(['name' => $role, 'guard_name' => 'web']);
+        }
     }
 
     public function test_create_event_page_saves_event_after_client_lookup_applied(): void
@@ -183,5 +185,156 @@ class CreateEventPageTest extends TestCase
             ->assertHasFormErrors();
 
         $this->assertSame(0, Event::query()->where('name', 'Bez telefonu')->count());
+    }
+
+    public function test_create_event_persists_transport_times_from_identity_section(): void
+    {
+        $admin = User::factory()->create(['status' => 'active']);
+        $admin->assignRole('admin');
+
+        $place = Place::factory()->starting()->create();
+        $template = EventTemplate::factory()->create([
+            'start_place_id' => $place->id,
+            'duration_days' => 2,
+        ]);
+
+        $contractor = Contractor::create([
+            'name' => 'Szkoła',
+            'status' => 'active',
+        ]);
+        $contact = Contact::create([
+            'first_name' => 'Anna',
+            'last_name' => 'Nowak',
+            'email' => 'anna@example.com',
+            'phone' => '501502503',
+        ]);
+        $contractor->contacts()->attach($contact->id);
+
+        $this->actingAs($admin);
+
+        $form = [
+            'event_template_id' => $template->id,
+            'name' => 'Impreza z godzinami',
+            'start_date' => '2026-08-01',
+            'duration_days' => 2,
+            'participant_count' => 20,
+            'start_place_id' => $place->id,
+            'departure_time' => '08:30',
+            'return_time' => '18:00',
+        ];
+
+        if (\Illuminate\Support\Facades\Schema::hasColumn('events', 'substitution_time')) {
+            $form['substitution_time'] = '07:45';
+        }
+
+        Livewire::test(CreateEvent::class)
+            ->call('applyClientLookup', [
+                [
+                    'contact_id' => (string) $contact->id,
+                    'contractor_id' => (string) $contractor->id,
+                    'department_label' => null,
+                ],
+            ], 'Anna Nowak · Szkoła', 'anna@example.com', '501502503')
+            ->fillForm($form)
+            ->set('data.departure_time', '08:30')
+            ->set('data.return_time', '18:00')
+            ->tap(function ($component) {
+                if (\Illuminate\Support\Facades\Schema::hasColumn('events', 'substitution_time')) {
+                    $component->set('data.substitution_time', '07:45');
+                }
+            })
+            ->call('create')
+            ->assertHasNoFormErrors();
+
+        $event = Event::query()->where('name', 'Impreza z godzinami')->first();
+        $this->assertNotNull($event);
+        $this->assertStringContainsString('08:30', (string) $event->departure_time);
+        $this->assertStringContainsString('18:00', (string) $event->return_time);
+
+        if (\Illuminate\Support\Facades\Schema::hasColumn('events', 'substitution_time')) {
+            $this->assertStringContainsString('07:45', (string) $event->substitution_time);
+        }
+    }
+
+    public function test_biuro_cannot_create_event_without_template(): void
+    {
+        \Spatie\Permission\Models\Permission::findOrCreate('create event', 'web');
+
+        $biuro = User::factory()->create(['status' => 'active']);
+        $biuro->assignRole('biuro');
+        $biuro->givePermissionTo('create event');
+
+        $place = Place::factory()->starting()->create();
+        $payload = app(\App\Services\ClientLookupService::class)->quickCreate([
+            'first_name' => 'Ewa',
+            'last_name' => 'Test',
+            'phone' => '500100200',
+            'email' => 'ewa@example.com',
+        ]);
+
+        $this->actingAs($biuro);
+
+        Livewire::test(CreateEvent::class)
+            ->call(
+                'applyClientLookup',
+                $payload['ordering_parties'],
+                $payload['client_name'],
+                $payload['client_email'],
+                $payload['client_phone'],
+            )
+            ->fillForm([
+                'event_template_id' => null,
+                'name' => 'Próba bez szablonu',
+                'start_date' => '2026-08-01',
+                'duration_days' => 1,
+                'participant_count' => 10,
+                'start_place_id' => $place->id,
+            ])
+            ->call('create')
+            ->assertHasFormErrors(['event_template_id']);
+
+        $this->assertDatabaseMissing('events', ['name' => 'Próba bez szablonu']);
+    }
+
+    public function test_admin_can_create_event_without_template(): void
+    {
+        $admin = User::factory()->create(['status' => 'active']);
+        $admin->assignRole('admin');
+
+        $place = Place::factory()->starting()->create();
+        $contractor = Contractor::create(['name' => 'Firma Admin', 'status' => 'active']);
+        $contact = Contact::create([
+            'first_name' => 'Admin',
+            'last_name' => 'Klient',
+            'email' => 'admin.klient@example.com',
+            'phone' => '511511511',
+        ]);
+        $contractor->contacts()->attach($contact->id);
+
+        $this->actingAs($admin);
+
+        Livewire::test(CreateEvent::class)
+            ->call('applyClientLookup', [
+                [
+                    'contact_id' => (string) $contact->id,
+                    'contractor_id' => (string) $contractor->id,
+                    'department_label' => null,
+                ],
+            ], 'Admin Klient · Firma Admin', 'admin.klient@example.com', '511511511')
+            ->fillForm([
+                'event_template_id' => null,
+                'name' => 'Czysta impreza admin',
+                'start_date' => '2026-08-15',
+                'duration_days' => 1,
+                'participant_count' => 8,
+                'start_place_id' => $place->id,
+            ])
+            ->call('create')
+            ->assertHasNoFormErrors();
+
+        $this->assertDatabaseHas('events', [
+            'name' => 'Czysta impreza admin',
+            'event_template_id' => null,
+        ]);
     }
 }

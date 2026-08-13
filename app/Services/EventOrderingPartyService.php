@@ -162,6 +162,54 @@ class EventOrderingPartyService
         return (int) $contact->id;
     }
 
+    /**
+     * @param  array<string, mixed>  $data
+     * @param  array<int, string>  $typeNames  typy do przypięcia (np. ['klient'])
+     */
+    public function createContractorFromFormData(array $data, ?int $contactId = null, array $typeNames = []): int
+    {
+        $contractor = Contractor::create([
+            'name' => $data['name'],
+            'phone' => $data['phone'] ?? null,
+            'email' => $data['email'] ?? null,
+            'nip' => $data['nip'] ?? null,
+            'street' => $data['street'] ?? null,
+            'house_number' => $data['house_number'] ?? null,
+            'city' => $data['city'] ?? null,
+            'postal_code' => $data['postal_code'] ?? null,
+            'office_notes' => $data['office_notes'] ?? null,
+            'status' => 'active',
+        ]);
+
+        $contractorId = (int) $contractor->getKey();
+
+        if ($typeNames !== []) {
+            $typeIds = \App\Models\ContractorType::idsForNames($typeNames);
+
+            if ($typeIds === []) {
+                foreach ($typeNames as $typeName) {
+                    $normalized = is_string($typeName) ? mb_strtolower(trim($typeName)) : '';
+                    if ($normalized === '') {
+                        continue;
+                    }
+
+                    \App\Models\ContractorType::query()->firstOrCreate(['name' => $normalized]);
+                }
+
+                \App\Models\ContractorType::clearIdsForNamesCache();
+                $typeIds = \App\Models\ContractorType::idsForNames($typeNames);
+            }
+
+            if ($typeIds !== []) {
+                $contractor->types()->syncWithoutDetaching($typeIds);
+            }
+        }
+
+        app(ContactContractorLinkService::class)->link($contactId, $contractorId);
+
+        return $contractorId;
+    }
+
     public function formatPartyLabel(?int $contactId, ?int $contractorId, ?string $departmentLabel = null): string
     {
         $contact = $contactId ? Contact::find($contactId) : null;
@@ -174,16 +222,16 @@ class EventOrderingPartyService
     {
         $parts = [];
 
-        if ($contact) {
-            $parts[] = $contact->displayName();
+        if ($contractor) {
+            $parts[] = $contractor->name;
         }
 
         if (filled($departmentLabel)) {
             $parts[] = (string) $departmentLabel;
         }
 
-        if ($contractor) {
-            $parts[] = $contractor->name;
+        if ($contact) {
+            $parts[] = $contact->displayName();
         }
 
         return $parts !== [] ? implode(' · ', $parts) : 'Nowy zamawiający';

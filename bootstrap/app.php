@@ -22,8 +22,17 @@ return Application::configure(basePath: dirname(__DIR__))
             \App\Http\Middleware\ServeCompressedAssets::class,
             \App\Http\Middleware\ResolveRegionSlug::class,
         ]);
+
+        $middleware->alias([
+            'office' => \App\Http\Middleware\EnsureOfficeStaff::class,
+        ]);
     })
     ->withSchedule(function (Schedule $schedule): void {
+        $schedule->command('payments:send-reminders')
+            ->dailyAt(config('payments.reminder_schedule_at', '09:00'))
+            ->withoutOverlapping()
+            ->appendOutputTo(storage_path('logs/payment-reminders-schedule.log'));
+
         if (! config('backup.schedule_enabled', true)) {
             return;
         }

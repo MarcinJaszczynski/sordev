@@ -834,16 +834,17 @@ class EventProgramPlanner extends Component
             return;
         }
 
-        $invoicesByPointId = VendorInvoice::query()
-            ->whereIn('event_program_point_id', $points->pluck('id'))
+        $invoices = VendorInvoice::queryForProgramPoints($points->pluck('id'))
             ->orderBy('issue_date')
-            ->get()
-            ->groupBy('event_program_point_id');
+            ->with(['programPoints:id'])
+            ->get();
 
-        $points->each(function (EventProgramPoint $point) use ($invoicesByPointId): void {
+        $points->each(function (EventProgramPoint $point) use ($invoices): void {
             $point->setRelation(
                 'linkedVendorInvoices',
-                $invoicesByPointId->get($point->id, collect()),
+                $invoices
+                    ->filter(fn (VendorInvoice $invoice): bool => $invoice->isLinkedToProgramPoint((int) $point->id))
+                    ->values(),
             );
         });
     }

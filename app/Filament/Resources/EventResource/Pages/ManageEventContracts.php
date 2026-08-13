@@ -2,6 +2,7 @@
 
 namespace App\Filament\Resources\EventResource\Pages;
 
+use App\Filament\Actions\HelpArticleAction;
 use App\Filament\Concerns\SingleRelationManagerPage;
 use App\Filament\Resources\EventResource;
 use App\Filament\Resources\EventResource\Concerns\HasEventDocumentsSubNavigation;
@@ -70,37 +71,41 @@ class ManageEventContracts extends SingleRelationManagerPage
 
     protected function getHeaderActions(): array
     {
+        $actions = [
+            HelpArticleAction::make('umowy'),
+        ];
+
         if (! Schema::hasTable('contracts') || ! Schema::hasTable('event_agreements')) {
-            return [];
+            return $actions;
         }
 
         $pending = $this->pendingLegacyAgreementsCount();
         if ($pending === 0) {
-            return [];
+            return $actions;
         }
 
         $eventId = (int) $this->getRecord()->getKey();
 
-        return [
-            Action::make('migrate_legacy_agreements')
-                ->label("Przenieś stare umowy tej imprezy ({$pending})")
-                ->icon('heroicon-o-arrow-path')
-                ->color('warning')
-                ->tooltip('Jednorazowa migracja starych umów do nowego modułu umów.')
-                ->requiresConfirmation()
-                ->modalHeading('Przeniesienie starych umów')
-                ->modalDescription("Przeniesie {$pending} starych umów wyłącznie tej imprezy (bezpiecznie, bez duplikatów). Nowe umowy twórz już tylko w module Umowy.")
-                ->action(function () use ($eventId): void {
-                    Artisan::call('contracts:migrate-from-event-agreements', [
-                        '--event' => $eventId,
-                    ]);
-                    Notification::make()
-                        ->title('Przenoszenie zakończone')
-                        ->body(trim(Artisan::output()) ?: 'Stare umowy tej imprezy przeniesione do nowego modułu.')
-                        ->success()
-                        ->send();
-                }),
-        ];
+        $actions[] = Action::make('migrate_legacy_agreements')
+            ->label("Przenieś stare umowy tej imprezy ({$pending})")
+            ->icon('heroicon-o-arrow-path')
+            ->color('warning')
+            ->tooltip('Jednorazowa migracja starych umów do nowego modułu umów.')
+            ->requiresConfirmation()
+            ->modalHeading('Przeniesienie starych umów')
+            ->modalDescription("Przeniesie {$pending} starych umów wyłącznie tej imprezy (bezpiecznie, bez duplikatów). Nowe umowy twórz już tylko w module Umowy.")
+            ->action(function () use ($eventId): void {
+                Artisan::call('contracts:migrate-from-event-agreements', [
+                    '--event' => $eventId,
+                ]);
+                Notification::make()
+                    ->title('Przenoszenie zakończone')
+                    ->body(trim(Artisan::output()) ?: 'Stare umowy tej imprezy przeniesione do nowego modułu.')
+                    ->success()
+                    ->send();
+            });
+
+        return $actions;
     }
 
     protected function pendingLegacyAgreementsCount(): int

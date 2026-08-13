@@ -43,7 +43,7 @@ class ReservationResource extends Resource
         return $form
             ->schema([
                 Forms\Components\Section::make('Rezerwacja')
-                    ->columns(2)
+                    ->columns(['default' => 1, 'md' => 2])
                     ->schema([
                         Forms\Components\Select::make('event_id')
                             ->label('Impreza')
@@ -172,7 +172,7 @@ class ReservationResource extends Resource
                     ->modalWidth('2xl')
                     ->infolist([
                         \Filament\Infolists\Components\Section::make('Dane rezerwacji')
-                            ->columns(2)
+                            ->columns(['default' => 1, 'md' => 2])
                             ->schema([
                                 \Filament\Infolists\Components\TextEntry::make('booking_reference')->label('Nr potwierdzenia dostawcy')->placeholder('—'),
                                 \Filament\Infolists\Components\TextEntry::make('status')
@@ -215,11 +215,9 @@ class ReservationResource extends Resource
                                 editingReservation: $record,
                             )))
                             ->action(function (Reservation $record, array $data): void {
-                                app(UpsertReservationAction::class)(new UpsertReservationData(
-                                    attributes: $data,
+                                app(UpsertReservationAction::class)(UpsertReservationData::fromForm(
+                                    formData: $data,
                                     reservation: $record,
-                                    attachmentData: $data,
-                                    createdBy: auth()->id(),
                                 ));
                             }),
                     ]),

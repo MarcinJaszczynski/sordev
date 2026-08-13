@@ -4,7 +4,6 @@ namespace App\Filament\Resources\EventResource\Concerns;
 
 use App\Filament\Resources\EventResource;
 use App\Filament\Resources\EventResource\Pages\ManageEventClientPortal;
-use App\Filament\Resources\EventResource\Pages\ManageEventDayInsurances;
 use App\Filament\Resources\EventResource\Pages\ManageEventParticipants;
 use App\Filament\Resources\EventResource\Pages\ManageEventResignations;
 use App\Support\WorkflowModuleNavigation;
@@ -18,7 +17,6 @@ trait HasEventParticipantsSubNavigation
             ManageEventParticipants::class => 'participants-list',
             ManageEventResignations::class => 'participant-resignations',
             ManageEventClientPortal::class => 'participant-portal',
-            ManageEventDayInsurances::class => 'day-insurances',
             default => 'participants-list',
         };
     }
@@ -36,7 +34,7 @@ trait HasEventParticipantsSubNavigation
             [
                 'key' => 'participants-list',
                 'label' => 'Lista',
-                'description' => 'Rejestr uczestników imprezy',
+                'description' => null,
                 'icon' => 'heroicon-o-users',
                 'url' => EventResource::getUrl('participants', ['record' => $recordId]),
                 'badge' => null,
@@ -44,7 +42,7 @@ trait HasEventParticipantsSubNavigation
             [
                 'key' => 'participant-resignations',
                 'label' => 'Rezygnacje',
-                'description' => 'Rezygnacje i korekty listy',
+                'description' => null,
                 'icon' => 'heroicon-o-user-minus',
                 'url' => EventResource::getUrl('participant-resignations', ['record' => $recordId]),
                 'badge' => null,
@@ -52,23 +50,12 @@ trait HasEventParticipantsSubNavigation
             [
                 'key' => 'participant-portal',
                 'label' => 'Portal klienta',
-                'description' => 'Dostęp opiekunów i uczestników',
+                'description' => null,
                 'icon' => 'heroicon-o-user-group',
                 'url' => EventResource::getUrl('participant-portal', ['record' => $recordId]),
                 'badge' => null,
             ],
         ];
-
-        if (Schema::hasTable('event_day_insurance')) {
-            $tabs[] = [
-                'key' => 'day-insurances',
-                'label' => 'Ubezpieczenia',
-                'description' => 'Polisy dzienne uczestników',
-                'icon' => 'heroicon-o-shield-check',
-                'url' => EventResource::getUrl('day-insurances', ['record' => $recordId]),
-                'badge' => null,
-            ];
-        }
 
         return WorkflowModuleNavigation::markActive($tabs, static::participantsSubNavigationActiveTab());
     }
@@ -82,17 +69,11 @@ trait HasEventParticipantsSubNavigation
             return [];
         }
 
-        $routes = [
+        return [
             ManageEventParticipants::getRouteName(),
             ManageEventResignations::getRouteName(),
             ManageEventClientPortal::getRouteName(),
         ];
-
-        if (Schema::hasTable('event_day_insurance')) {
-            $routes[] = ManageEventDayInsurances::getRouteName();
-        }
-
-        return $routes;
     }
 
     /**
@@ -101,18 +82,22 @@ trait HasEventParticipantsSubNavigation
     protected function buildModuleBreadcrumbs(): array
     {
         $recordId = $this->getRecord()->getKey();
-        $section = match (static::participantsSubNavigationActiveTab()) {
-            'participants-list' => 'Lista',
-            'participant-resignations' => 'Rezygnacje',
-            'participant-portal' => 'Portal klienta',
-            'day-insurances' => 'Ubezpieczenia',
-            default => 'Uczestnicy',
-        };
 
         return $this->eventRecordBreadcrumbs(
             moduleLabel: 'Uczestnicy',
             moduleUrl: EventResource::getUrl('participants', ['record' => $recordId]),
-            sectionLabel: $section,
+            sectionLabel: null,
         );
+    }
+
+    public function getHeading(): string|\Illuminate\Contracts\Support\Htmlable
+    {
+        // Pusty string ukrywa cały header Filament (w tym headerActions). HtmlString jest truthy.
+        return new \Illuminate\Support\HtmlString('');
+    }
+
+    public function getSubheading(): ?string
+    {
+        return null;
     }
 }

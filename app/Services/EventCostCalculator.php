@@ -2,6 +2,7 @@
 
 namespace App\Services;
 
+use App\Models\Bus;
 use App\Models\Event;
 use App\Models\EventProgramPoint;
 
@@ -13,12 +14,16 @@ use App\Models\EventProgramPoint;
  *  - nocleg pochodzi z planu hotelowego (gdy istnieje); punkty programu typu nocleg
  *    są wtedy pomijane (żeby uniknąć podwójnego liczenia),
  *  - transport liczony raz przez EventTransportCostCalculator (nie z punktów programu),
- *  - ubezpieczenie liczone raz (Event::insuranceCostPln),
+ *  - ubezpieczenie liczone raz (InsuranceCostCalculator / Event::insuranceCostPln — z gratisami),
  *  - baza → marża → podatki → SUMA KOŃCOWA,
+ *  - punkty programu liczone od osób koszowych (płacący + gratis — jedzą/śpią/bilety),
  *  - cena za osobę = SUMA KOŃCOWA ÷ liczba osób PŁACĄCYCH (bez gratisów/obsługi/kierowcy).
  */
 class EventCostCalculator
 {
+    /** @var array<string, array<string, mixed>> */
+    private static array $requestCache = [];
+
     public function __construct(private readonly Event $event) {}
 
     public static function for(Event $event): self
@@ -27,59 +32,95 @@ class EventCostCalculator
     }
 
     /**
+     * Czyści cache w obrębie requestu (testy / po zapisie atrybutów).
+     */
+    public static function clearRequestCache(): void
+    {
+        self::$requestCache = [];
+    }
+
+    /**
      * @return array<string, mixed>
      */
-    public function calculate(?int $participantCount = null): array
+    public function calculate(?int $participantCount = null, ?int $gratisOverride = null): array
     {
         $event = $this->event;
         $payingCount = max(1, (int) ($participantCount ?? $event->participant_count ?? 1));
 
-        $variant = $event->qtyVariants()
-            ->get(['qty', 'gratis', 'staff', 'driver'])
+        $cacheKey = $this->requestCacheKey($payingCount, $gratisOverride);
+        if (isset(self::$requestCache[$cacheKey])) {
+            return self::$requestCache[$cacheKey];
+        }
+
+        $this->ensureFreshBusRelation($event);
+        $event->loadMissing([
+            'markup',
+            'eventTemplate.markup',
+            'eventTemplate.taxes',
+            'bus',
+            'qtyVariants',
+            'programPoints.templatePoint',
+            'programPoints.currency',
+            'dayInsurances.insurance',
+            'hotelStays.roomLines.currency',
+        ]);
+
+        $variants = $event->relationLoaded('qtyVariants')
+            ? $event->qtyVariants
+            : $event->qtyVariants()->get(['qty', 'gratis', 'staff', 'driver']);
+
+        $variant = $variants
             ->sortBy(fn ($v) => abs((int) ($v->qty ?? 0) - $payingCount))
             ->first();
 
-        $gratis = max(0, (int) ($variant->gratis ?? 0));
+        $gratis = $gratisOverride !== null
+            ? max(0, $gratisOverride)
+            : max(0, (int) ($variant->gratis ?? 0));
         $staff = max(0, (int) ($variant->staff ?? 1));
         $driver = max(0, (int) ($variant->driver ?? 1));
 
         $hotelPlanTotal = $this->hotelPlanTotal();
         $hasHotelPlan = $hotelPlanTotal !== null;
+        $forceConvertForeign = ! ($event->eventTemplate?->isForeignTrip() ?? true);
 
         $lines = [];
+        $foreignBuckets = [];
 
         // 1) Punkty programu (bez noclegu gdy jest plan hotelowy, bez transportu).
         foreach ($this->activeProgramPoints() as $point) {
-            // Usługa hotelu (bankiet, obiad, DJ...) ma priorytet nad heurystyką nazwy/noclegu:
-            // liczona jest zawsze raz w bazie i NIE jest wykluczana przez plan hotelowy.
             $isHotelService = (bool) ($point->is_hotel_service ?? false);
 
             if (! $isHotelService && $this->isTransportPoint($point)) {
-                continue; // transport liczony osobno
+                continue;
             }
 
             $isAccommodation = ! $isHotelService && $this->isAccommodationPoint($point);
             if ($isAccommodation && $hasHotelPlan) {
-                continue; // nocleg z planu hotelowego ma priorytet
-            }
-
-            $costPln = $this->pointCostPln($point, $payingCount);
-            if ($costPln <= 0) {
                 continue;
             }
 
-            $category = 'program';
-            if ($isHotelService) {
-                $category = 'hotel_service';
-            } elseif ($isAccommodation) {
-                $category = 'accommodation';
+            $priced = $this->pointCostBreakdown($point, $payingCount, $gratis, $forceConvertForeign);
+            if ($priced['pln'] > 0) {
+                $category = 'program';
+                if ($isHotelService) {
+                    $category = 'hotel_service';
+                } elseif ($isAccommodation) {
+                    $category = 'accommodation';
+                }
+
+                $lines[] = [
+                    'category' => $category,
+                    'name' => (string) ($point->templatePoint?->name ?? $point->name ?? 'Pozycja'),
+                    'cost_pln' => round($priced['pln'], 2),
+                ];
             }
 
-            $lines[] = [
-                'category' => $category,
-                'name' => (string) ($point->templatePoint?->name ?? $point->name ?? 'Pozycja'),
-                'cost_pln' => round($costPln, 2),
-            ];
+            foreach ($priced['foreign'] as $code => $amount) {
+                if ($amount <= 0) {
+                    continue;
+                }
+                $foreignBuckets[$code] = ($foreignBuckets[$code] ?? 0) + $amount;
+            }
         }
 
         // 2) Nocleg z planu hotelowego (raz).
@@ -117,7 +158,19 @@ class EventCostCalculator
         $pricePerPerson = $payingCount > 0 ? round($total / $payingCount, 2) : 0.0;
         $pricePerPersonRounded = PriceRoundingService::roundPerPerson($pricePerPerson, 'PLN');
 
-        return [
+        $foreign = [];
+        foreach ($foreignBuckets as $code => $foreignBase) {
+            $foreignMarkup = round($foreignBase * ($markupPercent / 100), 2);
+            $foreignTotal = round($foreignBase + $foreignMarkup, 2);
+            $foreign[$code] = [
+                'base' => round($foreignBase, 2),
+                'markup' => $foreignMarkup,
+                'total' => $foreignTotal,
+                'price_per_person' => $payingCount > 0 ? round($foreignTotal / $payingCount, 2) : 0.0,
+            ];
+        }
+
+        $result = [
             'qty' => $payingCount,
             'gratis' => $gratis,
             'staff' => $staff,
@@ -133,42 +186,110 @@ class EventCostCalculator
             'total_pln' => $total,
             'price_per_person' => $pricePerPerson,
             'price_per_person_rounded' => $pricePerPersonRounded,
+            'foreign' => $foreign,
         ];
+
+        self::$requestCache[$cacheKey] = $result;
+
+        return $result;
+    }
+
+    private function requestCacheKey(int $payingCount, ?int $gratisOverride): string
+    {
+        $e = $this->event;
+
+        return implode(':', [
+            (string) ($e->getKey() ?? 'new'),
+            (string) ($e->updated_at?->timestamp ?? 0),
+            (string) $payingCount,
+            (string) ($gratisOverride ?? 'auto'),
+            (string) round((float) ($e->transfer_km ?? 0), 2),
+            (string) round((float) ($e->program_km ?? 0), 2),
+            (string) (int) ($e->start_place_id ?? 0),
+            (string) (int) ($e->bus_id ?? 0),
+            (string) ((int) (bool) ($e->use_manual_transport_cost ?? false)),
+            (string) round((float) ($e->manual_transport_cost ?? 0), 2),
+        ]);
+    }
+
+    private function ensureFreshBusRelation(Event $event): void
+    {
+        $busId = (int) ($event->bus_id ?? 0);
+        if ($busId <= 0) {
+            return;
+        }
+
+        if (! $event->relationLoaded('bus')) {
+            return;
+        }
+
+        $loaded = $event->getRelation('bus');
+        if (
+            $loaded === null
+            || ! ($loaded instanceof Bus)
+            || (int) $loaded->getKey() !== $busId
+            || ! $loaded->hasTransportPricingAttributesLoaded()
+        ) {
+            $event->unsetRelation('bus');
+        }
     }
 
     private function activeProgramPoints()
     {
+        if ($this->event->relationLoaded('programPoints')) {
+            return $this->event->programPoints
+                ->filter(fn (EventProgramPoint $p) => (bool) ($p->active ?? true) && (bool) ($p->include_in_calculation ?? true));
+        }
+
         return $this->event->programPoints()
             ->with(['templatePoint:id,name', 'currency:id,code,symbol,exchange_rate'])
             ->get()
             ->filter(fn (EventProgramPoint $p) => (bool) ($p->active ?? true) && (bool) ($p->include_in_calculation ?? true));
     }
 
-    private function pointCostPln(EventProgramPoint $point, int $count): float
-    {
-        $cost = (float) $point->resolveEffectiveTotalPrice($count);
+    /**
+     * @return array{pln: float, foreign: array<string, float>}
+     */
+    private function pointCostBreakdown(
+        EventProgramPoint $point,
+        int $payingCount,
+        int $gratis = 0,
+        bool $forceConvertForeign = false,
+    ): array {
+        $costHeadcount = max(1, $payingCount + max(0, $gratis));
+        $cost = (float) $point->resolveEffectiveTotalPrice($costHeadcount);
         if ($cost <= 0) {
-            return 0.0;
+            return ['pln' => 0.0, 'foreign' => []];
         }
 
         $code = strtoupper((string) ($point->currency?->code ?? $point->currency?->symbol ?? 'PLN'));
-        if ($code !== 'PLN' && $code !== '' && ! ($point->convert_to_pln ?? false)) {
-            return 0.0;
+        if ($code === '' || $code === 'PLN') {
+            return ['pln' => $cost, 'foreign' => []];
         }
 
-        if ($code === 'PLN' || $code === '') {
-            return $cost;
-        }
-
-        // Koszt w walucie obcej → PLN po kursie (zgodnie z logiką cennika).
+        $convert = $forceConvertForeign || (bool) ($point->convert_to_pln ?? false);
         $rate = (float) ($point->currency?->exchange_rate ?? 0);
 
-        return $rate > 0 ? round($cost * $rate, 2) : $cost;
+        if ($convert) {
+            return [
+                'pln' => $rate > 0 ? round($cost * $rate, 2) : $cost,
+                'foreign' => [],
+            ];
+        }
+
+        return [
+            'pln' => 0.0,
+            'foreign' => [$code => round($cost, 2)],
+        ];
     }
 
     private function hotelPlanTotal(): ?float
     {
-        if (! $this->event->hotelStays()->exists()) {
+        if ($this->event->relationLoaded('hotelStays')) {
+            if ($this->event->hotelStays->isEmpty()) {
+                return null;
+            }
+        } elseif (! $this->event->hotelStays()->exists()) {
             return null;
         }
 

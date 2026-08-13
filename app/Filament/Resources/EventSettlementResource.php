@@ -5,6 +5,7 @@ namespace App\Filament\Resources;
 use App\Filament\Resources\EventSettlementResource\Pages;
 use App\Models\Event;
 use App\Models\EventSettlement;
+use App\Models\EventSettlementParticipantPayment;
 use App\Models\User;
 use App\Support\ExecutiveAccess;
 use App\Support\FilamentNavigation;
@@ -18,6 +19,11 @@ use Filament\Resources\Resource;
 use Filament\Tables;
 use Filament\Tables\Table;
 
+/**
+ * Finanse imprezy są kanoniczne w EventFinance — ten resource zostaje
+ * tylko jako lista/deep-link z redirectami do Event.
+ * Nie rozbudowywać UI tutaj (warstwa zombie / bookmark).
+ */
 class EventSettlementResource extends Resource
 {
     protected static ?string $model = EventSettlement::class;
@@ -36,11 +42,86 @@ class EventSettlementResource extends Resource
 
     protected static ?string $pluralModelLabel = 'Rozliczenia imprez';
 
+    /**
+     * Finanse imprezy są kanoniczne w EventFinance — ten resource zostaje
+     * tylko jako lista/deep-link z redirectami do Event.
+     */
+    public static function shouldRegisterNavigation(): bool
+    {
+        return false;
+    }
+
+    public static function canCreate(): bool
+    {
+        return false;
+    }
+
+    public static function canDelete($record): bool
+    {
+        return false;
+    }
+
+    public static function canDeleteAny(): bool
+    {
+        return false;
+    }
+
+    public static function getEventFinanceUrlForSettlement(EventSettlement|int|null $settlement): ?string
+    {
+        $eventId = static::resolveEventIdForSettlement($settlement);
+
+        return $eventId
+            ? EventResource::getUrl('finance', ['record' => $eventId])
+            : null;
+    }
+
+    public static function getEventFinanceParticipantPaymentsUrlForSettlement(EventSettlement|int|null $settlement): ?string
+    {
+        $eventId = static::resolveEventIdForSettlement($settlement);
+
+        return $eventId
+            ? EventResource::getUrl('finance-participant-payments', ['record' => $eventId])
+            : null;
+    }
+
+    public static function getEventFinanceParticipantPaymentUrl(
+        EventSettlementParticipantPayment|int|null $payment,
+    ): ?string {
+        if ($payment === null) {
+            return null;
+        }
+
+        $model = $payment instanceof EventSettlementParticipantPayment
+            ? $payment
+            : EventSettlementParticipantPayment::query()->find($payment);
+
+        if (! $model?->settlement_id) {
+            return null;
+        }
+
+        $base = static::getEventFinanceParticipantPaymentsUrlForSettlement((int) $model->settlement_id);
+
+        return $base
+            ? $base.'?payment='.$model->getKey()
+            : null;
+    }
+
+    protected static function resolveEventIdForSettlement(EventSettlement|int|null $settlement): int|string|null
+    {
+        if ($settlement === null) {
+            return null;
+        }
+
+        return $settlement instanceof EventSettlement
+            ? $settlement->event_id
+            : EventSettlement::query()->whereKey($settlement)->value('event_id');
+    }
+
     public static function form(Form $form): Form
     {
         return $form->schema([
             Forms\Components\Section::make('Podstawowe informacje')
-                ->columns(2)
+                ->columns(['default' => 1, 'md' => 2])
                 ->schema([
                     Forms\Components\Select::make('event_id')
                         ->label('Impreza')
@@ -82,7 +163,7 @@ class EventSettlementResource extends Resource
 
             Forms\Components\Section::make('Raport pilota')
                 ->description('Dane wprowadzone przez pilota w portalu /pilot.')
-                ->columns(2)
+                ->columns(['default' => 1, 'md' => 2])
                 ->schema([
                     Forms\Components\Textarea::make('pilot_report_notes')
                         ->label('Uwagi pilota')
@@ -126,7 +207,7 @@ class EventSettlementResource extends Resource
                 ]),
 
             Forms\Components\Section::make('Sumy (auto-obliczane)')
-                ->columns(2)
+                ->columns(['default' => 1, 'md' => 2])
                 ->schema([
                     Forms\Components\Placeholder::make('executive_only_notice')
                         ->label('Wynik finansowy')
@@ -318,9 +399,7 @@ class EventSettlementResource extends Resource
                     ->wrap()
                     ->html()
                     ->state(fn (EventSettlement $record): string => static::settlementEventColumnHtml($record))
-                    ->url(fn (EventSettlement $record) => $record->event_id
-                        ? EventResource::getUrl('edit', ['record' => $record->event_id])
-                        : null),
+                    ->url(fn (EventSettlement $record) => static::getEventFinanceUrlForSettlement($record)),
 
                 Tables\Columns\TextColumn::make('status')
                     ->label('Status / pilot')
@@ -370,13 +449,10 @@ class EventSettlementResource extends Resource
                     ->openUrlInNewTab(),
 
                 Tables\Actions\Action::make('open_in_event_finance')
-                    ->label('W imprezie')
+                    ->label('Finanse imprezy')
                     ->icon('heroicon-o-calculator')
                     ->color('primary')
-                    ->tooltip('Otwórz rozliczenie w workflow imprezy (zalecane)')
-                    ->url(fn ($record) => $record->event_id
-                        ? EventResource::getUrl('settlement-summary', ['record' => $record->event_id])
-                        : null),
+                    ->url(fn ($record) => static::getEventFinanceUrlForSettlement($record)),
 
                 Tables\Actions\Action::make('import')
                     ->label('Importuj z imprezy')
@@ -401,9 +477,9 @@ class EventSettlementResource extends Resource
                         $record->refresh();
                     }),
 
-                Tables\Actions\EditAction::make(),
                 Tables\Actions\DeleteAction::make(),
             ])
+            ->recordUrl(fn (EventSettlement $record): ?string => static::getEventFinanceUrlForSettlement($record))
             ->bulkActions([
                 Tables\Actions\BulkActionGroup::make([
                     Tables\Actions\DeleteBulkAction::make(),
@@ -415,7 +491,7 @@ class EventSettlementResource extends Resource
     {
         return $infolist->schema([
             Infolists\Components\Section::make('Podsumowanie rozliczenia')
-                ->columns(4)
+                ->columns(['default' => 1, 'md' => 2, 'xl' => 4])
                 ->schema([
                     Infolists\Components\TextEntry::make('event.name')
                         ->label('Impreza')
@@ -496,14 +572,7 @@ class EventSettlementResource extends Resource
 
     public static function getRecordSubNavigation(Page $page): array
     {
-        return $page->generateNavigationItems([
-            Pages\EditEventSettlement::class,
-            Pages\ManageSettlementCosts::class,
-            Pages\ManageSettlementPayments::class,
-            Pages\ManageSettlementPilotCash::class,
-            Pages\ManageSettlementCurrencyExchanges::class,
-            Pages\ManageSettlementDocuments::class,
-        ]);
+        return [];
     }
 
     public static function getPages(): array

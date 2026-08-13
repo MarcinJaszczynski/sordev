@@ -3,11 +3,9 @@
 @endphp
 
 <div class="flex flex-wrap items-center gap-2">
-    <span class="text-xs font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400">Zakres</span>
-
     @foreach([
-        'assigned' => 'Moje zadania',
-        'authored' => 'Moje zlecenia',
+        'assigned' => 'Przypisane do mnie',
+        'authored' => 'Utworzone przeze mnie',
         'all' => 'Wszystkie',
     ] as $scope => $label)
         <button

@@ -5,9 +5,13 @@ namespace Tests\Feature;
 use App\Filament\Pages\ClientInvoiceRequestsInboxPage;
 use App\Models\ClientInvoiceRequest;
 use App\Models\Event;
+use App\Models\EventParticipant;
+use App\Models\EventSettlement;
+use App\Models\EventSettlementParticipantPayment;
 use App\Models\User;
 use App\Services\ClientInvoiceRequestWorkflowService;
 use App\Services\NotificationService;
+use App\Support\ClientInvoiceRequestAdminHelper;
 use Filament\Facades\Filament;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Schema;
@@ -110,6 +114,72 @@ class ClientInvoiceRequestAdminTest extends TestCase
             'client-invoice-requests',
             (string) $data['items_by_type']['invoice_request'][0]['url'],
         );
+    }
+
+    public function test_prefill_from_participant_uses_contact_and_payment_data(): void
+    {
+        if (! Schema::hasTable('client_invoice_requests') || ! Schema::hasTable('event_participants')) {
+            $this->markTestSkipped('Brak wymaganych tabel.');
+        }
+
+        $event = Event::factory()->create();
+        $settlement = EventSettlement::create([
+            'event_id' => $event->id,
+            'status' => 'active',
+        ]);
+        $payment = EventSettlementParticipantPayment::create([
+            'settlement_id' => $settlement->id,
+            'participant_name' => 'Jan Kowalski',
+            'due_amount_pln' => 1200,
+            'paid_amount_pln' => 600,
+        ]);
+        $participant = EventParticipant::create([
+            'event_id' => $event->id,
+            'first_name' => 'Jan',
+            'last_name' => 'Kowalski',
+            'email' => 'jan@example.com',
+            'phone' => '500600700',
+            'booking_reference' => 'REF-123',
+            'participant_payment_id' => $payment->id,
+            'source' => EventParticipant::SOURCE_MANUAL,
+            'status' => EventParticipant::STATUS_ACTIVE,
+        ]);
+
+        $prefill = ClientInvoiceRequestAdminHelper::prefillFromParticipant($participant);
+
+        $this->assertSame($event->id, $prefill['event_id']);
+        $this->assertSame(ClientInvoiceRequest::BUYER_PERSON, $prefill['buyer_type']);
+        $this->assertSame('Jan Kowalski', $prefill['company_name']);
+        $this->assertSame('jan@example.com', $prefill['invoice_email']);
+        $this->assertSame('500600700', $prefill['applicant_phone']);
+        $this->assertSame('REF-123', $prefill['payment_reference']);
+        $this->assertSame(600.0, $prefill['amount']);
+    }
+
+    public function test_admin_form_creates_request_in_inbox(): void
+    {
+        if (! Schema::hasTable('client_invoice_requests')) {
+            $this->markTestSkipped('Brak tabeli client_invoice_requests.');
+        }
+
+        $event = Event::factory()->create(['code' => 'EVT-99']);
+
+        $request = ClientInvoiceRequestAdminHelper::createFromAdminForm([
+            'event_id' => $event->id,
+            'buyer_type' => ClientInvoiceRequest::BUYER_PERSON,
+            'company_name' => 'Jan Test',
+            'invoice_email' => 'jan@test.local',
+            'amount' => 100,
+            'payment_reference' => 'UM-1',
+        ]);
+
+        $this->assertDatabaseHas('client_invoice_requests', [
+            'id' => $request->id,
+            'event_id' => $event->id,
+            'source' => ClientInvoiceRequest::SOURCE_ADMIN,
+            'status' => ClientInvoiceRequest::STATUS_PENDING,
+            'company_name' => 'Jan Test',
+        ]);
     }
 
     public function test_inbox_page_can_mark_request_processed(): void

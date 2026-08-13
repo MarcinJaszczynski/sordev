@@ -4,6 +4,7 @@ namespace Tests\Feature;
 
 use App\Models\Event;
 use App\Models\EventSettlement;
+use App\Models\EventSettlementCost;
 use App\Models\User;
 use App\Services\PilotSettlementService;
 use Filament\Facades\Filament;
@@ -273,8 +274,16 @@ class PilotPortalTest extends TestCase
         ]);
 
         $this->assertSame('pilot', $updated->paid_by);
-        $this->assertSame('45.00', $updated->actual_amount);
         $this->assertSame('Dopłata z własnej kieszeni', $updated->notes);
+
+        // Manual jest planem SSoT — kwota w wierszu płatności (source_id → plan).
+        $paymentSum = (float) EventSettlementCost::query()
+            ->where('settlement_id', $settlement->id)
+            ->where('source_id', $updated->id)
+            ->get()
+            ->filter(fn (EventSettlementCost $row) => EventSettlementCost::isPaymentSourceType($row->source_type))
+            ->sum(fn (EventSettlementCost $row) => (float) ($row->actual_amount_pln ?? $row->actual_amount ?? 0));
+        $this->assertEqualsWithDelta(45.0, $paymentSum, 0.01);
 
         $document = $service->uploadDocument($event, ['document_type' => 'receipt'], [], $updated);
         $this->assertContains($updated->id, $document->linked_cost_ids ?? []);

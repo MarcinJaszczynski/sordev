@@ -80,6 +80,18 @@ class EventDocument extends Model
                 $model->created_by ??= Auth::id();
             }
         });
+
+        static::deleting(function (self $document): void {
+            $path = $document->file_path;
+            if (! is_string($path) || $path === '') {
+                return;
+            }
+
+            $disk = \Illuminate\Support\Facades\Storage::disk('public');
+            if ($disk->exists($path)) {
+                $disk->delete($path);
+            }
+        });
     }
 
     public function event(): BelongsTo

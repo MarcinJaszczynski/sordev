@@ -180,7 +180,7 @@ class ConsoleAuditUrlCollector
             ['label' => 'Pilot / hotel', 'path' => "/pilot/hotel-plan/{$eventId}"],
             ['label' => 'Pilot / checklist', 'path' => "/pilot/checklist/{$eventId}"],
             ['label' => 'Pilot / rozliczenie', 'path' => "/pilot/settlement/{$eventId}"],
-            ['label' => 'Pilot / zaliczka', 'path' => "/pilot/advance/{$eventId}"],
+            ['label' => 'Pilot / gotówka i rozliczenie', 'path' => "/pilot/settlement/{$eventId}"],
         ];
 
         $urls = [];

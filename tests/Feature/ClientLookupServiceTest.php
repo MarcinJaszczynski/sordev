@@ -4,6 +4,7 @@ namespace Tests\Feature;
 
 use App\Models\Contact;
 use App\Models\Contractor;
+use App\Models\ContractorType;
 use App\Services\ClientLookupService;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Tests\TestCase;
@@ -11,6 +12,13 @@ use Tests\TestCase;
 class ClientLookupServiceTest extends TestCase
 {
     use RefreshDatabase;
+
+    private function markAsClient(Contractor $contractor): void
+    {
+        $type = ContractorType::query()->firstOrCreate(['name' => 'klient']);
+        ContractorType::clearIdsForNamesCache();
+        $contractor->types()->syncWithoutDetaching([(int) $type->id]);
+    }
 
     public function test_search_by_phone_returns_contact_contractor_pair(): void
     {
@@ -20,6 +28,7 @@ class ClientLookupServiceTest extends TestCase
             'email' => 'szkola@example.com',
             'status' => 'active',
         ]);
+        $this->markAsClient($contractor);
 
         $contact = Contact::create([
             'first_name' => 'Anna',
@@ -59,6 +68,9 @@ class ClientLookupServiceTest extends TestCase
             'status' => 'active',
         ]);
 
+        $this->markAsClient($contractorA);
+        $this->markAsClient($contractorB);
+
         if (Contractor::hasContactPivotTable()) {
             $contact->contractors()->attach([$contractorA->id, $contractorB->id]);
         }
@@ -73,6 +85,50 @@ class ClientLookupServiceTest extends TestCase
         $this->assertEqualsCanonicalizing(
             [$contractorA->id, $contractorB->id],
             $pairs->pluck('contractor_id')->map(fn ($id) => (int) $id)->all(),
+        );
+    }
+
+    public function test_search_excludes_non_client_contractors(): void
+    {
+        $hotel = Contractor::create([
+            'name' => 'Hotel Testowy',
+            'phone' => '111222333',
+            'status' => 'active',
+        ]);
+        $hotelType = ContractorType::query()->firstOrCreate(['name' => 'hotel']);
+        $hotel->types()->syncWithoutDetaching([(int) $hotelType->id]);
+
+        $results = app(ClientLookupService::class)->searchFromQuery('Hotel');
+
+        $this->assertFalse($results->contains(
+            fn (array $row): bool => (int) ($row['contractor_id'] ?? 0) === $hotel->id
+        ));
+    }
+
+    public function test_search_all_includes_non_client_contractors_and_attaches_client_type_on_select(): void
+    {
+        $hotel = Contractor::create([
+            'name' => 'Hotel Testowy',
+            'phone' => '111222333',
+            'status' => 'active',
+        ]);
+        $hotelType = ContractorType::query()->firstOrCreate(['name' => 'hotel']);
+        $hotel->types()->syncWithoutDetaching([(int) $hotelType->id]);
+
+        $results = app(ClientLookupService::class)->searchFromQuery('Hotel', searchAll: true);
+
+        $this->assertTrue($results->contains(
+            fn (array $row): bool => (int) ($row['contractor_id'] ?? 0) === $hotel->id
+        ));
+
+        $row = $results->first(
+            fn (array $row): bool => (int) ($row['contractor_id'] ?? 0) === $hotel->id
+        );
+
+        app(ClientLookupService::class)->resultToOrderingParties($row);
+
+        $this->assertTrue(
+            $hotel->fresh()->types()->whereRaw('LOWER(name) = ?', ['klient'])->exists(),
         );
     }
 
@@ -97,6 +153,7 @@ class ClientLookupServiceTest extends TestCase
             'email' => 'gimnazjum@test.pl',
             'status' => 'active',
         ]);
+        $this->markAsClient($contractor);
 
         $results = app(ClientLookupService::class)->searchFromQuery('gimnazjum');
 
@@ -127,6 +184,12 @@ class ClientLookupServiceTest extends TestCase
             'first_name' => 'Ewa',
             'last_name' => 'Test',
         ]);
+
+        $contractor = Contractor::query()->findOrFail($contractorId);
+        $this->assertTrue(
+            $contractor->types()->whereRaw('LOWER(name) = ?', ['klient'])->exists(),
+            'Quick create powinien oznaczyć kontrahenta typem klient',
+        );
 
         if (Contractor::hasContactPivotTable()) {
             $this->assertDatabaseHas(Contractor::contactPivotTable(), [

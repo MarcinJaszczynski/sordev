@@ -136,7 +136,12 @@
                         </button>
                         <div id="faq10" class="collapse" data-bs-parent=".faq-accordion">
                             <div class="faq-answer">
-                                <p>Faktura bez VAT jest wystawiana automatycznie i wysyłana na adres email zamawiającego. W razie potrzeby faktury VAT, prosimy o kontakt ze naszym biurem.</p>
+                                <p>
+                                    Aby otrzymać fakturę za udział w imprezie turystycznej (procedura marży dla biur podróży),
+                                    wypełnij <a href="{{ route('invoice-request') }}">wniosek o fakturę</a> na stronie
+                                    lub złóż go z poziomu portalu klienta przy swojej imprezie.
+                                    Potrzebny będzie kod imprezy z umowy / oferty. Faktury wysyłamy e-mailem po zakończeniu wyjazdu.
+                                </p>
                             </div>
                         </div>
                     </div>

@@ -58,16 +58,4 @@ class PilotOnboardingService
 
         return true;
     }
-
-    /**
-     * @deprecated Użyj sendPanelAccessCredentials() — wywoływane ręcznie z panelu admina.
-     */
-    public function sendCredentialsIfPilot(User $user, ?string $plainPassword): void
-    {
-        if (! filled($plainPassword)) {
-            return;
-        }
-
-        $this->sendPanelAccessCredentials($user, $plainPassword);
-    }
 }

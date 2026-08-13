@@ -29,7 +29,7 @@ class HotelRoomResource extends Resource
     {
         return $form->schema([
             Forms\Components\Section::make('Podstawowe informacje')
-                ->columns(3)
+                ->columns(['default' => 1, 'md' => 2, 'xl' => 3])
                 ->schema([
                     Forms\Components\TextInput::make('name')
                         ->label('Nazwa')
@@ -43,7 +43,7 @@ class HotelRoomResource extends Resource
                     Forms\Components\TextInput::make('standard')
                         ->label('Standard')
                         ->maxLength(100)
-                        ->placeholder('np. standard, superior, apartament'),
+                        ->placeholder('Wpisz standard pokoju'),
                     Forms\Components\TextInput::make('people_count')
                         ->label('Ilość osób (kalkulacja)')
                         ->numeric()
@@ -57,7 +57,7 @@ class HotelRoomResource extends Resource
                 ]),
 
             Forms\Components\Section::make('Cennik i waluta')
-                ->columns(3)
+                ->columns(['default' => 1, 'md' => 2, 'xl' => 3])
                 ->schema([
                     Forms\Components\TextInput::make('price')
                         ->label('Cena za pokój')

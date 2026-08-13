@@ -51,6 +51,7 @@ class EventSettlementCost extends Model
         'reviewed_at',
         'review_notes',
         'contractor_id',
+        'finance_group_id',
     ];
 
     protected $casts = [
@@ -91,9 +92,65 @@ class EventSettlementCost extends Model
     public static array $advanceTypes = [
         'advance' => 'Zaliczka',
         'deposit' => 'Kaucja',
-        'final' => 'Dopłata końcowa',
-        'full' => 'Pełna płatność',
+        'supplement' => 'Dopłata',
+        'final' => 'Dopłata całkowita',
+        'full' => 'Wpłata całkowita',
     ];
+
+    /**
+     * Typy widoczne w UI wpłat kosztów (bez historycznych kaucji).
+     *
+     * @return array<string, string>
+     */
+    public static function userSelectableAdvanceTypes(): array
+    {
+        return [
+            'advance' => 'Zaliczka',
+            'supplement' => 'Dopłata',
+            'final' => 'Dopłata całkowita',
+            'full' => 'Wpłata całkowita',
+        ];
+    }
+
+    /**
+     * @return list<string>
+     */
+    public static function userSelectableAdvanceTypeKeys(): array
+    {
+        return array_keys(self::userSelectableAdvanceTypes());
+    }
+
+    public static function userSelectableAdvanceTypesValidationRule(): string
+    {
+        return 'in:'.implode(',', self::userSelectableAdvanceTypeKeys());
+    }
+
+    public static function isAdvancePaymentType(?string $type): bool
+    {
+        return in_array((string) $type, ['advance', 'deposit'], true);
+    }
+
+    public static function advanceTypeLabel(?string $type): string
+    {
+        return self::$advanceTypes[$type] ?? ($type ?: 'Wpłata');
+    }
+
+    /**
+     * Mapuje historyczne / legacy wartości na aktualny wybór w formularzu.
+     */
+    public static function normalizeUserAdvanceType(?string $type): string
+    {
+        $type = (string) $type;
+
+        if (array_key_exists($type, self::userSelectableAdvanceTypes())) {
+            return $type;
+        }
+
+        return match ($type) {
+            'deposit' => 'advance',
+            default => 'final',
+        };
+    }
 
     public static array $paymentMethods = [
         'cash' => 'Gotówka',
@@ -150,6 +207,11 @@ class EventSettlementCost extends Model
         return $this->belongsTo(Contractor::class);
     }
 
+    public function financeGroup(): BelongsTo
+    {
+        return $this->belongsTo(EventSettlementCostGroup::class, 'finance_group_id');
+    }
+
     public function reservations(): HasMany
     {
         return $this->hasMany(Reservation::class, 'settlement_cost_id');
@@ -165,7 +227,21 @@ class EventSettlementCost extends Model
         $documents = $this->settlement?->documents()->get() ?? collect();
 
         return $documents->filter(function ($doc) {
-            $ids = collect($doc->linked_cost_ids ?? [])->map(fn ($id) => (string) $id)->all();
+            $raw = $doc->linked_cost_ids ?? [];
+            if (is_string($raw)) {
+                $decoded = json_decode($raw, true);
+                if (is_array($decoded)) {
+                    $raw = $decoded;
+                } else {
+                    $raw = preg_split('/\s*,\s*/', trim($raw, "[] \t\n\r\0\x0B\"")) ?: [];
+                }
+            }
+
+            $ids = collect($raw)
+                ->flatten()
+                ->map(fn ($id) => (string) (int) $id)
+                ->filter(fn (string $id): bool => $id !== '0')
+                ->all();
 
             return in_array((string) $this->id, $ids, true);
         })->values();
@@ -230,14 +306,84 @@ class EventSettlementCost extends Model
     }
 
     /**
-     * Zaległe płatności do sterty / kalendarza (bez planów informacyjnych).
+     * Dla wiersza inbox/płatności zwraca pozycję planu, na którą należy zaksięgować wpłatę.
+     * Dla samego planu / manualnego zobowiązania zwraca $this.
+     */
+    public function resolvePlanCostForPayment(): self
+    {
+        if (! self::isPaymentSourceType($this->source_type)) {
+            return $this;
+        }
+
+        $settlementId = (int) $this->settlement_id;
+
+        if ($this->source_type === 'program_point_payment' && $this->source_id) {
+            $plan = static::query()
+                ->where('settlement_id', $settlementId)
+                ->where('source_type', 'program_point')
+                ->where('source_id', $this->source_id)
+                ->whereNull('deleted_at')
+                ->orderBy('id')
+                ->first();
+
+            if ($plan) {
+                return $plan;
+            }
+        }
+
+        if ($this->source_type === 'manual_payment' && $this->source_id) {
+            $plan = static::query()
+                ->whereKey((int) $this->source_id)
+                ->where('settlement_id', $settlementId)
+                ->whereNull('deleted_at')
+                ->first();
+
+            if ($plan) {
+                return $plan;
+            }
+        }
+
+        if (in_array($this->source_type, ['transport_payment', 'accommodation_payment'], true)) {
+            $planType = str_replace('_payment', '', $this->source_type);
+            $plan = static::query()
+                ->where('settlement_id', $settlementId)
+                ->where('source_type', $planType)
+                ->whereNull('deleted_at')
+                ->orderBy('id')
+                ->first();
+
+            if ($plan) {
+                return $plan;
+            }
+        }
+
+        return $this;
+    }
+
+    /**
+     * Zaległe płatności do sterty / kalendarza.
+     * Tylko zobowiązania (nie zaksięgowane w pełni): bez paid / cancelled / planned bez terminu zobowiązania.
+     * Wyklucza advance_paid (zaliczka już wpłacona — nie należy do „do zapłaty”).
      */
     public function scopePendingPaymentInbox(Builder $query): Builder
     {
         return $query
             ->paymentsOnly()
-            ->whereNotIn('payment_status', ['paid', 'cancelled', 'planned', 'reserved'])
-            ->whereNotNull('advance_due_date');
+            ->whereNotIn('payment_status', ['paid', 'cancelled', 'planned', 'reserved', 'advance_paid'])
+            ->whereNotNull('advance_due_date')
+            ->where(function (Builder $q): void {
+                // Wiersze-zobowiązania (stary model): planned_amount > 0 i brak / mały actual
+                $q->where(function (Builder $inner): void {
+                    $inner->where('planned_amount_pln', '>', 0.01)
+                        ->where(function (Builder $actual): void {
+                            $actual->whereNull('actual_amount_pln')
+                                ->orWhereColumn('actual_amount_pln', '<', 'planned_amount_pln');
+                        });
+                })->orWhere(function (Builder $inner): void {
+                    // Częściowe / wymaga zaliczki bez full actual
+                    $inner->whereIn('payment_status', ['advance_required', 'partially_paid', 'reservation_required']);
+                });
+            });
     }
 
     // --- Computed ---

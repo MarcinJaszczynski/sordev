@@ -54,18 +54,45 @@ class EventNotesFields
         return self::editor('hotel_notes')
             ->label('Uwagi — który hotel wybrać')
             ->visible(fn (): bool => Schema::hasColumn('events', 'hotel_notes'))
-            ->placeholder('Np. preferowany hotel, lokalizacja, kontakt do rezerwacji.')
+            ->placeholder('Wpisz wskazówki dotyczące wyboru hotelu')
             ->helperText('Wskazówki przy wyborze hotelu. Widoczne w planie noclegów i we wszystkich oknach rezerwacji hotelowych.');
     }
 
-    public static function dietInfo(): Forms\Components\Textarea
+    public static function dietInfo(): Forms\Components\Component
     {
-        return Forms\Components\Textarea::make('diet_info')
-            ->label('Diety')
-            ->placeholder('1 x dieta bezglutenowa, 2 x dieta wegetariańska')
-            ->helperText('Informacja operacyjna o specjalnych dietach uczestników; widoczna dla pilota.')
-            ->visible(fn (): bool => Schema::hasColumn('events', 'diet_info'))
-            ->columnSpanFull()
-            ->rows(3);
+        return Forms\Components\Group::make([
+            Forms\Components\Placeholder::make('diet_from_participants')
+                ->label('Diety z listy uczestników')
+                ->content(function (?\App\Models\Event $record): \Illuminate\Support\HtmlString {
+                    if (! $record) {
+                        return new \Illuminate\Support\HtmlString('<span class="text-gray-500">—</span>');
+                    }
+
+                    $summary = app(\App\Services\EventDietSummaryService::class)->forEvent($record);
+                    if ($summary['count'] === 0) {
+                        return new \Illuminate\Support\HtmlString(
+                            '<span class="text-gray-500">Brak wpisanych diet na kartach uczestników.</span>'
+                        );
+                    }
+
+                    $items = collect($summary['lines'])
+                        ->map(fn (string $line): string => '<li>'.e($line).'</li>')
+                        ->implode('');
+
+                    return new \Illuminate\Support\HtmlString(
+                        '<ul class="list-disc pl-5 text-sm text-gray-800 dark:text-gray-200">'.$items.'</ul>'
+                        .'<p class="mt-1 text-xs text-gray-500">Możesz skopiować / uzupełnić pole poniżej (decyzja biura dla pilota/hotelu).</p>'
+                    );
+                })
+                ->columnSpanFull(),
+
+            Forms\Components\Textarea::make('diet_info')
+                ->label('Diety (decyzja biura)')
+                ->placeholder('Wpisz dietę (decyzja biura)')
+                ->helperText('Pole operacyjne dla pilota/hotelu. Uzupełnij ręcznie na podstawie listy powyżej lub własnej decyzji.')
+                ->visible(fn (): bool => Schema::hasColumn('events', 'diet_info'))
+                ->columnSpanFull()
+                ->rows(3),
+        ])->columnSpanFull();
     }
 }

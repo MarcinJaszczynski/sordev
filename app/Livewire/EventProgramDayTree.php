@@ -2,6 +2,7 @@
 
 namespace App\Livewire;
 
+use App\Filament\Concerns\InteractsWithTaskEditModal;
 use App\Filament\Resources\EventResource;
 use App\Models\Event;
 use App\Models\EventProgramPoint;
@@ -9,12 +10,20 @@ use App\Models\EventTemplateProgramPoint;
 use App\Services\EventProgramPointCreator;
 use App\Services\EventProgramPointOrderService;
 use App\Support\ProgramTimeSlots;
+use Filament\Actions\Concerns\InteractsWithActions;
+use Filament\Actions\Contracts\HasActions;
+use Filament\Forms\Concerns\InteractsWithForms;
+use Filament\Forms\Contracts\HasForms;
 use Illuminate\Support\Collection;
 use Illuminate\Validation\ValidationException;
 use Livewire\Component;
 
-class EventProgramDayTree extends Component
+class EventProgramDayTree extends Component implements HasActions, HasForms
 {
+    use InteractsWithActions;
+    use InteractsWithForms;
+    use InteractsWithTaskEditModal;
+
     public int $eventId;
 
     public int $activeDay = 1;
@@ -48,6 +57,21 @@ class EventProgramDayTree extends Component
     {
         $this->eventId = $eventId;
         $this->activeDay = $this->resolveInitialDay();
+        $this->mountInteractsWithTaskEditModal();
+    }
+
+    public function openCreateTaskForPoint(int $pointId): void
+    {
+        $belongs = EventProgramPoint::query()
+            ->where('event_id', $this->eventId)
+            ->whereKey($pointId)
+            ->exists();
+
+        if (! $belongs) {
+            return;
+        }
+
+        $this->openCreateTaskForProgramPoint($pointId);
     }
 
     public function setActiveDay(int $day): void

@@ -45,13 +45,20 @@ class EventParticipant extends Model
         'import_batch_key',
         'notes',
         'diet',
+        'selected_extras',
         'parent_consent_at',
         'parent_consent_ip',
+        'consents',
+        'parent_access_token',
+        'parent_access_token_expires_at',
     ];
 
     protected $casts = [
         'birth_date' => 'date',
         'parent_consent_at' => 'datetime',
+        'parent_access_token_expires_at' => 'datetime',
+        'consents' => 'array',
+        'selected_extras' => 'array',
     ];
 
     public function event(): BelongsTo
@@ -81,7 +88,27 @@ class EventParticipant extends Model
 
     public function hasParentConsent(): bool
     {
+        if (\App\Support\EventParticipantConsents::hasRequired($this->consents)) {
+            return true;
+        }
+
         return $this->parent_consent_at !== null;
+    }
+
+    /**
+     * @return array<string, bool>
+     */
+    public function consentChecklist(): array
+    {
+        return \App\Support\EventParticipantConsents::checklist($this->consents);
+    }
+
+    public function consentsCompletedLabel(): string
+    {
+        $done = \App\Support\EventParticipantConsents::completedCount($this->consents);
+        $total = count(\App\Support\EventParticipantConsents::allKeys());
+
+        return "{$done}/{$total}";
     }
 
     public function fullName(): string

@@ -289,6 +289,12 @@ class ClientPortalSettingsToolbar extends Component implements HasActions, HasFo
 
     public function previewUrl(): string
     {
-        return ClientEventResource::getUrl('index', panel: 'portal').'?preview=1';
+        return ClientEventResource::getUrl('view', ['record' => $this->eventId], panel: 'portal').'?preview=1';
+    }
+
+    public function previewAsAccessUrl(EventPortalAccess $access): string
+    {
+        return ClientEventResource::getUrl('view', ['record' => $this->eventId], panel: 'portal')
+            .'?preview=1&access='.$access->id;
     }
 }

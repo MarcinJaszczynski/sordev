@@ -3,18 +3,21 @@
 namespace App\Filament\Client\Resources\ClientEventResource\Pages;
 
 use App\Filament\Client\Concerns\HasClientTripNav;
-use App\Filament\Client\Pages\ClientAgreementPage;
-use App\Filament\Client\Pages\ClientProgramPage;
+use App\Filament\Client\Pages\ClientContactPage;
 use App\Filament\Client\Resources\ClientEventResource;
-use Filament\Actions;
+use App\Services\ClientTripReadinessService;
 use Filament\Resources\Pages\ViewRecord;
 use Illuminate\Contracts\Support\Htmlable;
+use Illuminate\Support\Facades\Auth;
+use Illuminate\Support\Facades\Schema;
 
 class ViewClientEvent extends ViewRecord
 {
     use HasClientTripNav;
 
     protected static string $resource = ClientEventResource::class;
+
+    protected static string $view = 'filament.client.resources.client-event-resource.pages.view-client-event';
 
     public function getClientTripNavActiveTab(): ?string
     {
@@ -23,33 +26,41 @@ class ViewClientEvent extends ViewRecord
 
     public function getTitle(): string|Htmlable
     {
-        return 'Wycieczka: '.$this->record->name;
+        return $this->record->name;
+    }
+
+    public function getHeading(): string|Htmlable
+    {
+        return '';
     }
 
     protected function getHeaderActions(): array
     {
-        $fullAccess = auth()->user()?->can('viewClientPortalDetails', $this->record) ?? false;
-
-        if (! $fullAccess) {
-            return [];
-        }
-
-        return [
-            Actions\Action::make('program')
-                ->label('Program')
-                ->icon('heroicon-o-calendar-days')
-                ->url(ClientProgramPage::urlFor($this->record)),
-            Actions\Action::make('agreement')
-                ->label('Umowa')
-                ->icon('heroicon-o-document-text')
-                ->url(ClientAgreementPage::urlFor($this->record)),
-        ];
+        return [];
     }
 
     protected function mutateFormDataBeforeFill(array $data): array
     {
-        $this->record->load(['startPlace']);
+        $this->record->load(['startPlace', 'eventTemplate']);
 
         return $data;
+    }
+
+    /**
+     * @return array{readiness: list<array<string, mixed>>, contactUrl: ?string}
+     */
+    protected function getViewData(): array
+    {
+        $user = Auth::user();
+        $readiness = $user
+            ? app(ClientTripReadinessService::class)->items($user, $this->record)
+            : [];
+
+        return [
+            'readiness' => $readiness,
+            'contactUrl' => Schema::hasTable('client_trip_inquiries') && $user
+                ? ClientContactPage::urlFor($this->record)
+                : null,
+        ];
     }
 }

@@ -3,76 +3,36 @@
 namespace App\Services;
 
 use App\Models\ContractTemplate;
+use App\Support\AgreementHtml;
 
 class AgreementTemplateRenderer
 {
+    public function __construct(
+        private readonly AgreementPlaceholderCatalog $catalog,
+    ) {}
+
     public function render(?ContractTemplate $template, array $payload): string
     {
-        $content = trim((string) ($template?->content ?? ''));
+        $content = AgreementHtml::normalizeContent($template?->content ?? '');
+        $content = trim($content);
 
         if ($content === '') {
             $content = $this->defaultTemplate();
         }
 
-        $replacements = [
-            '[NUMER_UMOWY]' => (string) ($payload['agreement_number'] ?? '—'),
-            '[DATA_UMOWY]' => (string) ($payload['agreement_date'] ?? '—'),
-            '[TYP_UMOWY]' => (string) ($payload['agreement_type_label'] ?? '—'),
-            '[NAZWA_IMPREZY]' => (string) ($payload['event_name'] ?? '—'),
-            '[DATA_START]' => (string) ($payload['event_start_date'] ?? '—'),
-            '[DATA_KONIEC]' => (string) ($payload['event_end_date'] ?? '—'),
-            '[KLIENT]' => (string) ($payload['customer_name'] ?? '—'),
-            '[EMAIL]' => (string) ($payload['customer_email'] ?? '—'),
-            '[TELEFON]' => (string) ($payload['customer_phone'] ?? '—'),
-            '[ZAMAWIAJACY_INSTYTUCJA]' => (string) ($payload['ordering_institution'] ?? '—'),
-            '[ZAMAWIAJACY_IMIE_NAZWISKO]' => (string) ($payload['ordering_person'] ?? '—'),
-            '[ZAMAWIAJACY_EMAIL]' => (string) ($payload['ordering_email'] ?? '—'),
-            '[ZAMAWIAJACY_TELEFON]' => (string) ($payload['ordering_phone'] ?? '—'),
-            '[ZAMAWIAJACY_ADRES]' => (string) ($payload['signer_address_full'] ?? '—'),
-            '[OPIEKUN]' => (string) ($payload['ordering_person'] ?? '—'),
-            '[PODPISUJACY_IMIE_NAZWISKO]' => (string) ($payload['signer_name'] ?? '—'),
-            '[PODPISUJACY_EMAIL]' => (string) ($payload['signer_email'] ?? '—'),
-            '[PODPISUJACY_TELEFON]' => (string) ($payload['signer_phone'] ?? '—'),
-            '[PODPISUJACY_ADRES_ULICA]' => (string) ($payload['signer_address_street'] ?? '—'),
-            '[PODPISUJACY_ADRES_NUMER]' => (string) ($payload['signer_address_number'] ?? '—'),
-            '[PODPISUJACY_KOD_POCZTOWY]' => (string) ($payload['signer_postal_code'] ?? '—'),
-            '[PODPISUJACY_MIASTO]' => (string) ($payload['signer_city'] ?? '—'),
-            '[PODPISUJACY_WOJEWODZTWO]' => (string) ($payload['signer_province'] ?? '—'),
-            '[UCZESTNIK]' => (string) ($payload['participant_name'] ?? '—'),
-            '[PODOPIECZNY]' => (string) ($payload['participant_name'] ?? '—'),
-            '[DATA_URODZENIA]' => (string) ($payload['participant_birth_date'] ?? '—'),
-            '[UCZESTNIK_EMAIL]' => (string) ($payload['participant_email'] ?? '—'),
-            '[UCZESTNIK_TELEFON]' => (string) ($payload['participant_phone'] ?? '—'),
-            '[LICZBA_OSOB]' => (string) ($payload['participant_count'] ?? '—'),
-            '[KWOTA]' => (string) ($payload['amount_due'] ?? '0,00'),
-            '[WALUTA]' => (string) ($payload['currency'] ?? 'PLN'),
-            '[CENA_JEDNOSTKOWA]' => (string) ($payload['amount_per_person'] ?? '—'),
-            '[DODATKOWE_UBEZPIECZENIE]' => (string) ($payload['travel_insurance_label'] ?? 'Nie wybrano'),
-            '[MIEJSCE_WYJAZDU]' => (string) ($payload['departure_place'] ?? '—'),
-            '[DATA_WYJAZDU]' => (string) ($payload['departure_date'] ?? '—'),
-            '[GODZINA_WYJAZDU]' => (string) ($payload['departure_time'] ?? '—'),
-            '[MIEJSCE_POWROTU]' => (string) ($payload['return_place'] ?? '—'),
-            '[DATA_POWROTU]' => (string) ($payload['return_date'] ?? '—'),
-            '[GODZINA_POWROTU]' => (string) ($payload['return_time'] ?? '—'),
-            '[ORGANIZATOR_NAZWA]' => (string) ($payload['organizer_name'] ?? '—'),
-            '[ORGANIZATOR_ADRES_1]' => (string) ($payload['organizer_address_line_1'] ?? '—'),
-            '[ORGANIZATOR_ADRES_2]' => (string) ($payload['organizer_address_line_2'] ?? '—'),
-            '[ORGANIZATOR_EMAIL]' => (string) ($payload['organizer_email'] ?? '—'),
-            '[ORGANIZATOR_TELEFON]' => (string) ($payload['organizer_phone'] ?? '—'),
-            '[REFERENCJA_REZERWACJI]' => (string) ($payload['booking_reference'] ?? '—'),
-            '[LINK_UMOWY]' => (string) ($payload['public_link'] ?? '—'),
-            '[UMOWA_BAZOWA]' => (string) ($payload['parent_agreement_number'] ?? '—'),
-            '[RODZAJE_ZMIAN_ANEKSU]' => (string) ($payload['annex_change_types'] ?? '—'),
-            '[OPIS_ZMIAN_PROGRAMU]' => (string) ($payload['annex_program_change_notes'] ?? '—'),
-            '[PROGRAM_ANEKSU]' => (string) ($payload['annex_program_text'] ?? '—'),
-            '[CENA_JEDNOSTKOWA]' => (string) ($payload['unit_price'] ?? ($payload['amount_per_person'] ?? '—')),
-            '[SCHEMAT_PLATNOSCI]' => (string) ($payload['payment_scheme_label'] ?? '—'),
-            '[HARMONOGRAM_PLATNOSCI]' => (string) ($payload['payment_schedule_text'] ?? '—'),
-        ];
+        $replacements = $this->catalog->replacementsFromPayload($payload);
+        $replacements = array_merge(
+            $replacements,
+            $this->customPlaceholderReplacements($template, $payload),
+        );
 
         // Backward compatibility: support legacy moustache placeholders.
         foreach ($payload as $key => $value) {
-            if (! is_string($key)) {
+            if (! is_string($key) || $key === 'custom_placeholder_values') {
+                continue;
+            }
+
+            if (! is_scalar($value) && $value !== null) {
                 continue;
             }
 
@@ -80,6 +40,54 @@ class AgreementTemplateRenderer
         }
 
         return strtr($content, $replacements);
+    }
+
+    /**
+     * Wykrywa nierozwiązane znaczniki [TAG] w treści (do ostrzeżeń w podglądzie).
+     *
+     * @return list<string>
+     */
+    public function unresolvedPlaceholders(string $renderedContent): array
+    {
+        preg_match_all('/\[[^\[\]]+\]/u', $renderedContent, $matches);
+
+        $found = $matches[0] ?? [];
+
+        return array_values(array_unique($found));
+    }
+
+    /**
+     * @return array<string, string>
+     */
+    protected function customPlaceholderReplacements(?ContractTemplate $template, array $payload): array
+    {
+        $definitions = $template?->normalizedCustomPlaceholders() ?? [];
+        $values = (array) ($payload['custom_placeholder_values'] ?? []);
+        $replacements = [];
+
+        foreach ($definitions as $definition) {
+            $key = $definition['key'];
+            $raw = $values[$key] ?? $definition['default'] ?? '—';
+            $value = filled($raw) ? (string) $raw : '—';
+
+            $replacements['['.$key.']'] = $value;
+            $replacements['['.mb_strtoupper($key).']'] = $value;
+            $replacements['['.mb_strtolower($key).']'] = $value;
+        }
+
+        // Wartości podane przy umowie, nawet bez definicji w szablonie (elastyczność).
+        foreach ($values as $key => $raw) {
+            if (! is_string($key) || $key === '') {
+                continue;
+            }
+
+            $value = filled($raw) ? (string) $raw : '—';
+            $replacements['['.$key.']'] ??= $value;
+            $replacements['['.mb_strtoupper($key).']'] ??= $value;
+            $replacements['['.mb_strtolower($key).']'] ??= $value;
+        }
+
+        return $replacements;
     }
 
     protected function defaultTemplate(): string

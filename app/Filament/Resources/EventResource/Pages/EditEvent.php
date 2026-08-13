@@ -55,6 +55,11 @@ class EditEvent extends EditRecord
     protected function getHeaderActions(): array
     {
         return [
+            Actions\Action::make('create_event_task')
+                ->label('Nowe zadanie')
+                ->icon('heroicon-m-plus')
+                ->color('primary')
+                ->action(fn () => $this->openEventCreateTaskModal()),
             Actions\Action::make('download_offer')
                 ->label('Oferta Word')
                 ->icon('heroicon-o-document-arrow-down')
@@ -244,8 +249,10 @@ class EditEvent extends EditRecord
     protected function afterSave(): void
     {
         $newParticipantCount = max(1, (int) ($this->record->participant_count ?? 1));
+        $participantCountChanged = $this->previousParticipantCount !== null
+            && $this->previousParticipantCount !== $newParticipantCount;
 
-        if ($this->previousParticipantCount !== null && $this->previousParticipantCount !== $newParticipantCount) {
+        if ($participantCountChanged) {
             app(EventParticipantCountChangeService::class)->notifyOffice(
                 $this->record,
                 $this->previousParticipantCount,
@@ -287,6 +294,14 @@ class EditEvent extends EditRecord
             );
         } catch (\Throwable $e) {
             // ignore qty sync failures after save
+        }
+
+        if ($participantCountChanged) {
+            try {
+                app(\App\Services\EventHotelPlanService::class)->refreshRoomStructureFromTemplate($this->record->fresh());
+            } catch (\Throwable $e) {
+                // ignore hotel structure refresh failures
+            }
         }
 
         // Zawsze przelicz ilości w punktach programu po zapisie

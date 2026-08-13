@@ -6,11 +6,21 @@ use App\Models\Event;
 use App\Models\EventProgramPoint;
 use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Spatie\Permission\Models\Role;
 use Tests\TestCase;
 
 class EventApiTest extends TestCase
 {
     use RefreshDatabase;
+
+    private function officeUser(): User
+    {
+        Role::firstOrCreate(['name' => 'admin', 'guard_name' => 'web']);
+        $user = User::factory()->create();
+        $user->assignRole('admin');
+
+        return $user;
+    }
 
     private function apiAs(User $user, string $method, string $uri, array $data = [])
     {
@@ -27,7 +37,7 @@ class EventApiTest extends TestCase
 
     public function test_events_index_returns_paginated_list(): void
     {
-        $user = User::factory()->create();
+        $user = $this->officeUser();
         Event::factory()->count(3)->create();
 
         $response = $this->apiAs($user, 'GET', '/events');
@@ -47,7 +57,7 @@ class EventApiTest extends TestCase
 
     public function test_events_index_filters_by_status(): void
     {
-        $user = User::factory()->create();
+        $user = $this->officeUser();
         Event::factory()->create(['status' => Event::STATUS_CONFIRMED]);
         Event::factory()->create(['status' => Event::STATUS_INQUIRY]);
 
@@ -60,7 +70,7 @@ class EventApiTest extends TestCase
 
     public function test_events_index_filters_by_search_name(): void
     {
-        $user = User::factory()->create();
+        $user = $this->officeUser();
         Event::factory()->create(['name' => 'Wycieczka do Krakowa']);
         Event::factory()->create(['name' => 'Wakacje w górach']);
 
@@ -72,7 +82,7 @@ class EventApiTest extends TestCase
 
     public function test_events_index_respects_per_page_param(): void
     {
-        $user = User::factory()->create();
+        $user = $this->officeUser();
         Event::factory()->count(10)->create();
 
         $response = $this->apiAs($user, 'GET', '/events?per_page=3');
@@ -84,7 +94,7 @@ class EventApiTest extends TestCase
 
     public function test_events_index_rejects_invalid_per_page(): void
     {
-        $user = User::factory()->create();
+        $user = $this->officeUser();
 
         $response = $this->apiAs($user, 'GET', '/events?per_page=999');
 
@@ -95,7 +105,7 @@ class EventApiTest extends TestCase
 
     public function test_events_show_returns_event_detail(): void
     {
-        $user = User::factory()->create();
+        $user = $this->officeUser();
         $event = $this->makeEvent();
 
         $response = $this->apiAs($user, 'GET', '/events/'.$event->id);
@@ -108,7 +118,7 @@ class EventApiTest extends TestCase
 
     public function test_events_show_returns_404_for_missing_event(): void
     {
-        $user = User::factory()->create();
+        $user = $this->officeUser();
 
         $response = $this->apiAs($user, 'GET', '/events/99999');
 
@@ -128,7 +138,7 @@ class EventApiTest extends TestCase
 
     public function test_events_calculation_returns_calculation_payload(): void
     {
-        $user = User::factory()->create();
+        $user = $this->officeUser();
         $event = $this->makeEvent(['participant_count' => 12]);
 
         $response = $this->apiAs($user, 'GET', '/events/'.$event->id.'/calculation');
@@ -161,7 +171,7 @@ class EventApiTest extends TestCase
 
     public function test_recalculate_price_returns_price_per_person(): void
     {
-        $user = User::factory()->create();
+        $user = $this->officeUser();
         $event = $this->makeEvent(['participant_count' => 10]);
 
         $response = $this->apiAs($user, 'POST', '/events/'.$event->id.'/recalculate-price');
@@ -185,7 +195,7 @@ class EventApiTest extends TestCase
 
     public function test_reorder_program_points_updates_order(): void
     {
-        $user = User::factory()->create();
+        $user = $this->officeUser();
         $event = $this->makeEvent();
 
         $p1 = EventProgramPoint::factory()->create(['event_id' => $event->id, 'day' => 1, 'order' => 1]);
@@ -208,7 +218,7 @@ class EventApiTest extends TestCase
 
     public function test_reorder_rejects_missing_day(): void
     {
-        $user = User::factory()->create();
+        $user = $this->officeUser();
         $event = $this->makeEvent();
 
         $response = $this->apiAs($user, 'POST', '/events/'.$event->id.'/program-points/reorder', [
@@ -221,7 +231,7 @@ class EventApiTest extends TestCase
 
     public function test_reorder_rejects_point_ids_from_different_day(): void
     {
-        $user = User::factory()->create();
+        $user = $this->officeUser();
         $event = $this->makeEvent();
 
         $p1 = EventProgramPoint::factory()->create(['event_id' => $event->id, 'day' => 1]);
@@ -238,7 +248,7 @@ class EventApiTest extends TestCase
 
     public function test_reorder_rejects_empty_point_ids(): void
     {
-        $user = User::factory()->create();
+        $user = $this->officeUser();
         $event = $this->makeEvent();
 
         $response = $this->apiAs($user, 'POST', '/events/'.$event->id.'/program-points/reorder', [

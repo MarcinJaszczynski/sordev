@@ -20,6 +20,6 @@ class RedirectLegacyEventSettlementPayments extends Page
     {
         $this->record = $this->resolveRecord($record);
 
-        $this->redirect(EventResource::getUrl('participant-payments', ['record' => $this->record]));
+        $this->redirect(EventResource::getUrl('finance-participant-payments', ['record' => $this->record]));
     }
 }

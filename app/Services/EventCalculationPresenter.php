@@ -2,7 +2,6 @@
 
 namespace App\Services;
 
-use App\Filament\Resources\EventResource\Widgets\EventPriceTable;
 use App\Models\Event;
 
 /**
@@ -35,19 +34,17 @@ class EventCalculationPresenter
 
     private function loadWidgetState(): array
     {
-        $widget = app(EventPriceTable::class);
-        $widget->record = $this->event;
-        $widget->loadCalculations();
+        $snapshot = app(EventCalculationSnapshotBuilder::class)->build($this->event);
 
         return [
-            'calculations' => $widget->calculations,
-            'transport_cost' => $widget->transportCost,
-            'event_transport_km' => $widget->eventTransportKm,
-            'detailed_calculations' => $widget->detailedCalculations,
-            'qty_variants' => $widget->qtyVariants,
-            'current_variant' => $widget->currentVariant,
-            'price_rows' => $widget->priceRows,
-            'program_points' => $widget->programPoints,
+            'calculations' => $snapshot['calculations'],
+            'transport_cost' => $snapshot['transport_cost'],
+            'event_transport_km' => $snapshot['event_transport_km'],
+            'detailed_calculations' => $snapshot['detailed_calculations'],
+            'qty_variants' => $snapshot['qty_variants'],
+            'current_variant' => $snapshot['current_variant'],
+            'price_rows' => $snapshot['price_rows'],
+            'program_points' => $snapshot['program_points'],
         ];
     }
 

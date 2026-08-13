@@ -61,18 +61,31 @@ class AuthController extends BaseApiController
         $validated = $request->validate([
             'name' => ['required', 'string', 'max:255'],
             'abilities' => ['nullable', 'array'],
-            'abilities.*' => ['string', 'max:255'],
+            'abilities.*' => ['string', 'max:255', 'in:events:read,events:write,tasks:read,tasks:write,notifications:read'],
         ]);
+
+        $defaultAbilities = ['events:read', 'tasks:read', 'notifications:read'];
+        $abilities = $validated['abilities'] ?? $defaultAbilities;
+
+        // Nie pozwalaj na wildcard — nawet jeśli klient go prześle.
+        $abilities = array_values(array_filter(
+            $abilities,
+            fn (string $ability): bool => $ability !== '*'
+        ));
+
+        if ($abilities === []) {
+            $abilities = $defaultAbilities;
+        }
 
         $token = $request->user()->createToken(
             $validated['name'],
-            $validated['abilities'] ?? ['*']
+            $abilities
         );
 
         return $this->success([
             'token' => $token->plainTextToken,
             'token_type' => 'Bearer',
-            'abilities' => $validated['abilities'] ?? ['*'],
+            'abilities' => $abilities,
         ], 'Token wygenerowany.', 201);
     }
 }

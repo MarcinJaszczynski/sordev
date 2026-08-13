@@ -20,10 +20,10 @@
     <div class="container pt_50">
         <h1>{{ $document->title }}</h1>
         @if($document->excerpt)
-            <div class="doc-excerpt">{!! $document->excerpt !!}</div>
+            <div class="doc-excerpt">{!! \App\Support\AgreementHtml::sanitize((string) $document->excerpt) !!}</div>
         @endif
 
-        <div class="doc-content">{!! $document->content !!}</div>
+        <div class="doc-content">{!! \App\Support\AgreementHtml::sanitize((string) $document->content) !!}</div>
 
         @if($document->attachments && $document->attachments->count())
             <h3>Załączniki</h3>

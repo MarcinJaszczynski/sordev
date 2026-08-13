@@ -77,6 +77,8 @@ class ClientPortalProvisioningService
         bool $sendCredentials = false,
         ?string $plainPassword = null,
     ): EventPortalAccess {
+        $this->ensurePortalRole($role);
+
         if (! $user->hasRole($this->roleNameFor($role))) {
             $user->assignRole($this->roleNameFor($role));
         }
@@ -112,22 +114,21 @@ class ClientPortalProvisioningService
     }
 
     /**
+     * Po self-service (wypełnienie/podpis/płatność) zawsze uczestnik.
+     * Opiekun nadawany jest wyłącznie ręcznie z panelu admina.
+     *
      * @return array{0: string, 1: string|null, 2: string|null}
      */
     protected function resolveRoleEmailName(Contract|EventAgreement $agreement): array
     {
-        if ($agreement->isGroup()) {
-            return [
-                EventPortalAccess::ROLE_GUARDIAN,
-                $agreement->signer_email ?: $agreement->customer_email,
-                $agreement->signer_name ?: $agreement->customer_name,
-            ];
-        }
-
         return [
             EventPortalAccess::ROLE_PARTICIPANT,
-            $agreement->participant_email ?: $agreement->signer_email ?: $agreement->customer_email,
-            $agreement->participant_name ?: $agreement->signer_name,
+            $agreement->participant_email
+                ?: $agreement->signer_email
+                ?: $agreement->customer_email,
+            $agreement->participant_name
+                ?: $agreement->signer_name
+                ?: $agreement->customer_name,
         ];
     }
 
@@ -136,6 +137,8 @@ class ClientPortalProvisioningService
      */
     protected function findOrCreateUser(string $email, ?string $name, string $role): array
     {
+        $this->ensurePortalRole($role);
+
         $existing = User::query()->where('email', $email)->first();
 
         if ($existing) {
@@ -148,8 +151,6 @@ class ClientPortalProvisioningService
 
         $plainPassword = Str::password(12);
 
-        Role::firstOrCreate(['name' => $this->roleNameFor($role), 'guard_name' => 'web']);
-
         $user = User::query()->create([
             'name' => $name ?: Str::before($email, '@'),
             'email' => $email,
@@ -160,6 +161,14 @@ class ClientPortalProvisioningService
         $user->assignRole($this->roleNameFor($role));
 
         return [$user, $plainPassword, true];
+    }
+
+    protected function ensurePortalRole(string $portalRole): void
+    {
+        Role::firstOrCreate([
+            'name' => $this->roleNameFor($portalRole),
+            'guard_name' => 'web',
+        ]);
     }
 
     protected function roleNameFor(string $portalRole): string

@@ -18,19 +18,19 @@ use App\Models\Contractor;
 use App\Models\ContractorType;
 use App\Models\Currency;
 use App\Models\Event;
+use App\Models\EventHotelStay;
 use App\Models\EventTemplate;
 use App\Models\Place;
 use App\Models\PlaceDistance;
 use App\Models\TransportType;
-use App\Models\EventHotelStay;
+use App\Filament\Forms\TransportContractorContactsFields;
+use App\Services\PilotContractorAssignmentService;
 use App\Support\ContractorContactDetails;
 use App\Support\EventListFinanceColumn;
 use App\Support\EventReadinessIndicators;
 use App\Support\ExecutiveAccess;
 use App\Support\FilamentNavigation;
 use App\Support\MoneyFormatter;
-use Illuminate\Support\Collection;
-use Illuminate\Database\Eloquent\Model;
 use Filament\Forms;
 use Filament\Forms\Form;
 use Filament\Pages\SubNavigationPosition;
@@ -39,6 +39,8 @@ use Filament\Resources\Resource;
 use Filament\Tables;
 use Filament\Tables\Table;
 use Illuminate\Database\Eloquent\Builder;
+use Illuminate\Database\Eloquent\Model;
+use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\Schema;
 
 class EventResource extends Resource
@@ -116,7 +118,7 @@ class EventResource extends Resource
         return Forms\Components\Section::make('Finanse')
             ->icon('heroicon-o-banknotes')
             ->description('Cena z kalkulacji, rozliczenie biura i wpłaty klientów.')
-            ->columns(2)
+            ->columns(['default' => 1, 'md' => 2])
             ->hidden(fn (string $operation) => $operation !== 'edit')
             ->schema([
                 Forms\Components\Placeholder::make('fs_calc_cost')
@@ -258,7 +260,7 @@ class EventResource extends Resource
         return Forms\Components\Section::make('Przewoźnik i kierowca')
             ->icon('heroicon-o-truck')
             ->description('Firma transportowa, autokar, miejsce podstawienia i dane kierowcy.')
-            ->columns(3)
+            ->columns(['default' => 1, 'md' => 2, 'xl' => 3])
             ->schema([
                 ...TypedContractorSelect::make(
                     field: 'transport_contractor_id',
@@ -267,6 +269,7 @@ class EventResource extends Resource
                     searchAllField: 'transport_contractor_search_all',
                     defaultTypeOnCreate: 'przewoźnik',
                     helperText: 'Wybierz firmę z listy, wyszukaj po nazwie lub dodaj nową.',
+                    searchAllHelperText: 'Domyślnie tylko przewoźnicy i kierowcy. Zaznacz, gdy firma ma źle przypisany typ.',
                     afterStateUpdated: function ($state, callable $set): void {
                         if (! Schema::hasColumn('events', 'transport_company_name')) {
                             return;
@@ -282,6 +285,16 @@ class EventResource extends Resource
                         $set('transport_company_name', $name ?: null);
                     },
                     columnSpan: 'full',
+                ),
+
+                ...TransportContractorContactsFields::make(
+                    contractorField: 'transport_contractor_id',
+                    prefix: 'transport_carrier',
+                    afterContractorCardUpdated: function (Contractor $contractor, callable $set): void {
+                        if (Schema::hasColumn('events', 'transport_company_name')) {
+                            $set('transport_company_name', $contractor->name);
+                        }
+                    },
                 ),
 
                 Forms\Components\Hidden::make('transport_company_name')
@@ -334,24 +347,36 @@ class EventResource extends Resource
 
                 Forms\Components\Select::make('program_start_place_id')
                     ->label('Początek programu')
-                    ->options(\App\Models\Place::pluck('name', 'id'))
+                    ->options(\App\Models\Place::query()->orderBy('name')->pluck('name', 'id'))
                     ->searchable()
                     ->nullable()
-                    ->dehydrated(false)
+                    ->dehydrated(fn (): bool => Schema::hasColumn('events', 'program_start_place_id'))
                     ->reactive()
-                    ->visible(fn (callable $get, ?\App\Models\Event $record) => empty($get('event_template_id')) && ! ($record?->event_template_id))
+                    ->visible(fn (): bool => Schema::hasColumn('events', 'program_start_place_id'))
                     ->afterStateUpdated(function (callable $get, callable $set, ?\App\Models\Event $record): void {
+                        $templateId = (int) ($get('event_template_id') ?? $record?->event_template_id ?? 0);
                         $startPlaceId = (int) ($get('start_place_id') ?? 0);
                         $programStartPlaceId = (int) ($get('program_start_place_id') ?? 0);
-                        if ($programStartPlaceId > 0 && $startPlaceId > 0) {
+
+                        if ($templateId > 0) {
+                            $set('transfer_km', static::resolveTransferKmFromTemplateState(
+                                $templateId,
+                                $startPlaceId,
+                                (float) ($get('transfer_km') ?? 0)
+                            ));
+                        } elseif ($programStartPlaceId > 0 && $startPlaceId > 0) {
                             $d1 = (float) (\App\Models\PlaceDistance::query()
                                 ->where('from_place_id', $startPlaceId)
                                 ->where('to_place_id', $programStartPlaceId)
                                 ->value('distance_km') ?? 0);
                             $set('transfer_km', $d1 * 2);
                         }
+
+                        static::refreshTotalCostFromTemplateState($set, $get);
                     })
-                    ->helperText('Służy tylko do przeliczenia transferu (x2).'),
+                    ->helperText(fn (callable $get, ?\App\Models\Event $record): string => filled($get('event_template_id') ?? $record?->event_template_id)
+                        ? 'Miejsce startu programu (z szablonu lub skorygowane ręcznie).'
+                        : 'Miejsce rozpoczęcia programu — do kalkulacji transferu i dokumentów.'),
 
                 Forms\Components\TextInput::make('transfer_km')
                     ->label('Km transferu')
@@ -382,7 +407,7 @@ class EventResource extends Resource
                     ->visible(fn (): bool => Schema::hasColumn('events', 'bus_info')),
 
                 Forms\Components\Fieldset::make('Kierowca i podstawienie')
-                    ->columns(2)
+                    ->columns(['default' => 1, 'md' => 2])
                     ->columnSpanFull()
                     ->schema(EventReadinessFields::driverFields()),
 
@@ -887,8 +912,8 @@ class EventResource extends Resource
                     ->label('Gotowość')
                     ->alignCenter()
                     ->html()
-                    ->state(fn (Event $record): string => EventReadinessIndicators::renderHtml($record))
-                    ->tooltip('Przejdź do edycji imprezy, aby zmienić gotowość')
+                    ->state(fn (Event $record): string => EventReadinessIndicators::renderSummaryHtml($record))
+                    ->tooltip(fn (Event $record): string => EventReadinessIndicators::summaryForList($record)['title'])
                     ->extraCellAttributes(['class' => 'event-readiness-cell']),
 
                 // --- Ukryte domyślnie ---
@@ -1056,27 +1081,54 @@ class EventResource extends Resource
                         ->modalHeading('Przypisz pilota')
                         ->modalWidth('md')
                         ->fillForm(fn (Event $record): array => [
+                            'pilot_contractor_id' => Schema::hasColumn('events', 'pilot_contractor_id')
+                                ? app(PilotContractorAssignmentService::class)->resolveContractorIdForEvent($record)
+                                : null,
                             'assigned_to' => $record->assigned_to,
                             'shared_with_pilot' => (bool) ($record->shared_with_pilot ?? false),
                         ])
-                        ->form([
-                            Forms\Components\Select::make('assigned_to')
-                                ->label('Pilot / opiekun')
-                                ->relationship('assignedUser', 'name')
-                                ->searchable()
-                                ->preload()
-                                ->nullable(),
-                            Forms\Components\Toggle::make('shared_with_pilot')
-                                ->label('Udostępnij w panelu pilota')
-                                ->helperText('Impreza widoczna u pilota dopiero po udostępnieniu.')
-                                ->visible(fn (): bool => Schema::hasColumn('events', 'shared_with_pilot')),
-                        ])
+                        ->form(function (): array {
+                            if (Schema::hasColumn('events', 'pilot_contractor_id')) {
+                                return [
+                                    ...TypedContractorSelect::make(
+                                        field: 'pilot_contractor_id',
+                                        label: 'Pilot / opiekun',
+                                        typeNames: ['pilot'],
+                                        searchAllField: 'pilot_contractor_search_all',
+                                        defaultTypeOnCreate: 'pilot',
+                                        helperText: 'Wybierz pilota z kontrahentów albo dodaj nowego (typ „pilot”).',
+                                        searchAllHelperText: 'Domyślnie tylko typ „pilot”. Zaznacz, gdy kontrahent ma źle przypisany typ.',
+                                        columnSpan: 'full',
+                                    ),
+                                    Forms\Components\Toggle::make('shared_with_pilot')
+                                        ->label('Udostępnij w panelu pilota')
+                                        ->helperText('Impreza widoczna u pilota dopiero po udostępnieniu i gdy pilot ma konto użytkownika z tym samym e-mailem.')
+                                        ->visible(fn (): bool => Schema::hasColumn('events', 'shared_with_pilot')),
+                                ];
+                            }
+
+                            return [
+                                Forms\Components\Select::make('assigned_to')
+                                    ->label('Pilot / opiekun')
+                                    ->relationship('assignedUser', 'name')
+                                    ->searchable()
+                                    ->preload()
+                                    ->nullable(),
+                                Forms\Components\Toggle::make('shared_with_pilot')
+                                    ->label('Udostępnij w panelu pilota')
+                                    ->helperText('Impreza widoczna u pilota dopiero po udostępnieniu.')
+                                    ->visible(fn (): bool => Schema::hasColumn('events', 'shared_with_pilot')),
+                            ];
+                        })
                         ->action(function (Event $record, array $data): void {
                             app(AssignEventPilotAction::class)(new AssignEventPilotData(
                                 event: $record,
                                 assignedTo: isset($data['assigned_to']) ? (int) $data['assigned_to'] : null,
                                 sharedWithPilot: Schema::hasColumn('events', 'shared_with_pilot')
                                     ? (bool) ($data['shared_with_pilot'] ?? false)
+                                    : null,
+                                pilotContractorId: Schema::hasColumn('events', 'pilot_contractor_id')
+                                    ? (isset($data['pilot_contractor_id']) ? (int) $data['pilot_contractor_id'] : null)
                                     : null,
                             ));
                         }),
@@ -1358,11 +1410,7 @@ class EventResource extends Resource
             return true;
         }
 
-        if ($user->can('view event')) {
-            return true;
-        }
-
-        return true;
+        return $user->can('view event');
     }
 
     public static function canCreate(): bool

@@ -23,7 +23,8 @@ class EventTransportCostCalculatorTest extends TestCase
 
         $calculator = new EventTransportCostCalculator($event);
 
-        $this->assertSame(1370.0, $calculator->resolveTransportKm());
+        // transfer_km = dojazd+powrót; formuła szablonu: 1.1*(500+370)+50
+        $this->assertSame(1007.0, $calculator->resolveTransportKm());
     }
 
     public function test_cost_within_included_km_package(): void
@@ -46,7 +47,7 @@ class EventTransportCostCalculatorTest extends TestCase
         $event->setRelation('bus', $bus);
 
         $calculator = new EventTransportCostCalculator($event);
-        // km = 40, included = 2 * 5000 = 10000
+        // km = 1.1*(10+20)+50 = 83, included = 2 * 5000 = 10000
         $this->assertSame(2000.0, $calculator->costForVariant(['qty' => 30, 'gratis' => 0, 'staff' => 1, 'driver' => 1]));
     }
 
@@ -72,7 +73,9 @@ class EventTransportCostCalculatorTest extends TestCase
         $calculator = new EventTransportCostCalculator($event);
         $cost = $calculator->costForVariant(['qty' => 30, 'gratis' => 0, 'staff' => 1, 'driver' => 1]);
 
-        $this->assertSame(11099.75, $cost);
+        // km = 1.1*(500.17+370)+50 = 1007.187
+        // included = 1200 → w pakiecie → 4*2430 = 9720
+        $this->assertSame(9720.0, $cost);
     }
 
     public function test_sync_transport_inserts_line_into_detailed_calculations(): void
@@ -111,6 +114,65 @@ class EventTransportCostCalculatorTest extends TestCase
 
         $names = collect($detailed[10]['PLN']['points'])->pluck('name');
         $this->assertTrue($names->contains(EventTransportCostCalculator::TRANSPORT_POINT_NAME));
+    }
+
+    public function test_resolve_bus_recovers_from_partial_select(): void
+    {
+        $bus = Bus::factory()->create([
+            'capacity' => 49,
+            'package_price_per_day' => 1000,
+            'package_km_per_day' => 5000,
+            'extra_km_price' => 10,
+            'currency' => 'PLN',
+        ]);
+
+        $event = Event::factory()->create([
+            'bus_id' => $bus->id,
+            'transfer_km' => 10,
+            'program_km' => 20,
+            'duration_days' => 2,
+            'participant_count' => 30,
+        ]);
+
+        // Lista imprez kiedyś ładowała bus:id,name — bez pól cenowych.
+        $partial = Bus::query()->select(['id', 'name'])->findOrFail($bus->id);
+        $this->assertFalse($partial->hasTransportPricingAttributesLoaded());
+        $event->setRelation('bus', $partial);
+
+        $calculator = new EventTransportCostCalculator($event);
+
+        $resolved = $calculator->resolveBus();
+        $this->assertInstanceOf(Bus::class, $resolved);
+        $this->assertTrue($resolved->hasTransportPricingAttributesLoaded());
+        $this->assertSame(2000.0, $calculator->costForVariant(['qty' => 30, 'gratis' => 0, 'staff' => 1, 'driver' => 1]));
+    }
+
+    public function test_resolve_bus_recovers_from_stale_null_relation(): void
+    {
+        $bus = Bus::factory()->create([
+            'capacity' => 49,
+            'package_price_per_day' => 1000,
+            'package_km_per_day' => 5000,
+            'extra_km_price' => 10,
+            'currency' => 'PLN',
+        ]);
+
+        $event = Event::factory()->create([
+            'bus_id' => $bus->id,
+            'transfer_km' => 10,
+            'program_km' => 20,
+            'duration_days' => 2,
+            'participant_count' => 30,
+        ]);
+
+        // Filament / loadMissing potrafi zostawić relationLoaded('bus') = true przy null.
+        $event->setRelation('bus', null);
+
+        $calculator = new EventTransportCostCalculator($event);
+
+        $this->assertInstanceOf(Bus::class, $calculator->resolveBus());
+        $this->assertSame($bus->id, $calculator->resolveBus()->id);
+        $this->assertSame(2000.0, $calculator->costForVariant(['qty' => 30, 'gratis' => 0, 'staff' => 1, 'driver' => 1]));
     }
 
     public function test_manual_transport_cost_overrides_bus_calculation(): void

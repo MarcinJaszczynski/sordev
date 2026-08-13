@@ -2,7 +2,6 @@
 
 namespace App\Filament\Forms;
 
-use App\Filament\Forms\PhoneInput;
 use Filament\Forms;
 
 final class ContractorLocationFields
@@ -39,7 +38,7 @@ final class ContractorLocationFields
                 ->columnSpan(1),
 
             Forms\Components\Fieldset::make('Osoba na miejscu')
-                ->columns(2)
+                ->columns(['default' => 1, 'md' => 2])
                 ->columnSpanFull()
                 ->schema([
                     Forms\Components\TextInput::make('contact_first_name')

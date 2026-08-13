@@ -9,10 +9,14 @@ use App\Services\Invoices\VendorInvoiceSettlementSync;
 use Filament\Actions;
 use Filament\Resources\Pages\EditRecord;
 use Illuminate\Support\Facades\Auth;
+use Illuminate\Support\Facades\Schema;
 
 class EditVendorInvoice extends EditRecord
 {
     protected static string $resource = VendorInvoiceResource::class;
+
+    /** @var list<int> */
+    protected array $pendingProgramPointIds = [];
 
     protected function getHeaderActions(): array
     {
@@ -28,8 +32,40 @@ class EditVendorInvoice extends EditRecord
         ];
     }
 
+    /**
+     * @param  array<string, mixed>  $data
+     * @return array<string, mixed>
+     */
+    protected function mutateFormDataBeforeFill(array $data): array
+    {
+        $this->record->loadMissing('programPoints');
+
+        $pointIds = $this->record->programPoints->pluck('id')->all();
+        if ($pointIds === [] && $this->record->event_program_point_id) {
+            $pointIds = [(int) $this->record->event_program_point_id];
+        }
+
+        $data['event_program_point_ids'] = $pointIds;
+
+        return $data;
+    }
+
+    /**
+     * @param  array<string, mixed>  $data
+     * @return array<string, mixed>
+     */
     protected function mutateFormDataBeforeSave(array $data): array
     {
+        $raw = $this->form->getRawState();
+        $this->pendingProgramPointIds = collect($raw['event_program_point_ids'] ?? [])
+            ->filter()
+            ->map(fn ($id) => (int) $id)
+            ->unique()
+            ->values()
+            ->all();
+
+        $data['event_program_point_id'] = $this->pendingProgramPointIds[0] ?? null;
+
         if (($data['approval_status'] ?? '') === 'approved' && $this->record->approval_status !== 'approved') {
             $data['approved_by'] = Auth::id();
             $data['approved_at'] = now();
@@ -49,6 +85,8 @@ class EditVendorInvoice extends EditRecord
             $data['paid_amount'] = 0;
         }
 
+        unset($data['event_program_point_ids']);
+
         return $data;
     }
 
@@ -56,12 +94,18 @@ class EditVendorInvoice extends EditRecord
     {
         $fresh = $this->record->fresh();
 
+        if (Schema::hasTable('vendor_invoice_program_point')) {
+            $fresh->syncProgramPointLinks($this->pendingProgramPointIds);
+            $fresh = $fresh->fresh();
+        }
+
         if ($fresh->approval_status === 'approved' && $fresh->sync_to_settlement && ! $fresh->settlement_document_id) {
             app(VendorInvoiceSettlementSync::class)->sync($fresh);
         }
 
-        if ($fresh->event_program_point_id) {
-            app(VendorInvoiceProgramPointSync::class)->sync($fresh);
+        // Wariant A: sync kwoty tylko przy dokładnie jednym punkcie.
+        if (count($this->pendingProgramPointIds) === 1) {
+            app(VendorInvoiceProgramPointSync::class)->sync($fresh->fresh());
         }
     }
 }

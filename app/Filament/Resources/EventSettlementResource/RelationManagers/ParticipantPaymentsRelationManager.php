@@ -16,4 +16,6 @@ class ParticipantPaymentsRelationManager extends RelationManager
     protected static ?string $recordTitleAttribute = 'participant_name';
 
     protected static string $view = 'filament.resources.event-settlement-resource.relation-managers.participant-payments-ledger';
+
+    public ?int $focusPaymentId = null;
 }

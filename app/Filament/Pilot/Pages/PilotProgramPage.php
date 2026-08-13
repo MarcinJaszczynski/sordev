@@ -8,7 +8,6 @@ use App\Models\Event;
 use App\Services\EventProgramPointOrderService;
 use App\Services\PilotAccessService;
 use App\Services\PilotProgramPointFinanceDisplay;
-use App\Services\PilotSetFinanceDisplay;
 use Filament\Pages\Page;
 use Illuminate\Contracts\Support\Htmlable;
 use Illuminate\Support\Facades\Auth;
@@ -59,7 +58,6 @@ class PilotProgramPage extends Page
             'programPoints' => $points,
             'programPointIds' => $programPointIds,
             'financeHintsByPointId' => app(PilotProgramPointFinanceDisplay::class)->hintsForPoints($this->event, $points),
-            'pilotSetFinanceCards' => app(PilotSetFinanceDisplay::class)->cardsForEvent($this->event, $programPointIds),
             'archiveMessage' => app(PilotAccessService::class)->archiveMessage($this->event),
         ];
     }

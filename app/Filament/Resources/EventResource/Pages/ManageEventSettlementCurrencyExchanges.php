@@ -1,21 +1,23 @@
 <?php
 
+declare(strict_types=1);
+
 namespace App\Filament\Resources\EventResource\Pages;
 
-use App\Filament\Resources\EventSettlementResource\RelationManagers\PilotCurrencyExchangesRelationManager;
-
-class ManageEventSettlementCurrencyExchanges extends ManageEventSettlementFinanceSection
+/** @deprecated Bookmark → EventFinancePilotCash */
+class ManageEventSettlementCurrencyExchanges extends RedirectEventToFinance
 {
-    protected static ?string $navigationLabel = 'Wymiany walut';
-
-    protected static ?string $title = 'Wymiany walut';
-
-    protected static ?string $navigationIcon = 'heroicon-o-arrows-right-left';
-
-    protected static function settlementRelationManagers(): array
+    public static function getResourcePageName(): string
     {
-        return [
-            PilotCurrencyExchangesRelationManager::class,
-        ];
+        return 'settlement-currency-exchanges';
+    }
+
+    public function mount(int|string $record): void
+    {
+        $this->record = $this->resolveRecord($record);
+        abort_unless(static::getResource()::canEdit($this->getRecord()), 403);
+        $this->redirect(\App\Filament\Resources\EventResource::getUrl('finance-pilot-cash', [
+            'record' => $this->getRecord(),
+        ]));
     }
 }

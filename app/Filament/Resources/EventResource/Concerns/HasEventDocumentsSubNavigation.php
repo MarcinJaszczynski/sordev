@@ -39,7 +39,7 @@ trait HasEventDocumentsSubNavigation
             $tabs[] = [
                 'key' => 'contracts',
                 'label' => 'Umowy',
-                'description' => 'Umowy i harmonogramy płatności',
+                'description' => null,
                 'icon' => 'heroicon-o-document-check',
                 'url' => EventResource::getUrl('contracts', ['record' => $recordId]),
                 'badge' => null,
@@ -50,7 +50,7 @@ trait HasEventDocumentsSubNavigation
             $tabs[] = [
                 'key' => 'files',
                 'label' => 'Pliki',
-                'description' => 'Dokumenty i paczki PDF',
+                'description' => null,
                 'icon' => 'heroicon-o-folder',
                 'url' => EventResource::getUrl('documents', ['record' => $recordId]),
                 'badge' => null,
@@ -61,7 +61,7 @@ trait HasEventDocumentsSubNavigation
             $tabs[] = [
                 'key' => 'audit',
                 'label' => 'Historia',
-                'description' => 'Dziennik zmian imprezy',
+                'description' => null,
                 'icon' => 'heroicon-o-clock',
                 'url' => EventResource::getUrl('audit', ['record' => $recordId]),
                 'badge' => null,
@@ -103,12 +103,6 @@ trait HasEventDocumentsSubNavigation
     protected function buildModuleBreadcrumbs(): array
     {
         $recordId = $this->getRecord()->getKey();
-        $section = match (static::documentsSubNavigationActiveTab()) {
-            'contracts' => 'Umowy',
-            'files' => 'Pliki',
-            'audit' => 'Historia',
-            default => 'Dokumenty',
-        };
 
         $moduleUrl = EventResource::getUrl('contracts', ['record' => $recordId]);
         if (! Schema::hasTable('contracts') && ! Schema::hasTable('event_agreements')) {
@@ -120,7 +114,18 @@ trait HasEventDocumentsSubNavigation
         return $this->eventRecordBreadcrumbs(
             moduleLabel: 'Dokumenty',
             moduleUrl: $moduleUrl,
-            sectionLabel: $section,
+            sectionLabel: null,
         );
+    }
+
+    public function getHeading(): string|\Illuminate\Contracts\Support\Htmlable
+    {
+        // Pusty string ukrywa cały header Filament (w tym headerActions). HtmlString jest truthy.
+        return new \Illuminate\Support\HtmlString('');
+    }
+
+    public function getSubheading(): ?string
+    {
+        return null;
     }
 }

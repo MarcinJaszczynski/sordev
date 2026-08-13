@@ -30,15 +30,15 @@ class PilotPanelProvider extends PanelProvider
             ->id('pilot')
             ->path('pilot')
             ->login()
-            ->brandName('Portal pilota')
-            ->brandLogo(asset('images/bprafa-pilot-logo.svg'))
-            ->brandLogoHeight('2.25rem')
+            ->brandName('BP RAFA')
+            ->brandLogo(asset('uploads/logo.png'))
+            ->brandLogoHeight('2.1rem')
             ->font('Inter')
-            ->maxContentWidth(MaxWidth::Full)
+            ->maxContentWidth(MaxWidth::SevenExtraLarge)
             ->darkMode(condition: false, isForced: true)
             ->defaultThemeMode(ThemeMode::Light)
             ->colors([
-                'primary' => Color::hex('#0D9488'),
+                'primary' => Color::hex('#0663fc'),
                 'gray' => Color::Slate,
                 'success' => Color::Emerald,
                 'warning' => Color::Amber,
@@ -83,7 +83,8 @@ class PilotPanelProvider extends PanelProvider
             })
             ->renderHook(
                 PanelsRenderHook::HEAD_END,
-                fn (): string => view('filament.components.admin-readability-styles')->render(),
+                fn (): string => view('filament.components.admin-readability-styles')->render()
+                    .view('filament.pilot.components.portal-styles')->render(),
             )
             ->renderHook(
                 PanelsRenderHook::PAGE_START,
@@ -91,10 +92,17 @@ class PilotPanelProvider extends PanelProvider
                     $html = '';
 
                     if (\App\Http\Middleware\PilotPreviewMiddleware::isActive()) {
+                        $banner = app(\App\Services\PilotAccessService::class)->previewBannerContext()
+                            ?? [
+                                'title' => 'Podgląd portalu pilota',
+                                'description' => 'Tryb podglądu biurowego — tylko odczyt.',
+                                'exitUrl' => url('/pilot/pilot-events?exit_preview=1'),
+                            ];
                         $html .= view('filament.components.preview-mode-banner', [
-                            'title' => 'Podgląd portalu pilota',
-                            'description' => 'Widzisz portal tak jak pilot wycieczki. To tryb podglądu biura — nie zastępuje logowania przypisanego pilota.',
-                            'accentClass' => 'border-teal-200 bg-teal-50 text-teal-950',
+                            'title' => $banner['title'],
+                            'description' => $banner['description'],
+                            'exitUrl' => $banner['exitUrl'] ?? null,
+                            'accentClass' => 'border-blue-200 bg-blue-50 text-blue-950',
                         ])->render();
                     }
 

@@ -227,7 +227,7 @@
                         Ukryj godziny
                     </label>
                     @if(!($editForm['hide_times'] ?? false))
-                        <div class="grid grid-cols-2 gap-3">
+                        <div class="grid grid-cols-1 gap-3 sm:grid-cols-2">
                             <label class="block text-sm">Start
                                 <select wire:model.live.debounce.500ms="editForm.start_time" class="mt-1 w-full rounded-lg border-gray-300 text-sm">
                                     <option value="">—</option>
@@ -261,4 +261,6 @@
     @endif
 
     @include('filament.components.event-program-tree-sortable-boot', ['rootId' => 'event-program-days-container'])
+
+    <x-filament-actions::modals />
 </div>

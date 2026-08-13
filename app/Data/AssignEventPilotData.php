@@ -15,5 +15,6 @@ readonly class AssignEventPilotData
         public Event $event,
         public ?int $assignedTo,
         public ?bool $sharedWithPilot = null,
+        public ?int $pilotContractorId = null,
     ) {}
 }

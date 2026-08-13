@@ -101,11 +101,8 @@ class EventParticipantCountChangeTest extends TestCase
             ->where('taskable_id', $event->id)
             ->get();
 
-        $this->assertCount(2, $tasks);
-        $this->assertEqualsCanonicalizing(
-            [$admin->id, $biuro->id],
-            $tasks->pluck('assignee_id')->all(),
-        );
+        $this->assertCount(1, $tasks);
+        $this->assertContains((int) $tasks->first()->assignee_id, [$admin->id, $biuro->id]);
         $this->assertStringContainsString('z 12 na 11', (string) $tasks->first()->description);
     }
 
@@ -123,6 +120,7 @@ class EventParticipantCountChangeTest extends TestCase
             'client_name' => 'Klient testowy',
             'contractor_id' => $contractor->id,
             'status' => Event::STATUS_CONFIRMED,
+            'assigned_to' => $admin->id,
         ]);
 
         $this->actingAs($admin);
@@ -150,11 +148,36 @@ class EventParticipantCountChangeTest extends TestCase
             ->where('taskable_id', $event->id)
             ->get();
 
-        $this->assertCount(2, $tasks);
-        $this->assertEqualsCanonicalizing(
-            [$admin->id, $biuro->id],
-            $tasks->pluck('assignee_id')->all(),
+        $this->assertCount(1, $tasks);
+        $this->assertContains((int) $tasks->first()->assignee_id, [$admin->id, $biuro->id]);
+        $this->assertStringContainsString('z 20 na 24', (string) $tasks->first()->description);
+        $this->assertStringContainsString('formularzu imprezy', (string) $tasks->first()->description);
+    }
+
+    public function test_manual_notify_office_creates_single_shared_task(): void
+    {
+        [$admin, $biuro] = $this->makeOfficeUsers();
+        $event = $this->makeEvent($admin, [
+            'participant_count' => 20,
+            'assigned_to' => $admin->id,
+        ]);
+
+        app(EventParticipantCountChangeService::class)->notifyOffice(
+            $event,
+            20,
+            24,
+            EventParticipantCountChangeService::REASON_MANUAL_EDIT,
+            ['editor_name' => $admin->name],
         );
+
+        $tasks = Task::query()
+            ->where('taskable_type', Event::class)
+            ->where('taskable_id', $event->id)
+            ->get();
+
+        $this->assertCount(1, $tasks);
+        $this->assertSame($admin->id, (int) $tasks->first()->assignee_id);
+        $this->assertNotSame($biuro->id, (int) $tasks->first()->assignee_id);
         $this->assertStringContainsString('z 20 na 24', (string) $tasks->first()->description);
         $this->assertStringContainsString('formularzu imprezy', (string) $tasks->first()->description);
     }
@@ -190,7 +213,7 @@ class EventParticipantCountChangeTest extends TestCase
 
         $event->refresh();
         $this->assertSame(7, (int) $event->participant_count);
-        $this->assertSame(2, Task::query()->where('taskable_id', $event->id)->count());
+        $this->assertSame(1, Task::query()->where('taskable_id', $event->id)->count());
     }
 
     public function test_cancelled_resignation_reverts_count_and_notifies_office(): void
@@ -224,7 +247,7 @@ class EventParticipantCountChangeTest extends TestCase
             ->where('taskable_id', $event->id)
             ->get();
 
-        $this->assertCount(4, $tasks);
+        $this->assertCount(2, $tasks);
         $this->assertTrue(
             $tasks->contains(fn (Task $task): bool => str_contains((string) $task->description, 'z 5 na 6')),
         );
@@ -271,7 +294,7 @@ class EventParticipantCountChangeTest extends TestCase
             ['editor_name' => 'Tester'],
         );
 
-        $this->assertSame(2, Task::query()->where('taskable_id', $event->id)->count());
+        $this->assertSame(1, Task::query()->where('taskable_id', $event->id)->count());
     }
 
     /**

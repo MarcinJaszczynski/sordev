@@ -28,63 +28,30 @@
     --f-border: #e2e8f0;
 }
 
-/* Kanban — używa aliasów --f-* (źródło prawdy: admin-readability-styles) */
-.mkh-kanban-board .mkh-card,
-.filament-kanban .kanban-card,
-.mkh-kanban-board .mkh-card .card-body,
-.filament-kanban .kanban-card .card-body {
-    background: var(--f-surface) !important;
+/* Kanban — style dla aktywnego DOM (.kanban-board / .task-card) */
+.kanban-board .task-card,
+.kanban-board .record {
+    background: var(--f-surface);
 }
 
-/* Ensure inner badges and chips have readable contrast */
-.mkh-kanban-board .mkh-card .badge,
-.filament-kanban .kanban-card .badge,
-.mkh-kanban-board .mkh-card .chip,
-.filament-kanban .kanban-card .chip {
+.kanban-board .priority-badge {
     color: #fff !important;
-}
-
-/* Ensure contrast for badges/pills that may use status colors */
-.mkh-kanban-board .mkh-column-header,
-.mkh-kanban-board .mkh-column-title {
-    color: var(--f-text) !important;
 }
 
 /* End theme variables ------------------------------------------------------------ */
 
-/* Scoped fixes: ensure the Kanban board uses light surfaces when theme=light
-   - Targets the actual Kanban root used in the DOM: div[x-data="kanbanBoard()"]
-   - Overrides Tailwind utility backgrounds (bg-gray-*) inside this subtree only
-     so we don't affect Filament header or other global elements.
-*/
-html[data-theme="light"] div[x-data="kanbanBoard()"] {
+/* Scoped light-theme surfaces for the active Kanban root */
+html[data-theme="light"] .kanban-board {
     background-color: var(--f-bg) !important;
 }
 
-html[data-theme="light"] div[x-data="kanbanBoard()"] .kanban-column,
-html[data-theme="light"] div[x-data="kanbanBoard()"] .kanban-column-header,
-html[data-theme="light"] div[x-data="kanbanBoard()"] .tasks-container,
-html[data-theme="light"] div[x-data="kanbanBoard()"] .task-card,
-html[data-theme="light"] div[x-data="kanbanBoard()"] .record {
-    background-color: var(--f-surface) !important;
+html[data-theme="light"] .kanban-board .kanban-column,
+html[data-theme="light"] .kanban-board .kanban-column-header,
+html[data-theme="light"] .kanban-board .tasks-container {
     color: var(--f-text) !important;
-    border-color: var(--f-border) !important;
 }
 
-/* Neutralize deeply nested bg-* utility classes inside kanban subtree so
-   parent surface color is visible. This avoids changing header or other
-   components because the selector is scoped to the kanban root. */
-html[data-theme="light"] div[x-data="kanbanBoard()"] .bg-gray-900,
-html[data-theme="light"] div[x-data="kanbanBoard()"] .bg-gray-950,
-html[data-theme="light"] div[x-data="kanbanBoard()"] .bg-gray-800,
-html[data-theme="light"] div[x-data="kanbanBoard()"] .bg-gray-700,
-html[data-theme="light"] div[x-data="kanbanBoard()"] .bg-gray-600,
-html[data-theme="light"] div[x-data="kanbanBoard()"] .bg-white {
-    background-color: transparent !important;
-}
-
-/* Make column headers subtle and keep readable text */
-html[data-theme="light"] div[x-data="kanbanBoard()"] .kanban-column-header {
+html[data-theme="light"] .kanban-board .kanban-column-header {
     background: linear-gradient(
         90deg,
         rgba(15, 23, 42, 0.03),
@@ -92,78 +59,7 @@ html[data-theme="light"] div[x-data="kanbanBoard()"] .kanban-column-header {
     ) !important;
 }
 
-/* Ensure priority badges remain readable */
-html[data-theme="light"] div[x-data="kanbanBoard()"] .priority-badge {
-    color: #fff !important;
-}
-
-/* Kanban semantic classes — use these in the kanban Blade so styles come from here */
-.f-kanban-controls {
-    background-color: var(--f-surface) !important;
-    border: 1px solid var(--f-border) !important;
-    color: var(--f-text) !important;
-}
-
-.f-kanban-root {
-    background-color: var(--f-bg) !important;
-}
-
-.f-kanban-column {
-    background-color: var(--f-surface) !important;
-    color: var(--f-text) !important;
-    border: 1px solid var(--f-border) !important;
-    border-radius: 0.5rem;
-}
-
-.f-kanban-column-header {
-    background: linear-gradient(
-        90deg,
-        rgba(15, 23, 42, 0.03),
-        rgba(15, 23, 42, 0.02)
-    ) !important;
-    color: var(--f-text) !important;
-}
-
-.f-kanban-count {
-    background-color: rgba(15, 23, 42, 0.06) !important;
-    color: var(--f-text) !important;
-    padding: 0.125rem 0.5rem;
-    border-radius: 9999px;
-    font-weight: 800;
-}
-
-.f-kanban-task {
-    background-color: var(--f-surface) !important;
-    color: var(--f-text) !important;
-    border: 1px solid var(--f-border) !important;
-    border-radius: 0.5rem !important;
-}
-
-.f-kanban-meta {
-    background-color: rgba(15, 23, 42, 0.04) !important;
-    color: var(--f-text) !important;
-    border: 1px solid rgba(15, 23, 42, 0.04) !important;
-}
-
-.f-kanban-meta-default {
-    background-color: rgba(15, 23, 42, 0.04) !important;
-    color: var(--f-text) !important;
-    border-color: var(--f-border) !important;
-}
-
-.f-kanban-meta-danger {
-    background-color: rgba(220, 38, 38, 0.12) !important;
-    color: #b91c1c !important;
-    border-color: rgba(220, 38, 38, 0.18) !important;
-}
-
-.f-kanban-pill {
-    background-color: rgba(15, 23, 42, 0.04) !important;
-    color: var(--f-text) !important;
-    border: 1px solid var(--f-border) !important;
-}
-
-.f-kanban-priority {
+html[data-theme="light"] .kanban-board .priority-badge {
     color: #fff !important;
 }
 
@@ -253,12 +149,12 @@ a.badge-tag:focus {
 }
 
 /* Kanban — responsywność kolumn */
-.kanban-column, .filament-kanban .kanban-column {
+.kanban-column {
     min-width: clamp(220px, 30vw, 340px);
 }
-.kanban-card, .filament-kanban .kanban-card {
-    min-height: 80px;
-    font-size: clamp(0.9rem, 1vw, 1.1rem);
+.kanban-board .task-card {
+    min-height: 0;
+    font-size: 0.875rem;
 }
 
 /* Tiptap — gdy vite-dist załadowany obok panelu */
@@ -274,7 +170,7 @@ a.badge-tag:focus {
 
 .fi-fo-field-wrp .tiptap-toolbar {
     flex-direction: row;
-    flex-wrap: nowrap;
+    flex-wrap: wrap;
     align-items: center;
     gap: 0.75rem;
     border-bottom: 1px solid rgb(243 244 246);
@@ -282,6 +178,8 @@ a.badge-tag:focus {
     padding: 0.5rem 0.625rem;
     border-top-left-radius: 0.5rem;
     border-top-right-radius: 0.5rem;
+    /* widoczne panele koloru / nagłówków (absolute) */
+    overflow: visible;
 }
 
 .dark .fi-fo-field-wrp .tiptap-toolbar {
@@ -291,11 +189,25 @@ a.badge-tag:focus {
 
 .fi-fo-field-wrp .tiptap-toolbar-left {
     flex: 1 1 auto;
-    flex-wrap: nowrap;
-    overflow-x: auto;
-    scrollbar-width: thin;
+    flex-wrap: wrap;
+    overflow: visible;
     gap: 0.25rem;
     padding: 0;
+}
+
+.fi-fo-field-wrp .tiptap-toolbar-left > .relative {
+    overflow: visible;
+}
+
+.fi-fo-field-wrp .tiptap-panel,
+.tiptap-panel:popover-open {
+    z-index: 9999;
+    overflow: visible;
+}
+
+.fi-fo-field-wrp .tiptap-wrapper {
+    z-index: 20;
+    overflow: visible;
 }
 
 /* Ukryj domyślny przycisk akapitu (¶) — nie ma go we wzorcu Filament */
@@ -359,4 +271,31 @@ a.badge-tag:focus {
     min-height: 6rem;
     font-size: 0.875rem;
     line-height: 1.5;
+}
+
+/* Szablon umowy — RichEditor / Textarea fallback */
+.fi-fo-field-wrp textarea.contract-template-textarea,
+.fi-main textarea.contract-template-textarea {
+    font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace !important;
+    font-size: 0.875rem !important;
+    line-height: 1.65 !important;
+    letter-spacing: normal !important;
+    white-space: pre-wrap !important;
+    word-break: break-word !important;
+    overflow-wrap: anywhere !important;
+    min-height: 28rem !important;
+    tab-size: 4;
+}
+
+.contract-template-preview {
+    font-family: ui-sans-serif, system-ui, sans-serif;
+    font-size: 0.9rem;
+    line-height: 1.65;
+    letter-spacing: normal;
+    white-space: normal;
+    color: #0f172a;
+}
+
+.contract-template-preview p {
+    margin: 0 0 0.65rem;
 }

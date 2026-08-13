@@ -2,11 +2,14 @@
 
 namespace Tests\Feature;
 
+use App\Enums\TaskSource;
 use App\Filament\Resources\EventResource\Pages\ManageEventTasks;
 use App\Filament\Resources\TaskResource\RelationManagers\TasksRelationManager;
 use App\Models\Event;
+use App\Models\Reservation;
 use App\Models\Task;
 use App\Models\User;
+use App\Support\Tasks\TaskNavigation;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Livewire\Livewire;
 use Spatie\Permission\Models\Role;
@@ -56,8 +59,7 @@ class EventTasksRelationManagerTest extends TestCase
                 'ownerRecord' => $event,
                 'pageClass' => ManageEventTasks::class,
             ])
-            ->assertSee('Dodaj zadanie')
-            ->assertSee('Moje')
+            ->assertSee('Nowe zadanie')
             ->call('openCreateTaskModal', [
                 'taskable_type' => Event::class,
                 'taskable_id' => $event->id,
@@ -85,6 +87,25 @@ class EventTasksRelationManagerTest extends TestCase
             ->assertSet('mountedActions', ['createTask']);
     }
 
+    public function test_event_workflow_bar_opens_create_task_modal_on_current_page(): void
+    {
+        $user = User::factory()->create();
+        $user->assignRole('admin');
+
+        $event = Event::factory()->create();
+
+        Livewire::actingAs($user)
+            ->test(\App\Filament\Resources\EventResource\Pages\EditEvent::class, [
+                'record' => $event->getKey(),
+            ])
+            ->call('openEventCreateTaskModal')
+            ->assertSet('mountedActions', ['createTask'])
+            ->assertSet('pendingCreateFormData', [
+                'taskable_type' => Event::class,
+                'taskable_id' => $event->id,
+            ]);
+    }
+
     public function test_event_tasks_edit_deep_link_opens_modal(): void
     {
         $user = User::factory()->create();
@@ -107,5 +128,40 @@ class EventTasksRelationManagerTest extends TestCase
             ])
             ->assertSet('editingTaskId', $task->id)
             ->assertSet('mountedActions', ['editTask']);
+    }
+
+    public function test_event_tasks_include_reservation_tasks_and_resolve_navigation(): void
+    {
+        $user = User::factory()->create();
+        $user->assignRole('admin');
+
+        $event = Event::factory()->create();
+        $reservation = Reservation::create([
+            'event_id' => $event->id,
+            'status' => 'pending',
+            'booking_reference' => 'RES-TEST-1',
+            'created_by' => $user->id,
+        ]);
+
+        $task = Task::factory()->create([
+            'title' => 'Potwierdź rezerwację testową',
+            'taskable_type' => Reservation::class,
+            'taskable_id' => $reservation->id,
+            'author_id' => $user->id,
+            'assignee_id' => $user->id,
+            'source' => TaskSource::System->value,
+            'status_id' => Task::getDefaultStatusId(),
+        ]);
+
+        Livewire::actingAs($user)
+            ->test(TasksRelationManager::class, [
+                'ownerRecord' => $event,
+                'pageClass' => ManageEventTasks::class,
+            ])
+            ->assertCanSeeTableRecords([$task])
+            ->assertSee('Systemowe');
+
+        $this->assertSame($event->id, TaskNavigation::resolveEvent($task)?->id);
+        $this->assertStringContainsString('/events/'.$event->id.'/tasks', TaskNavigation::fullViewUrl($task));
     }
 }

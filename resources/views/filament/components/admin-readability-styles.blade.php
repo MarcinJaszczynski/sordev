@@ -570,8 +570,7 @@
     .fi-ta-table-ctn,
     .fi-ta-ctn,
     .event-program-planner-scroll,
-    .mkh-kanban-board,
-    .f-kanban-root {
+    .kanban-board {
         overflow-x: auto;
         overflow-y: visible; /* hidden blocked dropdowns/tooltips inside table cells */
         -webkit-overflow-scrolling: touch;
@@ -1459,6 +1458,48 @@
         font-weight: 500;
     }
 
+    .epp-prices-pilot-due {
+        margin-top: 0.1rem;
+        font-size: 0.65rem;
+        line-height: 1.25;
+        color: #1d4ed8;
+        font-weight: 600;
+    }
+
+    .epp-prices-row--remaining .epp-prices-remaining-inline {
+        color: #be123c;
+        font-weight: 700;
+    }
+
+    .epp-prices-row--plan-differs .epp-prices-value {
+        color: #b45309;
+    }
+
+    .epp-prices-status {
+        margin-top: 0.2rem;
+        display: flex;
+        justify-content: flex-end;
+    }
+
+    .epp-prices-doc {
+        margin-top: 0.15rem;
+        max-width: 11rem;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+        font-size: 0.62rem;
+        line-height: 1.25;
+        font-weight: 600;
+    }
+
+    .epp-prices-doc--ok {
+        color: #047857;
+    }
+
+    .epp-prices-doc--missing {
+        color: #b45309;
+    }
+
     @media (max-width: 1024px) {
         .epp-name-cell--child {
             padding-left: 0.65rem;
@@ -1942,14 +1983,12 @@
         }
     }
 
-    .mkh-kanban-board,
-    .f-kanban-root {
+    .kanban-board {
         gap: 1rem;
         padding-bottom: 0.25rem;
     }
 
-    .mkh-kanban-board .mkh-column,
-    .f-kanban-column {
+    .kanban-board .kanban-column {
         min-width: var(--admin-column-min-width);
         max-width: min(24rem, 92vw);
     }
@@ -2041,8 +2080,7 @@
             min-width: 38rem;
         }
 
-        .mkh-kanban-board .mkh-column,
-        .f-kanban-column {
+        .kanban-board .kanban-column {
             min-width: min(17rem, 88vw);
         }
     }
@@ -2157,6 +2195,74 @@
 
     .event-readiness-cell {
         cursor: pointer;
+        vertical-align: middle;
+        min-width: 7.5rem;
+    }
+
+    .event-readiness-summary {
+        display: inline-flex;
+        flex-direction: column;
+        align-items: center;
+        gap: 0.35rem;
+        max-width: 9rem;
+    }
+
+    .event-readiness-summary__score {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        min-width: 2.75rem;
+        padding: 0.15rem 0.5rem;
+        border-radius: 999px;
+        font-size: 0.75rem;
+        font-weight: 700;
+        line-height: 1.2;
+        border: 1px solid transparent;
+    }
+
+    .event-readiness-summary--ok .event-readiness-summary__score {
+        background: #ecfdf5;
+        color: #047857;
+        border-color: #a7f3d0;
+    }
+
+    .event-readiness-summary--warn .event-readiness-summary__score {
+        background: #fffbeb;
+        color: #b45309;
+        border-color: #fde68a;
+    }
+
+    .event-readiness-summary--danger .event-readiness-summary__score {
+        background: #fef2f2;
+        color: #b91c1c;
+        border-color: #fecaca;
+    }
+
+    .event-readiness-summary--muted .event-readiness-summary__score {
+        background: #f3f4f6;
+        color: #6b7280;
+        border-color: #e5e7eb;
+    }
+
+    .event-readiness-summary__blockers {
+        display: flex;
+        flex-wrap: wrap;
+        justify-content: center;
+        gap: 0.2rem;
+    }
+
+    .event-readiness-summary__blockers .event-indicator {
+        font-size: 0.65rem;
+        padding: 0.05rem 0.35rem;
+    }
+
+    .event-readiness-overview__group-label {
+        margin: 0 0 0.5rem;
+        font-size: 0.7rem;
+        font-weight: 700;
+        letter-spacing: 0.04em;
+        text-transform: uppercase;
+        color: #6b7280;
     }
 
     .event-readiness-cell:hover .event-indicators--clickable .event-indicator {
@@ -2182,6 +2288,16 @@
 
     .event-readiness-overview-card:hover {
         box-shadow: var(--sor-shadow-md, 0 4px 12px rgb(0 0 0 / 0.06));
+    }
+
+    a.event-readiness-overview-card--link {
+        text-decoration: none;
+        color: inherit;
+        cursor: pointer;
+    }
+
+    a.event-readiness-overview-card--link:hover {
+        border-color: var(--sor-primary, #2563eb);
     }
 
     .event-readiness-overview-card__icon-wrap {
@@ -2415,6 +2531,14 @@
         font-size: 0.75rem;
         color: #6b7280;
         margin-bottom: 2px;
+    }
+
+    .admin-event-times {
+        font-size: 0.7rem;
+        color: #9ca3af;
+        line-height: 1.3;
+        margin-bottom: 3px;
+        text-transform: none;
     }
 
     .admin-event-name {
@@ -3177,36 +3301,89 @@
         border-color: var(--sor-border) !important;
     }
 
-    /* Tiptap — formularz tworzenia imprezy i sekcje uwag */
+    /* Tiptap — formularz tworzenia imprezy, uwagi, modal zadania */
     .fi-body .fi-fo-field-wrp .tiptap-wrapper,
-    .fi-body .event-notes-editor .tiptap-wrapper {
+    .fi-body .event-notes-editor .tiptap-wrapper,
+    .fi-body .tiptap-wrapper {
         position: relative;
-        overflow: visible;
+        /* z-0 z pakietu chowało panele pod kolejnymi sekcjami formularza */
+        z-index: 20;
+        overflow: visible !important;
         border-radius: var(--sor-radius-md);
     }
 
     .fi-body .fi-fo-field-wrp .tiptap-toolbar,
-    .fi-body .event-notes-editor .tiptap-toolbar {
+    .fi-body .event-notes-editor .tiptap-toolbar,
+    .fi-body .tiptap-toolbar {
         position: sticky;
         top: 0;
-        z-index: 20;
-        overflow-x: auto;
-        flex-wrap: nowrap;
+        z-index: 30;
+        /* overflow-x:auto obcinało submenu koloru / nagłówków (absolute panels) */
+        overflow: visible !important;
+        flex-wrap: wrap;
         background: var(--sor-surface-elevated);
         border-bottom: 1px solid var(--sor-border);
     }
 
     .fi-body .fi-fo-field-wrp .tiptap-toolbar-left,
-    .fi-body .event-notes-editor .tiptap-toolbar-left {
-        flex-wrap: nowrap;
-        min-width: max-content;
+    .fi-body .event-notes-editor .tiptap-toolbar-left,
+    .fi-body .tiptap-toolbar-left {
+        flex-wrap: wrap;
+        overflow: visible !important;
+        min-width: 0;
+    }
+
+    .fi-body .tiptap-toolbar .relative {
+        overflow: visible !important;
+    }
+
+    /*
+     * Panele kolor/nagłówki renderują się przez Popover API (top layer).
+     * Sam z-index nie wystarczy względem .fi-layout { overflow-x-clip }.
+     */
+    .fi-body .tiptap-panel,
+    .tiptap-panel:popover-open {
+        z-index: 9999 !important;
+        min-width: 12rem;
+        max-width: min(22rem, 92vw);
+        box-shadow: 0 10px 25px rgb(0 0 0 / 0.18);
+        border: 0;
+        padding: 0;
+        overflow: visible;
+    }
+
+    .fi-body .tiptap-panel tiptap-hex-color-picker,
+    .tiptap-panel tiptap-hex-color-picker,
+    .tiptap-hex-picker {
+        display: block;
+        width: 100%;
+        min-width: 200px;
+        height: 200px;
+        margin: 0 auto;
+    }
+
+    .tiptap-color-picker-body {
+        min-width: 13.5rem;
+        max-width: 16rem;
+        padding: 0.25rem;
+    }
+
+    .tiptap-color-a-icon {
+        color: inherit;
+    }
+
+    .fi-body .tiptap-tool .tiptap-color-a-icon {
+        pointer-events: none;
     }
 
     .fi-body .fi-fo-field-wrp .tiptap-prosemirror-wrapper,
     .fi-body .event-notes-editor .tiptap-prosemirror-wrapper {
         min-height: 8rem;
         max-height: none;
-        overflow: visible;
+    }
+
+    .task-full-editor-shell {
+        overflow: visible !important;
     }
 
     .fi-body .fi-fo-field-wrp .tiptap-editor .ProseMirror,
@@ -3214,6 +3391,8 @@
         min-height: 6rem;
         margin-inline: 0 !important;
         text-align: left !important;
+        line-height: 1.6 !important;
+        letter-spacing: normal !important;
     }
 
     .fi-body .tiptap-prosemirror-wrapper {
@@ -3225,18 +3404,391 @@
     }
 
     /* Nadpisuje inline text-align:center z Tiptap (akapit / nagłówek) */
-    .fi-body .tiptap-editor .ProseMirror :where(p, h1, h2, h3, h4, h5, h6, li, blockquote, td, th) {
+    .fi-body .tiptap-editor .ProseMirror mark,
+    .fi-body .event-notes-editor .tiptap-editor .ProseMirror mark {
+        background-color: #fef08a;
+        color: inherit;
+        border-radius: 0.15rem;
+        padding: 0 0.1em;
+    }
+
+    .fi-body .tiptap-editor .ProseMirror [style*="color"],
+    .fi-body .event-notes-editor .tiptap-editor .ProseMirror span[style*="color"] {
+        /* zachowaj inline color z TipTap Color */
+    }
+
+    .fi-body .fi-fo-field-wrp .tiptap-editor .ProseMirror :where(p, h1, h2, h3, h4, h5, h6, li, blockquote, td, th) {
         text-align: left !important;
+        line-height: 1.6 !important;
+        letter-spacing: normal !important;
     }
 
     .fi-body .fi-fo-rich-editor .tiptap-bubble-menu,
     .fi-body .fi-fo-rich-editor .tiptap-floating-menu,
     .fi-body .event-notes-editor .tiptap-bubble-menu,
-    .fi-body .event-notes-editor .tiptap-floating-menu {
-        z-index: 40;
+    .fi-body .event-notes-editor .tiptap-floating-menu,
+    .fi-body .tiptap-bubble-menu,
+    .fi-body .tiptap-floating-menu {
+        z-index: 90;
     }
 
     .fi-body .fi-section:not(.fi-collapsed) .fi-fo-field-wrp:has(.event-notes-editor) {
         overflow: visible;
+    }
+
+/* Szablon umowy — Filament RichEditor: czytelna typografia */
+.fi-body .fi-fo-rich-editor.contract-template-rich,
+.fi-body .contract-template-rich .fi-fo-rich-editor,
+.fi-body .fi-fo-field-wrp:has(.contract-template-rich) .fi-fo-rich-editor,
+.fi-body .fi-fo-field-wrp:has(.contract-template-rich) .ProseMirror,
+.fi-body .fi-fo-field-wrp:has(.contract-template-rich) .tiptap {
+    font-family: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial, sans-serif !important;
+    font-size: 0.95rem !important;
+    line-height: 1.65 !important;
+    letter-spacing: normal !important;
+}
+
+.fi-body .fi-fo-field-wrp:has(.contract-template-rich) .ProseMirror,
+.fi-body .fi-fo-field-wrp:has(.contract-template-rich) .tiptap {
+    min-height: 22rem !important;
+    padding: 0.85rem 1rem !important;
+}
+
+.fi-body .fi-fo-field-wrp:has(.contract-template-rich) .ProseMirror p,
+.fi-body .fi-fo-field-wrp:has(.contract-template-rich) .tiptap p {
+    margin: 0 0 0.65rem !important;
+    line-height: 1.65 !important;
+    letter-spacing: normal !important;
+}
+
+.fi-body .fi-fo-field-wrp:has(.contract-template-rich) .ProseMirror strong,
+.fi-body .fi-fo-field-wrp:has(.contract-template-rich) .tiptap strong {
+    font-weight: 700 !important;
+}
+
+.fi-body .contract-template-preview {
+    font-size: 0.9rem;
+    line-height: 1.65;
+    letter-spacing: normal;
+    white-space: normal;
+}
+
+.fi-body .contract-template-preview p {
+    margin: 0 0 0.65rem;
+}
+
+    /* =====================================================================
+       Responsive system — sticky ladder, overflow, dense UI, devices
+       Breakpoints: phone ≤639 | tablet ≤767/1023 | laptop ≥1024 | desktop ≥1280
+       ===================================================================== */
+    :root {
+        --sor-chrome-top: 0px;
+        --sor-sticky-z-topbar: 60;
+        --sor-sticky-z-workflow: 28;
+        --sor-sticky-z-local: 18;
+        --sor-sticky-z-dropdown: 50;
+    }
+
+    @media (min-width: 1280px) {
+        :root {
+            --sor-chrome-top: 3.25rem;
+        }
+    }
+
+    /* Drabina sticky: topbar → workflow nav → lokalny toolbar */
+    .workflow-module-nav {
+        top: var(--sor-chrome-top) !important;
+        z-index: var(--sor-sticky-z-workflow) !important;
+    }
+
+    .admin-program-toolbar,
+    .sor-sticky-toolbar {
+        position: sticky;
+        top: var(--sor-chrome-top);
+        z-index: var(--sor-sticky-z-local);
+        background: color-mix(in srgb, var(--sor-surface-elevated) 95%, transparent);
+        backdrop-filter: blur(6px);
+    }
+
+    .fi-page:has(.workflow-module-nav) .admin-program-toolbar,
+    .fi-page:has(.workflow-module-nav) .sor-sticky-toolbar {
+        top: calc(var(--sor-chrome-top) + 3.25rem);
+    }
+
+    /* Na telefonie/tablecie wyłączamy sticky lokalne — unikamy nakładania warstw */
+    @media (max-width: 1023.98px) {
+        .admin-program-toolbar,
+        .sor-sticky-toolbar,
+        .fi-page:has(.workflow-module-nav) .admin-program-toolbar,
+        .fi-page:has(.workflow-module-nav) .sor-sticky-toolbar {
+            position: relative !important;
+            top: auto !important;
+            z-index: auto !important;
+            backdrop-filter: none;
+        }
+
+        .workflow-module-nav {
+            position: relative !important;
+            top: auto !important;
+            z-index: 10 !important;
+        }
+
+        .fi-body .fi-fo-field-wrp .tiptap-toolbar,
+        .fi-body .event-notes-editor .tiptap-toolbar {
+            position: relative !important;
+            top: auto !important;
+        }
+    }
+
+    /* Opisy w workflow nav — chowamy na wąskich ekranach, zostaje label */
+    @media (max-width: 1023.98px) {
+        .workflow-module-nav-desc {
+            display: none !important;
+        }
+
+        .workflow-module-nav-item {
+            min-width: 7.25rem !important;
+            padding-block: 0.55rem !important;
+        }
+
+        .workflow-module-nav .text-\[0\.65rem\] {
+            display: none;
+        }
+    }
+
+    /* Gwarancja scrollu poziomego — nigdy nie giną w overflow-hidden parent */
+    .sor-scroll-x,
+    .sor-dense-table-wrap,
+    .fi-section-content:has(table),
+    .sor-lw-card:has(table) {
+        overflow-x: auto;
+        -webkit-overflow-scrolling: touch;
+        max-width: 100%;
+    }
+
+    .sor-lw-card.overflow-hidden:has(table),
+    .overflow-hidden:has(> .overflow-x-auto),
+    .overflow-hidden:has(> table) {
+        overflow-x: auto !important;
+    }
+
+    /* Gridy dense UI — wymuszenie 1 kolumny na telefonie */
+    @media (max-width: 639.98px) {
+        .sor-grid-responsive,
+        .event-program-planner .grid.grid-cols-3,
+        .event-program-planner .grid.grid-cols-2,
+        .event-program-day-tree .grid.grid-cols-2,
+        .fi-page .grid.grid-cols-3:not(.sm\:grid-cols-2):not(.sm\:grid-cols-3) {
+            grid-template-columns: minmax(0, 1fr) !important;
+        }
+
+        .fi-page .grid.grid-cols-2:not([class*="sm:grid-cols"]):not([class*="md:grid-cols"]) {
+            grid-template-columns: minmax(0, 1fr) !important;
+        }
+
+        .fi-header-actions,
+        .fi-page-header-actions,
+        .fi-ac {
+            flex-wrap: wrap !important;
+            gap: 0.5rem !important;
+            max-width: 100%;
+        }
+
+        .fi-header-actions .fi-btn,
+        .fi-page-header-actions .fi-btn,
+        .fi-ac .fi-btn {
+            max-width: 100%;
+        }
+
+        .fi-main,
+        .fi-page,
+        .fi-page-content,
+        .fi-section-content {
+            min-width: 0 !important;
+            max-width: 100% !important;
+        }
+    }
+
+    @media (min-width: 640px) and (max-width: 1023.98px) {
+        .event-program-planner .grid.grid-cols-3 {
+            grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+        }
+    }
+
+    /* Chat — layout mobile: lista LUB wątek */
+    .sor-chat-shell {
+        min-height: min(80vh, 52rem);
+        max-width: 100%;
+    }
+
+    .sor-chat-shell .sor-chat-aside {
+        width: 20rem;
+        min-width: 16rem;
+        max-width: 20rem;
+        flex-shrink: 0;
+    }
+
+    .sor-chat-shell .sor-chat-main {
+        min-width: 0;
+        flex: 1 1 auto;
+    }
+
+    @media (max-width: 767.98px) {
+        .sor-chat-shell {
+            margin: 0.5rem !important;
+            min-height: calc(100dvh - 6rem);
+            flex-direction: column;
+        }
+
+        .sor-chat-shell .sor-chat-aside {
+            width: 100% !important;
+            min-width: 0 !important;
+            max-width: none !important;
+            border-right: none !important;
+            border-bottom: 1px solid var(--sor-border);
+            max-height: 100%;
+        }
+
+        .sor-chat-shell[data-mobile-pane="thread"] .sor-chat-aside {
+            display: none !important;
+        }
+
+        .sor-chat-shell[data-mobile-pane="list"] .sor-chat-main {
+            display: none !important;
+        }
+
+        .sor-chat-shell .sor-chat-back {
+            display: inline-flex !important;
+        }
+    }
+
+    .sor-chat-shell .sor-chat-back {
+        display: none;
+    }
+
+    /* Kanban / kalendarz — bezpieczny scroll */
+    @media (max-width: 1023.98px) {
+        .kanban-board {
+            display: flex;
+            flex-wrap: nowrap;
+            overflow-x: auto;
+            padding-bottom: 0.75rem;
+            gap: 0.75rem;
+            -webkit-overflow-scrolling: touch;
+        }
+
+        .kanban-board .kanban-column {
+            flex: 0 0 auto;
+            min-width: min(17rem, 85vw);
+            max-width: 85vw;
+        }
+
+        .event-program-planner-scroll,
+        .admin-program-planner-section,
+        .fc {
+            max-width: 100%;
+        }
+
+        .event-program-planner-scroll .fc {
+            min-width: 36rem;
+        }
+    }
+
+    /* Drawer finansów — pełna szerokość na telefonie */
+    @media (max-width: 639.98px) {
+        .fi-page aside.max-w-md {
+            max-width: 100% !important;
+        }
+
+        .custom-topbar-notifications .topbar-notification-panel,
+        .topbar-notification-panel {
+            width: min(28rem, calc(100vw - 1rem)) !important;
+            left: 0.5rem !important;
+            right: 0.5rem !important;
+        }
+    }
+
+    /* Formularze Filament — pola nie wychodzą poza viewport */
+    .fi-fo-component-ctn,
+    .fi-fo-field-wrp,
+    .fi-input-wrp,
+    .fi-select-input,
+    .fi-textarea {
+        max-width: 100%;
+        min-width: 0;
+    }
+
+    /* Livewire sticky toolbary (uczestnicy / hotel) — klasa zamiast Tailwind sticky top-0 */
+    .sor-sticky-toolbar {
+        margin-bottom: 1rem;
+        border: 1px solid var(--sor-border);
+        border-radius: var(--sor-radius-xl);
+        padding: 1rem;
+        box-shadow: var(--sor-shadow-sm);
+    }
+
+    /* Tablet landscape / iPad — bezpieczne paddingi contentu */
+    @media (min-width: 768px) and (max-width: 1279.98px) {
+        .fi-page-content,
+        .fi-simple-main-ctn {
+            padding-inline: 0.85rem;
+        }
+
+        .fi-ta-table {
+            min-width: min(var(--admin-table-min-width), 100%);
+        }
+    }
+
+    /* Zapobieganie nachodzeniu flex/grid children — bez globalnego min-width:0 na * */
+    .fi-page .fi-section-content,
+    .fi-page .fi-fo-component-ctn,
+    .fi-page .fi-fo-field-wrp,
+    .sor-chat-shell .sor-chat-aside,
+    .sor-chat-shell .sor-chat-main,
+    .workflow-module-nav {
+        min-width: 0;
+        max-width: 100%;
+    }
+
+    /* Hint scrollu poziomego — widoczny tylko gdy kontener faktycznie się przewija */
+    @media (max-width: 1023.98px) {
+        .sor-scroll-hint {
+            position: relative;
+        }
+
+        .sor-scroll-hint::before {
+            content: '↔ Przesuń w bok, aby zobaczyć więcej';
+            display: block;
+            margin-bottom: 0.4rem;
+            font-size: 0.72rem;
+            font-weight: 600;
+            letter-spacing: 0.01em;
+            color: var(--sor-text-muted);
+        }
+
+        .fi-ta-ctn:has(.fi-ta-table),
+        .sor-dense-table-wrap,
+        .sor-scroll-x,
+        .overflow-x-auto:has(table[class*='min-w-']) {
+            position: relative;
+        }
+
+        .fi-ta-ctn:has(.fi-ta-table)::before,
+        .sor-dense-table-wrap::before,
+        .sor-scroll-x::before,
+        .overflow-x-auto:has(table[class*='min-w-'])::before {
+            content: '↔ Przesuń w bok, aby zobaczyć więcej';
+            display: block;
+            margin-bottom: 0.35rem;
+            font-size: 0.72rem;
+            font-weight: 600;
+            color: var(--sor-text-muted);
+        }
+    }
+
+    /* Modale Livewire fixed — nad sidebar, pod Filament modal */
+    .fi-body .fixed.inset-0.z-40,
+    .fi-body .fixed.inset-0.z-50 {
+        z-index: 1400 !important;
     }
 </style>

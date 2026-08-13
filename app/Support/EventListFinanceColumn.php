@@ -3,6 +3,8 @@
 namespace App\Support;
 
 use App\Models\Event;
+use App\Services\EventManualPricePerPersonService;
+use App\Services\EventPriceSummaryService;
 use App\Services\ParticipantPaymentBalanceService;
 use App\Services\SettlementPaymentHealthService;
 use Illuminate\Support\Collection;
@@ -11,6 +13,17 @@ final class EventListFinanceColumn
 {
     /** @var array<int, bool> */
     private static array $overdueByEventId = [];
+
+    /**
+     * Cache podsumowania na stronę listy.
+     *
+     * @var array<int, array{
+     *   due_pln: float,
+     *   base_pln: float,
+     *   price_per_person_label: string
+     * }>
+     */
+    private static array $priceSummaryByEventId = [];
 
     public static function resolveCurrencyCode(mixed $livewire): string
     {
@@ -28,8 +41,6 @@ final class EventListFinanceColumn
     }
 
     /**
-     * Wstępne wyliczenie overdue dla strony listy — jedno przejście zamiast N+1 przy renderze.
-     *
      * @param  Collection<int, Event>|iterable<Event>  $records
      */
     public static function warmForPage(iterable $records): void
@@ -40,21 +51,23 @@ final class EventListFinanceColumn
             return;
         }
 
-        $service = app(ParticipantPaymentBalanceService::class);
+        $balanceService = app(ParticipantPaymentBalanceService::class);
 
         foreach ($events as $event) {
             $eventId = (int) $event->getKey();
 
-            if (array_key_exists($eventId, self::$overdueByEventId)) {
-                continue;
+            if (! array_key_exists($eventId, self::$overdueByEventId)) {
+                try {
+                    $aggregate = $balanceService->eventAggregate($event);
+                    self::$overdueByEventId[$eventId] = ($aggregate['count'] ?? 0) > 0
+                        && ($aggregate['coverage_status'] ?? '') === SettlementPaymentHealthService::STATUS_OVERDUE;
+                } catch (\Throwable) {
+                    self::$overdueByEventId[$eventId] = false;
+                }
             }
 
-            try {
-                $aggregate = $service->eventAggregate($event);
-                self::$overdueByEventId[$eventId] = ($aggregate['count'] ?? 0) > 0
-                    && ($aggregate['coverage_status'] ?? '') === SettlementPaymentHealthService::STATUS_OVERDUE;
-            } catch (\Throwable) {
-                self::$overdueByEventId[$eventId] = false;
+            if (! array_key_exists($eventId, self::$priceSummaryByEventId)) {
+                self::$priceSummaryByEventId[$eventId] = self::resolveClientPriceSummary($event);
             }
         }
     }
@@ -62,6 +75,7 @@ final class EventListFinanceColumn
     public static function resetWarmCache(): void
     {
         self::$overdueByEventId = [];
+        self::$priceSummaryByEventId = [];
     }
 
     public static function html(Event $record, string $currencyCode = 'PLN'): string
@@ -69,11 +83,12 @@ final class EventListFinanceColumn
         $currencyCode = strtoupper($currencyCode);
         $fmt = fn ($v) => e(MoneyFormatter::format($v, $currencyCode));
 
-        $participantCount = max(1, (int) ($record->participant_count ?? 1));
-        $dueAmount = (float) ($record->total_cost ?? 0);
-        $pricePerPerson = $dueAmount > 0
-            ? round($dueAmount / $participantCount, 2)
-            : 0.0;
+        $summary = self::clientPriceSummaryFor($record);
+        $dueAmount = (float) $summary['due_pln'];
+        $baseAmount = (float) $summary['base_pln'];
+        $priceLabel = $summary['price_per_person_label'] !== ''
+            ? $summary['price_per_person_label']
+            : '—';
 
         $paidAmount = self::resolvePaidAmount($record, $currencyCode);
         $paymentsColor = self::resolveClientPaymentsColor($record, $paidAmount, $dueAmount);
@@ -84,10 +99,80 @@ final class EventListFinanceColumn
             .'<td style="color:'.$vColor.';font-size:0.78rem;font-weight:600;white-space:nowrap">'.$value.'</td>'
             .'</tr>';
 
-        return '<table style="border-collapse:collapse" title="Szczegóły kalkulacji na karcie finansów imprezy">'
+        return '<table style="border-collapse:collapse" title="Cena klienta z kalkulatora imprezy; koszt bazowy bez marży/podatków">'
             .$row('Wpłaty klienta:', $paymentsDisplay, $paymentsColor)
-            .$row('Cena za os.:', e(MoneyFormatter::format($pricePerPerson, $currencyCode)), '#1f2937')
+            .$row('Cena za os.:', e($priceLabel), '#1f2937')
+            .$row('Koszt bazowy:', $baseAmount > 0 ? $fmt($baseAmount) : '—', '#4b5563')
             .'</table>';
+    }
+
+    /**
+     * @return array{due_pln: float, base_pln: float, price_per_person_label: string}
+     */
+    private static function clientPriceSummaryFor(Event $record): array
+    {
+        $eventId = (int) $record->getKey();
+
+        if ($eventId > 0 && array_key_exists($eventId, self::$priceSummaryByEventId)) {
+            return self::$priceSummaryByEventId[$eventId];
+        }
+
+        $summary = self::resolveClientPriceSummary($record);
+
+        if ($eventId > 0) {
+            self::$priceSummaryByEventId[$eventId] = $summary;
+        }
+
+        return $summary;
+    }
+
+    /**
+     * @return array{due_pln: float, base_pln: float, price_per_person_label: string}
+     */
+    private static function resolveClientPriceSummary(Event $record): array
+    {
+        $manual = app(EventManualPricePerPersonService::class);
+        $manualLines = $manual->manualLinesForEvent($record);
+        $storedBase = round((float) ($record->total_cost ?? 0), 2);
+
+        if ($manualLines !== []) {
+            $label = $manual->formatLinesLabel($manualLines) ?? '—';
+            $paying = max(1, (int) ($record->participant_count ?? 1));
+            $plnPerPerson = collect($manualLines)
+                ->first(fn (array $line): bool => strtoupper((string) ($line['currency_code'] ?? '')) === 'PLN');
+            $duePln = $plnPerPerson
+                ? round((float) $plnPerPerson['amount'] * $paying, 2)
+                : 0.0;
+
+            // Lista: bez żywego forEvent — baza z events.total_cost (aktualizowana przy zapisie).
+            return [
+                'due_pln' => $duePln,
+                'base_pln' => $storedBase,
+                'price_per_person_label' => $label,
+            ];
+        }
+
+        try {
+            $calc = app(EventPriceSummaryService::class)->forEvent(
+                $record,
+                includeNearest: false,
+            );
+            if ($calc['ready'] ?? false) {
+                return [
+                    'due_pln' => (float) ($calc['total_pln'] ?? 0),
+                    'base_pln' => (float) ($calc['base_pln'] ?? $storedBase),
+                    'price_per_person_label' => (string) ($calc['price_per_person_label'] ?? '—'),
+                ];
+            }
+        } catch (\Throwable) {
+            // fallback poniżej
+        }
+
+        return [
+            'due_pln' => 0.0,
+            'base_pln' => $storedBase,
+            'price_per_person_label' => '—',
+        ];
     }
 
     private static function resolveClientPaymentsColor(Event $record, float $paidAmount, float $dueAmount): string

@@ -71,14 +71,19 @@ class ProgramPointPaymentStatusResolver
         $stackSum = (float) $settlement->costs()
             ->where('source_type', self::PAYMENT_SOURCE_TYPE)
             ->where('source_id', $point->id)
-            ->where('payment_status', '!=', 'cancelled')
+            ->whereIn('payment_status', SettlementPaymentHealthService::BOOKED_PAYMENT_STATUSES)
             ->sum('actual_amount_pln');
 
         if ($stackSum > 0) {
             return $stackSum;
         }
 
-        return (float) ($baseCost->actual_amount_pln ?? $baseCost->actual_amount ?? 0);
+        // Legacy: actual na planie tylko gdy status zaksięgowany.
+        if (SettlementPaymentHealthService::isBookedPaymentStatus($baseCost->payment_status)) {
+            return (float) ($baseCost->actual_amount_pln ?? $baseCost->actual_amount ?? 0);
+        }
+
+        return 0.0;
     }
 
     /**
@@ -99,7 +104,8 @@ class ProgramPointPaymentStatusResolver
             ];
         }
 
-        if ($status === 'paid' || $paid + 0.01 >= $planned) {
+        // Źródło prawdy: kwoty, nie flaga payment_status.
+        if (SettlementPaymentHealthService::isFullyPaid($paid, $planned)) {
             return [
                 'code' => '$',
                 'color' => 'green',
@@ -135,7 +141,7 @@ class ProgramPointPaymentStatusResolver
             }
         }
 
-        if ($paid > 0.0 && $paid + 0.01 < $planned) {
+        if (SettlementPaymentHealthService::isPartiallyPaid($paid, $planned)) {
             return [
                 'code' => '$',
                 'color' => 'orange',

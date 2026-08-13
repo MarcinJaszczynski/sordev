@@ -1,0 +1,9 @@
+Data operacji;Data księgowania;Tytuł;Nadawca/Odbiorca;Numer rachunku;Kwota
+01.08.2026;01.08.2026;Wpłata za wycieczkę umowa DEMO/19/2 Piotr Nowak 26JGYZY7;Piotr Nowak;48 1160 2202 0000 0003 1234 5678;1 800,00
+02.08.2026;02.08.2026;Rezerwacja nr 26JGYZY7U003 Maria Wisniewska Paryz;Maria Wiśniewska;48 1140 2004 0000 3102 7654 3210;1 600,00
+03.08.2026;03.08.2026;Dopłata Ewa Dabrowska impreza 26JGYZY7;Ewa Dąbrowska;48 1050 1025 1000 0092 1472 6379;650,00
+04.08.2026;04.08.2026;Zaliczka na umowę DEMO/19/1 Anna Kowalska;Anna Kowalska;48 1240 6175 1111 0000 4825 1101;1 600,00
+05.08.2026;05.08.2026;Zaliczka pilota 26JGYZY7 Paryż;Biuro Podróży SOR;12 3456 7890 0000 0000 0000 0001;2 500,00
+06.08.2026;06.08.2026;Wpłata Test Jeden 26JGYZY7;Test Jeden;48 1020 1026 0000 0422 7020 0360;500,00
+07.08.2026;07.08.2026;Przelew bez dopasowania — faktura FV/XYZ/99;Nieznany Kontrahent Sp. z o.o.;48 1090 2590 0000 0001 3579 2468;123,45
+08.08.2026;08.08.2026;Wypłata biurowa — koszt hotelu;Hotel Paris Demo;48 1160 2202 0000 0003 9999 0001;-450,00

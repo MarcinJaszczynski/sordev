@@ -1,13 +1,13 @@
 <?php
 
+declare(strict_types=1);
+
 namespace App\Services;
 
-use App\Filament\Resources\EventTemplateResource\Widgets\EventTemplatePriceTable;
 use App\Models\Currency;
 use App\Models\EventTemplate;
 use App\Models\EventTemplatePricePerPerson;
 use App\Models\EventTemplateQty;
-use App\Models\EventTemplateStartingPlaceAvailability;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 
@@ -16,6 +16,11 @@ use Illuminate\Support\Facades\Log;
  * --------------------------------------------------------------
  * Cel: Jedno, spójne źródło wyliczania wszystkich cen (PLN + inne waluty)
  * dla kombinacji (event_template, start_place, qty_variant).
+ *
+ * Warstwa: Service (domena). Nie zależy od Filament / Livewire.
+ * Silnik obliczeń: {@see EventTemplateCalculationEngine}.
+ * UI (np. EventTemplatePriceTable) może czytać zapisane ceny lub wołać ten kalkulator —
+ * nigdy odwrotnie.
  *
  * Główne założenia:
  * 1. Wejściem jest EventTemplate z kompletnymi relacjami (programPoints->children, taxes, markup, bus, hotelDays, dayInsurances, qtyVariants itp.).
@@ -30,24 +35,15 @@ use Illuminate\Support\Facades\Log;
  * 8. Start places: jeśli są wpisy w event_template_starting_place_availability (available=true) – używamy ich;
  *    w przeciwnym wypadku fallback do wszystkich miejsc oznaczonych starting_place=1 lub (ostatni fallback) null.
  */
-/**
- * UnifiedPriceCalculator
- *
- * Adapter korzystający z tych samych obliczeń co widok kalkulacji w panelu
- * (Widget `EventTemplatePriceTable`) w celu ujednolicenia wyników i zapisu
- * do tabeli `event_template_price_per_person`.
- *
- * Dokumentacja wstępna po polsku: patrz `docs/PL/README.md`.
- */
 class UnifiedPriceCalculator
 {
-    private ?EventTemplateCalculationEngine $engine = null;
+    private EventTemplateCalculationEngine $engine;
 
     private ?\Illuminate\Support\Collection $qtyLookup = null;
 
     public function __construct(?EventTemplateCalculationEngine $engine = null)
     {
-        $this->engine = $engine;
+        $this->engine = $engine ?? app(EventTemplateCalculationEngine::class);
     }
 
     /**
@@ -262,7 +258,7 @@ class UnifiedPriceCalculator
 
     /**
      * Recalculates and persists for all relevant start places.
-     * available=true w availability => użyj tego zestawu; fallback: wszystkie Place::starting_place.
+     * available=true w availability => użyj tego zestawu (bez fallbacku do wszystkich startowych).
      */
     public function recalculateForTemplate(EventTemplate $template, bool $deleteExisting = false): void
     {
@@ -273,35 +269,54 @@ class UnifiedPriceCalculator
         }
     }
 
-    /* =============================== */
-    /* Poniżej sekcja prywatnych metod */
-    /* =============================== */
+    /**
+     * Usuwa globalne duplikaty cen (ta sama kombinacja kluczy) — zachowuje najnowszy rekord.
+     */
+    public function removeDuplicatePrices(): int
+    {
+        $duplicateGroups = EventTemplatePricePerPerson::query()
+            ->select('event_template_id', 'event_template_qty_id', 'currency_id', 'start_place_id')
+            ->selectRaw('COUNT(*) as count')
+            ->groupBy('event_template_id', 'event_template_qty_id', 'currency_id', 'start_place_id')
+            ->having('count', '>', 1)
+            ->get();
 
+        $removedCount = 0;
+        foreach ($duplicateGroups as $group) {
+            $records = EventTemplatePricePerPerson::query()
+                ->where([
+                    'event_template_id' => $group->event_template_id,
+                    'event_template_qty_id' => $group->event_template_qty_id,
+                    'currency_id' => $group->currency_id,
+                    'start_place_id' => $group->start_place_id,
+                ])
+                ->orderByDesc('created_at')
+                ->get();
+
+            for ($i = 1; $i < $records->count(); $i++) {
+                $records[$i]->delete();
+                $removedCount++;
+            }
+        }
+
+        if ($removedCount > 0) {
+            Log::info("[UnifiedPriceCalculator] Removed {$removedCount} duplicate price records globally");
+        }
+
+        return $removedCount;
+    }
+
+    /**
+     * @return array<int|string, mixed>
+     */
     protected function calculateDetailedRows(EventTemplate $template, ?int $startPlaceId = null): array
     {
         try {
-            // Use injected engine if available (for testing); otherwise use widget
-            if ($this->engine !== null) {
-                $rawData = $this->engine->calculateDetailed($template, $startPlaceId, null, false);
+            $rawData = $this->engine->calculateDetailed($template, $startPlaceId, null, false);
 
-                // Transform engine output to expected format if needed
-                return $rawData ?? [];
-            }
-
-            $widget = app(EventTemplatePriceTable::class);
-            $widget->record = $template;
-            $widget->startPlaceId = $startPlaceId;
-            $widget->mount();
-
-            $rows = $widget->detailedCalculations ?? [];
-
-            if ($rows instanceof \Illuminate\Support\Collection) {
-                return $rows->toArray();
-            }
-
-            return is_array($rows) ? $rows : [];
+            return $rawData ?? [];
         } catch (\Throwable $e) {
-            Log::error('[UnifiedPriceCalculator] Widget calculations failed: '.$e->getMessage(), [
+            Log::error('[UnifiedPriceCalculator] Engine calculations failed: '.$e->getMessage(), [
                 'template_id' => $template->id,
                 'start_place_id' => $startPlaceId,
             ]);

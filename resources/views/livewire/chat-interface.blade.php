@@ -1,5 +1,6 @@
-<div class="h-screen flex flex-col bg-gray-50 dark:bg-gray-900" 
+<div class="h-[100dvh] max-h-screen flex flex-col bg-gray-50 dark:bg-gray-900" 
      x-data="{ 
+         mobilePane: @js($selectedConversationId ? 'thread' : 'list'),
          scrollToBottom() { 
              const container = document.getElementById('messages-container'); 
              if (container) { 
@@ -11,12 +12,16 @@
      @scroll-to-bottom.window="scrollToBottom()" 
      @message-sent.window="scrollToBottom()">
     
-    <div class="flex flex-1 overflow-hidden rounded-xl shadow-sm ring-1 ring-gray-950/5 dark:ring-white/10 m-4 bg-white dark:bg-gray-900">
+    <div
+        class="sor-chat-shell flex flex-1 overflow-hidden rounded-xl shadow-sm ring-1 ring-gray-950/5 dark:ring-white/10 m-4 bg-white dark:bg-gray-900"
+        :data-mobile-pane="mobilePane"
+    >
         <!-- Lewy panel: lista czatów -->
-        <aside class="w-80 min-w-[280px] max-w-xs bg-white dark:bg-gray-900 border-r border-gray-200 dark:border-gray-700 flex flex-col h-full">
+        <aside class="sor-chat-aside w-80 min-w-[280px] max-w-xs bg-white dark:bg-gray-900 border-r border-gray-200 dark:border-gray-700 flex flex-col h-full">
             <div class="flex flex-col gap-3 px-4 py-4 border-b border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 flex-shrink-0">
                 <button 
-                    wire:click="startNewConversation" 
+                    wire:click="startNewConversation"
+                    @click="mobilePane = 'thread'"
                     class="w-full flex items-center justify-center gap-2 px-4 py-3 rounded-lg bg-primary-600 hover:bg-primary-700 text-white font-semibold shadow-sm transition-colors duration-200 text-sm" 
                     title="Nowy czat"
                 >
@@ -40,6 +45,7 @@
                         $otherUser = $conversation->participants->where('id', '!=', auth()->id())->first(); 
                     @endphp
                     <div wire:click="selectConversation({{ $conversation->id }})"
+                        @click="mobilePane = 'thread'"
                         class="flex items-center gap-3 px-4 py-3 cursor-pointer transition-colors border-b border-gray-200 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-800 {{ $selectedConversationId === $conversation->id ? 'bg-primary-50 dark:bg-primary-900/30' : '' }}">
                         
                         <div class="relative flex-shrink-0">
@@ -104,14 +110,24 @@
         </aside>
         
         <!-- Środkowy panel: rozmowa -->
-        <main class="flex-1 flex flex-col bg-white dark:bg-gray-900 min-h-0">
+        <main class="sor-chat-main flex-1 flex flex-col bg-white dark:bg-gray-900 min-h-0">
             @if($selectedConversationId)
                 @php
                     $selectedConv = $selectedConversation;
                 @endphp
                 @if($selectedConv)
                     <!-- Nagłówek rozmowy (stały) -->
-                    <header class="flex items-center gap-3 px-6 py-4 border-b border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 flex-shrink-0">
+                    <header class="flex items-center gap-3 px-4 sm:px-6 py-4 border-b border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 flex-shrink-0">
+                        <button
+                            type="button"
+                            class="sor-chat-back inline-flex items-center justify-center rounded-lg border border-gray-200 bg-white p-2 text-gray-700 shadow-sm dark:border-gray-700 dark:bg-gray-800 dark:text-gray-200"
+                            @click="mobilePane = 'list'"
+                            aria-label="Wróć do listy rozmów"
+                        >
+                            <svg class="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7"/>
+                            </svg>
+                        </button>
                         @if($selectedConv->type === 'group')
                         <div class="w-10 h-10 rounded-full bg-gradient-to-br from-primary-500 to-purple-600 flex items-center justify-center">
                             <svg class="w-5 h-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">

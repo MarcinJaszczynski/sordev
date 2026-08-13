@@ -38,7 +38,10 @@ class SalesInvoice extends Model
         'margin_net_pln',
         'vat_on_margin_pln',
         'currency',
-        'ksef_number',
+            'ksef_number',
+        'fakturownia_id',
+        'fakturownia_url',
+        'fakturownia_synced_at',
         'notes',
         'created_by',
     ];
@@ -49,6 +52,7 @@ class SalesInvoice extends Model
         'margin_gross_pln' => 'decimal:2',
         'margin_net_pln' => 'decimal:2',
         'vat_on_margin_pln' => 'decimal:2',
+        'fakturownia_synced_at' => 'datetime',
     ];
 
     public static array $types = [

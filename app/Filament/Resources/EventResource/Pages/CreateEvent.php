@@ -12,6 +12,7 @@ use App\Models\Event;
 use App\Models\EventTemplate;
 use App\Models\User;
 use App\Services\EventInquiryNotificationService;
+use App\Services\PilotContractorAssignmentService;
 use Filament\Forms;
 use Filament\Notifications\Notification;
 use Filament\Resources\Pages\CreateRecord;
@@ -53,6 +54,7 @@ class CreateEvent extends CreateRecord
                     'bus_id' => $this->template->bus_id,
                     'markup_id' => $this->template->markup_id,
                     'name' => $this->template->name,
+                    'program_start_place_id' => $this->template->start_place_id,
                 ]);
             }
         }
@@ -111,8 +113,11 @@ class CreateEvent extends CreateRecord
                         ->label('Szablon imprezy')
                         ->options(EventTemplate::where('deleted_at', null)->pluck('name', 'id'))
                         ->searchable()
-                        ->placeholder('Bez szablonu (impreza czysta)')
-                        ->nullable()
+                        ->placeholder(fn (): string => $this->canCreateWithoutTemplate()
+                            ? 'Bez szablonu (impreza czysta)'
+                            : 'Wybierz szablon')
+                        ->nullable(fn (): bool => $this->canCreateWithoutTemplate())
+                        ->required(fn (): bool => ! $this->canCreateWithoutTemplate())
                         ->reactive()
                         ->afterStateUpdated(function ($state, callable $set, callable $get) {
                             $this->template = $state ? EventTemplate::find($state) : null;
@@ -123,6 +128,9 @@ class CreateEvent extends CreateRecord
                                 $set('bus_id', $this->template->bus_id);
                                 $set('markup_id', $this->template->markup_id);
                                 $set('name', $this->template->name);
+                                if (\Illuminate\Support\Facades\Schema::hasColumn('events', 'program_start_place_id')) {
+                                    $set('program_start_place_id', $this->template->start_place_id);
+                                }
 
                                 $startPlaceId = (int) ($get('start_place_id') ?? 0);
                                 $allowed = $this->template->resolveAvailableStartPlaceIds();
@@ -136,11 +144,17 @@ class CreateEvent extends CreateRecord
                                     $startPlaceId,
                                     (float) ($this->template->transfer_km ?? 0)
                                 ));
+                            } else {
+                                if (\Illuminate\Support\Facades\Schema::hasColumn('events', 'program_start_place_id')) {
+                                    // Czyszczenie szablonu — zostaw program_start do ręcznego wyboru.
+                                }
                             }
 
                             $this->refreshTotalCostFromTemplateState($set, $get);
                         })
-                        ->helperText('Szablon programu i bazowej kalkulacji. Szczegóły ceny dojrzewają po utworzeniu w module Finanse.'),
+                        ->helperText(fn (): string => $this->canCreateWithoutTemplate()
+                            ? 'Szablon programu i bazowej kalkulacji. Imprezę bez szablonu mogą zakładać tylko admin / super_admin.'
+                            : 'Wybór szablonu jest wymagany. Imprezę bez szablonu mogą zakładać tylko admin / super_admin.'),
 
                     // Wartości z szablonu — bez UI na Create (Operacje / Finanse po zapisie).
                     Forms\Components\Hidden::make('bus_id')->dehydrated(),
@@ -155,7 +169,7 @@ class CreateEvent extends CreateRecord
             Forms\Components\Section::make('Grupa i miejsce startu')
                 ->icon('heroicon-o-users')
                 ->description('Potrzebne do utworzenia z szablonu i wstępnej kalkulacji. Resztę parametrów operacyjnych uzupełnisz później.')
-                ->columns(2)
+                ->columns(['default' => 1, 'md' => 2])
                 ->schema([
                     ...EventKeyInfoFields::participantFields(
                         onUpdated: fn (callable $get, callable $set) => $this->refreshTotalCostFromTemplateState($set, $get),
@@ -219,6 +233,10 @@ class CreateEvent extends CreateRecord
             $this->data['client_email'] ?? null,
         );
 
+        if (blank($this->data['event_template_id'] ?? null) && ! $this->canCreateWithoutTemplate()) {
+            $errors['event_template_id'] = 'Wybór szablonu jest wymagany. Imprezę bez szablonu mogą zakładać tylko admin / super_admin.';
+        }
+
         if ($errors !== []) {
             throw \Illuminate\Validation\ValidationException::withMessages(
                 collect($errors)->mapWithKeys(
@@ -242,7 +260,20 @@ class CreateEvent extends CreateRecord
             }
         }
 
+        if (blank($data['event_template_id'] ?? null) && ! $this->canCreateWithoutTemplate()) {
+            throw \Illuminate\Validation\ValidationException::withMessages([
+                'data.event_template_id' => ['Wybór szablonu jest wymagany. Imprezę bez szablonu mogą zakładać tylko admin / super_admin.'],
+            ]);
+        }
+
         return $data;
+    }
+
+    protected function canCreateWithoutTemplate(): bool
+    {
+        $user = Auth::user();
+
+        return $user instanceof User && $user->hasRole(['admin', 'super_admin']);
     }
 
     protected function syncClientFieldsFromOrderingParties(): void
@@ -327,9 +358,24 @@ class CreateEvent extends CreateRecord
         $pilotBirth = $data['pilot_birth_date'] ?? null;
         $pilotPesel = $data['pilot_pesel'] ?? null;
         $pilotPhone = $data['pilot_phone'] ?? null;
+        $pilotContractorId = Schema::hasColumn('events', 'pilot_contractor_id')
+            ? (filled($data['pilot_contractor_id'] ?? null) ? (int) $data['pilot_contractor_id'] : null)
+            : null;
         $orderingParties = $data['ordering_parties'] ?? null;
         $orderingContractorIds = $data['orderingContractors'] ?? null;
-        unset($data['ordering_parties'], $data['orderingContractors'], $data['pilot_birth_date'], $data['pilot_pesel'], $data['pilot_phone']);
+        unset(
+            $data['ordering_parties'],
+            $data['orderingContractors'],
+            $data['pilot_birth_date'],
+            $data['pilot_pesel'],
+            $data['pilot_phone'],
+            $data['pilot_contractor_search_all'],
+        );
+
+        if (Schema::hasColumn('events', 'pilot_contractor_id') && $pilotContractorId) {
+            $contractor = \App\Models\Contractor::query()->find($pilotContractorId);
+            $data['assigned_to'] = app(PilotContractorAssignmentService::class)->resolvePortalUserId($contractor);
+        }
 
         if (! empty($data['start_date']) && empty($data['end_date'])) {
             $start = \Carbon\Carbon::parse($data['start_date']);
@@ -360,7 +406,7 @@ class CreateEvent extends CreateRecord
             ]));
             Log::info('CreateEvent:web:after_create_from_template', ['event_id' => $event->id]);
 
-            User::syncPilotDemographics($event->assigned_to, $pilotBirth, $pilotPesel, $pilotPhone);
+            $this->syncPilotAfterCreate($event, $pilotContractorId, $pilotBirth, $pilotPesel, $pilotPhone);
 
             return $event;
         }
@@ -391,9 +437,31 @@ class CreateEvent extends CreateRecord
             }
         }
 
-        User::syncPilotDemographics($event->assigned_to, $pilotBirth, $pilotPesel, $pilotPhone);
+        $this->syncPilotAfterCreate($event, $pilotContractorId, $pilotBirth, $pilotPesel, $pilotPhone);
 
         return $event;
+    }
+
+    protected function syncPilotAfterCreate(
+        Event $event,
+        ?int $pilotContractorId,
+        mixed $pilotBirth,
+        ?string $pilotPesel,
+        ?string $pilotPhone,
+    ): void {
+        $assignmentService = app(PilotContractorAssignmentService::class);
+
+        if (Schema::hasColumn('events', 'pilot_contractor_id') && $pilotContractorId) {
+            $assignmentService->syncContractorDemographics($pilotContractorId, $pilotBirth, $pilotPesel);
+            $assignmentService->syncPortalUserDemographicsFromContractor(
+                $pilotContractorId,
+                filled($event->assigned_to) ? (int) $event->assigned_to : null,
+            );
+
+            return;
+        }
+
+        User::syncPilotDemographics($event->assigned_to, $pilotBirth, $pilotPesel, $pilotPhone);
     }
 
     protected function refreshTotalCostFromTemplateState(callable $set, callable $get): void

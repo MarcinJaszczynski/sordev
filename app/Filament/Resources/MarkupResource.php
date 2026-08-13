@@ -19,6 +19,10 @@ class MarkupResource extends Resource
 
     protected static ?string $navigationLabel = 'Narzuty';
 
+    protected static ?string $modelLabel = 'narzut';
+
+    protected static ?string $pluralModelLabel = 'narzuty';
+
     protected static ?string $navigationGroup = FilamentNavigation::GROUP_CONFIG;
 
     public static function form(Form $form): Form
@@ -26,7 +30,7 @@ class MarkupResource extends Resource
         return $form
             ->schema([
                 Forms\Components\Section::make('Dane narzutu')
-                    ->columns(3)
+                    ->columns(['default' => 1, 'md' => 2, 'xl' => 3])
                     ->schema([
                         Forms\Components\TextInput::make('name')
                             ->label('Nazwa')
@@ -48,7 +52,7 @@ class MarkupResource extends Resource
                     ]),
 
                 Forms\Components\Section::make('Upust')
-                    ->columns(3)
+                    ->columns(['default' => 1, 'md' => 2, 'xl' => 3])
                     ->schema([
                         Forms\Components\TextInput::make('discount_percent')
                             ->label('Upust (%)')

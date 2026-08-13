@@ -2,8 +2,11 @@
 
 namespace App\Filament\Resources\EventResource\Pages;
 
-use App\Filament\Forms\EventReadinessFields;
+use App\Filament\Actions\HelpArticleAction;
+use App\Filament\Forms\ClientInvoiceRequestFormFields;
+use App\Filament\Pages\ClientInvoiceRequestsInboxPage;
 use App\Filament\Resources\EventResource;
+use App\Support\ClientInvoiceRequestAdminHelper;
 use Filament\Actions;
 use Filament\Navigation\NavigationItem;
 use Filament\Notifications\Notification;
@@ -48,6 +51,36 @@ class ManageEventParticipants extends ManageEventParticipantsSection
     protected function getHeaderActions(): array
     {
         return [
+            HelpArticleAction::make('uczestnicy'),
+            Actions\Action::make('create_invoice_request')
+                ->label('Wniosek o fakturę')
+                ->icon('heroicon-o-receipt-percent')
+                ->color('primary')
+                ->visible(fn (): bool => Schema::hasTable('client_invoice_requests'))
+                ->modalHeading(fn (): string => 'Wniosek o fakturę — '.$this->currentEvent()->name)
+                ->modalDescription('Formularz dla biura — tak jak klient wysyła z portalu. Po zapisie wniosek pojawi się w skrzynce wniosków o fakturę.')
+                ->modalIcon('heroicon-o-receipt-percent')
+                ->modalWidth('3xl')
+                ->modalSubmitActionLabel('Zapisz wniosek')
+                ->fillForm(fn (): array => ClientInvoiceRequestAdminHelper::prefillFromEvent($this->currentEvent()))
+                ->form(fn (): array => ClientInvoiceRequestFormFields::adminModalSchema(
+                    lockedEventId: (int) $this->currentEvent()->id,
+                    event: $this->currentEvent(),
+                ))
+                ->action(function (array $data): void {
+                    ClientInvoiceRequestAdminHelper::createFromAdminForm($data);
+
+                    Notification::make()
+                        ->title('Utworzono wniosek o fakturę')
+                        ->body('Wniosek jest widoczny w skrzynce „Wnioski o fakturę”.')
+                        ->actions([
+                            Notification\Actions\Action::make('open_inbox')
+                                ->label('Otwórz skrzynkę')
+                                ->url(ClientInvoiceRequestsInboxPage::getUrl()),
+                        ])
+                        ->success()
+                        ->send();
+                }),
             Actions\Action::make('ops_lists')
                 ->label('Listy operacyjne')
                 ->icon('heroicon-o-clipboard-document-list')
@@ -70,21 +103,8 @@ class ManageEventParticipants extends ManageEventParticipantsSection
                 ->label('Ubezpieczenie')
                 ->icon('heroicon-o-shield-check')
                 ->color('primary')
-                ->tooltip('Polisa, status i dokumenty ubezpieczenia imprezy.')
-                ->modalHeading(fn (): string => 'Ubezpieczenie: '.trim(($this->record->code ?: '#'.$this->record->id).' — '.$this->record->name))
-                ->modalWidth('2xl')
-                ->modalSubmitActionLabel('Zapisz')
-                ->record($this->record)
-                ->form(EventReadinessFields::insuranceSection())
-                ->fillForm(fn (): array => EventReadinessFields::insuranceFormState($this->record))
-                ->action(function (array $data): void {
-                    EventReadinessFields::persistInsurance($this->record, $data);
-
-                    Notification::make()
-                        ->title('Zapisano dane ubezpieczenia')
-                        ->success()
-                        ->send();
-                }),
+                ->tooltip('Polisa, gotowość i koszty NNW/KL — Operacje → Ubezpieczenia.')
+                ->url(fn (): string => EventResource::getUrl('day-insurances', ['record' => $this->record])),
         ];
     }
 }

@@ -2,28 +2,26 @@
 
 namespace App\Filament\Resources\EventSettlementResource\Pages;
 
+use App\Filament\Pages\FinanceOverviewPage;
 use App\Filament\Resources\EventSettlementResource;
-use Filament\Resources\Pages\CreateRecord;
+use Filament\Resources\Pages\Page;
 
-class CreateEventSettlement extends CreateRecord
+/**
+ * Legacy create — zamrożone; rozliczenie powstaje z imprezy (EventFinance).
+ *
+ * Nie dziedziczy po CreateRecord: mount tylko redirectuje, a CreateRecord
+ * odpala lifecycle formularza / getRecord bez sensu dla strony-zombie.
+ */
+class CreateEventSettlement extends Page
 {
     protected static string $resource = EventSettlementResource::class;
 
-    protected function getRedirectUrl(): string
+    protected static string $view = 'filament.resources.event-resource.pages.event-finance-redirect';
+
+    protected static bool $shouldRegisterNavigation = false;
+
+    public function mount(): void
     {
-        return $this->getResource()::getUrl('edit', ['record' => $this->getRecord()]);
-    }
-
-    protected function mutateFormDataBeforeCreate(array $data): array
-    {
-        $data['created_by'] = auth()->id();
-
-        foreach (['planned_cost_pln', 'actual_cost_pln', 'participant_due_pln', 'participant_paid_pln'] as $field) {
-            $data[$field] = (float) ($data[$field] ?? 0);
-        }
-
-        $data['status'] = $data['status'] ?? 'draft';
-
-        return $data;
+        $this->redirect(FinanceOverviewPage::getUrl());
     }
 }

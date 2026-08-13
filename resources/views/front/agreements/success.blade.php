@@ -23,12 +23,36 @@
 
         <header class="confirmation-banner">
             <h3>Potwierdzenie rezerwacji</h3>
-            <p class="lead">Dziękujemy za poprawne opłacenie umowy!</p>
+            @php
+                $lastPayment = data_get($flow ?? [], 'last_payment', []);
+                $remaining = is_array($checkout ?? null)
+                    ? (float) ($checkout['total_remaining_pln'] ?? 0)
+                    : max(0, (float) $agreement->amount_due - (float) $agreement->amount_paid);
+            @endphp
+            @if($agreement->payment_status === 'paid' || $remaining <= 0.009)
+                <p class="lead">Dziękujemy — część PLN umowy jest rozliczona!</p>
+            @else
+                <p class="lead">Dziękujemy za płatność pierwszej raty.</p>
+                <p class="small">Opłacono teraz: {{ number_format((float) ($lastPayment['amount'] ?? 0), 2, ',', ' ') }} PLN.
+                    Pozostało: {{ number_format($remaining, 2, ',', ' ') }} PLN.</p>
+                <p class="small mt-2 text-muted">
+                    Kolejne transze opłacisz w portalu klienta. Linki do płatności znajdziesz także w mailu potwierdzającym.
+                </p>
+            @endif
             <p class="small">Potwierdzenie zostało wysłane na adres {{ $agreement->signer_email ?: $agreement->customer_email ?: '—' }}.</p>
             @if(!empty($portalLoginUrl))
                 <p class="small mt-2">
                     <a href="{{ $portalLoginUrl }}" class="btn btn-primary btn-sm">Przejdź do portalu klienta</a>
-                    — program, umowa i harmonogram płatności.
+                    — program, umowa i harmonogram kolejnych płatności.
+                </p>
+            @endif
+            @if(is_array($checkout ?? null) && !empty($checkout['fx_rows']))
+                <p class="small mt-2">
+                    Waluta obca:
+                    @foreach($checkout['fx_rows'] as $fx)
+                        {{ number_format((float) $fx['amount_foreign'], 2, ',', ' ') }} {{ $fx['currency_code'] }}
+                        ({{ ($fx['paid_by'] ?? 'pilot') === 'office' ? 'biuro' : 'pilot / autokar' }})@if(!$loop->last); @endif
+                    @endforeach
                 </p>
             @endif
         </header>

@@ -3,7 +3,6 @@
 namespace App\Services;
 
 use App\Enums\TaskPriority;
-use App\Enums\TaskSource;
 use App\Models\Contract;
 use App\Models\ContractPaymentSchedule;
 use App\Models\Event;
@@ -12,13 +11,12 @@ use App\Models\EventProgramPoint;
 use App\Models\EventSettlementCost;
 use App\Models\Task;
 use App\Models\TaskStatus;
-use App\Models\User;
 use App\Models\VendorInvoice;
 use App\Support\CurrencyAmountDisplay;
-use App\Support\Tasks\OfficeTaskRecipients;
+use App\Support\Tasks\SystemTaskFactory;
+use App\Support\Tasks\TaskQueryFilters;
 use Carbon\Carbon;
-use Illuminate\Support\Collection;
-use Illuminate\Support\Facades\Auth;
+use Illuminate\Database\Eloquent\Model;
 
 class EventPaymentReminderSyncService
 {
@@ -60,8 +58,8 @@ class EventPaymentReminderSyncService
             taskableType: $programPoint ? EventProgramPoint::class : Event::class,
             taskableId: $programPoint?->id ?? $event->id,
             url: $cost->settlement_id
-                ? \App\Filament\Resources\EventSettlementResource::getUrl('edit', ['record' => $cost->settlement_id])
-                : \App\Filament\Resources\EventResource::getUrl('reservations', ['record' => $event->id]),
+                ? \App\Support\AdminPanelUrls::eventFinanceForSettlement($cost->settlement_id)
+                : \App\Support\AdminPanelUrls::eventReservations($event),
         );
     }
 
@@ -99,8 +97,8 @@ class EventPaymentReminderSyncService
             taskableType: Event::class,
             taskableId: $event->id,
             url: $schedule->contract_id
-                ? \App\Filament\Resources\ContractResource::getUrl('edit', ['record' => $schedule->contract_id])
-                : \App\Filament\Resources\EventResource::getUrl('reservations', ['record' => $event->id]),
+                ? \App\Support\AdminPanelUrls::contractEdit((int) $schedule->contract_id)
+                : \App\Support\AdminPanelUrls::eventReservations($event),
         );
     }
 
@@ -137,7 +135,7 @@ class EventPaymentReminderSyncService
             event: $event,
             taskableType: Event::class,
             taskableId: $event->id,
-            url: \App\Filament\Resources\EventResource::getUrl('reservations', ['record' => $event->id]),
+            url: \App\Support\AdminPanelUrls::eventReservations($event),
         );
     }
 
@@ -173,7 +171,7 @@ class EventPaymentReminderSyncService
             event: $event,
             taskableType: Event::class,
             taskableId: $event->id,
-            url: \App\Filament\Resources\VendorInvoiceResource::getUrl('edit', ['record' => $invoice->id]),
+            url: \App\Support\AdminPanelUrls::vendorInvoiceEdit($invoice),
         );
     }
 
@@ -187,91 +185,23 @@ class EventPaymentReminderSyncService
         int $taskableId,
         ?string $url,
     ): void {
-        $statusId = Task::getDefaultStatusId();
+        /** @var Model $taskable */
+        $taskable = $taskableType::query()->find($taskableId);
 
-        if (! $statusId) {
+        if (! $taskable) {
             return;
         }
 
-        $body = trim($description."\n\n".$fingerprint.($url ? "\n\nLink: ".$url : ''));
-        $recipients = $this->resolveRecipients($event);
-
-        if ($recipients->isEmpty()) {
-            return;
-        }
-
-        $maxOrder = (int) Task::query()->where('status_id', $statusId)->max('order');
-
-        foreach ($recipients as $recipient) {
-            $existing = Task::query()
-                ->where('description', 'like', '%'.$fingerprint.'%')
-                ->where('assignee_id', $recipient->id)
-                ->whereHas('status', fn ($query) => $query->where('name', '!=', 'Zakończone'))
-                ->first();
-
-            if ($existing) {
-                $existing->update([
-                    'title' => $title,
-                    'description' => $body,
-                    'due_date' => $dueDate,
-                    'taskable_type' => $taskableType,
-                    'taskable_id' => $taskableId,
-                    'source' => TaskSource::System->value,
-                ]);
-
-                NotificationService::clearCacheForUser((int) $recipient->id);
-
-                continue;
-            }
-
-            Task::create([
-                'title' => $title,
-                'description' => $body,
-                'due_date' => $dueDate,
-                'status_id' => $statusId,
-                'priority' => TaskPriority::Urgent->value,
-                'source' => TaskSource::System->value,
-                'author_id' => $recipient->id,
-                'assignee_id' => $recipient->id,
-                'taskable_type' => $taskableType,
-                'taskable_id' => $taskableId,
-                'order' => ++$maxOrder,
-            ]);
-
-            NotificationService::clearCacheForUser((int) $recipient->id);
-        }
-    }
-
-    /**
-     * @return Collection<int, User>
-     */
-    private function resolveRecipients(Event $event): Collection
-    {
-        $recipients = OfficeTaskRecipients::users();
-
-        if ($recipients->isNotEmpty()) {
-            return $recipients;
-        }
-
-        if ($event->assigned_to) {
-            $assignee = User::query()->find($event->assigned_to);
-
-            if ($assignee) {
-                return collect([$assignee]);
-            }
-        }
-
-        $fallbackId = Auth::id();
-
-        if ($fallbackId) {
-            $fallback = User::query()->find($fallbackId);
-
-            if ($fallback) {
-                return collect([$fallback]);
-            }
-        }
-
-        return collect();
+        SystemTaskFactory::upsertShared(
+            taskable: $taskable,
+            fingerprint: $fingerprint,
+            title: $title,
+            description: $description,
+            priority: TaskPriority::Urgent,
+            dueDate: $dueDate,
+            eventForAssignee: $event,
+            url: $url,
+        );
     }
 
     private function retireTasks(string $fingerprint): void
@@ -282,10 +212,9 @@ class EventPaymentReminderSyncService
             return;
         }
 
-        Task::query()
-            ->where('description', 'like', '%'.$fingerprint.'%')
-            ->where('status_id', '!=', $completedStatusId)
-            ->update(['status_id' => $completedStatusId]);
+        $query = Task::query()->where('description', 'like', '%'.$fingerprint.'%');
+        TaskQueryFilters::excludeFinished($query);
+        $query->update(['status_id' => $completedStatusId]);
     }
 
     private function fingerprint(string $source, int $id, string $kind): string

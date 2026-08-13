@@ -96,11 +96,16 @@ class ContractGroupPricingService
                     'id' => (int) $schedule->getKey(),
                     'label' => $schedule->label,
                     'amount' => (float) $schedule->amount,
+                    'amount_foreign' => isset($schedule->amount_foreign) ? (float) $schedule->amount_foreign : null,
+                    'currency_code' => $schedule->currency_code ?? null,
+                    'paid_by' => $schedule->paid_by ?? null,
                     'paid_amount' => (float) ($schedule->paid_amount ?? 0),
                     'paid_at' => optional($schedule->paid_at)->format('d.m.Y'),
                     'due_date' => optional($schedule->due_date)->format('d.m.Y'),
                     'notes' => $schedule->notes,
-                    'is_paid' => (float) ($schedule->paid_amount ?? 0) >= (float) $schedule->amount - 0.01,
+                    'is_paid' => (float) ($schedule->amount ?? 0) <= 0.009
+                        ? (float) ($schedule->paid_amount ?? 0) >= ((float) ($schedule->amount_foreign ?? 0) - 0.01)
+                        : (float) ($schedule->paid_amount ?? 0) >= (float) $schedule->amount - 0.01,
                 ])
                 ->values()
                 ->all(),
@@ -121,11 +126,27 @@ class ContractGroupPricingService
                 $label = filled($schedule->label) ? $schedule->label.': ' : '';
                 $date = optional($schedule->due_date)->format('d.m.Y');
                 $dateSuffix = $date ? ' (termin: '.$date.')' : '';
+                $foreign = (float) ($schedule->amount_foreign ?? 0);
+                $amount = (float) $schedule->amount;
+
+                if ($foreign > 0.009 && $amount <= 0.009) {
+                    $code = strtoupper((string) ($schedule->currency_code ?: ''));
+                    $pilot = ($schedule->paid_by ?? null) === 'pilot' ? ' → pilot' : '';
+
+                    return sprintf(
+                        '%s%s %s%s%s',
+                        $label,
+                        number_format($foreign, 2, ',', ' '),
+                        $code,
+                        $pilot,
+                        $dateSuffix,
+                    );
+                }
 
                 return sprintf(
                     '%s%s PLN%s',
                     $label,
-                    number_format((float) $schedule->amount, 2, ',', ' '),
+                    number_format($amount, 2, ',', ' '),
                     $dateSuffix,
                 );
             })
@@ -160,6 +181,9 @@ class ContractGroupPricingService
             ->map(fn ($schedule): array => [
                 'label' => $schedule->label,
                 'amount' => (float) $schedule->amount,
+                'amount_foreign' => isset($schedule->amount_foreign) ? (float) $schedule->amount_foreign : null,
+                'currency_code' => $schedule->currency_code ?? null,
+                'paid_by' => $schedule->paid_by ?? null,
                 'due_date' => optional($schedule->due_date)?->toDateString(),
                 'notes' => $schedule->notes,
             ])
@@ -172,14 +196,38 @@ class ContractGroupPricingService
     public function normalizedSchedules(array $schedules): array
     {
         return collect($schedules)
-            ->filter(fn (array $row): bool => (float) ($row['amount'] ?? 0) > 0)
+            ->filter(function (array $row): bool {
+                $amount = (float) ($row['amount'] ?? 0);
+                $foreign = (float) ($row['amount_foreign'] ?? 0);
+
+                return $amount > 0 || $foreign > 0;
+            })
             ->values()
             ->map(function (array $row, int $index): array {
+                $dueFrom = filled($row['due_from'] ?? null) ? $row['due_from'] : null;
+                $dueTo = filled($row['due_to'] ?? null) ? $row['due_to'] : null;
+                $dueDate = filled($row['due_date'] ?? null) ? $row['due_date'] : null;
+                // Deadline do zaległości = koniec okna (due_to) albo legacy due_date.
+                if ($dueTo) {
+                    $dueDate = $dueTo;
+                } elseif ($dueDate && ! $dueTo) {
+                    $dueTo = $dueDate;
+                }
+
                 return [
                     'sort_order' => $index,
                     'label' => filled($row['label'] ?? null) ? (string) $row['label'] : null,
-                    'amount' => round((float) $row['amount'], 2),
-                    'due_date' => filled($row['due_date'] ?? null) ? $row['due_date'] : null,
+                    'amount' => round((float) ($row['amount'] ?? 0), 2),
+                    'amount_foreign' => isset($row['amount_foreign']) && (float) $row['amount_foreign'] > 0
+                        ? round((float) $row['amount_foreign'], 2)
+                        : null,
+                    'currency_code' => filled($row['currency_code'] ?? null)
+                        ? strtoupper((string) $row['currency_code'])
+                        : null,
+                    'paid_by' => filled($row['paid_by'] ?? null) ? (string) $row['paid_by'] : null,
+                    'due_date' => $dueDate,
+                    'due_from' => $dueFrom,
+                    'due_to' => $dueTo,
                     'notes' => filled($row['notes'] ?? null) ? (string) $row['notes'] : null,
                 ];
             })

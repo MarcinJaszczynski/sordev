@@ -3,6 +3,7 @@
 namespace App\Services;
 
 use App\Models\Contract;
+use App\Models\EventAgreement;
 use App\Models\EventSettlement;
 use App\Models\EventSettlementParticipantPayment;
 use App\Models\EventSettlementParticipantPaymentEntry;
@@ -25,6 +26,9 @@ final class ParticipantPaymentLedgerService
         ?string $payerName = null,
         ?string $bankTransferDescription = null,
         string $paymentKind = EventSettlementParticipantPaymentEntry::KIND_REGULAR,
+        ?float $amountForeign = null,
+        ?float $rate = null,
+        ?int $currencyId = null,
     ): EventSettlementParticipantPaymentEntry {
         if (! Schema::hasTable('event_settlement_participant_payment_entries')) {
             throw new \RuntimeException('Tabela historii wpłat nie jest dostępna.');
@@ -51,8 +55,11 @@ final class ParticipantPaymentLedgerService
             $payerName,
             $bankTransferDescription,
             $paymentKind,
+            $amountForeign,
+            $rate,
+            $currencyId,
         ): EventSettlementParticipantPaymentEntry {
-            $entry = EventSettlementParticipantPaymentEntry::query()->create([
+            $payload = [
                 'participant_payment_id' => $payment->id,
                 'paid_at' => $paidAt,
                 'amount_pln' => $amount,
@@ -64,7 +71,15 @@ final class ParticipantPaymentLedgerService
                 'bank_payment_import_line_id' => $bankPaymentImportLineId,
                 'notes' => $notes,
                 'created_by' => $createdBy ?? Auth::id(),
-            ]);
+            ];
+
+            if (Schema::hasColumn('event_settlement_participant_payment_entries', 'currency_id')) {
+                $payload['amount'] = $amountForeign !== null ? round($amountForeign, 2) : null;
+                $payload['currency_id'] = $currencyId;
+                $payload['rate'] = $rate !== null ? round($rate, 6) : null;
+            }
+
+            $entry = EventSettlementParticipantPaymentEntry::query()->create($payload);
 
             $this->syncPaidAggregate($payment->fresh(['entries']));
 
@@ -110,7 +125,9 @@ final class ParticipantPaymentLedgerService
             'payment_method' => $latestMethod ?: $payment->payment_method,
         ])->save();
 
-        $this->syncLinkedContracts($payment->fresh(), $paidTotal);
+        $fresh = $payment->fresh();
+        $this->syncLinkedContracts($fresh, $paidTotal);
+        $this->syncLinkedAgreements($fresh, $paidTotal);
 
         $payment->loadMissing('settlement');
         $payment->settlement?->recalculateTotals();
@@ -163,12 +180,36 @@ final class ParticipantPaymentLedgerService
 
             $contract->forceFill([
                 'amount_paid' => $paidTotal,
-                'payment_status' => $this->resolveContractPaymentStatus($paidTotal, $dueTotal),
+                'payment_status' => $this->resolveLinkedPaymentStatus($paidTotal, $dueTotal),
+                'paid_at' => $paidTotal > 0 ? ($contract->paid_at ?? now()) : $contract->paid_at,
             ])->saveQuietly();
         }
     }
 
-    private function resolveContractPaymentStatus(float $paidTotal, float $dueTotal): string
+    private function syncLinkedAgreements(EventSettlementParticipantPayment $payment, float $paidTotal): void
+    {
+        if (! Schema::hasTable('event_agreements')) {
+            return;
+        }
+
+        $payment->loadMissing('agreements');
+
+        foreach ($payment->agreements as $agreement) {
+            if (! $agreement instanceof EventAgreement) {
+                continue;
+            }
+
+            $dueTotal = (float) ($agreement->amount_due ?: $payment->due_amount_pln);
+
+            $agreement->forceFill([
+                'amount_paid' => $paidTotal,
+                'payment_status' => $this->resolveLinkedPaymentStatus($paidTotal, $dueTotal),
+                'paid_at' => $paidTotal > 0 ? ($agreement->paid_at ?? now()) : $agreement->paid_at,
+            ])->saveQuietly();
+        }
+    }
+
+    private function resolveLinkedPaymentStatus(float $paidTotal, float $dueTotal): string
     {
         if ($paidTotal <= 0) {
             return 'pending';

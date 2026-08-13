@@ -27,7 +27,9 @@ class TaskAttachmentDownloadTest extends TestCase
     public function test_assignee_can_download_task_attachment(): void
     {
         $author = User::factory()->create();
+        $author->assignRole('admin');
         $assignee = User::factory()->create();
+        $assignee->assignRole('admin');
 
         $task = Task::create([
             'title' => 'Zadanie z plikiem',

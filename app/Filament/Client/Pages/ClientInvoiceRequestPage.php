@@ -2,17 +2,21 @@
 
 namespace App\Filament\Client\Pages;
 
+use App\Actions\Finance\CreateClientInvoiceRequestAction;
+use App\Data\CreateClientInvoiceRequestData;
+use App\Filament\Actions\HelpArticleAction;
 use App\Filament\Client\Concerns\AuthorizesClientTrip;
 use App\Filament\Client\Concerns\HasClientTripNav;
 use App\Models\ClientInvoiceRequest;
-use App\Models\EventPortalAccess;
 use App\Models\Event;
-use App\Services\ClientAccessService;
+use App\Models\EventPortalAccess;
 use App\Models\User;
+use App\Services\ClientAccessService;
 use Filament\Forms;
 use Filament\Forms\Concerns\InteractsWithForms;
 use Filament\Forms\Contracts\HasForms;
 use Filament\Forms\Form;
+use Filament\Forms\Get;
 use Filament\Notifications\Notification;
 use Filament\Pages\Page;
 use Illuminate\Contracts\Support\Htmlable;
@@ -52,9 +56,11 @@ class ClientInvoiceRequestPage extends Page implements HasForms
         $contract = $this->invoiceContractFor($user);
 
         $this->form->fill([
+            'buyer_type' => ClientInvoiceRequest::BUYER_COMPANY,
             'company_name' => $contract?->customer_name ?: $contract?->signer_name,
             'invoice_email' => $user?->email,
             'payment_reference' => $contract?->agreement_number,
+            'event_code' => $event->code,
         ]);
     }
 
@@ -68,6 +74,13 @@ class ClientInvoiceRequestPage extends Page implements HasForms
         return 'Wniosek o fakturę: '.$this->event->name;
     }
 
+    protected function getHeaderActions(): array
+    {
+        return [
+            HelpArticleAction::make('wniosek-o-fakture', 'portal'),
+        ];
+    }
+
     public static function urlFor(Event $event): string
     {
         return static::getUrl(['event' => $event->id], panel: 'portal');
@@ -77,14 +90,29 @@ class ClientInvoiceRequestPage extends Page implements HasForms
     {
         return $form
             ->schema([
+                Forms\Components\Radio::make('buyer_type')
+                    ->label('Typ nabywcy')
+                    ->options(ClientInvoiceRequest::$buyerTypes)
+                    ->inline()
+                    ->required()
+                    ->live()
+                    ->columnSpanFull(),
                 Forms\Components\TextInput::make('company_name')
-                    ->label('Nazwa firmy / instytucji')
+                    ->label(fn (Get $get): string => $get('buyer_type') === ClientInvoiceRequest::BUYER_PERSON
+                        ? 'Imię i nazwisko'
+                        : 'Nazwa firmy / instytucji')
                     ->required()
                     ->maxLength(255),
                 Forms\Components\TextInput::make('nip')
                     ->label('NIP')
-                    ->required()
+                    ->required(fn (Get $get): bool => $get('buyer_type') !== ClientInvoiceRequest::BUYER_PERSON)
+                    ->visible(fn (Get $get): bool => $get('buyer_type') !== ClientInvoiceRequest::BUYER_PERSON)
                     ->maxLength(16),
+                Forms\Components\TextInput::make('event_code')
+                    ->label('Kod imprezy')
+                    ->disabled()
+                    ->dehydrated(false)
+                    ->helperText(fn (): string => $this->event->code.' — '.$this->event->name),
                 Forms\Components\TextInput::make('street')
                     ->label('Ulica')
                     ->maxLength(255),
@@ -114,40 +142,45 @@ class ClientInvoiceRequestPage extends Page implements HasForms
                     ->rows(3)
                     ->columnSpanFull(),
             ])
-            ->columns(2)
+            ->columns(['default' => 1, 'md' => 2])
             ->statePath('data');
     }
 
     public function submit(): void
     {
+        app(\App\Services\ClientAccessService::class)->assertPortalMutationsAllowed();
+
         $payload = $this->form->getState();
         $user = Auth::user();
         $contract = $this->invoiceContractFor($user);
 
-        ClientInvoiceRequest::query()->create([
-            'event_id' => $this->event->id,
-            'contract_id' => $contract?->id,
-            'user_id' => $user->id,
-            'company_name' => $payload['company_name'],
-            'nip' => $payload['nip'],
-            'street' => $payload['street'] ?? null,
-            'house_number' => $payload['house_number'] ?? null,
-            'postal_code' => $payload['postal_code'] ?? null,
-            'city' => $payload['city'] ?? null,
-            'invoice_email' => $payload['invoice_email'],
-            'payment_reference' => $payload['payment_reference'] ?? null,
-            'amount' => filled($payload['amount'] ?? null) ? $payload['amount'] : null,
-            'notes' => $payload['notes'] ?? null,
-            'status' => ClientInvoiceRequest::STATUS_PENDING,
-        ]);
+        app(CreateClientInvoiceRequestAction::class)(new CreateClientInvoiceRequestData(
+            buyerType: $payload['buyer_type'] ?? ClientInvoiceRequest::BUYER_COMPANY,
+            companyName: $payload['company_name'],
+            invoiceEmail: $payload['invoice_email'],
+            source: ClientInvoiceRequest::SOURCE_PORTAL,
+            nip: $payload['nip'] ?? null,
+            street: $payload['street'] ?? null,
+            houseNumber: $payload['house_number'] ?? null,
+            postalCode: $payload['postal_code'] ?? null,
+            city: $payload['city'] ?? null,
+            amount: filled($payload['amount'] ?? null) ? (float) $payload['amount'] : null,
+            paymentReference: $payload['payment_reference'] ?? null,
+            notes: $payload['notes'] ?? null,
+            eventCodeEntered: $this->event->code,
+            event: $this->event,
+            contract: $contract,
+            user: $user,
+        ));
 
         Notification::make()
             ->title('Wniosek wysłany')
-            ->body('Biuro otrzymało Twój wniosek o fakturę.')
+            ->body('Biuro otrzymało Twój wniosek o fakturę. Potwierdzenie wysłaliśmy e-mailem.')
             ->success()
             ->send();
 
         $this->form->fill([
+            'buyer_type' => $payload['buyer_type'] ?? ClientInvoiceRequest::BUYER_COMPANY,
             'company_name' => $payload['company_name'],
             'nip' => '',
             'street' => '',
@@ -158,6 +191,7 @@ class ClientInvoiceRequestPage extends Page implements HasForms
             'payment_reference' => '',
             'amount' => null,
             'notes' => '',
+            'event_code' => $this->event->code,
         ]);
     }
 

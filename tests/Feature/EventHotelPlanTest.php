@@ -27,6 +27,8 @@ class EventHotelPlanTest extends TestCase
     public function test_snapshot_from_template_creates_stays_and_room_lines(): void
     {
         $user = User::factory()->create();
+        Role::firstOrCreate(['name' => 'admin', 'guard_name' => 'web']);
+        $user->assignRole('admin');
         $this->actingAs($user);
 
         $place = Place::create(['name' => 'Warszawa']);
@@ -75,6 +77,67 @@ class EventHotelPlanTest extends TestCase
 
         $stay = $event->hotelStays()->where('day', 1)->first();
         $this->assertSame('Śniadanie w cenie', $stay->notes);
+    }
+
+    public function test_create_from_template_allocates_all_hotel_roles_after_qty_variants(): void
+    {
+        $user = User::factory()->create();
+        $this->actingAs($user);
+
+        $place = Place::create(['name' => 'Kraków']);
+        $template = EventTemplate::factory()->create([
+            'duration_days' => 2,
+            'start_place_id' => $place->id,
+        ]);
+
+        $roomQty = HotelRoom::create([
+            'name' => 'Trzyosobowy',
+            'people_count' => 3,
+            'price' => 300,
+            'currency' => 'PLN',
+            'convert_to_pln' => true,
+        ]);
+        $roomStaff = HotelRoom::create([
+            'name' => 'Jedynka',
+            'people_count' => 1,
+            'price' => 150,
+            'currency' => 'PLN',
+            'convert_to_pln' => true,
+        ]);
+
+        \App\Models\EventTemplateQty::create([
+            'event_template_id' => $template->id,
+            'qty' => 30,
+            'gratis' => 2,
+            'staff' => 1,
+            'driver' => 1,
+        ]);
+
+        EventTemplateHotelDay::create([
+            'event_template_id' => $template->id,
+            'day' => 1,
+            'hotel_room_ids_qty' => [$roomQty->id],
+            'hotel_room_ids_gratis' => [$roomStaff->id],
+            'hotel_room_ids_staff' => [$roomStaff->id],
+            'hotel_room_ids_driver' => [$roomStaff->id],
+        ]);
+
+        $event = Event::createFromTemplate($template, [
+            'name' => 'Wycieczka z pełnym hotelem',
+            'client_name' => 'Klient',
+            'start_date' => now()->format('Y-m-d'),
+            'participant_count' => 30,
+            'gratis_count' => 2,
+        ]);
+
+        $stay = $event->hotelStays()->where('day', 1)->first();
+        $this->assertNotNull($stay);
+
+        $roles = $stay->roomLines()->pluck('role')->unique()->sort()->values()->all();
+        $this->assertContains('qty', $roles);
+        $this->assertContains('gratis', $roles);
+        $this->assertContains('staff', $roles);
+        $this->assertContains('driver', $roles);
     }
 
     public function test_copy_structure_to_all_stays(): void
@@ -237,6 +300,8 @@ class EventHotelPlanTest extends TestCase
     public function test_import_template_csv_contains_event_rooms(): void
     {
         $user = User::factory()->create();
+        Role::firstOrCreate(['name' => 'admin', 'guard_name' => 'web']);
+        $user->assignRole('admin');
         $this->actingAs($user);
 
         $event = Event::factory()->create(['duration_days' => 2, 'name' => 'Test Wycieczka']);
@@ -472,6 +537,8 @@ class EventHotelPlanTest extends TestCase
     public function test_selecting_hotel_persists_contractor_without_full_plan_save(): void
     {
         $user = User::factory()->create();
+        Role::firstOrCreate(['name' => 'admin', 'guard_name' => 'web']);
+        $user->assignRole('admin');
         $this->actingAs($user);
 
         $event = Event::factory()->create(['duration_days' => 3]);

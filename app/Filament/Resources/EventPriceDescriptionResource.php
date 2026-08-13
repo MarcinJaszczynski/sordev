@@ -23,6 +23,10 @@ class EventPriceDescriptionResource extends Resource
 
     protected static ?string $pluralLabel = 'Opisy cen imprez';
 
+    protected static ?string $modelLabel = 'opis ceny imprezy';
+
+    protected static ?string $pluralModelLabel = 'opisy cen imprez';
+
     protected static ?int $navigationSort = 120;
 
     public static function shouldRegisterNavigation(): bool
@@ -40,7 +44,7 @@ class EventPriceDescriptionResource extends Resource
                 \FilamentTiptapEditor\TiptapEditor::make('description')
                     ->label('Opis (możesz używać <b>, <ul>, <li> itd.)')
                     ->required()
-                    
+
                     ->columnSpanFull(),
             ]);
     }

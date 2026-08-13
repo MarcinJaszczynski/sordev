@@ -135,6 +135,60 @@ CSV;
         $this->assertNotNull($event->pilot_funds_paid_at);
     }
 
+    public function test_manual_assign_unmatched_line_then_apply(): void
+    {
+        $user = User::factory()->create();
+        Role::findOrCreate('admin');
+        $user->assignRole('admin');
+
+        $event = Event::factory()->create(['code' => 'MANUAL-01']);
+        $settlement = EventSettlement::findOrCreateActiveForEvent($event);
+
+        $payment = EventSettlementParticipantPayment::query()->create([
+            'settlement_id' => $settlement->id,
+            'participant_name' => 'Anna Nowak',
+            'booking_reference' => 'BN-999',
+            'due_amount_pln' => 777.5,
+            'paid_amount_pln' => 0,
+            'payment_status' => 'pending',
+        ]);
+
+        $csv = <<<'CSV'
+Data operacji;Tytuł;Nadawca/Odbiorca;Numer rachunku;Kwota
+19.06.2026;PRZELEW WLASNY BEZ ODNIESIENIA;Nieznany Nadawca;12 3456 7890;333,00
+CSV;
+
+        $service = new BankPaymentImportService;
+        $summary = $service->createPreviewFromCsv($csv, 'millennium.csv', $user->id);
+
+        $this->assertSame(1, $summary['unmatched']);
+
+        $batch = \App\Models\BankPaymentImportBatch::query()->findOrFail($summary['batch_id']);
+        $line = $batch->lines()->firstOrFail();
+
+        $this->assertSame('unmatched', $line->match_status);
+        $this->assertTrue(
+            BankPaymentImportService::unmatchedPendingQuery()->whereKey($line->id)->exists()
+        );
+
+        $service->assignLine($line, 'participant_payment', $payment->id);
+
+        $line->refresh();
+        $this->assertSame('matched_payment', $line->match_status);
+        $this->assertSame($payment->id, $line->participant_payment_id);
+        $this->assertSame($event->id, $line->event_id);
+        $this->assertTrue($line->selected);
+        $this->assertFalse(
+            BankPaymentImportService::unmatchedPendingQuery()->whereKey($line->id)->exists()
+        );
+
+        $apply = $service->applyLines($batch, [$line->id]);
+        $this->assertSame(1, $apply['applied']);
+
+        $payment->refresh();
+        $this->assertSame(333.0, (float) $payment->paid_amount_pln);
+    }
+
     public function test_event_scoped_import_panel_shows_only_matching_event_lines(): void
     {
         $user = User::factory()->create();

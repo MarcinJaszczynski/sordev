@@ -2,12 +2,10 @@
 
 namespace App\Models;
 
-use Carbon\Carbon;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
-use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Schema;
 
@@ -94,6 +92,11 @@ class EventSettlement extends Model
         return $this->hasMany(EventSettlementCost::class, 'settlement_id')->orderBy('order');
     }
 
+    public function costGroups(): HasMany
+    {
+        return $this->hasMany(EventSettlementCostGroup::class, 'settlement_id')->orderBy('sort_order')->orderBy('id');
+    }
+
     /**
      * Punkty programu imprezy powiązanej z tym rozliczeniem (ten sam event_id).
      */
@@ -170,22 +173,12 @@ class EventSettlement extends Model
     }
 
     /**
-     * Przelicza i zapisuje sumy z pozycji kosztów
+     * Przelicza i zapisuje sumy z pozycji kosztów.
+     * Logika: {@see \App\Services\EventSettlementTotalsService}.
      */
     public function recalculateTotals(): void
     {
-        $costs = $this->costs()->get();
-        $this->planned_cost_pln = round((float) $costs
-            ->reject(fn (EventSettlementCost $cost): bool => EventSettlementCost::isPaymentSourceType($cost->source_type))
-            ->sum(fn (EventSettlementCost $cost): float => (float) ($cost->planned_amount_pln ?? 0)), 2);
-        $this->actual_cost_pln = round((float) $costs->sum(fn (EventSettlementCost $cost) => $this->resolvePaidCostPln($cost)), 2);
-
-        $payments = $this->participantPayments()->get();
-        $agreementTotals = $this->resolveAgreementPaymentTotals($payments);
-        $this->participant_due_pln = $payments->sum('due_amount_pln') + $agreementTotals['due'];
-        $this->participant_paid_pln = $payments->sum('paid_amount_pln') + $agreementTotals['paid'];
-
-        $this->saveQuietly();
+        \App\Services\EventSettlementTotalsService::for($this)->recalculate();
     }
 
     public function refreshDerivedData(): void
@@ -212,539 +205,48 @@ class EventSettlement extends Model
         }
     }
 
-    private function resolvePaidCostPln(EventSettlementCost $cost): float
-    {
-        if ($cost->payment_status === 'cancelled') {
-            return 0.0;
-        }
-
-        if (EventSettlementCost::isPaymentSourceType($cost->source_type)) {
-            return (float) ($cost->actual_amount_pln ?? 0);
-        }
-
-        if ($cost->source_type === 'manual' && $cost->actual_amount_pln !== null) {
-            return (float) $cost->actual_amount_pln;
-        }
-
-        return 0.0;
-    }
-
-    private function resolveAgreementPaymentTotals($participantPayments): array
-    {
-        $event = $this->event()->with('agreements')->first();
-
-        if (! $event) {
-            return ['due' => 0.0, 'paid' => 0.0];
-        }
-
-        $paymentIds = $participantPayments
-            ->pluck('id')
-            ->filter()
-            ->map(fn ($id) => (int) $id)
-            ->all();
-
-        $references = $participantPayments
-            ->flatMap(function (EventSettlementParticipantPayment $payment) {
-                return array_filter([
-                    $this->normalizeSettlementReference($payment->booking_reference),
-                    $this->normalizeSettlementReference($payment->document_number),
-                ]);
-            })
-            ->unique()
-            ->values()
-            ->all();
-
-        $unsyncedAgreements = $event->agreements->filter(function ($agreement) use ($paymentIds, $references) {
-            if (! $this->shouldIncludeAgreementInSettlementTotals($agreement)) {
-                return false;
-            }
-
-            if ($agreement->participant_payment_id && in_array((int) $agreement->participant_payment_id, $paymentIds, true)) {
-                return false;
-            }
-
-            $agreementReference = $this->normalizeSettlementReference(
-                $agreement->operational_number
-                    ?? $agreement->agreement_number
-                    ?? $agreement->contract_number
-                    ?? null
-            );
-
-            if ($agreementReference && in_array($agreementReference, $references, true)) {
-                return false;
-            }
-
-            return true;
-        });
-
-        return [
-            'due' => (float) $unsyncedAgreements->sum(fn ($agreement) => (float) ($agreement->amount_due ?? $agreement->total_price ?? 0)),
-            'paid' => (float) $unsyncedAgreements->sum(fn ($agreement) => (float) ($agreement->amount_paid ?? 0)),
-        ];
-    }
-
-    private function shouldIncludeAgreementInSettlementTotals(EventAgreement|Contract $agreement): bool
-    {
-        if (($agreement->meta['is_individual_template'] ?? false) === true
-            && empty($agreement->meta['parent_template_id'] ?? null)) {
-            return false;
-        }
-
-        if ($agreement instanceof Contract && $agreement->usesIndividualParticipantPayments()) {
-            return false;
-        }
-
-        if (in_array($agreement->status, ['draft', 'template', 'cancelled'], true)) {
-            return false;
-        }
-
-        if ($agreement->payment_status === 'failed') {
-            return false;
-        }
-
-        return (float) ($agreement->amount_due ?? 0) > 0
-            || (float) ($agreement->amount_paid ?? 0) > 0
-            || $agreement->participant_payment_id !== null;
-    }
-
-    private function normalizeSettlementReference(?string $value): ?string
-    {
-        $value = strtoupper(trim((string) $value));
-
-        return $value !== '' ? $value : null;
-    }
-
     /**
-     * Importuje wszystkie punkty programu imprezy oraz koszty transportu i noclegu jako pozycje kosztów planowanych
+     * Importuje wszystkie punkty programu imprezy oraz koszty transportu i noclegu jako pozycje kosztów planowanych.
+     * Logika: {@see \App\Services\EventSettlementImportService}.
      */
     public function importFromEvent(): void
     {
-        $event = $this->event()->with('programPoints.currency', 'programPoints.reservations', 'bus', 'eventTemplate.hotelDays', 'dayInsurances.insurance')->first();
-        if (! $event) {
-            return;
-        }
-
-        $fallbackPlnCurrencyId = $this->resolveFallbackPlnCurrencyId();
-        $participantCount = max(1, (int) ($event->participant_count ?? 1));
-        $importedProgramPointIds = [];
-
-        // Import programu (punkty programu)
-        foreach ($event->programPoints as $pp) {
-            if (! $pp->include_in_calculation || ! $pp->active) {
-                continue;
-            }
-
-            // W rozliczeniu bazujemy na realnej, zapisanej kwocie punktu programu,
-            // żeby każda ręczna zmiana ceny była widoczna 1:1.
-            $calculatedAmount = $pp->resolveEffectiveTotalPrice($participantCount);
-
-            $currencyId = $pp->currency_id ?: $fallbackPlnCurrencyId;
-            $currency = $pp->currency;
-            $currencyCode = strtoupper((string) ($currency?->code ?? $currency?->symbol ?? 'PLN'));
-            $convertToPln = (bool) ($pp->convert_to_pln ?? false);
-            $pln = $calculatedAmount;
-
-            if ($currencyId && $currencyCode !== 'PLN') {
-                $pln = $convertToPln
-                    ? $calculatedAmount * ($currency?->exchange_rate ?? 1)
-                    : null;
-            }
-
-            $existing = $this->costs()
-                ->where('source_type', 'program_point')
-                ->where('source_id', $pp->id)
-                ->first();
-
-            $attributes = [
-                'name' => $pp->name,
-                'planned_amount' => $calculatedAmount,
-                'planned_currency_id' => $currencyId,
-                'planned_convert_to_pln' => $convertToPln,
-                'planned_rate' => $currency?->exchange_rate ?? 1,
-                'planned_amount_pln' => $pln,
-                'contractor_id' => $this->resolveContractorIdForProgramPoint($pp),
-                'paid_by' => $existing?->paid_by ?? $this->inferPaidByFromProgramPoint($pp),
-                'advance_type' => 'full',
-                'payment_status' => $existing?->payment_status ?? 'planned',
-                'order' => $pp->order ?? 0,
-            ];
-
-            $this->costs()->updateOrCreate(
-                ['source_type' => 'program_point', 'source_id' => $pp->id],
-                $this->mergeExistingCostPilotReporting($existing, $attributes)
-            );
-
-            $importedProgramPointIds[] = (int) $pp->id;
-        }
-
-        // Usuń koszty punktów programu, które już nie powinny być liczone
-        $this->costs()
-            ->where('source_type', 'program_point')
-            ->when(
-                ! empty($importedProgramPointIds),
-                fn ($query) => $query->whereNotIn('source_id', $importedProgramPointIds),
-                fn ($query) => $query
-            )
-            ->delete();
-
-        $softDeletedProgramPointIds = EventProgramPoint::query()
-            ->onlyTrashed()
-            ->where('event_id', $event->id)
-            ->pluck('id')
-            ->map(fn ($id): int => (int) $id)
-            ->all();
-
-        if ($softDeletedProgramPointIds !== []) {
-            $this->costs()
-                ->where('source_type', 'program_point')
-                ->whereIn('source_id', $softDeletedProgramPointIds)
-                ->delete();
-
-            $this->costs()
-                ->where('source_type', 'program_point_payment')
-                ->whereIn('source_id', $softDeletedProgramPointIds)
-                ->delete();
-        }
-
-        $this->costs()
-            ->where('source_type', 'program_point_payment')
-            ->when(
-                ! empty($importedProgramPointIds),
-                fn ($query) => $query->whereNotIn('source_id', $importedProgramPointIds),
-                fn ($query) => $query
-            )
-            ->delete();
-
-        // Import kosztów transportu (autokar)
-        $this->importTransportCosts($event, $fallbackPlnCurrencyId);
-
-        // Import kosztów noclegu (hotel)
-        $this->importAccommodationCosts($event, $fallbackPlnCurrencyId);
-
-        // Import kosztów ubezpieczeń dziennych
-        $this->importInsuranceCosts($event, $fallbackPlnCurrencyId);
-
-        $this->recalculateTotals();
+        \App\Services\EventSettlementImportService::for($this)->import();
     }
 
     /**
-     * Importuje koszty ubezpieczeń przypisanych do dni imprezy.
-     */
-    private function importInsuranceCosts(Event $event, ?int $fallbackPlnCurrencyId): void
-    {
-        $participantCount = max(1, (int) ($event->participant_count ?? 1));
-        $importedInsuranceDayIds = [];
-
-        foreach ($event->dayInsurances as $dayInsurance) {
-            $insurance = $dayInsurance->insurance;
-
-            if (! $insurance || ! $insurance->insurance_enabled || ! $insurance->active) {
-                continue;
-            }
-
-            $amount = (float) ($insurance->price_per_person ?? 0) * $participantCount;
-            if ($amount <= 0) {
-                continue;
-            }
-
-            $day = (int) ($dayInsurance->day ?? 0);
-
-            $existing = $this->costs()
-                ->where('source_type', 'insurance_day')
-                ->where('source_id', $dayInsurance->id)
-                ->first();
-
-            $attributes = [
-                'name' => 'Ubezpieczenie Dzień '.$day.': '.($insurance->name ?? ('ID '.$insurance->id)),
-                'planned_amount' => $amount,
-                'planned_currency_id' => $fallbackPlnCurrencyId,
-                'planned_rate' => 1,
-                'planned_amount_pln' => $amount,
-                'paid_by' => $existing?->paid_by ?? 'office',
-                'advance_type' => 'full',
-                'payment_status' => $existing?->payment_status ?? 'planned',
-                'order' => 1100 + $day,
-            ];
-
-            $this->costs()->updateOrCreate(
-                ['source_type' => 'insurance_day', 'source_id' => $dayInsurance->id],
-                $this->mergeExistingCostPilotReporting($existing, $attributes)
-            );
-
-            $importedInsuranceDayIds[] = (int) $dayInsurance->id;
-        }
-
-        // Usuń nieaktualne koszty ubezpieczeń po odpięciu ubezpieczenia od dnia
-        $this->costs()
-            ->where('source_type', 'insurance_day')
-            ->when(
-                ! empty($importedInsuranceDayIds),
-                fn ($query) => $query->whereNotIn('source_id', $importedInsuranceDayIds),
-                fn ($query) => $query
-            )
-            ->delete();
-    }
-
-    /**
-     * Importuje koszty transportu z autokarów
-     */
-    private function importTransportCosts(Event $event, ?int $fallbackPlnCurrencyId): void
-    {
-        $calculator = new \App\Services\EventTransportCostCalculator($event);
-
-        if (! $calculator->usesManualTransportCost() && ! $event->bus) {
-            return;
-        }
-
-        $manual = $calculator->usesManualTransportCost();
-        $totalTransportCostPln = $calculator->effectiveTransportCost();
-        $currencyId = $fallbackPlnCurrencyId;
-        $rate = 1.0;
-        $plannedAmount = $totalTransportCostPln;
-
-        if (! $manual && $event->bus) {
-            $bus = $event->bus;
-            $busCurrency = $bus->currency ?? 'PLN';
-
-            if ($busCurrency !== 'PLN') {
-                $currency = Currency::where('symbol', $busCurrency)->first();
-                if ($currency) {
-                    $currencyId = $currency->id;
-                    $rate = (float) ($currency->exchange_rate ?? 1);
-                    $plannedAmount = $rate > 0 ? round($totalTransportCostPln / $rate, 2) : $totalTransportCostPln;
-                }
-            }
-        }
-
-        if ($totalTransportCostPln > 0) {
-            $existing = $this->costs()
-                ->where('source_type', 'transport')
-                ->whereNull('source_id')
-                ->first();
-
-            $attributes = [
-                'name' => $manual
-                    ? \App\Services\EventTransportCostCalculator::MANUAL_TRANSPORT_POINT_NAME
-                    : \App\Services\EventTransportCostCalculator::TRANSPORT_POINT_NAME,
-                'planned_amount' => $plannedAmount,
-                'planned_currency_id' => $currencyId,
-                'planned_rate' => $rate,
-                'planned_amount_pln' => $totalTransportCostPln,
-                'paid_by' => $existing?->paid_by ?? 'office',
-                'advance_type' => 'full',
-                'payment_status' => $existing?->payment_status ?? 'planned',
-                'order' => 1000,
-            ];
-
-            $this->costs()->updateOrCreate(
-                ['source_type' => 'transport', 'source_id' => null],
-                $this->mergeExistingCostPilotReporting($existing, $attributes)
-            );
-        }
-    }
-
-    /**
-     * Importuje koszty noclegu z hoteli.
-     *
-     * Używa algorytmu DP (tak jak EventTemplateCalculationEngine) do wyznaczenia
-     * minimalnej kombinacji pokoi pokrywającej faktyczną liczebność każdej grupy
-     * (uczestnicy, gratis, obsługa, kierowca). Dzięki temu kwota w rozliczeniu
-     * odpowiada kwocie w kalkulacji.
-     */
-    private function importAccommodationCosts(Event $event, ?int $fallbackPlnCurrencyId): void
-    {
-        if (\Illuminate\Support\Facades\Schema::hasTable('event_hotel_stays') && $event->hotelStays()->exists()) {
-            $this->importAccommodationCostsFromEventPlan($event, $fallbackPlnCurrencyId);
-
-            return;
-        }
-
-        if (! $event->eventTemplate) {
-            return;
-        }
-
-        $template = $event->eventTemplate;
-        $hotelDays = $template->hotelDays()->get();
-        if ($hotelDays->isEmpty()) {
-            return;
-        }
-
-        // Ustal liczebność grup z wariantu ilościowego imprezy
-        $participantCount = max(1, (int) ($event->participant_count ?? 1));
-        $qtyVariant = $event->qtyVariants()
-            ->get()
-            ->sortBy(fn ($v) => abs(((int) ($v->qty ?? 0)) - $participantCount))
-            ->first();
-
-        $groupCounts = [
-            'qty' => $participantCount,
-            'gratis' => (int) ($qtyVariant->gratis ?? 0),
-            'staff' => (int) ($qtyVariant->staff ?? 0),
-            'driver' => (int) ($qtyVariant->driver ?? 0),
-        ];
-
-        $totalAccommodationCostPln = 0;
-
-        foreach ($hotelDays as $hotelDay) {
-            $dayNumber = (int) ($hotelDay->day ?? 0);
-            if ($dayNumber <= 0) {
-                continue;
-            }
-
-            $roomGroupMap = [
-                'qty' => $hotelDay->hotel_room_ids_qty ?? [],
-                'gratis' => $hotelDay->hotel_room_ids_gratis ?? [],
-                'staff' => $hotelDay->hotel_room_ids_staff ?? [],
-                'driver' => $hotelDay->hotel_room_ids_driver ?? [],
-            ];
-
-            $dayTotalPln = 0;
-
-            foreach ($roomGroupMap as $groupType => $roomIds) {
-                $peopleCount = $groupCounts[$groupType];
-                if ($peopleCount <= 0 || empty($roomIds)) {
-                    continue;
-                }
-
-                $rooms = HotelRoom::whereIn('id', $roomIds)->get();
-                if ($rooms->isEmpty()) {
-                    continue;
-                }
-
-                // DP: minimalny koszt kombinacji pokoi pokrywającej >= $peopleCount osób
-                $maxCapacity = $rooms->sum('people_count') * $peopleCount;
-                $dp = array_fill(0, $maxCapacity + 1, INF);
-                $choice = array_fill(0, $maxCapacity + 1, null);
-                $dp[0] = 0;
-
-                foreach ($rooms as $room) {
-                    $cap = max(1, (int) $room->people_count);
-                    for ($i = $cap; $i <= $maxCapacity; $i++) {
-                        if ($dp[$i] > $dp[$i - $cap] + $room->price) {
-                            $dp[$i] = $dp[$i - $cap] + $room->price;
-                            $choice[$i] = $room->id;
-                        }
-                    }
-                }
-
-                // Najtańsze rozwiązanie pokrywające >= $peopleCount
-                $minCost = INF;
-                $bestI = null;
-                for ($i = $peopleCount; $i <= $maxCapacity; $i++) {
-                    if ($dp[$i] < $minCost) {
-                        $minCost = $dp[$i];
-                        $bestI = $i;
-                    }
-                }
-
-                if ($minCost === INF || $bestI === null) {
-                    continue;
-                }
-
-                // Odtwórz wybór pokoi i zsumuj koszt w PLN
-                $i = $bestI;
-                while ($i > 0 && $choice[$i] !== null) {
-                    $room = $rooms->firstWhere('id', $choice[$i]);
-                    $roomPrice = (float) ($room->price ?? 0);
-                    $roomCurrency = (string) ($room->currency ?? 'PLN');
-                    $convertFlag = (bool) ($room->convert_to_pln ?? false);
-
-                    if ($roomCurrency === 'PLN' || $convertFlag) {
-                        if ($roomCurrency !== 'PLN') {
-                            $rate = Currency::where('symbol', $roomCurrency)->first()?->exchange_rate ?? 1;
-                            $roomPrice *= $rate;
-                        }
-                        $dayTotalPln += $roomPrice;
-                    } else {
-                        // Waluta obca bez konwersji → traktuj jako PLN (brak kursu w settlement)
-                        $dayTotalPln += $roomPrice;
-                    }
-
-                    $cap = max(1, (int) $room->people_count);
-                    $i -= $cap;
-                }
-            }
-
-            $totalAccommodationCostPln += $dayTotalPln;
-        }
-
-        // Dodaj/zaktualizuj jako jedną zagregowaną pozycję kosztów noclegu
-        if ($totalAccommodationCostPln > 0) {
-            $existing = $this->costs()
-                ->where('source_type', 'accommodation')
-                ->whereNull('source_id')
-                ->first();
-
-            $attributes = [
-                'name' => 'Koszty noclegu (hotel)',
-                'planned_amount' => $totalAccommodationCostPln,
-                'planned_currency_id' => $fallbackPlnCurrencyId,
-                'planned_rate' => 1,
-                'planned_amount_pln' => $totalAccommodationCostPln,
-                'paid_by' => $existing?->paid_by ?? 'office',
-                'advance_type' => 'full',
-                'payment_status' => $existing?->payment_status ?? 'planned',
-                'order' => 1001,
-            ];
-
-            $this->costs()->updateOrCreate(
-                ['source_type' => 'accommodation', 'source_id' => null],
-                $this->mergeExistingCostPilotReporting($existing, $attributes)
-            );
-        }
-    }
-
-    private function importAccommodationCostsFromEventPlan(Event $event, ?int $fallbackPlnCurrencyId): void
-    {
-        $event->loadMissing(['hotelStays.roomLines.currency']);
-        $totalAccommodationCostPln = app(\App\Services\EventHotelPlanService::class)->totalPlnForEvent($event);
-
-        if ($totalAccommodationCostPln <= 0) {
-            return;
-        }
-
-        $existing = $this->costs()
-            ->where('source_type', 'accommodation')
-            ->whereNull('source_id')
-            ->first();
-
-        $attributes = [
-            'name' => 'Koszty noclegu (hotel)',
-            'planned_amount' => $totalAccommodationCostPln,
-            'planned_currency_id' => $fallbackPlnCurrencyId,
-            'planned_rate' => 1,
-            'planned_amount_pln' => $totalAccommodationCostPln,
-            'paid_by' => $existing?->paid_by ?? 'office',
-            'advance_type' => 'full',
-            'payment_status' => $existing?->payment_status ?? 'planned',
-            'order' => 1001,
-        ];
-
-        $this->costs()->updateOrCreate(
-            ['source_type' => 'accommodation', 'source_id' => null],
-            $this->mergeExistingCostPilotReporting($existing, $attributes)
-        );
-    }
-
-    /**
-     * Oblicza gotówkę pilota per waluta i zapisuje/aktualizuje wpisy
+     * Oblicza gotówkę pilota per waluta i zapisuje/aktualizuje wpisy.
+     * Do przygotowania = plan pozycji paid_by=pilot minus już zapłacone (zaliczki biura + gotówka pilota).
+     * Np. hotel 800 − zaliczka biura 300 = 500 dopłaty do przygotowania.
      */
     public function recalculatePilotCash(): void
     {
-        $pilotCosts = $this->costs()
-            ->where('paid_by', 'pilot')
-            ->where('payment_status', '!=', 'cancelled')
-            ->get();
+        $allCosts = $this->costs()->with('plannedCurrency')->get();
+        $health = app(\App\Services\SettlementPaymentHealthService::class);
+
+        $pilotPlanCosts = $allCosts
+            ->filter(function (EventSettlementCost $cost) use ($health): bool {
+                if (($cost->paid_by ?? '') !== 'pilot') {
+                    return false;
+                }
+
+                if (($cost->payment_status ?? '') === 'cancelled') {
+                    return false;
+                }
+
+                if (EventSettlementCost::isPaymentSourceType($cost->source_type)) {
+                    return false;
+                }
+
+                return $health->isEvaluablePlanCost($cost);
+            })
+            ->values();
 
         $fallbackPlnCurrencyId = $this->resolveFallbackPlnCurrencyId();
 
-        $byCurrency = $pilotCosts->groupBy(function ($cost) use ($fallbackPlnCurrencyId) {
-            if ($cost->actual_amount !== null) {
-                return $cost->actual_currency_id ?: $cost->planned_currency_id ?: $fallbackPlnCurrencyId;
-            }
-
-            return $cost->planned_currency_id ?: $fallbackPlnCurrencyId;
-        });
+        $byCurrency = $pilotPlanCosts->groupBy(
+            fn (EventSettlementCost $cost) => $cost->planned_currency_id ?: $fallbackPlnCurrencyId
+        );
 
         $usedCurrencyIds = [];
 
@@ -755,16 +257,22 @@ class EventSettlement extends Model
 
             $usedCurrencyIds[] = (int) $currencyId;
 
-            $total = $items->sum(fn (EventSettlementCost $cost) => $this->resolvePilotCashAmount($cost));
-            $rate = (float) ($items->first()?->actual_rate ?? $items->first()?->planned_rate ?? 1);
-            $pln = $items->sum(fn (EventSettlementCost $cost) => $this->resolvePilotCashAmountPln($cost));
+            $total = 0.0;
+            $pln = 0.0;
+            $rate = (float) ($items->first()?->planned_rate ?? 1);
+
+            foreach ($items as $cost) {
+                [$remainingAmount, $remainingPln] = $this->resolvePilotCashRemaining($cost, $allCosts, $health);
+                $total += $remainingAmount;
+                $pln += $remainingPln;
+            }
 
             $existing = $this->pilotCashPreparations()->where('currency_id', $currencyId)->first();
 
             $attributes = [
-                'calculated_amount' => $total,
-                'rate_used' => $rate,
-                'pln_equivalent' => $pln,
+                'calculated_amount' => round($total, 2),
+                'rate_used' => $rate > 0 ? $rate : 1,
+                'pln_equivalent' => round($pln, 2),
             ];
 
             if (! $existing || blank($existing->provided_amount)) {
@@ -832,111 +340,64 @@ class EventSettlement extends Model
         }
     }
 
-    private function resolvePilotCashAmount(EventSettlementCost $cost): float
-    {
-        if ($cost->actual_amount !== null) {
-            return (float) $cost->actual_amount;
-        }
-
-        if (in_array($cost->payment_status, ['advance_paid', 'partially_paid'], true) && (float) ($cost->advance_amount ?? 0) > 0) {
-            return (float) $cost->advance_amount;
-        }
-
-        return (float) ($cost->planned_amount ?? 0);
-    }
-
-    private function resolvePilotCashAmountPln(EventSettlementCost $cost): float
-    {
-        if ($cost->actual_amount_pln !== null) {
-            return (float) $cost->actual_amount_pln;
-        }
-
-        if (in_array($cost->payment_status, ['advance_paid', 'partially_paid'], true) && (float) ($cost->advance_amount ?? 0) > 0) {
-            $rate = (float) ($cost->actual_rate ?? $cost->planned_rate ?? 1);
-
-            return (float) $cost->advance_amount * $rate;
-        }
-
-        return (float) ($cost->planned_amount_pln ?? 0);
-    }
-
     /**
-     * @param  array<string, mixed>  $attributes
-     * @return array<string, mixed>
+     * @return array{0: float, 1: float} [kwota w walucie planu, ekwiwalent PLN]
      */
-    protected function mergeExistingCostPilotReporting(?EventSettlementCost $existing, array $attributes): array
-    {
-        if (! $existing) {
-            return $attributes;
+    private function resolvePilotCashRemaining(
+        EventSettlementCost $cost,
+        \Illuminate\Support\Collection $allCosts,
+        \App\Services\SettlementPaymentHealthService $health,
+    ): array {
+        $plannedPln = $health->indicativePlannedPlnForCost($cost);
+        $paidPln = $health->paidPlnForPlanCost($cost, $allCosts);
+
+        // Legacy: wpłata zapisana bezpośrednio na wierszu planu (bez *_payment).
+        if ($paidPln <= \App\Services\SettlementPaymentHealthService::TOLERANCE
+            && (float) ($cost->actual_amount_pln ?? 0) > \App\Services\SettlementPaymentHealthService::TOLERANCE
+            && \App\Services\SettlementPaymentHealthService::isBookedPaymentStatus($cost->payment_status)) {
+            $paidPln = (float) $cost->actual_amount_pln;
         }
 
-        foreach ([
-            'paid_by',
-            'actual_amount',
-            'actual_currency_id',
-            'actual_rate',
-            'actual_amount_pln',
-            'notes',
-            'payment_method',
-            'payment_status',
-            'advance_amount',
-        ] as $field) {
-            $value = $existing->{$field};
+        $remainingPln = max(0.0, round($plannedPln - $paidPln, 2));
+        if ($remainingPln <= \App\Services\SettlementPaymentHealthService::TOLERANCE) {
+            return [0.0, 0.0];
+        }
 
-            if ($value !== null && $value !== '') {
-                $attributes[$field] = $value;
+        $plannedAmount = (float) ($cost->planned_amount ?? 0);
+        $currency = $cost->relationLoaded('plannedCurrency')
+            ? $cost->plannedCurrency
+            : $cost->plannedCurrency()->first();
+        $symbol = strtoupper((string) ($currency?->symbol ?? $currency?->code ?? 'PLN'));
+        $rate = (float) ($cost->planned_rate ?? ($currency?->exchange_rate ?? 1));
+        if ($rate <= 0) {
+            $rate = 1.0;
+        }
+
+        if ($plannedAmount > 0 && $symbol !== '' && $symbol !== 'PLN') {
+            $paidForeign = 0.0;
+            foreach ($health->paymentRowsForPlanCost($cost, $allCosts) as $payment) {
+                if (! \App\Services\SettlementPaymentHealthService::isBookedPaymentStatus($payment->payment_status)) {
+                    continue;
+                }
+                $paidForeign += (float) ($payment->actual_amount ?? 0);
             }
-        }
 
-        return $attributes;
-    }
-
-    /**
-     * @param  \Illuminate\Support\Collection<int, Reservation>|null  $activeReservations
-     */
-    protected function resolveContractorIdForProgramPoint(
-        EventProgramPoint $point,
-        ?\Illuminate\Support\Collection $activeReservations = null,
-    ): ?int {
-        if (filled($point->contractor_id)) {
-            return (int) $point->contractor_id;
-        }
-
-        $point->loadMissing('reservations');
-        $reservations = $activeReservations ?? $point->reservations->whereNotIn('status', ['cancelled', 'not_required']);
-
-        $reservationContractorId = $reservations
-            ->pluck('contractor_id')
-            ->filter()
-            ->last();
-
-        return $reservationContractorId ? (int) $reservationContractorId : null;
-    }
-
-    protected function inferPaidByFromProgramPoint(EventProgramPoint $point): string
-    {
-        $text = mb_strtolower(trim(($point->pilot_notes ?? '').' '.($point->office_notes ?? '')));
-
-        $pilotHints = [
-            'pilot płaci',
-            'pilot placi',
-            'płaci pilot',
-            'placi pilot',
-            'gotówka pilota',
-            'gotowka pilota',
-            'dopłata pilota',
-            'doplata pilota',
-            'pilot dopłaca',
-            'pilot doplaca',
-        ];
-
-        foreach ($pilotHints as $hint) {
-            if (str_contains($text, $hint)) {
-                return 'pilot';
+            if ($paidForeign <= \App\Services\SettlementPaymentHealthService::TOLERANCE
+                && (float) ($cost->actual_amount ?? 0) > \App\Services\SettlementPaymentHealthService::TOLERANCE
+                && \App\Services\SettlementPaymentHealthService::isBookedPaymentStatus($cost->payment_status)) {
+                $paidForeign = (float) $cost->actual_amount;
             }
+
+            if ($paidForeign <= \App\Services\SettlementPaymentHealthService::TOLERANCE && $paidPln > 0) {
+                $paidForeign = round($paidPln / $rate, 2);
+            }
+
+            $remainingForeign = max(0.0, round($plannedAmount - $paidForeign, 2));
+
+            return [$remainingForeign, $remainingPln];
         }
 
-        return 'office';
+        return [$remainingPln, $remainingPln];
     }
 
     protected function resolveFallbackPlnCurrencyId(): ?int
@@ -956,12 +417,20 @@ class EventSettlement extends Model
         return self::$statuses[$this->status] ?? $this->status;
     }
 
-    public static function findOrCreateActiveForEvent(Event $event): self
+    /**
+     * Istniejące aktywne rozliczenie (draft/active/pilot_settled) — bez tworzenia.
+     */
+    public static function findActiveForEvent(Event $event): ?self
     {
-        $existing = $event->settlements()
+        return $event->settlements()
             ->whereIn('status', ['draft', 'active', 'pilot_settled'])
             ->latest('id')
             ->first();
+    }
+
+    public static function findOrCreateActiveForEvent(Event $event): self
+    {
+        $existing = self::findActiveForEvent($event);
 
         if ($existing) {
             return $existing;
@@ -976,116 +445,6 @@ class EventSettlement extends Model
 
     public function upsertCostFromProgramPoint(EventProgramPoint $point): EventSettlementCost
     {
-        $point->loadMissing(['event', 'reservations', 'currency', 'templatePoint']);
-
-        // Rozliczenie punktu powinno odzwierciedlać faktyczny total_price punktu.
-        $participantCount = max(1, (int) ($point->event?->participant_count ?? 1));
-        $plannedAmount = $point->resolveEffectiveTotalPrice($participantCount);
-
-        $currency = $point->currency;
-        $currencyCode = strtoupper((string) ($currency?->code ?? $currency?->symbol ?? 'PLN'));
-        $rate = (float) ($currency?->exchange_rate ?? 1);
-        $currencyId = $point->currency_id ?: $this->resolveFallbackPlnCurrencyId();
-
-        $plannedAmountPln = $plannedAmount;
-        $convertToPln = (bool) ($point->convert_to_pln ?? false);
-        if ($convertToPln && $currencyId && $currencyCode !== 'PLN') {
-            $plannedAmountPln = $plannedAmount * $rate;
-        } elseif (! $convertToPln && $currencyId && $currencyCode !== 'PLN') {
-            $plannedAmountPln = null;
-        }
-
-        $activeReservations = $point->reservations->whereNotIn('status', ['cancelled', 'not_required']);
-        $contractorId = $this->resolveContractorIdForProgramPoint($point, $activeReservations);
-        $hasReservations = $activeReservations->isNotEmpty();
-        $reservedAmount = (float) $activeReservations->sum(fn (Reservation $reservation) => (float) ($reservation->reserved_amount ?? 0));
-        $reservationExpiry = $this->resolveReservationAdvanceDueDate($activeReservations);
-
-        $existingCost = $this->costs()
-            ->where('source_type', 'program_point')
-            ->where('source_id', $point->id)
-            ->first();
-
-        $paymentStatus = $existingCost?->payment_status;
-        $depositPaidAt = $activeReservations
-            ->map(fn (Reservation $reservation) => $reservation->deposit_paid_at)
-            ->filter()
-            ->sort()
-            ->first();
-
-        if ($depositPaidAt) {
-            $paymentStatus = 'advance_paid';
-        } elseif (in_array($paymentStatus, [null, 'planned', 'reservation_required', 'reserved'], true)) {
-            $paymentStatus = $hasReservations ? 'reserved' : 'planned';
-        }
-
-        $costPayload = [
-            'name' => $point->name ?: ($point->templatePoint->name ?? ('Punkt #'.$point->id)),
-            'planned_amount' => $plannedAmount,
-            'planned_currency_id' => $currencyId,
-            'planned_convert_to_pln' => $convertToPln,
-            'planned_rate' => $rate,
-            'planned_amount_pln' => $plannedAmountPln,
-            'contractor_id' => $contractorId,
-            'paid_by' => 'office',
-            'advance_type' => $hasReservations ? 'deposit' : ($existingCost?->advance_type ?? 'full'),
-            'payment_status' => $paymentStatus,
-            'advance_amount' => $reservedAmount > 0 ? $reservedAmount : null,
-            'advance_due_date' => $reservationExpiry,
-            'order' => $point->order ?? 0,
-            'notes' => $point->notes,
-        ];
-
-        if ($depositPaidAt) {
-            $costPayload['paid_at'] = self::sanitizeTimestampDate($depositPaidAt);
-        }
-
-        $cost = $this->costs()->updateOrCreate(
-            [
-                'source_type' => 'program_point',
-                'source_id' => $point->id,
-            ],
-            $costPayload
-        );
-
-        foreach ($point->reservations as $reservation) {
-            if ((int) $reservation->settlement_cost_id !== (int) $cost->id) {
-                $reservation->forceFill(['settlement_cost_id' => $cost->id])->saveQuietly();
-            }
-        }
-
-        $this->recalculateTotals();
-
-        return $cost;
-    }
-
-    /**
-     * @param  Collection<int, Reservation>  $activeReservations
-     */
-    private function resolveReservationAdvanceDueDate(Collection $activeReservations): ?Carbon
-    {
-        $date = $activeReservations
-            ->map(fn (Reservation $reservation) => $reservation->deposit_due_at
-                ?? $reservation->confirm_by
-                ?? $reservation->expires_at
-                ?? $reservation->reserved_at)
-            ->filter()
-            ->sortBy(fn (Carbon $value) => $value->timestamp)
-            ->first();
-
-        return self::sanitizeTimestampDate($date);
-    }
-
-    private static function sanitizeTimestampDate(mixed $date): ?Carbon
-    {
-        if (! $date instanceof Carbon) {
-            return null;
-        }
-
-        if ($date->year < 1970 || $date->year > 2038) {
-            return null;
-        }
-
-        return $date;
+        return \App\Services\EventSettlementImportService::for($this)->upsertCostFromProgramPoint($point);
     }
 }

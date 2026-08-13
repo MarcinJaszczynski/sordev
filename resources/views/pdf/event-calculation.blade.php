@@ -21,7 +21,10 @@
         <div><strong>{{ $event->name }}</strong> @if($event->code)({{ $event->code }})@endif</div>
         <div>Klient: {{ $event->client_name ?? '—' }}</div>
         <div>Termin: {{ $event->start_date?->format('d.m.Y') ?? '—' }} — {{ $event->end_date?->format('d.m.Y') ?? '—' }}</div>
-        <div>Uczestnicy: {{ (int) ($event->participant_count ?? 0) }}</div>
+        <div>Uczestnicy: {{ (int) ($event->participant_count ?? 0) }}
+            @php $gratis = $event->resolveGratisCountForParticipantCount((int) ($event->participant_count ?? 0)); @endphp
+            @if($gratis > 0) + {{ $gratis }} opiek. @endif
+        </div>
         <div>Wygenerowano: {{ now()->format('d.m.Y H:i') }}</div>
     </div>
 

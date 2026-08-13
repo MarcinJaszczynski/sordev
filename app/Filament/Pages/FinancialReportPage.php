@@ -29,6 +29,11 @@ class FinancialReportPage extends Page implements HasForms
 
     protected static ?int $navigationSort = 9;
 
+    public static function shouldRegisterNavigation(): bool
+    {
+        return false;
+    }
+
     public ?string $filterType = null;
 
     public ?string $filterDateFrom = null;
@@ -92,7 +97,7 @@ class FinancialReportPage extends Page implements HasForms
                         ->label('Szukaj')
                         ->placeholder('Nazwa, numer, NIP, referencja…'),
                 ])
-                ->columns(3)
+                ->columns(['default' => 1, 'md' => 2, 'xl' => 3])
                 ->statePath(''),
         ];
     }

@@ -6,6 +6,7 @@ use App\Models\Concerns\HasStickyNotes;
 use App\Models\Concerns\HasTasks;
 use App\Services\EventProgramScheduleService;
 use App\Services\TemplateProgramPointCopier;
+use App\Support\ProgramPointCostPricing;
 use Carbon\Carbon;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
@@ -16,7 +17,6 @@ use Illuminate\Database\Eloquent\Relations\HasOne;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Schema;
-use Illuminate\Support\Str;
 
 class Event extends Model
 {
@@ -46,11 +46,16 @@ class Event extends Model
         'cancelled' => self::STATUS_CANCELLED,
     ];
 
+    /** @var array<int, \App\Models\Contact> */
+    private static array $contactsByIdCache = [];
+
     protected $fillable = [
         'event_template_id',
         'start_place_id',
+        'program_start_place_id',
         'contractor_id',
         'transport_contractor_id',
+        'driver_contractor_id',
         'name',
         'client_name',
         'client_email',
@@ -95,8 +100,10 @@ class Event extends Model
         'insurance_payment_status',
         'insurance_status',
         'insurance_paid_at',
+        'tfg_defaults',
         'created_by',
         'assigned_to',
+        'pilot_contractor_id',
         'pilot_funds_paid',
         'pilot_funds_paid_at',
         'pilot_funds_paid_by',
@@ -126,6 +133,7 @@ class Event extends Model
         'use_manual_transport_cost' => 'boolean',
         'insurance_amount' => 'decimal:2',
         'insurance_paid_at' => 'datetime',
+        'tfg_defaults' => 'array',
         'pilot_funds_paid' => 'boolean',
         'pilot_funds_paid_at' => 'datetime',
         'pilot_advance_planned_amount' => 'decimal:2',
@@ -295,6 +303,7 @@ class Event extends Model
     public function requiresDriverPickupInfo(): bool
     {
         return filled($this->transport_contractor_id)
+            || filled($this->driver_contractor_id)
             || filled($this->bus_id)
             || filled($this->transport_company_name)
             || filled($this->driver_name)
@@ -592,23 +601,28 @@ class Event extends Model
             return collect();
         }
 
-        /** @var array<int, \App\Models\Contact> $cache */
-        static $cache = [];
-
         $missing = array_values(array_filter(
             $contactIds,
-            fn (int $id): bool => ! array_key_exists($id, $cache)
+            fn (int $id): bool => ! array_key_exists($id, self::$contactsByIdCache)
         ));
 
         if ($missing !== []) {
             foreach (\App\Models\Contact::query()->whereIn('id', $missing)->get() as $contact) {
-                $cache[(int) $contact->id] = $contact;
+                self::$contactsByIdCache[(int) $contact->id] = $contact;
             }
         }
 
         return collect($contactIds)
-            ->mapWithKeys(fn (int $id) => [$id => $cache[$id] ?? null])
+            ->mapWithKeys(fn (int $id) => [$id => self::$contactsByIdCache[$id] ?? null])
             ->filter();
+    }
+
+    /**
+     * Czyści cache kontaktów — wymagane między testami (RefreshDatabase + static).
+     */
+    public static function clearContactsByIdsCache(): void
+    {
+        self::$contactsByIdCache = [];
     }
 
     /**
@@ -619,13 +633,25 @@ class Event extends Model
         return $this->belongsTo(Contractor::class, 'transport_contractor_id');
     }
 
+    public function driverContractor(): BelongsTo
+    {
+        return $this->belongsTo(Contractor::class, 'driver_contractor_id');
+    }
+
     /**
-    /**
-     * Miejsce startu imprezy
+     * Miejsce startu imprezy (podstawienie autokaru).
      */
     public function startPlace(): BelongsTo
     {
         return $this->belongsTo(Place::class, 'start_place_id');
+    }
+
+    /**
+     * Początek programu (miejsce, do którego liczony jest transfer).
+     */
+    public function programStartPlace(): BelongsTo
+    {
+        return $this->belongsTo(Place::class, 'program_start_place_id');
     }
 
     /**
@@ -642,6 +668,11 @@ class Event extends Model
     public function assignedUser(): BelongsTo
     {
         return $this->belongsTo(User::class, 'assigned_to');
+    }
+
+    public function pilotContractor(): BelongsTo
+    {
+        return $this->belongsTo(Contractor::class, 'pilot_contractor_id');
     }
 
     public function pilotAdvancePlannedByUser(): BelongsTo
@@ -824,6 +855,38 @@ class Event extends Model
         }
 
         return $this->start_date->copy()->addDays(max(0, $day - 1));
+    }
+
+    /**
+     * Liczba dni programu widoczna w UI (trasy, zakładki).
+     *
+     * Bierze max(duration_days, szablon, span dat, max dzień punktów), żeby błędne
+     * duration_days=1 nie obcinało tras / programu.
+     */
+    public function resolveProgramDaysCount(): int
+    {
+        $this->loadMissing('eventTemplate');
+
+        $fromDates = 1;
+        if ($this->start_date && $this->end_date) {
+            $fromDates = max(1, (int) $this->start_date->copy()->startOfDay()
+                ->diffInDays($this->end_date->copy()->startOfDay()) + 1);
+        }
+
+        $maxPointDay = 1;
+        if ($this->exists && Schema::hasTable('event_program_points')) {
+            $maxPointDay = max(1, (int) EventProgramPoint::query()
+                ->where('event_id', $this->getKey())
+                ->max('day'));
+        }
+
+        return max(
+            1,
+            (int) ($this->duration_days ?? 0),
+            (int) ($this->eventTemplate?->duration_days ?? 0),
+            $fromDates,
+            $maxPointDay,
+        );
     }
 
     /**
@@ -1027,15 +1090,8 @@ class Event extends Model
 
     public function isInsuranceCompleted(): bool
     {
-        if (! $this->requiresInsuranceWorkflow()) {
-            return true;
-        }
-
-        return filled($this->insurance_policy_number)
-            && filled($this->insurance_terms)
-            && filled($this->insurance_document_path)
-            && ($this->insurance_status === 'completed')
-            && ($this->insurance_payment_status === 'paid');
+        // SSoT: formularz na danych imprezy — status „Gotowe” (bez „nie dotyczy”).
+        return ($this->insurance_status ?? 'pending') === 'completed';
     }
 
     public function hasInsuranceDataSaved(): bool
@@ -1063,7 +1119,7 @@ class Event extends Model
             return 'Kompletne';
         }
 
-        if ($this->hasInsuranceDataSaved()) {
+        if (($this->insurance_status ?? 'pending') === 'in_progress' || $this->hasInsuranceDataSaved()) {
             $parts = array_filter([
                 filled($this->insurance_policy_number) ? 'polisa '.$this->insurance_policy_number : null,
                 filled($this->insurance_document_path) ? 'dokument wgrany' : null,
@@ -1072,7 +1128,7 @@ class Event extends Model
             return 'W trakcie'.($parts !== [] ? ' ('.implode(', ', $parts).')' : '');
         }
 
-        return 'Brak danych';
+        return 'Do zrobienia — uzupełnij w Operacje → Ubezpieczenia i ustaw status „Gotowe”';
     }
 
     public static function normalizeInsuranceDocumentPath(mixed $path): ?string
@@ -1136,7 +1192,7 @@ class Event extends Model
 
         $eventPayload = [
             'event_template_id' => $template->id,
-            'start_place_id' => $data['start_place_id'] ?? $template->start_place_id ?? null,
+            'start_place_id' => $data['start_place_id'] ?? null,
             'name' => $data['name'],
             'client_name' => $data['client_name'],
             'client_email' => $data['client_email'] ?? null,
@@ -1154,6 +1210,12 @@ class Event extends Model
             'assigned_to' => $data['assigned_to'] ?? null,
             'notes' => $data['notes'] ?? null,
         ];
+
+        if (Schema::hasColumn('events', 'program_start_place_id')) {
+            $eventPayload['program_start_place_id'] = $data['program_start_place_id']
+                ?? $template->start_place_id
+                ?? null;
+        }
 
         if (Schema::hasColumn('events', 'diet_info')) {
             $eventPayload['diet_info'] = $data['diet_info'] ?? null;
@@ -1175,8 +1237,16 @@ class Event extends Model
             $eventPayload['driver_notes'] = $data['driver_notes'] ?? null;
         }
 
+        if (Schema::hasColumn('events', 'substitution_time')) {
+            $eventPayload['substitution_time'] = $data['substitution_time'] ?? null;
+        }
+
         if (Schema::hasColumn('events', 'departure_time')) {
             $eventPayload['departure_time'] = $data['departure_time'] ?? null;
+        }
+
+        if (Schema::hasColumn('events', 'return_time')) {
+            $eventPayload['return_time'] = $data['return_time'] ?? null;
         }
 
         if (Schema::hasColumn('events', 'transport_company_name')) {
@@ -1185,6 +1255,10 @@ class Event extends Model
 
         if (Schema::hasColumn('events', 'transport_contractor_id')) {
             $eventPayload['transport_contractor_id'] = $data['transport_contractor_id'] ?? null;
+        }
+
+        if (Schema::hasColumn('events', 'driver_contractor_id')) {
+            $eventPayload['driver_contractor_id'] = $data['driver_contractor_id'] ?? null;
         }
 
         if (Schema::hasColumn('events', 'driver_name')) {
@@ -1233,15 +1307,7 @@ class Event extends Model
         // Skopiuj punkty programu z szablonu (w tym podpunkty)
         $event->copyProgramPointsFromTemplate();
 
-        try {
-            $hotelPlan = app(\App\Services\EventHotelPlanService::class);
-            $hotelPlan->snapshotFromTemplate($event);
-            $hotelPlan->linkStaysToProgramPoints($event);
-        } catch (\Throwable $e) {
-            // ignore when hotel tables unavailable
-        }
-
-        // Kopiuj warianty ilości (qty) z szablonu do event-scoped
+        // Kopiuj warianty ilości (qty) z szablonu — PRZED planem hotelowym (algorytm DP używa gratis/staff/driver).
         try {
             foreach ($template->qtyVariants()->get() as $qty) {
                 \App\Models\EventQty::create([
@@ -1265,6 +1331,15 @@ class Event extends Model
             } catch (\Throwable $e) {
                 // ignore qty sync failures
             }
+        }
+
+        try {
+            $hotelPlan = app(\App\Services\EventHotelPlanService::class);
+            $hotelPlan->snapshotFromTemplate($event);
+            $hotelPlan->linkStaysToProgramPoints($event);
+            app(\App\Services\EventParticipantPropagationService::class)->assignOperationalOccupants($event->fresh());
+        } catch (\Throwable $e) {
+            // ignore when hotel tables unavailable
         }
 
         // Kopiuj ceny per person (jeśli istnieją) do event-scoped table
@@ -1427,6 +1502,8 @@ class Event extends Model
 
         $this->logHistory('program_copied', null, null, null, 'Skopiowano punkty programu z szablonu (w tym podpunkty)');
         $this->calculateTotalCost();
+        // Impreza z szablonu = wstępnie wypełniona: draft settlement + koszty planu z programu.
+        EventSettlement::findOrCreateActiveForEvent($this);
         $this->refreshActiveSettlementCosts();
         $this->syncTransportFromProgramPoints();
     }
@@ -1447,19 +1524,20 @@ class Event extends Model
     }
 
     /**
-     * Przelicz ilości (quantity) w punktach programu na podstawie aktualnego participant_count.
-     * Dotyczy tylko punktów z ustawionym group_size (ilość grup zależy od liczby uczestników).
+     * Przelicz ilości (quantity) w punktach programu na podstawie osób koszowych
+     * (płacący + gratis). Dotyczy punktów z group_size > 0 (1za1 lub XzaY).
      */
     public function resyncProgramPointQuantities(): void
     {
-        $participantCount = max(1, (int) ($this->participant_count ?? 1));
+        $payingCount = max(1, (int) ($this->participant_count ?? 1));
+        $costHeadcount = ProgramPointCostPricing::costHeadcount($this, $payingCount);
 
         $this->programPoints()
             ->whereNotNull('group_size')
             ->where('group_size', '>', 0)
-            ->each(function ($point) use ($participantCount) {
+            ->each(function ($point) use ($costHeadcount) {
                 $groupSize = max(1, (int) $point->group_size);
-                $newQuantity = max(1, (int) ceil($participantCount / $groupSize));
+                $newQuantity = max(1, (int) ceil($costHeadcount / $groupSize));
                 $previousQuantity = max(1, (int) ($point->quantity ?? 1));
                 $previousCalculated = round((float) ($point->calculated_price ?? 0), 2);
                 $previousPlanned = round((float) ($point->planned_price ?? 0), 2);
@@ -1498,8 +1576,7 @@ class Event extends Model
     }
 
     /**
-     * Pobiera pełny koszt imprezy z uwzględnieniem narzutu i podatków.
-     * Uwzględnia zmiany w punktach programu konkretnej imprezy.
+     * Pełny koszt / suma do zapłaty grupy (baza + marża + podatki) — to samo źródło co kalkulator.
      */
     public function resolvedFullTotalCost(
         ?int $participantCount = null,
@@ -1507,58 +1584,30 @@ class Event extends Model
         ?int $startPlaceId = null
     ): float {
         $count = max(1, (int) ($participantCount ?? $this->participant_count ?? 1));
-        $startPlace = (int) ($startPlaceId ?? $this->start_place_id ?? 0);
+        $gratis = $gratisCount !== null
+            ? max(0, (int) $gratisCount)
+            : $this->resolveGratisCountForParticipantCount($count);
 
-        // Priorytet 1: Odczytaj price_with_tax z tabeli event_price_per_person
-        // (kopia z "Cennika" szablonu — identyczna z zakładką Cennik/Kalkulacja).
-        $priceRows = $this->pricePerPerson()
-            ->with(['eventTemplateQty:id,qty', 'currency:id,code'])
-            ->get()
-            ->filter(fn ($r) => $r->currency && strtoupper($r->currency->code) === 'PLN')
-            ->when($startPlace > 0, fn ($c) => $c->filter(fn ($r) => (int) $r->start_place_id === $startPlace))
-            ->sortBy(fn ($r) => abs((int) ($r->eventTemplateQty->qty ?? 0) - $count));
-
-        if ($priceRows->isNotEmpty()) {
-            $best = $priceRows->first();
-            if ((float) $best->price_with_tax > 0) {
-                return round((float) $best->price_with_tax, 2);
+        try {
+            $calc = \App\Services\EventCostCalculator::for($this)->calculate($count, $gratis);
+            $total = round((float) ($calc['total_pln'] ?? 0), 2);
+            if ($total > 0) {
+                return $total;
             }
+        } catch (\Throwable $e) {
+            \Illuminate\Support\Facades\Log::warning('Event::resolvedFullTotalCost calculator failed', [
+                'event_id' => $this->id,
+                'error' => $e->getMessage(),
+            ]);
         }
 
-        // Priorytet 2: Silnik kalkulacji
-        if ($this->eventTemplate && $startPlace > 0) {
-            try {
-                $variant = $this->qtyVariants()->orderByRaw('ABS(qty - ?)', [$count])->first();
-                $gratis = max(0, (int) ($gratisCount ?? $variant->gratis ?? 0));
-                $engine = new \App\Services\EventTemplateCalculationEngine;
-                $result = $engine->calculateDetailedForCustomGroup(
-                    $this->eventTemplate, $count, $gratis, $startPlace
-                );
-                if (! empty($result) && isset($result['price_with_tax'])) {
-                    return round((float) $result['price_with_tax'], 2);
-                }
-            } catch (\Throwable $e) {
-                \Illuminate\Support\Facades\Log::warning('Event::resolvedFullTotalCost engine failed', [
-                    'event_id' => $this->id, 'error' => $e->getMessage(),
-                ]);
-            }
+        // Fallback: ręczna cena × płacący (gdy brak punktów / planu do kalkulacji).
+        $manualPpp = $this->resolveStoredManualPlnPricePerPerson($count);
+        if ($manualPpp !== null && $manualPpp > 0) {
+            return round($manualPpp * $count, 2);
         }
 
-        // Priorytet 3: Baza + marża + podatki (głęboki fallback)
-        $baseCost = $this->resolvedBaseTotalCost($participantCount, $gratisCount, $startPlaceId);
-        $markupPercent = (float) ($this->markup?->percent ?? $this->eventTemplate?->markup?->percent ?? 0);
-        $markupAmount = $baseCost * ($markupPercent / 100);
-        $totalTaxAmount = 0.0;
-        if ($this->eventTemplate) {
-            foreach ($this->eventTemplate->taxes as $tax) {
-                if (! $tax->is_active) {
-                    continue;
-                }
-                $totalTaxAmount += $tax->calculateTaxAmount($baseCost, $markupAmount);
-            }
-        }
-
-        return round($baseCost + $markupAmount + $totalTaxAmount, 2);
+        return 0.0;
     }
 
     /**
@@ -1567,28 +1616,12 @@ class Event extends Model
      */
     public function refreshActiveSettlementCosts(): void
     {
-        $settlement = $this->settlements()
-            ->whereIn('status', ['draft', 'active', 'pilot_settled'])
-            ->latest('id')
-            ->first();
-
-        if (! $settlement) {
-            return;
-        }
-
-        try {
-            $settlement->importFromEvent();
-        } catch (\Throwable $e) {
-            \Illuminate\Support\Facades\Log::warning('Event::refreshActiveSettlementCosts failed', [
-                'event_id' => $this->id,
-                'settlement_id' => $settlement->id,
-                'error' => $e->getMessage(),
-            ]);
-        }
+        app(\App\Services\EventSettlementSyncService::class)->refreshActiveCosts($this);
     }
 
     /**
-     * Pobierz bazowy całkowity koszt imprezy (bez narzutu), spójny z kalkulacją imprezy.
+     * Bazowy koszt imprezy (bez marży/podatków) — delegacja do EventCostCalculator.
+     * Parametr $startPlaceId zachowany dla BC (kalkulator bierze place z eventu).
      */
     public function resolvedBaseTotalCost(
         ?int $participantCount = null,
@@ -1596,114 +1629,30 @@ class Event extends Model
         ?int $startPlaceId = null
     ): float {
         $count = max(1, (int) ($participantCount ?? $this->participant_count ?? 1));
-        $startPlace = (int) ($startPlaceId ?? $this->start_place_id ?? 0);
+        $gratis = $gratisCount !== null
+            ? max(0, (int) $gratisCount)
+            : $this->resolveGratisCountForParticipantCount($count);
 
-        $gratis = $gratisCount;
-        if ($gratis === null) {
-            $variant = $this->qtyVariants()
-                ->orderByRaw('ABS(qty - ?)', [$count])
-                ->first();
-
-            $gratis = (int) ($variant->gratis ?? 0);
+        try {
+            $calc = \App\Services\EventCostCalculator::for($this)->calculate($count, $gratis);
+            $base = round((float) ($calc['base_pln'] ?? 0), 2);
+            if ($base > 0) {
+                return $base;
+            }
+        } catch (\Throwable $e) {
+            \Illuminate\Support\Facades\Log::warning('Event::resolvedBaseTotalCost calculator failed', [
+                'event_id' => $this->id,
+                'error' => $e->getMessage(),
+            ]);
         }
 
-        $gratis = max(0, (int) $gratis);
-
-        // Jeżeli event ma własne punkty programu, traktujemy je jako źródło prawdy
-        // (m.in. po ręcznych zmianach cen w RelationManagerze).
-        // Transport liczony osobno (jak w EventCostCalculator) — nie z punktów is_transport.
-        $points = $this->programPoints()->with('templatePoint:id,name')->where('active', true)->get();
-        if ($points->isNotEmpty()) {
-            $programPoints = $points->reject(function ($point): bool {
-                if ((bool) ($point->is_transport ?? false)) {
-                    return true;
-                }
-
-                return \App\Services\EventTransportCostCalculator::isTransportPointName(
-                    (string) ($point->templatePoint?->name ?? $point->name ?? '')
-                );
-            });
-
-            $programCost = (float) \App\Services\ProgramPointHelper::sumIncluded($programPoints, 'total_price');
-            $insuranceCost = $this->resolvedInsuranceCost($count, $gratis);
-
-            $variant = [
-                'qty' => $count,
-                'gratis' => $gratis,
-                'staff' => 1,
-                'driver' => 1,
-            ];
-            $qtyVariant = $this->qtyVariants()
-                ->orderByRaw('ABS(qty - ?)', [$count])
-                ->first();
-            if ($qtyVariant) {
-                $variant['staff'] = max(0, (int) ($qtyVariant->staff ?? 1));
-                $variant['driver'] = max(0, (int) ($qtyVariant->driver ?? 1));
-            }
-
-            $transportCost = (float) (new \App\Services\EventTransportCostCalculator($this))
-                ->effectiveTransportCost($variant);
-
-            return round($programCost + $insuranceCost + $transportCost, 2);
-        }
-
-        if ($this->eventTemplate && $startPlace > 0) {
-            try {
-                $engine = new \App\Services\EventTemplateCalculationEngine;
-                $result = $engine->calculateDetailedForCustomGroup(
-                    $this->eventTemplate,
-                    $count,
-                    $gratis,
-                    $startPlace,
-                    null,
-                    false
-                );
-
-                if (! empty($result) && array_key_exists('price_base', $result) && $result['price_base'] !== null) {
-                    return round((float) $result['price_base'], 2);
-                }
-            } catch (\Throwable $e) {
-                \Illuminate\Support\Facades\Log::warning(
-                    'Event::resolvedBaseTotalCost engine failed',
-                    ['event_id' => $this->id, 'error' => $e->getMessage()]
-                );
-            }
-        }
-
-        $priceRows = $this->pricePerPerson()
-            ->with('eventTemplateQty:id,qty')
-            ->get()
-            ->sortBy(function ($row) use ($count) {
-                $qty = (int) ($row->eventTemplateQty->qty ?? $row->event_template_qty_id ?? 0);
-
-                return abs($qty - $count);
-            });
-
-        if ($priceRows->isNotEmpty()) {
-            $bestMatch = $priceRows->first();
-
-            if ($bestMatch && $bestMatch->price_base !== null) {
-                return round((float) $bestMatch->price_base, 2);
-            }
-
-            if (
-                $bestMatch &&
-                $bestMatch->price_with_tax !== null &&
-                $bestMatch->markup_amount !== null
-            ) {
-                return round(max(0, ((float) $bestMatch->price_with_tax) - ((float) $bestMatch->markup_amount)), 2);
-            }
-        }
-
-        return 0.0;
+        // Ostatni fallback: zapisane total_cost (historycznie = baza).
+        return round((float) ($this->total_cost ?? 0), 2);
     }
 
     /**
-     * Koszt ubezpieczeń przypisanych do dni eventu.
-     * Liczenie zgodne z EventProgramTree: suma ubezpieczeń per dzień × (uczestnicy + gratis).
-     */
-    /**
-     * Publiczny dostęp do kosztu ubezpieczeń (dla wspólnego kalkulatora).
+     * Koszt ubezpieczeń NNW przypisanych do dni imprezy.
+     * SSoT: InsuranceCostCalculator — (płacący + gratis) × suma cen dnia.
      */
     public function insuranceCostPln(int $participantCount, int $gratisCount = 0): float
     {
@@ -1712,112 +1661,91 @@ class Event extends Model
 
     protected function resolvedInsuranceCost(int $participantCount, int $gratisCount = 0): float
     {
-        $count = max(0, $participantCount) + max(0, $gratisCount);
-        if ($count <= 0) {
-            return 0.0;
-        }
+        $dayInsurances = $this->relationLoaded('dayInsurances')
+            ? $this->dayInsurances
+            : $this->dayInsurances()->with('insurance')->get();
 
-        $daysGrouped = [];
-        foreach ($this->dayInsurances()->with('insurance')->get() as $dayInsurance) {
-            $insurance = $dayInsurance->insurance;
-            if (! $insurance || ! $insurance->insurance_enabled || ! $insurance->active) {
-                continue;
-            }
+        $dayInsurances->loadMissing('insurance');
 
-            $day = (int) ($dayInsurance->day ?? 0);
-            if ($day <= 0) {
-                continue;
-            }
-
-            $daysGrouped[$day] = ($daysGrouped[$day] ?? 0) + (float) ($insurance->price_per_person ?? 0);
-        }
-
-        $totalInsurance = 0.0;
-        foreach ($daysGrouped as $daySum) {
-            $totalInsurance += $daySum * $count;
-        }
-
-        return round($totalInsurance, 2);
+        return \App\Services\InsuranceCostCalculator::totalForDayAssignments(
+            $dayInsurances,
+            $participantCount,
+            $gratisCount
+        );
     }
 
     /**
-     * Pobierz cenę za osobę z pełnej kalkulacji (silnik + tab pricePerPerson + fallback)
+     * Cena za osobę (PLN, zaokrąglona) — jedno źródło z EventCostCalculator.
+     * Ręczna cena (is_manual) ma priorytet nad kalkulacją.
      */
     public function resolvedPricePerPerson(?int $participantCount = null): float
     {
         $count = max(1, (int) ($participantCount ?? $this->participant_count ?? 1));
 
-        // Priority 1: ręcznie ustawione ceny w tabeli event_price_per_person
-        $manualPrice = $this->resolveStoredPricePerPerson($count, manualOnly: true);
+        $manualPrice = $this->resolveStoredManualPlnPricePerPerson($count);
         if ($manualPrice !== null) {
             return $manualPrice;
         }
 
-        $storedPrice = $this->resolveStoredPricePerPerson($count, manualOnly: false);
-        if ($storedPrice !== null) {
-            return $storedPrice;
-        }
-
-        // Priority 2: silnik kalkulacji (szablon + gratis)
-        if ($this->eventTemplate && $this->start_place_id) {
-            try {
-                $variant = $this->qtyVariants()
-                    ->orderByRaw('ABS(qty - ?)', [$count])
-                    ->first();
-
-                $gratis = (int) ($variant->gratis ?? 0);
-
-                $engine = new \App\Services\EventTemplateCalculationEngine;
-                $result = $engine->calculateDetailedForCustomGroup(
-                    $this->eventTemplate,
-                    $count,
-                    $gratis,
-                    $this->start_place_id,
-                    null,
-                    false
-                );
-
-                if (! empty($result) && isset($result['price_per_person'])) {
-                    return round((float) $result['price_per_person'], 2);
-                }
-            } catch (\Throwable $e) {
-                \Illuminate\Support\Facades\Log::warning(
-                    'Event::resolvedPricePerPerson engine failed',
-                    ['event_id' => $this->id, 'error' => $e->getMessage()]
-                );
+        try {
+            $gratis = $this->resolveGratisCountForParticipantCount($count);
+            $calc = \App\Services\EventCostCalculator::for($this)->calculate($count, $gratis);
+            $rounded = (float) ($calc['price_per_person_rounded'] ?? 0);
+            if ($rounded > 0) {
+                return round($rounded, 2);
             }
-        }
-
-        // Priority 3: Fallback do total_cost / count
-        $totalCost = (float) ($this->total_cost ?? 0);
-        if ($totalCost > 0) {
-            return round($totalCost / $count, 2);
+            $raw = (float) ($calc['price_per_person'] ?? 0);
+            if ($raw > 0) {
+                return round($raw, 2);
+            }
+        } catch (\Throwable $e) {
+            \Illuminate\Support\Facades\Log::warning(
+                'Event::resolvedPricePerPerson calculator failed',
+                ['event_id' => $this->id, 'error' => $e->getMessage()]
+            );
         }
 
         return 0.0;
     }
 
-    private function resolveStoredPricePerPerson(int $count, bool $manualOnly): ?float
+    /**
+     * Ręczna cena PLN z event_price_per_person (is_manual).
+     */
+    private function resolveStoredManualPlnPricePerPerson(int $count): ?float
     {
-        $query = $this->pricePerPerson()
-            ->with('eventTemplateQty:id,qty');
+        $rows = $this->pricePerPerson()
+            ->where('is_manual', true)
+            ->with(['eventTemplateQty:id,qty', 'currency:id,code,symbol'])
+            ->get();
 
-        if ($manualOnly) {
-            $query->where('is_manual', true);
-        }
-
-        $priceRows = $query->get()
-            ->sortBy(function ($row) use ($count) {
-                $qty = (int) ($row->eventTemplateQty->qty ?? $row->event_template_qty_id ?? 0);
-
-                return abs($qty - $count);
-            });
-
-        if ($priceRows->isEmpty()) {
+        if ($rows->isEmpty()) {
             return null;
         }
 
-        $bestMatch = $priceRows->first();
+        $plnIds = \App\Models\Currency::plnIds();
+
+        $plnRows = $rows->filter(function ($row) use ($plnIds): bool {
+            if ($plnIds !== [] && in_array((int) ($row->currency_id ?? 0), $plnIds, true)) {
+                return true;
+            }
+
+            $code = strtoupper((string) ($row->currency?->code ?: $row->currency?->symbol ?: ''));
+
+            return $code === 'PLN' || $code === '' || $row->currency_id === null;
+        });
+
+        $pool = $plnRows->isNotEmpty() ? $plnRows : $rows;
+
+        $bestMatch = $pool->sortBy(function ($row) use ($count) {
+            $qty = (int) ($row->eventTemplateQty->qty ?? $row->event_template_qty_id ?? 0);
+
+            return abs($qty - $count);
+        })->first();
+
+        if (! $bestMatch) {
+            return null;
+        }
+
         if ((float) $bestMatch->price_per_person > 0) {
             return round((float) $bestMatch->price_per_person, 2);
         }
@@ -1949,6 +1877,16 @@ class Event extends Model
     public function settlements(): HasMany
     {
         return $this->hasMany(EventSettlement::class);
+    }
+
+    /**
+     * Szablon harmonogramu wpłat klientów (D−N / % / waluta→pilot).
+     */
+    public function paymentInstallmentTemplates(): HasMany
+    {
+        return $this->hasMany(EventPaymentInstallmentTemplate::class)
+            ->orderBy('sort_order')
+            ->orderBy('id');
     }
 
     public function vendorInvoices(): HasMany
@@ -2093,6 +2031,14 @@ class Event extends Model
     public function documents(): HasMany
     {
         return $this->hasMany(EventDocument::class)->orderBy('sort_order')->orderBy('created_at');
+    }
+
+    /**
+     * Edytowalne pakiety PDF (pilot / hotel / kierowca / teczka).
+     */
+    public function packageDocuments(): HasMany
+    {
+        return $this->hasMany(EventPackageDocument::class);
     }
 
     public static function templatePointLooksLikeHotel(object $point): bool

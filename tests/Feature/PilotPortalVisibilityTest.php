@@ -2,7 +2,8 @@
 
 namespace Tests\Feature;
 
-use App\Filament\Pilot\Pages\PilotAdvancePage;
+use App\Filament\Pilot\Pages\PilotSettlementPage;
+use App\Livewire\PilotCashDesk;
 use App\Livewire\PilotTripSettlementForm;
 use App\Models\Event;
 use App\Models\User;
@@ -22,7 +23,7 @@ class PilotPortalVisibilityTest extends TestCase
         Role::firstOrCreate(['name' => 'pilot']);
     }
 
-    public function test_pilot_advance_page_hides_currency_exchange_when_disabled(): void
+    public function test_pilot_settlement_hides_currency_exchange_when_disabled(): void
     {
         $pilot = User::factory()->create(['status' => 'active']);
         $pilot->assignRole('pilot');
@@ -36,9 +37,15 @@ class PilotPortalVisibilityTest extends TestCase
 
         $this->actingAs($pilot);
 
-        Livewire::test(PilotAdvancePage::class, ['event' => $event])
-            ->assertDontSee('Wymiana walut')
+        Livewire::test(PilotTripSettlementForm::class, ['event' => $event, 'showTripHeader' => false])
             ->assertSee('Zaliczka od biura');
+
+        Livewire::test(PilotCashDesk::class, [
+            'event' => $event,
+            'context' => 'pilot',
+            'compact' => true,
+            'showOfficePayoutBlock' => false,
+        ])->assertDontSee('Wymiana walut');
     }
 
     public function test_pilot_settlement_hides_bus_collections_by_default(): void
@@ -56,8 +63,7 @@ class PilotPortalVisibilityTest extends TestCase
         $this->actingAs($pilot);
 
         Livewire::test(PilotTripSettlementForm::class, ['event' => $event])
-            ->assertDontSee('Zbiórka gotówki w autokarze')
-            ->assertSee('Wydatki pilota');
+            ->assertDontSee('Zbiórka gotówki w autokarze');
     }
 
     public function test_pilot_settlement_shows_bus_collections_when_enabled(): void
@@ -76,5 +82,81 @@ class PilotPortalVisibilityTest extends TestCase
 
         Livewire::test(PilotTripSettlementForm::class, ['event' => $event])
             ->assertSee('Zbiórka gotówki w autokarze');
+    }
+
+    public function test_trip_nav_has_single_cash_settlement_tab(): void
+    {
+        $pilot = User::factory()->create(['status' => 'active']);
+        $pilot->assignRole('pilot');
+
+        $event = Event::factory()->create([
+            'assigned_to' => $pilot->id,
+            'shared_with_pilot' => true,
+            'status' => Event::STATUS_CONFIRMED,
+        ]);
+
+        $this->actingAs($pilot);
+
+        $tabs = \App\Support\PilotTripModuleNavigation::tabs($event);
+        $keys = collect($tabs)->pluck('key')->all();
+
+        $this->assertContains('settlement', $keys);
+        $this->assertNotContains('advance', $keys);
+        $this->assertStringContainsString(
+            '/pilot/settlement/',
+            collect($tabs)->firstWhere('key', 'settlement')['url'] ?? '',
+        );
+    }
+
+    public function test_admin_pilot_cash_desk_respects_portal_exchange_visibility(): void
+    {
+        Role::firstOrCreate(['name' => 'admin']);
+        $admin = User::factory()->create(['status' => 'active']);
+        $admin->assignRole('admin');
+
+        $event = Event::factory()->create([
+            'status' => Event::STATUS_CONFIRMED,
+            'pilot_portal_show_currency_exchange' => false,
+        ]);
+
+        $this->actingAs($admin);
+
+        Livewire::test(PilotCashDesk::class, [
+            'event' => $event,
+            'context' => 'admin',
+            'respectPortalVisibility' => true,
+        ])->assertDontSee('Wymiana walut');
+
+        Livewire::test(PilotCashDesk::class, [
+            'event' => $event,
+            'context' => 'admin',
+            'respectPortalVisibility' => false,
+        ])->assertSee('Wymiana walut');
+    }
+
+    public function test_admin_cash_desk_toggles_exchange_after_portal_visibility_event(): void
+    {
+        Role::firstOrCreate(['name' => 'admin']);
+        $admin = User::factory()->create(['status' => 'active']);
+        $admin->assignRole('admin');
+
+        $event = Event::factory()->create([
+            'status' => Event::STATUS_CONFIRMED,
+            'pilot_portal_show_currency_exchange' => true,
+        ]);
+
+        $this->actingAs($admin);
+
+        $component = Livewire::test(PilotCashDesk::class, [
+            'event' => $event,
+            'context' => 'admin',
+            'respectPortalVisibility' => true,
+        ])->assertSee('Wymiana walut');
+
+        $event->update(['pilot_portal_show_currency_exchange' => false]);
+
+        $component
+            ->dispatch('pilot-portal-visibility-updated', eventId: $event->id)
+            ->assertDontSee('Wymiana walut');
     }
 }

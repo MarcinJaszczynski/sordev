@@ -8,30 +8,25 @@ use App\Filament\Resources\EventResource;
 use App\Filament\Resources\EventResource\Concerns\HasEventFinanceSubNavigation;
 use App\Filament\Resources\EventResource\Concerns\InteractsWithEventRecord;
 use App\Filament\Resources\EventResource\Concerns\ResolvesEventSettlement;
-use App\Filament\Resources\EventSettlementResource\RelationManagers\PilotCashRelationManager;
-use App\Filament\Resources\EventSettlementResource\RelationManagers\PilotCurrencyExchangesRelationManager;
 use App\Models\Event;
-use Filament\Resources\Pages\Concerns\HasRelationManagers;
 use Filament\Resources\Pages\Page;
-use Illuminate\Support\Facades\Schema;
 
 /**
- * Gotówka pilota + wymiany walut — nested tab w hubie Finanse.
+ * Gotówka dla pilota — saldo, wymiany, wydatki (wspólne z panelem pilota).
  */
 class EventFinancePilotCash extends Page
 {
     use HasEventFinanceSubNavigation;
-    use HasRelationManagers;
     use InteractsWithEventRecord;
     use ResolvesEventSettlement;
 
     protected static string $resource = EventResource::class;
 
-    protected static string $view = 'filament.resources.event-resource.pages.event-finance-settlement-managers';
+    protected static string $view = 'filament.resources.event-resource.pages.event-finance-pilot-cash';
 
-    protected static ?string $navigationLabel = 'Gotówka i waluty';
+    protected static ?string $navigationLabel = 'Gotówka dla pilota';
 
-    protected static ?string $title = 'Gotówka i waluty';
+    protected static ?string $title = 'Gotówka dla pilota';
 
     protected static ?string $navigationIcon = 'heroicon-o-banknotes';
 
@@ -48,40 +43,6 @@ class EventFinancePilotCash extends Page
         $event = $this->record;
 
         return $event;
-    }
-
-    /**
-     * @return array<class-string>
-     */
-    protected function getAllRelationManagers(): array
-    {
-        $managers = [];
-
-        if (Schema::hasTable('pilot_cash_preparations')) {
-            $managers[] = PilotCashRelationManager::class;
-        }
-
-        if (Schema::hasTable('pilot_currency_exchanges')) {
-            $managers[] = PilotCurrencyExchangesRelationManager::class;
-        }
-
-        return $managers;
-    }
-
-    public function getRelationManagers(): array
-    {
-        $managers = [];
-
-        foreach ($this->getAllRelationManagers() as $manager) {
-            $managers[$manager] = $manager;
-        }
-
-        return $managers;
-    }
-
-    public function hasCombinedRelationManagerTabsWithContent(): bool
-    {
-        return false;
     }
 
     public static function getResourcePageName(): string

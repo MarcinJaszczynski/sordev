@@ -41,8 +41,15 @@
         <span class="badge ok">Opłacone</span>
     @else
         <span class="badge wait">Oczekuje na wpłatę</span>
+        @if(!empty($payOnlineUrl))
+            <p style="margin-top:1.25rem">
+                <a href="{{ $payOnlineUrl }}" style="display:inline-block;background:#2563eb;color:#fff;text-decoration:none;padding:.75rem 1.25rem;border-radius:.75rem;font-weight:600">
+                    {{ \App\Support\PaymentCta::label(includeSimulatorHint: true) }}
+                </a>
+            </p>
+        @endif
         <div class="hint">
-            <p><strong>Przelew tradycyjny</strong> (bramka online będzie dostępna później).</p>
+            <p><strong>Przelew tradycyjny</strong> — alternatywa dla płatności online.</p>
             <p>Tytuł przelewu: <code>{{ $transferTitle }}</code></p>
             <p class="muted" style="margin-top:0.75rem">Po zaksięgowaniu biuro oznaczy ratę jako opłaconą. Link jest podpisany czasowo.</p>
         </div>

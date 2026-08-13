@@ -24,11 +24,11 @@ return [
             'superscript', 'subscript', '|',
             'align-left', 'align-center', 'align-right', 'align-justify',
         ],
-        /* Uwagi imprezy — bez wyrównania do środka (edycja zawsze od lewej) */
+        /* Uwagi imprezy — bez wyrównania do środka; kolor i highlight jak w default */
         'notes' => [
             'undo', 'redo', '|',
             'heading', 'bullet-list', 'ordered-list', 'blockquote', '|',
-            'bold', 'italic', 'strike', 'underline', 'link',
+            'bold', 'italic', 'strike', 'underline', 'color', 'highlight', 'link',
         ],
         'simple' => ['heading', 'bullet-list', 'ordered-list', '|', 'bold', 'italic', 'underline', 'color', 'highlight', '|', 'link'],
         'minimal' => ['bold', 'italic', 'link', 'bullet-list', 'ordered-list'],
@@ -120,7 +120,15 @@ return [
     ]
     |
     */
-    'preset_colors' => [],
+    'preset_colors' => [
+        'amber' => '#f59e0b',
+        'red' => '#dc2626',
+        'green' => '#16a34a',
+        'blue' => '#2563eb',
+        'purple' => '#7c3aed',
+        'gray' => '#4b5563',
+        'black' => '#111827',
+    ],
 
     /*
     |--------------------------------------------------------------------------

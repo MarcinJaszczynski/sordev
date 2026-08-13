@@ -34,7 +34,8 @@ final class ReservationFormFields
             self::contractorPlaceholder($options),
 
             Forms\Components\TextInput::make('booking_reference')
-                ->label('Numer rezerwacji')
+                ->label('Nr potwierdzenia dostawcy')
+                ->helperText('Numer z potwierdzenia u kontrahenta — nie mylić z nr referencyjnym uczestnika.')
                 ->maxLength(255)
                 ->nullable(),
 
@@ -42,7 +43,7 @@ final class ReservationFormFields
 
             Forms\Components\Section::make('Kwota rezerwacji')
                 ->collapsed()
-                ->columns(2)
+                ->columns(['default' => 1, 'md' => 2])
                 ->schema([
                     ...ParticipantPricingFields::reservationPricingFields(),
                     CurrencyConversionFields::currencySelect(),
@@ -82,7 +83,8 @@ final class ReservationFormFields
     {
         $fields = [
             Forms\Components\TextInput::make('booking_reference')
-                ->label('Numer rezerwacji')
+                ->label('Nr potwierdzenia dostawcy')
+                ->helperText('Numer z potwierdzenia u kontrahenta — nie mylić z nr referencyjnym uczestnika.')
                 ->maxLength(255)
                 ->nullable(),
 

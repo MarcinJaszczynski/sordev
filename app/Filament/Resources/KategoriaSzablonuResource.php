@@ -75,7 +75,7 @@ class KategoriaSzablonuResource extends Resource
     {
         return $form->schema([
             Forms\Components\Section::make('Dane kategorii')
-                ->columns(2)
+                ->columns(['default' => 1, 'md' => 2])
                 ->schema([
                     Forms\Components\TextInput::make('nazwa')
                         ->label('Nazwa kategorii')

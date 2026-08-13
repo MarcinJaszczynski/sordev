@@ -3,7 +3,6 @@
 namespace App\Filament\Resources\EventSettlementResource\RelationManagers;
 
 use App\Filament\Resources\EventSettlementResource\Traits\DispatchesSettlementDataChanged;
-use App\Filament\Resources\TaskResource;
 use App\Models\Currency;
 use App\Models\CurrencyRateSnapshot;
 use App\Models\PilotCashPreparation;
@@ -28,7 +27,7 @@ class PilotCashRelationManager extends RelationManager
     {
         return $form->schema([
             Forms\Components\Section::make('Waluta i kwoty')
-                ->columns(2)
+                ->columns(['default' => 1, 'md' => 2])
                 ->schema([
                     Forms\Components\Select::make('currency_id')
                         ->label('Waluta')
@@ -86,10 +85,10 @@ class PilotCashRelationManager extends RelationManager
                 ]),
 
             Forms\Components\Section::make('Kurs walutowy')
-                ->columns(3)
+                ->columns(['default' => 1, 'md' => 2, 'xl' => 3])
                 ->schema([
                     Forms\Components\Select::make('rate_snapshot_id')
-                        ->label('Snapshot kursu')
+                        ->label('Kurs z dnia')
                         ->options(fn (Forms\Get $get) => CurrencyRateSnapshot::when(
                             $get('currency_id'),
                             fn ($q, $id) => $q->where('currency_id', $id)
@@ -128,7 +127,7 @@ class PilotCashRelationManager extends RelationManager
                 ]),
 
             Forms\Components\Section::make('Status')
-                ->columns(2)
+                ->columns(['default' => 1, 'md' => 2])
                 ->schema([
                     Forms\Components\Select::make('status')
                         ->label('Status')

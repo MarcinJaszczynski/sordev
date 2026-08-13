@@ -34,7 +34,7 @@ class ContractAnnexFields
             Forms\Components\CheckboxList::make('annex_change_types')
                 ->label('Rodzaje zmian w aneksie')
                 ->options(Contract::$annexChangeTypes)
-                ->columns(2)
+                ->columns(['default' => 1, 'md' => 2])
                 ->live()
                 ->required($requireChangeTypes)
                 ->helperText('Zaznacz, czego dotyczy aneks. Przy zmianie programu zapisujemy aktualny program imprezy.'),

@@ -250,7 +250,7 @@ class EditEventProgram extends Page
     {
         /** @var Event $event */
         $event = $this->getRecord();
-        $maxDay = max(1, (int) ($event->duration_days ?? 1));
+        $maxDay = $event->resolveProgramDaysCount();
 
         $counts = $this->filteredProgramPointsQuery()
             ->selectRaw('day, count(*) as aggregate')
@@ -313,7 +313,8 @@ class EditEventProgram extends Page
 
     protected function clampProgramDay(): void
     {
-        $maxDay = max(1, (int) ($this->getRecord()->duration_days ?? 1));
+        $event = $this->getRecord();
+        $maxDay = $event->resolveProgramDaysCount();
         $this->programDay = max(1, min($maxDay, (int) $this->programDay));
     }
 

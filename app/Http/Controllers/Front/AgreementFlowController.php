@@ -2,52 +2,62 @@
 
 namespace App\Http\Controllers\Front;
 
+use App\Actions\Finance\GenerateInstallmentPaymentLinkAction;
+use App\Data\GenerateInstallmentPaymentLinkData;
 use App\Http\Controllers\Controller;
 use App\Models\Contract;
+use App\Models\ContractPaymentSchedule;
 use App\Models\EventAgreement;
+use App\Services\AgreementFlowSessionStore;
+use App\Services\AgreementParticipantConsentSyncService;
 use App\Services\ClientPortalProvisioningService;
+use App\Services\ContractInstallmentCheckoutService;
 use App\Services\PublicAgreementResolver;
+use App\Support\SecurityEnvironment;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Mail;
+use Illuminate\Support\Facades\Schema;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Str;
 use Illuminate\Validation\Rule;
+use InvalidArgumentException;
 
 class AgreementFlowController extends Controller
 {
     public function __construct(
         protected PublicAgreementResolver $agreements,
+        protected AgreementParticipantConsentSyncService $participantConsentSync,
+        protected ContractInstallmentCheckoutService $installmentCheckout,
+        protected AgreementFlowSessionStore $flowSession,
     ) {}
 
     public function show(string $token)
     {
         $agreement = $this->findAgreement($token);
 
-        // Jeśli to szablon - utwórz klon dla tego uczestnika
-        if ($agreement->status === 'template') {
-            return $this->cloneTemplateForParticipant($agreement);
+        // Szablon: render bez klonu — umowa powstaje dopiero po danych osobowych.
+        if ($this->isTemplate($agreement)) {
+            return view('front.agreements.show', [
+                'agreement' => $agreement,
+                'flow' => $this->effectiveFlow($agreement),
+            ]);
         }
 
         if ($agreement->payment_status === 'paid') {
             return redirect()->route('agreement.flow.success', ['token' => $agreement->public_token]);
         }
 
-        if ($agreement->status === 'signed') {
+        if (in_array($agreement->status, ['signed', 'completed'], true)
+            && in_array($agreement->payment_status, ['pending', 'partial'], true)
+        ) {
             return redirect()->route('agreement.flow.payment', ['token' => $agreement->public_token]);
         }
 
         return view('front.agreements.show', [
             'agreement' => $agreement,
-            'flow' => $this->flowMeta($agreement),
+            'flow' => $this->effectiveFlow($agreement),
         ]);
-    }
-
-    protected function cloneTemplateForParticipant(Contract|EventAgreement $template): \Illuminate\Http\RedirectResponse
-    {
-        $agreement = $this->agreements->createFromTemplate($template);
-
-        return redirect()->route('agreement.flow.show', ['token' => $agreement->public_token]);
     }
 
     public function confirmPlan(Request $request, string $token)
@@ -64,13 +74,18 @@ class AgreementFlowController extends Controller
             'travel_insurance.required' => 'Wybierz opcję dodatkowego ubezpieczenia, aby kontynuować.',
         ]);
 
-        $this->mergeMeta($agreement, [
-            'flow' => [
-                'plan_confirmed_at' => now()->toIso8601String(),
-                'travel_insurance' => $payload['travel_insurance'],
-            ],
-        ]);
+        $flowPatch = [
+            'plan_confirmed_at' => now()->toIso8601String(),
+            'travel_insurance' => $payload['travel_insurance'],
+        ];
 
+        if ($this->isTemplate($agreement)) {
+            $this->flowSession->merge($agreement, $flowPatch);
+
+            return redirect()->route('agreement.flow.consents', ['token' => $agreement->public_token]);
+        }
+
+        $this->mergeMeta($agreement, ['flow' => $flowPatch]);
         $agreement->refresh();
         $agreement->regenerateAgreementBody();
 
@@ -97,7 +112,7 @@ class AgreementFlowController extends Controller
 
         return view('front.agreements.consents', [
             'agreement' => $agreement,
-            'flow' => $this->flowMeta($agreement),
+            'flow' => $this->effectiveFlow($agreement),
         ]);
     }
 
@@ -121,18 +136,28 @@ class AgreementFlowController extends Controller
             'consent_comm.accepted' => 'Zaakceptuj zgodę na komunikację elektroniczną.',
         ]);
 
+        $consents = [
+            'terms' => true,
+            'insurance' => true,
+            'data' => true,
+            'communication' => true,
+            'accepted' => true,
+            'accepted_at' => now()->toIso8601String(),
+        ];
+
+        if ($this->isTemplate($agreement)) {
+            $this->flowSession->merge($agreement, ['consents' => $consents]);
+
+            return redirect()->route('agreement.flow.personal', ['token' => $agreement->public_token]);
+        }
+
         $this->mergeMeta($agreement, [
             'flow' => [
-                'consents' => [
-                    'terms' => true,
-                    'insurance' => true,
-                    'data' => true,
-                    'communication' => true,
-                    'accepted' => true,
-                    'accepted_at' => now()->toIso8601String(),
-                ],
+                'consents' => $consents,
             ],
         ]);
+
+        $this->participantConsentSync->syncFromAgreement($agreement->fresh(), $request->ip());
 
         return redirect()->route('agreement.flow.personal', ['token' => $agreement->public_token]);
     }
@@ -157,7 +182,7 @@ class AgreementFlowController extends Controller
 
         return view('front.agreements.personal', [
             'agreement' => $agreement,
-            'flow' => $this->flowMeta($agreement),
+            'flow' => $this->effectiveFlow($agreement),
         ]);
     }
 
@@ -188,6 +213,22 @@ class AgreementFlowController extends Controller
             'participant_phone' => ['nullable', 'string', 'max:64'],
         ]);
 
+        $sessionFlow = [];
+        if ($this->isTemplate($agreement)) {
+            $sessionFlow = $this->flowSession->get($agreement);
+            $template = $agreement;
+            $agreement = $this->agreements->createFromTemplate($template);
+            $this->flowSession->clear($template);
+
+            // Przenieś plan/zgody z sesji na nową umowę.
+            $this->mergeMeta($agreement, [
+                'flow' => array_merge($sessionFlow, [
+                    'materialized_from_template_at' => now()->toIso8601String(),
+                ]),
+            ]);
+            $agreement->refresh();
+        }
+
         $participantName = $payload['participant_name']
             ?? $agreement->participant_name
             ?? $agreement->participantPayment?->participant_name;
@@ -205,7 +246,17 @@ class AgreementFlowController extends Controller
         ]);
 
         if ($agreement->isIndividual()) {
-            $agreement->participant_count = 1;
+            // Zachowaj slots ze szablonu (np. rodzeństwo); nie resetuj do 1.
+            $slots = max(
+                1,
+                (int) data_get($agreement->meta, 'participants_on_contract', $agreement->participant_count ?? 1)
+            );
+            $agreement->participant_count = $slots;
+
+            // Zamawiający = płatnik (osoba wypełniająca formularz).
+            $agreement->customer_name = $payload['signer_name'];
+            $agreement->customer_email = $payload['signer_email'];
+            $agreement->customer_phone = $payload['signer_phone'] ?? null;
 
             if ((float) $agreement->amount_due <= 0) {
                 $agreement->amount_due = $agreement->resolveIndividualAmountDue();
@@ -215,6 +266,7 @@ class AgreementFlowController extends Controller
         $agreement->save();
 
         $this->mergeMeta($agreement, [
+            'awaiting_participant_details' => false,
             'flow' => [
                 'personal_completed_at' => now()->toIso8601String(),
                 'signer_address' => [
@@ -230,14 +282,43 @@ class AgreementFlowController extends Controller
         $agreement->refresh();
         $agreement->regenerateAgreementBody();
 
+        $this->participantConsentSync->syncFromAgreement($agreement->fresh(), $request->ip());
+        $this->provisionPortalOnce($agreement->fresh());
+
+        if ((bool) data_get($agreement->meta, 'skip_payment', false)) {
+            $agreement->update([
+                'status' => 'completed',
+                'payment_status' => 'paid',
+                'amount_paid' => 0,
+                'paid_at' => now(),
+            ]);
+            $this->mergeMeta($agreement, [
+                'flow' => [
+                    'payment_skipped_data_collection' => true,
+                    'payment_completed_at' => now()->toIso8601String(),
+                ],
+            ]);
+            $this->sendConfirmationEmail($agreement->fresh());
+
+            return redirect()
+                ->route('agreement.flow.success', ['token' => $agreement->public_token])
+                ->with('success', 'Dane zapisane. Masz dostęp do panelu imprezy.');
+        }
+
         return redirect()
             ->route('agreement.flow.payment', ['token' => $agreement->public_token])
-            ->with('success', 'Dane zapisane. Przejdź do płatności.');
+            ->with('success', 'Dane zapisane. Przejdź do płatności pierwszej raty.');
     }
 
     public function sign(Request $request, string $token)
     {
         $agreement = $this->findAgreement($token);
+
+        if ($this->isTemplate($agreement)) {
+            return redirect()
+                ->route('agreement.flow.show', ['token' => $agreement->public_token])
+                ->with('info', 'Wypełnij formularz krok po kroku.');
+        }
 
         if ($agreement->payment_status === 'paid') {
             return redirect()->route('agreement.flow.success', ['token' => $agreement->public_token]);
@@ -281,7 +362,8 @@ class AgreementFlowController extends Controller
         $agreement->refresh();
         $agreement->regenerateAgreementBody();
 
-        app(ClientPortalProvisioningService::class)->provisionFromAgreement($agreement->fresh());
+        $this->participantConsentSync->syncFromAgreement($agreement->fresh(), $request->ip());
+        $this->provisionPortalOnce($agreement->fresh());
 
         return redirect()
             ->route('agreement.flow.payment', ['token' => $agreement->public_token])
@@ -292,11 +374,16 @@ class AgreementFlowController extends Controller
     {
         $agreement = $this->findAgreement($token);
 
+        if ($this->isTemplate($agreement)) {
+            return redirect()->route('agreement.flow.show', ['token' => $agreement->public_token]);
+        }
+
         if ($agreement->payment_status === 'paid') {
             return redirect()->route('agreement.flow.success', ['token' => $agreement->public_token]);
         }
 
-        if ($agreement->status !== 'signed') {
+        $canPay = in_array($agreement->status, ['signed', 'completed'], true);
+        if (! $canPay) {
             if ($this->hasConsents($agreement)) {
                 return redirect()->route('agreement.flow.personal', ['token' => $agreement->public_token]);
             }
@@ -309,9 +396,12 @@ class AgreementFlowController extends Controller
         }
 
         return view('front.agreements.payment', [
-            'agreement' => $agreement,
+            'agreement' => $agreement->loadMissing(['paymentSchedules', 'participantPayment', 'event']),
             'methods' => Contract::$paymentMethods,
-            'flow' => $this->flowMeta($agreement),
+            'flow' => $this->effectiveFlow($agreement),
+            'checkout' => $agreement instanceof Contract
+                ? $this->installmentCheckout->snapshot($agreement)
+                : null,
         ]);
     }
 
@@ -319,39 +409,175 @@ class AgreementFlowController extends Controller
     {
         $agreement = $this->findAgreement($token);
 
+        if ($this->isTemplate($agreement)) {
+            return redirect()->route('agreement.flow.show', ['token' => $agreement->public_token]);
+        }
+
         if ($agreement->payment_status === 'paid') {
             return redirect()->route('agreement.flow.success', ['token' => $agreement->public_token]);
         }
 
-        if ($agreement->status !== 'signed') {
+        if ($agreement->status !== 'signed' && $agreement->status !== 'completed') {
             return redirect()->route('agreement.flow.personal', ['token' => $agreement->public_token]);
         }
 
+        // Demo „opłać bieżącą ratę” tylko poza produkcją + driver fake.
+        if (SecurityEnvironment::allowsFakePayments()) {
+            $rules = [
+                'payment_method' => ['required', Rule::in(array_keys(Contract::$paymentMethods))],
+                'accept_demo' => ['accepted'],
+                'fx_location' => ['nullable', 'array'],
+                'fx_location.*' => ['in:office,pilot'],
+            ];
+
+            $payload = $request->validate($rules, [
+                'accept_demo.accepted' => 'Potwierdź realizację płatności demo.',
+            ]);
+
+            if ($agreement instanceof Contract) {
+                try {
+                    $fxLocations = is_array($payload['fx_location'] ?? null) ? $payload['fx_location'] : [];
+                    $checkoutBefore = $this->installmentCheckout->snapshot($agreement);
+                    $nextRemaining = (float) ($checkoutBefore['next_pln']['remaining'] ?? 0);
+
+                    // Tylko zapis miejsca FX (PLN już rozliczony).
+                    if ($nextRemaining <= 0.009) {
+                        $this->installmentCheckout->persistFxLocations($agreement, $fxLocations);
+                        $this->mergeMeta($agreement->fresh(), [
+                            'flow' => [
+                                'last_payment' => [
+                                    'contract_id' => $agreement->id,
+                                    'schedule_id' => null,
+                                    'amount' => 0,
+                                    'method' => $payload['payment_method'],
+                                    'at' => now()->toIso8601String(),
+                                    'next' => 'done',
+                                    'total_remaining_pln' => 0,
+                                ],
+                                'fx_location_saved_at' => now()->toIso8601String(),
+                                'payment_method' => $payload['payment_method'],
+                            ],
+                        ]);
+
+                        $this->sendConfirmationEmail($agreement->fresh());
+
+                        return redirect()
+                            ->route('agreement.flow.success', ['token' => $agreement->public_token])
+                            ->with('success', 'Zapisano miejsce płatności walutowej.');
+                    }
+
+                    $result = $this->installmentCheckout->applyDemoPlnPayment(
+                        $agreement,
+                        (string) $payload['payment_method'],
+                        $fxLocations,
+                    );
+                } catch (InvalidArgumentException $e) {
+                    return redirect()
+                        ->route('agreement.flow.payment', ['token' => $agreement->public_token])
+                        ->withErrors(['payment' => $e->getMessage()]);
+                }
+
+                $this->mergeMeta($agreement->fresh(), [
+                    'flow' => [
+                        'last_payment' => [
+                            'contract_id' => $agreement->id,
+                            'schedule_id' => $result['schedule_id'],
+                            'amount' => $result['charged'],
+                            'method' => $payload['payment_method'],
+                            'at' => now()->toIso8601String(),
+                            'next' => $result['snapshot']['next_step'],
+                            'total_remaining_pln' => $result['snapshot']['total_remaining_pln'],
+                        ],
+                        'payment_method' => $payload['payment_method'],
+                    ],
+                ]);
+
+                $this->agreements->syncPayment($agreement->fresh());
+
+                $fresh = $agreement->fresh();
+                $this->provisionPortalOnce($fresh);
+                // Po 1. racie w /umowa kończymy flow — kolejne raty w portalu / mailu.
+                $this->sendConfirmationEmail($fresh);
+
+                $msg = 'Opłacono ratę '.number_format($result['charged'], 2, ',', ' ').' PLN.';
+                if (($result['snapshot']['total_remaining_pln'] ?? 0) > 0.009) {
+                    $msg .= ' Kolejne transze opłacisz w portalu klienta (linki także w mailu potwierdzającym).';
+                } else {
+                    $msg .= ' Umowa jest rozliczona po stronie PLN.';
+                }
+
+                return redirect()
+                    ->route('agreement.flow.success', ['token' => $fresh->public_token])
+                    ->with('success', $msg);
+            }
+
+            // Legacy EventAgreement — pełna kwota (brak nowoczesnych rat kontraktowych).
+            $agreement->update([
+                'status' => 'completed',
+                'payment_status' => 'paid',
+                'payment_method' => $payload['payment_method'],
+                'amount_paid' => (float) $agreement->amount_due,
+                'paid_at' => now(),
+            ]);
+
+            $this->mergeMeta($agreement, [
+                'flow' => [
+                    'payment_completed_at' => now()->toIso8601String(),
+                    'payment_method' => $payload['payment_method'],
+                ],
+            ]);
+
+            $this->agreements->syncPayment($agreement);
+            $this->provisionPortalOnce($agreement->fresh());
+            $this->sendConfirmationEmail($agreement->fresh());
+
+            return redirect()->route('agreement.flow.success', ['token' => $agreement->public_token]);
+        }
+
+        // Produkcja / prawdziwy driver: wybór metody offline → oczekuje na księgowość (nie „paid”).
         $payload = $request->validate([
             'payment_method' => ['required', Rule::in(array_keys(Contract::$paymentMethods))],
-            'accept_demo' => ['accepted'],
-        ], [
-            'accept_demo.accepted' => 'Potwierdź realizację płatności demo.',
+            'fx_location' => ['nullable', 'array'],
+            'fx_location.*' => ['in:office,pilot'],
         ]);
+
+        if ($agreement instanceof Contract) {
+            $this->installmentCheckout->persistFxLocations(
+                $agreement,
+                is_array($payload['fx_location'] ?? null) ? $payload['fx_location'] : [],
+            );
+            $checkout = $this->installmentCheckout->snapshot($agreement->fresh());
+            $awaitingAmount = (float) ($checkout['next_pln']['remaining'] ?? $checkout['total_remaining_pln']);
+        } else {
+            $awaitingAmount = (float) $agreement->amount_due;
+            $checkout = null;
+        }
 
         $agreement->update([
             'status' => 'completed',
-            'payment_status' => 'paid',
+            'payment_status' => ((float) ($agreement->amount_paid ?? 0) > 0.009) ? 'partial' : 'pending',
             'payment_method' => $payload['payment_method'],
-            'amount_paid' => (float) $agreement->amount_due,
-            'paid_at' => now(),
         ]);
 
         $this->mergeMeta($agreement, [
             'flow' => [
-                'payment_completed_at' => now()->toIso8601String(),
+                'payment_method_selected_at' => now()->toIso8601String(),
                 'payment_method' => $payload['payment_method'],
+                'awaiting_offline_payment' => true,
+                'awaiting_amount_pln' => $awaitingAmount,
+                'last_payment' => [
+                    'contract_id' => $agreement->id,
+                    'schedule_id' => $checkout['next_pln']['id'] ?? null,
+                    'amount' => $awaitingAmount,
+                    'method' => $payload['payment_method'],
+                    'at' => now()->toIso8601String(),
+                    'next' => $checkout['next_step'] ?? 'pay_pln',
+                ],
             ],
         ]);
 
-        $this->agreements->syncPayment($agreement);
+        $this->provisionPortalOnce($agreement->fresh());
         $this->sendConfirmationEmail($agreement->fresh());
-        app(ClientPortalProvisioningService::class)->provisionFromAgreement($agreement->fresh());
 
         return redirect()->route('agreement.flow.success', ['token' => $agreement->public_token]);
     }
@@ -360,7 +586,22 @@ class AgreementFlowController extends Controller
     {
         $agreement = $this->findAgreement($token);
 
-        if ($agreement->payment_status !== 'paid') {
+        if ($this->isTemplate($agreement)) {
+            return redirect()->route('agreement.flow.show', ['token' => $agreement->public_token]);
+        }
+
+        $awaitingOffline = (bool) data_get($agreement->meta, 'flow.awaiting_offline_payment', false)
+            && in_array($agreement->payment_status, ['pending', 'partial'], true)
+            && filled($agreement->payment_method);
+
+        $checkout = $agreement instanceof Contract
+            ? $this->installmentCheckout->snapshot($agreement)
+            : null;
+
+        $plnSettled = in_array($agreement->payment_status, ['paid', 'partial'], true)
+            || ((float) ($agreement->amount_paid ?? 0) > 0.009);
+
+        if ($agreement->payment_status !== 'paid' && ! $awaitingOffline && ! $plnSettled) {
             return redirect()->route('agreement.flow.payment', ['token' => $agreement->public_token]);
         }
 
@@ -371,7 +612,8 @@ class AgreementFlowController extends Controller
 
         return view('front.agreements.success', [
             'agreement' => $agreement,
-            'flow' => $this->flowMeta($agreement),
+            'flow' => $this->effectiveFlow($agreement),
+            'checkout' => $checkout,
             'portalLoginUrl' => url('/portal/login'),
         ]);
     }
@@ -381,8 +623,20 @@ class AgreementFlowController extends Controller
         return $this->agreements->findByToken($token);
     }
 
-    protected function flowMeta(Contract|EventAgreement $agreement): array
+    protected function isTemplate(Contract|EventAgreement $agreement): bool
     {
+        return $agreement->status === 'template';
+    }
+
+    /**
+     * @return array<string, mixed>
+     */
+    protected function effectiveFlow(Contract|EventAgreement $agreement): array
+    {
+        if ($this->isTemplate($agreement)) {
+            return $this->flowSession->get($agreement);
+        }
+
         return (array) data_get($agreement->meta, 'flow', []);
     }
 
@@ -395,12 +649,35 @@ class AgreementFlowController extends Controller
 
     protected function isPlanConfirmed(Contract|EventAgreement $agreement): bool
     {
+        if ($this->isTemplate($agreement)) {
+            return $this->flowSession->isPlanConfirmed($agreement);
+        }
+
         return filled(data_get($agreement->meta, 'flow.plan_confirmed_at'));
     }
 
     protected function hasConsents(Contract|EventAgreement $agreement): bool
     {
+        if ($this->isTemplate($agreement)) {
+            return $this->flowSession->hasConsents($agreement);
+        }
+
         return (bool) data_get($agreement->meta, 'flow.consents.accepted', false);
+    }
+
+    protected function provisionPortalOnce(Contract|EventAgreement $agreement): void
+    {
+        if (filled(data_get($agreement->meta, 'flow.portal_provisioned_at'))) {
+            return;
+        }
+
+        app(ClientPortalProvisioningService::class)->provisionFromAgreement($agreement);
+
+        $this->mergeMeta($agreement->fresh(), [
+            'flow' => [
+                'portal_provisioned_at' => now()->toIso8601String(),
+            ],
+        ]);
     }
 
     protected function sendConfirmationEmail(Contract|EventAgreement $agreement): void
@@ -411,8 +688,7 @@ class AgreementFlowController extends Controller
             return;
         }
 
-        $subject = sprintf('Potwierdzenie zawarcia umowy %s', $agreement->agreement_number ?: ('#'.$agreement->id));
-        $body = implode("\n", [
+        $lines = [
             'Dziękujemy za zawarcie umowy.',
             '',
             'Numer umowy: '.($agreement->agreement_number ?: ('#'.$agreement->id)),
@@ -423,7 +699,20 @@ class AgreementFlowController extends Controller
             'Data płatności: '.optional($agreement->paid_at)->format('d.m.Y H:i'),
             '',
             'Link do umowy: '.$agreement->public_link,
-        ]);
+            'Portal klienta: '.url('/portal/login'),
+        ];
+
+        $paymentLinks = $this->remainingInstallmentPaymentLines($agreement);
+        if ($paymentLinks !== []) {
+            $lines[] = '';
+            $lines[] = 'Kolejne płatności (linki jednorazowe):';
+            foreach ($paymentLinks as $line) {
+                $lines[] = $line;
+            }
+        }
+
+        $subject = sprintf('Potwierdzenie zawarcia umowy %s', $agreement->agreement_number ?: ('#'.$agreement->id));
+        $body = implode("\n", $lines);
 
         try {
             Mail::raw($body, function ($message) use ($agreement, $recipient, $subject): void {
@@ -473,6 +762,84 @@ class AgreementFlowController extends Controller
                 'error' => $e->getMessage(),
             ]);
         }
+    }
+
+    /**
+     * @return list<string>
+     */
+    protected function remainingInstallmentPaymentLines(Contract|EventAgreement $agreement): array
+    {
+        if (! $agreement instanceof Contract || ! Schema::hasTable('contract_payment_schedules')) {
+            return [];
+        }
+
+        $action = app(GenerateInstallmentPaymentLinkAction::class);
+        $lines = [];
+
+        $schedules = $agreement->paymentSchedules()
+            ->orderBy('sort_order')
+            ->get()
+            ->filter(function (ContractPaymentSchedule $row): bool {
+                $amount = round((float) $row->amount, 2);
+                if ($amount <= 0.009) {
+                    return false;
+                }
+
+                $paid = round((float) ($row->paid_amount ?? 0), 2);
+
+                return ($amount - $paid) > 0.009;
+            });
+
+        foreach ($schedules as $schedule) {
+            $remaining = round((float) $schedule->amount - (float) ($schedule->paid_amount ?? 0), 2);
+            $label = $schedule->label ?: 'Transza';
+            $window = $this->formatScheduleDueWindow($schedule);
+
+            try {
+                $link = $action(new GenerateInstallmentPaymentLinkData(schedule: $schedule, ttlDays: 30));
+                $lines[] = sprintf(
+                    '- %s: %s PLN%s — %s',
+                    $label,
+                    number_format($remaining, 2, ',', ' '),
+                    $window !== '' ? ' ('.$window.')' : '',
+                    $link['url'],
+                );
+            } catch (\Throwable $e) {
+                Log::warning('agreement-confirmation-payment-link-failed', [
+                    'schedule_id' => $schedule->id,
+                    'error' => $e->getMessage(),
+                ]);
+            }
+        }
+
+        return $lines;
+    }
+
+    protected function formatScheduleDueWindow(ContractPaymentSchedule $schedule): string
+    {
+        $from = null;
+        $to = null;
+
+        if (Schema::hasColumn($schedule->getTable(), 'due_from') && $schedule->due_from) {
+            $from = $schedule->due_from->format('d.m.Y');
+        }
+        if (Schema::hasColumn($schedule->getTable(), 'due_to') && $schedule->due_to) {
+            $to = $schedule->due_to->format('d.m.Y');
+        } elseif ($schedule->due_date) {
+            $to = $schedule->due_date->format('d.m.Y');
+        }
+
+        if ($from && $to) {
+            return 'termin '.$from.'–'.$to;
+        }
+        if ($to) {
+            return 'do '.$to;
+        }
+        if ($from) {
+            return 'od '.$from;
+        }
+
+        return '';
     }
 
     protected function renderAgreementPdf(Contract|EventAgreement $agreement): ?string

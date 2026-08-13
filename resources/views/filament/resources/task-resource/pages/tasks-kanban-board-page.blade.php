@@ -99,7 +99,7 @@
         </div>
     </div>
 </div>
-<div class="mb-6 grid grid-cols-2 lg:grid-cols-2 gap-3">
+<div class="mb-6 grid grid-cols-1 gap-3 sm:grid-cols-2">
         <button type="button" wire:click="applyQuickFilter('high_priority')" class="text-left rounded-lg border border-gray-200 dark:border-gray-700 px-3 py-2 hover:bg-gray-50 dark:hover:bg-gray-800/60 transition bg-white dark:bg-gray-900">
             <p class="text-xs text-gray-500 dark:text-gray-400">Pilne</p>
             <p class="text-lg font-semibold text-gray-900 dark:text-gray-100">{{ $boardStats['urgent'] ?? $tasks->where('priority', 'urgent')->count() }}</p>
@@ -112,7 +112,7 @@
 
     {{-- Enhanced Kanban Board using filament-kanban style --}}
     <div class="mb-2 flex items-center justify-between">
-        <h3 class="text-base font-semibold text-gray-900 dark:text-gray-100">Tablica Kanban</h3>
+        <h3 class="text-base font-semibold text-gray-900 dark:text-gray-100" title="Zadania pogrupowane według statusu — przeciągaj karty między kolumnami.">Tablica zadań</h3>
     </div>
     <div 
         x-data="{}"
@@ -239,36 +239,13 @@
                                 id="{{ $task->id }}" 
                                 style="{{ $palette['cardStyle'] }}"
                                 wire:click="openEditTaskModal({{ $task->id }})"
-                                class="task-card record group px-4 py-4 cursor-pointer transition hover:shadow-xl transform hover:-translate-y-1 relative" 
+                                class="task-card record group px-3 py-3 cursor-pointer transition hover:shadow-md relative rounded-lg border" 
                             >
-                                <button
-                                    type="button"
-                                    wire:click.stop
-                                    class="task-drag-handle absolute right-2 top-2 z-10 rounded-md p-1 text-gray-400 hover:bg-white/80 hover:text-gray-700 dark:hover:bg-gray-800/80 dark:hover:text-gray-200 cursor-grab"
-                                    title="Przeciągnij zadanie"
-                                >
-                                    <x-heroicon-m-bars-3 class="w-4 h-4" />
-                                </button>
                                 @php
-                                    $statusName = mb_strtolower($task->status?->name ?? '');
-                                    $isNewTask = str_contains($statusName, 'nowe') || str_contains($statusName, 'nowy');
-                                    $isInProgressTask = str_contains($statusName, 'w trakcie');
                                     $isOverdueTask = $task->due_date && $task->due_date->isPast();
-                                    $hasRecentComment = $task->comments?->contains(fn ($comment) => $comment->created_at && now()->diffInHours($comment->created_at, true) <= 24) ?? false;
-                                    $isRecentlyUpdated = $task->updated_at && now()->diffInHours($task->updated_at, true) <= 24;
-                                    $isRecentlyActive = $hasRecentComment || $isRecentlyUpdated;
-
-                                    $titleColorClass = 'text-gray-900 dark:text-gray-100';
-
-                                    if ($isOverdueTask) {
-                                        $titleColorClass = 'text-red-700 dark:text-red-300';
-                                    } elseif ($isRecentlyActive) {
-                                        $titleColorClass = 'text-orange-700 dark:text-orange-300';
-                                    } elseif ($isInProgressTask) {
-                                        $titleColorClass = 'text-blue-700 dark:text-blue-300';
-                                    } elseif ($isNewTask) {
-                                        $titleColorClass = 'text-green-700 dark:text-green-300';
-                                    }
+                                    $titleColorClass = $isOverdueTask
+                                        ? 'text-red-700 dark:text-red-300'
+                                        : 'text-gray-900 dark:text-gray-100';
 
                                     $priorityLabel = match (\App\Enums\TaskPriority::normalize($task->priority)) {
                                         'urgent' => 'Pilne',
@@ -279,168 +256,167 @@
                                         default => 'background-color:#4b5563;color:#ffffff;border-color:#374151;',
                                     };
 
-                                    $latestComment = $task->comments?->sortByDesc('created_at')->first();
-                                    $latestAttachmentAt = $task->attachments?->sortByDesc('created_at')->first()?->created_at;
-                                    $latestSubtaskAt = $task->subtasks?->sortByDesc('updated_at')->first()?->updated_at;
-
-                                    $latestActivity = collect([
-                                        ['label' => 'zadanie', 'at' => $task->updated_at ?: $task->created_at],
-                                        ['label' => 'komentarz', 'at' => $latestComment?->created_at],
-                                        ['label' => 'załącznik', 'at' => $latestAttachmentAt],
-                                        ['label' => 'podzadanie', 'at' => $latestSubtaskAt],
-                                    ])
-                                        ->filter(fn (array $item): bool => filled($item['at']))
-                                        ->sortByDesc(fn (array $item): int => $item['at']->timestamp)
-                                        ->first();
-
-                                    $attachments = $task->attachments?->sortByDesc('created_at') ?? collect();
-                                    $attachmentPreview = $attachments->take(3);
-
-                                    $completedSubtasks = $task->subtasks?->where('status.name', 'Zakończone')->count() ?? 0;
                                     $totalSubtasks = $task->subtasks?->count() ?? 0;
-                                    $progressPercent = $totalSubtasks > 0 ? round(($completedSubtasks / $totalSubtasks) * 100) : 0;
+                                    $taskComments = $task->relationLoaded('comments')
+                                        ? $task->comments->sortBy('created_at')->values()
+                                        : collect();
+                                    $commentsCount = (int) ($task->comments_count ?? $taskComments->count());
+                                    $attachmentsCount = (int) ($task->attachments_count ?? $task->attachments?->count() ?? 0);
+
+                                    $descriptionFull = \App\Support\Tasks\TaskListColumn::sanitizeTaskText($task->description, 5000);
+                                    $descriptionPreview = \App\Support\Tasks\TaskListColumn::sanitizeTaskText($task->description, 180);
+
+                                    $contextLabel = $task->task_context_label;
+                                    $contextPreview = \Illuminate\Support\Str::limit($contextLabel, 72);
+
+                                    $latestComment = $taskComments->last();
+                                    $latestCommentPreview = $latestComment
+                                        ? \App\Support\Tasks\TaskListColumn::sanitizeTaskText($latestComment->content, 140)
+                                        : '';
                                 @endphp
 
-                                {{-- 1) Tytuł + priorytet --}}
-                                <div class="flex items-start justify-between gap-3 mb-2 pr-8">
-                                    <h4 class="font-bold text-base leading-5 flex-1 text-left {{ $titleColorClass }}">
+                                <div class="flex items-start gap-2 mb-2">
+                                    <h4 class="min-w-0 flex-1 break-words font-semibold text-sm leading-5 text-left {{ $titleColorClass }}">
                                         {{ $task->title }}
                                     </h4>
-                                    <span class="priority-badge flex-shrink-0 text-xs px-2 py-1 rounded-full font-bold border" style="{{ $priorityStyles }}">
+                                    <span class="priority-badge flex-shrink-0 text-[10px] px-1.5 py-0.5 rounded-full font-bold border" style="{{ $priorityStyles }}">
                                         {{ $priorityLabel }}
                                     </span>
+                                    <button
+                                        type="button"
+                                        wire:click.stop
+                                        class="task-drag-handle -mr-1 flex-shrink-0 rounded-md p-1 text-gray-400 hover:bg-white/80 hover:text-gray-700 dark:hover:bg-gray-800/80 dark:hover:text-gray-200 cursor-grab"
+                                        title="Przeciągnij zadanie"
+                                    >
+                                        <x-heroicon-m-bars-3 class="w-4 h-4" />
+                                    </button>
                                 </div>
 
                                 @if($task->parent)
-                                    <div class="mb-2 text-xs font-semibold text-indigo-700 dark:text-indigo-300 px-2 py-1 rounded-md bg-indigo-50 dark:bg-indigo-900/30 border border-indigo-200 dark:border-indigo-800">
+                                    <p class="mb-1.5 text-[11px] text-indigo-600 dark:text-indigo-300 truncate">
                                         Podzadanie: {{ $task->parent->title }}
-                                    </div>
+                                    </p>
                                 @endif
 
-                                <div class="mb-2 text-xs text-gray-500 dark:text-gray-400">
-                                    Utworzono: {{ $task->created_at?->format('d.m.Y H:i') ?? '—' }}
-                                    @if($latestComment?->created_at)
-                                        · Ostatni komentarz: {{ $latestComment->created_at->format('d.m.Y H:i') }}
-                                    @endif
-                                </div>
-
-                                {{-- 2) Skrócony opis --}}
-                                @if($task->description)
-                                    @php
-                                        $rawDescription = (string) $task->description;
-                                        $descriptionHasHtml = $rawDescription !== strip_tags($rawDescription);
-                                        $descriptionPreviewHtml = $descriptionHasHtml
-                                            ? strip_tags($rawDescription, '<p><br><strong><b><em><i><u><ul><ol><li><blockquote>')
-                                            : nl2br(e(\Illuminate\Support\Str::limit($rawDescription, 420)));
-                                    @endphp
-                                    <div class="mb-3 relative">
-                                        <div class="text-[16px] leading-7 font-semibold text-gray-950 dark:text-gray-50 max-h-32 overflow-hidden [&_strong]:font-black [&_b]:font-black [&_em]:italic [&_i]:italic [&_u]:underline [&_ul]:list-disc [&_ul]:pl-5 [&_ol]:list-decimal [&_ol]:pl-5 [&_li]:mb-0.5 [&_blockquote]:border-l-2 [&_blockquote]:border-gray-300 dark:[&_blockquote]:border-gray-600 [&_blockquote]:pl-3 [&_p]:mb-1">
-                                            {!! $descriptionPreviewHtml !!}
-                                        </div>
-                                        <div class="pointer-events-none absolute inset-x-0 bottom-0 h-7 bg-gradient-to-t from-transparent via-white/70 to-transparent dark:via-gray-900/70"></div>
-                                    </div>
-                                @endif
-
-                                {{-- 3) Do kiedy --}}
-                                <div class="mb-2 text-xs text-gray-700 dark:text-gray-200 px-3 py-2 rounded-lg bg-white/50 dark:bg-black/20">
-                                    <span class="font-semibold">Do kiedy:</span>
-                                    @if($task->due_date)
-                                        <span class="ml-1 font-medium">{{ $task->due_date->format('d.m.Y H:i') }}</span>
-                                        @if($task->due_date->isPast())
-                                            <span class="ml-2 font-bold text-red-700 dark:text-red-300">Po terminie</span>
-                                        @endif
-                                    @else
-                                        <span class="ml-1">Brak terminu</span>
-                                    @endif
-                                </div>
-
-                                {{-- 4) Dla kogo --}}
-                                <div class="mb-3 text-xs text-gray-700 dark:text-gray-200 px-3 py-2 rounded-lg bg-white/50 dark:bg-black/20">
-                                    <span class="font-semibold">Dla kogo:</span>
-                                    <span class="ml-1 font-medium">{{ $task->assignee?->name ?? 'Nie przypisano' }}</span>
-                                </div>
-
-                                {{-- 6) Ostatnia aktywność --}}
-                                @if($latestActivity)
-                                    <div class="mb-3 text-xs text-orange-700 dark:text-orange-200 rounded-lg border border-orange-200 dark:border-orange-800 bg-orange-50 dark:bg-orange-900/30 px-3 py-2 font-semibold">
-                                        <x-heroicon-m-bolt class="w-3.5 h-3.5" />
-                                        <span class="ml-1">Ostatnia aktywność: {{ ucfirst($latestActivity['label']) }} {{ $latestActivity['at']->diffForHumans() }}</span>
-                                    </div>
-                                @endif
-
-                                {{-- 7) Ostatni komentarz --}}
-                                @if($latestComment)
-                                    @php
-                                        $rawComment = (string) ($latestComment->content ?? '');
-                                        $commentHasHtml = $rawComment !== strip_tags($rawComment);
-                                        $commentPreviewHtml = $commentHasHtml
-                                            ? strip_tags($rawComment, '<p><br><strong><b><em><i><u><ul><ol><li><blockquote>')
-                                            : nl2br(e(\Illuminate\Support\Str::limit($rawComment, 360)));
-                                    @endphp
-                                    <div class="mb-3 rounded-xl border-2 border-emerald-300 dark:border-emerald-700 px-3 py-3 bg-emerald-50 dark:bg-emerald-900/30 shadow-md ring-2 ring-emerald-200/70 dark:ring-emerald-900/40">
-                                        <div class="flex items-center justify-between gap-2 mb-1.5">
-                                            <span class="text-[11px] uppercase tracking-[0.14em] font-black text-emerald-900 dark:text-emerald-100">Ostatni komentarz</span>
-                                            <span class="text-xs font-semibold text-emerald-800 dark:text-emerald-200">{{ $latestComment->created_at?->diffForHumans() }}</span>
-                                        </div>
-                                        <p class="text-sm font-black text-emerald-950 dark:text-emerald-50 mb-2">{{ $latestComment->author?->name ?? 'Nieznany autor' }}</p>
-                                        <div class="relative rounded-lg border-l-4 border-emerald-500 dark:border-emerald-400 bg-white/90 dark:bg-emerald-950/40 pl-3 pr-2 py-2">
-                                            <div class="text-[16px] leading-7 font-semibold text-emerald-950 dark:text-emerald-50 max-h-32 overflow-hidden [&_strong]:font-black [&_b]:font-black [&_em]:italic [&_i]:italic [&_u]:underline [&_ul]:list-disc [&_ul]:pl-5 [&_ol]:list-decimal [&_ol]:pl-5 [&_li]:mb-0.5 [&_blockquote]:border-l-2 [&_blockquote]:border-emerald-300 dark:[&_blockquote]:border-emerald-700 [&_blockquote]:pl-3 [&_p]:mb-1">
-                                                {!! $commentPreviewHtml !!}
-                                            </div>
-                                            <div class="pointer-events-none absolute inset-x-0 bottom-0 h-7 bg-gradient-to-t from-emerald-50/95 via-emerald-50/70 to-transparent dark:from-emerald-950/95 dark:via-emerald-950/70"></div>
+                                @if($descriptionFull !== '')
+                                    <div
+                                        class="mb-2 relative"
+                                        x-data="{ open: false }"
+                                        @mouseenter="open = true"
+                                        @mouseleave="open = false"
+                                    >
+                                        <p class="text-xs leading-snug text-gray-700 dark:text-gray-300 line-clamp-2 whitespace-pre-wrap">
+                                            {{ $descriptionPreview }}
+                                        </p>
+                                        <div
+                                            x-show="open"
+                                            x-cloak
+                                            x-transition.opacity.duration.100ms
+                                            class="kanban-card-tooltip absolute left-0 bottom-full z-[80] mb-1.5 w-72 max-w-[18rem] rounded-md border border-gray-200 bg-white p-2.5 text-xs leading-snug text-gray-800 shadow-lg dark:border-gray-600 dark:bg-gray-900 dark:text-gray-100"
+                                            wire:click.stop
+                                        >
+                                            <div class="mb-1 text-[10px] font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400">Treść zadania</div>
+                                            <div class="max-h-48 overflow-y-auto whitespace-pre-wrap">{{ $descriptionFull }}</div>
                                         </div>
                                     </div>
                                 @endif
 
-                                {{-- 8) Bezpośrednie linki do plików --}}
-                                @if($attachmentPreview->isNotEmpty())
-                                    <div class="mb-3">
-                                        <p class="text-xs font-semibold text-gray-700 dark:text-gray-300 mb-1.5">Powiązane pliki:</p>
-                                        <div class="flex flex-wrap gap-1.5">
-                                            @foreach($attachmentPreview as $attachment)
-                                                @if($attachment->public_url)
-                                                    <a
-                                                        href="{{ $attachment->public_url }}"
-                                                        target="_blank"
-                                                        rel="noopener"
-                                                        wire:click.stop
-                                                        class="inline-flex items-center gap-1 px-2 py-1 text-xs rounded-md border border-purple-200 dark:border-purple-800 bg-purple-50 dark:bg-purple-900/30 text-purple-700 dark:text-purple-200 hover:bg-purple-100 dark:hover:bg-purple-800/50 transition"
-                                                    >
-                                                        <x-heroicon-m-paper-clip class="w-3 h-3" />
-                                                        {{ \Illuminate\Support\Str::limit($attachment->filename, 28) }}
-                                                    </a>
-                                                @endif
-                                            @endforeach
+                                @if($task->taskable_type && $task->taskable_id)
+                                    <div
+                                        class="mb-2 relative"
+                                        x-data="{ open: false }"
+                                        @mouseenter="open = true"
+                                        @mouseleave="open = false"
+                                    >
+                                        <div class="flex items-start gap-1.5 text-[11px] text-sky-700 dark:text-sky-300">
+                                            <x-heroicon-m-link class="mt-0.5 h-3.5 w-3.5 flex-shrink-0 text-sky-500" />
+                                            <span class="line-clamp-2 leading-snug">{{ $contextPreview }}</span>
+                                        </div>
+                                        <div
+                                            x-show="open"
+                                            x-cloak
+                                            x-transition.opacity.duration.100ms
+                                            class="kanban-card-tooltip absolute left-0 bottom-full z-[80] mb-1.5 w-72 max-w-[18rem] rounded-md border border-gray-200 bg-white p-2.5 text-xs leading-snug text-gray-800 shadow-lg dark:border-gray-600 dark:bg-gray-900 dark:text-gray-100"
+                                            wire:click.stop
+                                        >
+                                            <div class="mb-1 text-[10px] font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400">Kontekst</div>
+                                            <div class="whitespace-pre-wrap">{{ $contextLabel }}</div>
                                         </div>
                                     </div>
                                 @endif
 
-                                {{-- 9) Podzadania X/Y --}}
-                                @if($totalSubtasks > 0)
-                                    <div class="mb-3 px-3 py-2 rounded-lg bg-white/50 dark:bg-black/20">
-                                        <div class="flex items-center justify-between text-sm text-gray-700 dark:text-gray-200 mb-1.5">
-                                            <span class="font-semibold">Podzadania {{ $completedSubtasks }}/{{ $totalSubtasks }}</span>
-                                            <span class="text-xs font-bold text-green-700 dark:text-green-400">{{ $progressPercent }}%</span>
-                                        </div>
-                                        <div class="w-full bg-gray-200 dark:bg-gray-700 rounded-full h-1.5 border border-gray-300 dark:border-gray-600">
-                                            <div class="bg-green-500 dark:bg-green-400 h-1.5 rounded-full transition-all duration-300" style="width: {{ $progressPercent }}%"></div>
-                                        </div>
-                                    </div>
-                                @endif
-
-                                <div class="flex items-center justify-between pt-2 border-t border-gray-200 dark:border-gray-700">
+                                <div class="space-y-1 mb-2 text-xs text-gray-600 dark:text-gray-300">
                                     <div class="flex items-center gap-1.5">
-                                        <span class="text-xs text-gray-500 flex items-center">
-                                            <x-heroicon-m-squares-plus class="w-3.5 h-3.5 mr-1" />
+                                        <x-heroicon-m-calendar class="w-3.5 h-3.5 flex-shrink-0 text-gray-400" />
+                                        @if($task->due_date)
+                                            <span class="{{ $isOverdueTask ? 'font-semibold text-red-700 dark:text-red-300' : '' }}">
+                                                {{ $task->due_date->format('d.m.Y H:i') }}
+                                                @if($isOverdueTask)
+                                                    · Po terminie
+                                                @endif
+                                            </span>
+                                        @else
+                                            <span class="text-gray-400">Brak terminu</span>
+                                        @endif
+                                    </div>
+                                    <div class="flex items-center gap-1.5">
+                                        <x-heroicon-m-user class="w-3.5 h-3.5 flex-shrink-0 text-gray-400" />
+                                        <span class="truncate">{{ $task->assignee?->name ?? 'Nie przypisano' }}</span>
+                                    </div>
+                                </div>
+
+                                @if($latestComment)
+                                    <div
+                                        class="mb-2 relative rounded-md border border-gray-200/80 bg-white/50 px-2 py-1.5 dark:border-gray-700/80 dark:bg-black/20"
+                                        x-data="{ open: false }"
+                                        @mouseenter="open = true"
+                                        @mouseleave="open = false"
+                                    >
+                                        <div class="text-[10px] font-semibold text-gray-500 dark:text-gray-400">
+                                            Ostatni komentarz · {{ $latestComment->author?->name ?? '—' }} · {{ $latestComment->created_at?->format('d.m.Y H:i') ?? '—' }}
+                                        </div>
+                                        <p class="mt-0.5 text-xs italic leading-snug text-gray-700 dark:text-gray-300 line-clamp-2 whitespace-pre-wrap">
+                                            {{ $latestCommentPreview }}
+                                        </p>
+                                        <div
+                                            x-show="open"
+                                            x-cloak
+                                            x-transition.opacity.duration.100ms
+                                            class="kanban-card-tooltip absolute left-0 bottom-full z-[80] mb-1.5 w-80 max-w-[20rem] rounded-md border border-gray-200 bg-white p-2.5 text-xs leading-snug text-gray-800 shadow-lg dark:border-gray-600 dark:bg-gray-900 dark:text-gray-100"
+                                            wire:click.stop
+                                        >
+                                            <div class="mb-1.5 text-[10px] font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400">
+                                                Wątek komentarzy ({{ $commentsCount }})
+                                            </div>
+                                            <div class="max-h-56 space-y-2 overflow-y-auto">
+                                                @foreach($taskComments as $threadComment)
+                                                    <div class="border-b border-gray-100 pb-2 last:border-0 last:pb-0 dark:border-gray-700">
+                                                        <div class="font-semibold text-gray-600 dark:text-gray-300">
+                                                            {{ $threadComment->author?->name ?? '—' }} · {{ $threadComment->created_at?->format('d.m.Y H:i') ?? '—' }}
+                                                        </div>
+                                                        <div class="mt-0.5 whitespace-pre-wrap text-gray-800 dark:text-gray-100">
+                                                            {{ \App\Support\Tasks\TaskListColumn::sanitizeTaskText($threadComment->content, 2000) }}
+                                                        </div>
+                                                    </div>
+                                                @endforeach
+                                            </div>
+                                        </div>
+                                    </div>
+                                @endif
+
+                                <div class="flex items-center justify-between pt-2 border-t border-gray-200/80 dark:border-gray-700/80">
+                                    <div class="flex items-center gap-2 text-gray-500 dark:text-gray-400">
+                                        <span class="text-xs flex items-center" title="Podzadania">
+                                            <x-heroicon-m-squares-plus class="w-3.5 h-3.5 mr-0.5" />
                                             {{ $totalSubtasks }}
                                         </span>
-                                        <span class="text-xs text-gray-500 flex items-center">
-                                            <x-heroicon-m-chat-bubble-left-ellipsis class="w-3.5 h-3.5 mr-1" />
-                                            {{ $task->comments->count() ?? 0 }}
+                                        <span class="text-xs flex items-center" title="Komentarze">
+                                            <x-heroicon-m-chat-bubble-left-ellipsis class="w-3.5 h-3.5 mr-0.5" />
+                                            {{ $commentsCount }}
                                         </span>
-                                        <span class="text-xs text-gray-500 flex items-center">
-                                            <x-heroicon-m-paper-clip class="w-3.5 h-3.5 mr-1" />
-                                            {{ $attachments->count() ?? 0 }}
+                                        <span class="text-xs flex items-center" title="Załączniki">
+                                            <x-heroicon-m-paper-clip class="w-3.5 h-3.5 mr-0.5" />
+                                            {{ $attachmentsCount }}
                                         </span>
                                     </div>
 
@@ -524,7 +500,7 @@
                 @error('quickTaskDueDate') <span class="text-red-500 text-sm">{{ $message }}</span> @enderror
             </div>
 
-            <div class="grid grid-cols-2 gap-4">
+            <div class="grid grid-cols-1 gap-4 sm:grid-cols-2">
                 <div>
                     <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Priorytet</label>
                     <select 
@@ -692,6 +668,36 @@
             -webkit-box-orient: vertical;
             overflow: hidden;
         }
+
+        [x-cloak] {
+            display: none !important;
+        }
+
+        .kanban-card-tooltip {
+            pointer-events: none;
+        }
+
+        /* Dymki wychodzą poza kartę — podbij stacking przy hoverze, inaczej chowają się pod sąsiadami */
+        .kanban-column {
+            position: relative;
+            z-index: 1;
+            box-shadow: 0 1px 3px rgba(15, 23, 42, 0.08);
+            border-width: 1px !important;
+        }
+
+        .kanban-column:hover,
+        .kanban-column:focus-within {
+            z-index: 30;
+        }
+
+        .task-card {
+            z-index: 1;
+        }
+
+        .task-card:hover,
+        .task-card:focus-within {
+            z-index: 40;
+        }
         
         .grabbing {
             cursor: grabbing !important;
@@ -751,32 +757,26 @@
             font-size: 0.875rem;
             font-weight: 500;
         }
-        
-        .kanban-column {
-            box-shadow: 0 2px 6px rgba(15, 23, 42, 0.12), 0 10px 24px rgba(15, 23, 42, 0.08);
-            border-width: 2px !important;
-        }
 
         .task-card,
         .record {
-            border-width: 3px;
-            box-shadow: 0 6px 14px rgba(15, 23, 42, 0.16);
+            border-width: 1px;
+            box-shadow: 0 1px 2px rgba(15, 23, 42, 0.06);
         }
 
         .dark .task-card,
         .dark .record {
-            border-color: #9ca3af;
+            border-color: #4b5563;
         }
 
         .task-card:hover,
         .record:hover {
-            border-color: #1d4ed8 !important;
-            box-shadow: 0 10px 22px rgba(37, 99, 235, 0.28);
+            border-color: #3b82f6 !important;
+            box-shadow: 0 2px 8px rgba(37, 99, 235, 0.12);
         }
 
         .priority-badge {
-            letter-spacing: 0.03em;
-            box-shadow: inset 0 -1px 0 rgba(0, 0, 0, 0.12);
+            letter-spacing: 0.02em;
         }
         
         .kanban-board {

@@ -3,6 +3,7 @@
 namespace App\Filament\Resources\EventResource\Pages;
 
 use App\Actions\Events\RecalculateEventTotalsAction;
+use App\Actions\Events\SendDriverPickupInfoAction;
 use App\Data\RecalculateEventTotalsData;
 use App\Filament\Resources\EventResource;
 use App\Filament\Resources\EventResource\Concerns\HasEventOperationsSubNavigation;
@@ -12,10 +13,11 @@ use App\Models\Contractor;
 use Filament\Actions;
 use Filament\Forms;
 use Filament\Forms\Form;
+use Filament\Notifications\Notification;
 use Filament\Resources\Pages\EditRecord;
-use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Blade;
 use Illuminate\Support\Facades\Schema;
+use Illuminate\Support\HtmlString;
 
 class ManageEventTransport extends EditRecord
 {
@@ -40,7 +42,7 @@ class ManageEventTransport extends EditRecord
                 ->visible(fn (): bool => blank($this->record->bus_id)
                     && blank($this->record->transport_contractor_id)
                     && blank($this->record->transport_company_name))
-                ->content(new \Illuminate\Support\HtmlString(
+                ->content(new HtmlString(
                     '<div class="rounded-lg border border-dashed border-gray-300 bg-gray-50 px-4 py-6 text-center dark:border-gray-600 dark:bg-gray-800/50">'
                     .'<p class="text-sm font-medium text-gray-900 dark:text-gray-100">Brak przypisanego autokaru</p>'
                     .'<p class="mt-1 text-sm text-gray-500">Wybierz firmę transportową i autokar w sekcji „Przewoźnik i kierowca” poniżej.</p>'
@@ -53,7 +55,7 @@ class ManageEventTransport extends EditRecord
                 ->schema([
                     Forms\Components\Placeholder::make('transport_finance_panel')
                         ->hiddenLabel()
-                        ->content(fn (): \Illuminate\Support\HtmlString => new \Illuminate\Support\HtmlString(
+                        ->content(fn (): HtmlString => new HtmlString(
                             Blade::render(
                                 '@livewire(\'settlement-aggregate-finance-panel\', [\'eventId\' => '.$this->record->getKey().', \'aggregateType\' => \'transport\', \'heading\' => \'Finanse transportu\'], key(\'transport-finance-'.$this->record->getKey().'\'))'
                             )
@@ -85,11 +87,20 @@ class ManageEventTransport extends EditRecord
 
     public function getContentTabLabel(): ?string
     {
-        return 'Transport';
+        return null;
     }
 
     protected function mutateFormDataBeforeFill(array $data): array
     {
+        // Legacy: imprezy ze szablonem bez zapisanego początku programu.
+        if (
+            Schema::hasColumn('events', 'program_start_place_id')
+            && blank($data['program_start_place_id'] ?? null)
+            && $this->record->event_template_id
+        ) {
+            $data['program_start_place_id'] = $this->record->eventTemplate?->start_place_id;
+        }
+
         if (Schema::hasColumn('events', 'driver_pickup_info_sent_at')) {
             $data['driver_pickup_info_sent'] = $this->record->isDriverPickupInfoSent();
         }
@@ -109,19 +120,35 @@ class ManageEventTransport extends EditRecord
                 : null;
         }
 
-        if (Schema::hasColumn('events', 'driver_pickup_info_sent_at')) {
+        if (Schema::hasColumn('events', 'driver_contractor_id')) {
+            $driverId = filled($data['driver_contractor_id'] ?? null)
+                ? (int) $data['driver_contractor_id']
+                : null;
+
+            if ($driverId) {
+                $driver = Contractor::query()->find($driverId);
+                if (Schema::hasColumn('events', 'driver_name')) {
+                    $data['driver_name'] = $driver?->name;
+                }
+                if (Schema::hasColumn('events', 'driver_phone')) {
+                    $data['driver_phone'] = $driver?->phone;
+                }
+            }
+        }
+
+        if (Schema::hasColumn('events', 'driver_pickup_info_sent_at') && array_key_exists('driver_pickup_info_sent', $data)) {
             $sent = (bool) ($data['driver_pickup_info_sent'] ?? false);
 
             if ($sent && ! $this->record->driver_pickup_info_sent_at) {
                 $data['driver_pickup_info_sent_at'] = now();
-                $data['driver_pickup_info_sent_by'] = Auth::id();
+                $data['driver_pickup_info_sent_by'] = auth()->id();
             } elseif (! $sent) {
                 $data['driver_pickup_info_sent_at'] = null;
                 $data['driver_pickup_info_sent_by'] = null;
             }
-
-            unset($data['driver_pickup_info_sent']);
         }
+
+        unset($data['driver_pickup_info_sent'], $data['driver_contractor_search_all'], $data['transport_contractor_search_all']);
 
         return $data;
     }
@@ -168,6 +195,70 @@ class ManageEventTransport extends EditRecord
     protected function getHeaderActions(): array
     {
         return [
+            Actions\Action::make('send_driver_info')
+                ->label('Wyślij do kierowcy')
+                ->icon('heroicon-o-paper-airplane')
+                ->color('primary')
+                ->visible(fn (): bool => Schema::hasColumn('events', 'driver_contractor_id')
+                    || Schema::hasColumn('events', 'driver_pickup_info_sent_at'))
+                ->modalHeading('Wyślij informację do kierowcy')
+                ->modalDescription('Wiadomość pójdzie e-mailem i SMS-em (wg zaznaczenia). Możesz dopisać własne uwagi.')
+                ->modalSubmitActionLabel('Wyślij')
+                ->fillForm(fn (): array => [
+                    'message_html' => SendDriverPickupInfoAction::defaultMessageHtml($this->record->fresh([
+                        'driverContractor',
+                        'startPlace',
+                        'bus',
+                        'transportContractor',
+                    ]) ?? $this->record),
+                    'send_email' => true,
+                    'send_sms' => true,
+                ])
+                ->form([
+                    Forms\Components\Toggle::make('send_email')
+                        ->label('E-mail')
+                        ->default(true),
+                    Forms\Components\Toggle::make('send_sms')
+                        ->label('SMS')
+                        ->default(true),
+                    \FilamentTiptapEditor\TiptapEditor::make('message_html')
+                        ->label('Treść wiadomości')
+                        ->required()
+                        ->columnSpanFull(),
+                ])
+                ->action(function (array $data): void {
+                    try {
+                        $result = app(SendDriverPickupInfoAction::class)(
+                            event: $this->record->fresh(['driverContractor']) ?? $this->record,
+                            messageHtml: (string) ($data['message_html'] ?? ''),
+                            sendEmail: (bool) ($data['send_email'] ?? false),
+                            sendSms: (bool) ($data['send_sms'] ?? false),
+                        );
+                    } catch (\InvalidArgumentException $e) {
+                        Notification::make()
+                            ->title('Nie wysłano')
+                            ->body($e->getMessage())
+                            ->danger()
+                            ->send();
+
+                        return;
+                    }
+
+                    $this->record->refresh();
+                    $this->fillForm();
+
+                    $channels = array_filter([
+                        $result['email_sent'] ? 'e-mail' : null,
+                        $result['sms_sent'] ? 'SMS' : null,
+                    ]);
+
+                    Notification::make()
+                        ->title('Wysłano informację do kierowcy')
+                        ->body('Kanały: '.implode(', ', $channels))
+                        ->success()
+                        ->send();
+                }),
+
             Actions\Action::make('pdf_driver')
                 ->label('Pakiet kierowcy')
                 ->icon('heroicon-o-document-arrow-down')

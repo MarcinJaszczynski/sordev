@@ -5,9 +5,11 @@ namespace App\Livewire;
 use App\Models\Currency;
 use App\Models\Event;
 use App\Models\EventBusCollection;
+use App\Models\EventPaymentInstallmentTemplate;
 use App\Support\MoneyFormatter;
 use Filament\Notifications\Notification;
 use Illuminate\Support\Facades\Auth;
+use Illuminate\Support\Facades\Schema;
 use Livewire\Component;
 
 class EventBusCollections extends Component
@@ -28,14 +30,52 @@ class EventBusCollections extends Component
 
     public string $notes = '';
 
+    /** Informacja skąd wzięto domyślne wartości (UI). */
+    public string $defaultsHint = '';
+
     public function mount(Event $event, bool $readOnly = false): void
     {
         abort_unless(Auth::user()?->can('view', $event), 403);
 
         $this->event = $event;
         $this->readOnly = $readOnly;
-        $this->currencyId = Currency::defaultPlnId();
-        $this->collectedAt = now()->format('Y-m-d\\TH:i');
+        $this->applyEventDefaults();
+    }
+
+    /**
+     * Wstępne wartości z imprezy: pojemność, waluta→pilot z harmonogramu, data startu.
+     */
+    public function applyEventDefaults(): void
+    {
+        $hints = [];
+
+        $count = $this->resolveDefaultParticipantCount();
+        $this->participantCount = $count > 0 ? (string) $count : '';
+        if ($count > 0) {
+            $hints[] = $count.' os. (pojemność imprezy)';
+        }
+
+        $pilotDue = $this->resolvePilotCurrencyDue();
+        if ($pilotDue !== null) {
+            $this->unitAmount = (string) $pilotDue['amount'];
+            $this->currencyId = $pilotDue['currency_id'];
+            $this->title = $pilotDue['title'];
+            $hints[] = number_format($pilotDue['amount'], 2, ',', ' ').' '.$pilotDue['currency_code'].'/os. (harmonogram)';
+        } else {
+            $this->currencyId = Currency::defaultPlnId();
+            $this->unitAmount = '';
+            $this->title = 'Zbiórka gotówki w autokarze';
+        }
+
+        $this->collectedAt = $this->resolveDefaultCollectedAt();
+        if ($this->event->start_date) {
+            $hints[] = 'data: start imprezy '.$this->event->start_date->format('d.m.Y');
+        }
+
+        $this->notes = '';
+        $this->defaultsHint = $hints !== []
+            ? 'Wstępnie: '.implode(' · ', $hints)
+            : '';
     }
 
     public function computedTotalAmount(): ?float
@@ -81,9 +121,7 @@ class EventBusCollections extends Component
             'status' => 'collected',
         ]);
 
-        $this->reset(['title', 'unitAmount', 'participantCount', 'notes']);
-        $this->title = 'Zbiórka gotówki w autokarze';
-        $this->collectedAt = now()->format('Y-m-d\\TH:i');
+        $this->applyEventDefaults();
 
         Notification::make()->title('Zbiórka zapisana')->success()->send();
     }
@@ -119,6 +157,92 @@ class EventBusCollections extends Component
             ->delete();
 
         Notification::make()->title('Zbiórka usunięta')->success()->send();
+    }
+
+    protected function resolveDefaultParticipantCount(): int
+    {
+        $capacity = (int) ($this->event->participant_count ?? 0);
+        if ($capacity > 0) {
+            return $capacity;
+        }
+
+        if (method_exists($this->event, 'activeParticipants')) {
+            return (int) $this->event->activeParticipants()->count();
+        }
+
+        return 0;
+    }
+
+    /**
+     * @return array{amount: float, currency_id: int, currency_code: string, title: string}|null
+     */
+    protected function resolvePilotCurrencyDue(): ?array
+    {
+        if (Schema::hasTable('event_payment_installment_templates')) {
+            $row = EventPaymentInstallmentTemplate::query()
+                ->where('event_id', $this->event->id)
+                ->where('paid_by', EventPaymentInstallmentTemplate::PAID_BY_PILOT)
+                ->where('share_type', EventPaymentInstallmentTemplate::SHARE_FOREIGN)
+                ->whereNotNull('amount_foreign')
+                ->where('amount_foreign', '>', 0)
+                ->orderBy('sort_order')
+                ->orderBy('id')
+                ->first();
+
+            if ($row) {
+                $code = strtoupper((string) ($row->currency_code ?: 'EUR'));
+                $currencyId = $this->resolveCurrencyIdByCode($code);
+                if ($currencyId) {
+                    return [
+                        'amount' => round((float) $row->amount_foreign, 2),
+                        'currency_id' => $currencyId,
+                        'currency_code' => $code,
+                        'title' => filled($row->label) ? (string) $row->label : 'Zbiórka '.$code.' w autokarze',
+                    ];
+                }
+            }
+        }
+
+        try {
+            $foreign = app(\App\Services\EventPriceSummaryService::class)
+                ->forEvent($this->event, includeNearest: false)['foreign_prices'] ?? [];
+            $first = is_array($foreign) && $foreign !== [] ? $foreign[0] : null;
+            if (is_array($first) && (float) ($first['price_per_person'] ?? 0) > 0) {
+                $code = strtoupper((string) ($first['currency'] ?? 'EUR'));
+                $currencyId = $this->resolveCurrencyIdByCode($code);
+                if ($currencyId) {
+                    return [
+                        'amount' => round((float) $first['price_per_person'], 2),
+                        'currency_id' => $currencyId,
+                        'currency_code' => $code,
+                        'title' => 'Zbiórka '.$code.' w autokarze',
+                    ];
+                }
+            }
+        } catch (\Throwable) {
+            // Brak cennika / serwisu — zostaw puste pola.
+        }
+
+        return null;
+    }
+
+    protected function resolveCurrencyIdByCode(string $code): ?int
+    {
+        return Currency::query()
+            ->where(function ($q) use ($code): void {
+                $q->where('code', $code)->orWhere('symbol', $code);
+            })
+            ->orderBy('id')
+            ->value('id');
+    }
+
+    protected function resolveDefaultCollectedAt(): string
+    {
+        if ($this->event->start_date) {
+            return $this->event->start_date->copy()->startOfDay()->setTime(8, 0)->format('Y-m-d\\TH:i');
+        }
+
+        return now()->format('Y-m-d\\TH:i');
     }
 
     public function render()

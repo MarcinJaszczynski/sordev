@@ -5,12 +5,17 @@ namespace App\Filament\Pilot\Pages;
 use App\Filament\Pilot\Concerns\AuthorizesPilotTrip;
 use App\Filament\Pilot\Concerns\HasPilotTripNav;
 use App\Models\Event;
+use App\Models\EventDocument;
+use App\Models\EventSettlement;
+use App\Models\EventSettlementDocument;
 use Filament\Actions\Action;
 use Filament\Pages\Page;
 use Illuminate\Contracts\Support\Htmlable;
+use Illuminate\Support\Collection;
+use Illuminate\Support\Facades\Schema;
 
 /**
- * Hub dokumentów pilota — PDF otwierane świadomie (nie bezpośredni skok z trip-nav).
+ * Hub dokumentów pilota — pakiet PDF + dokumenty udostępnione w pakiecie pilota.
  */
 class PilotDocumentsPage extends Page
 {
@@ -46,7 +51,7 @@ class PilotDocumentsPage extends Page
 
     public function getSubheading(): ?string
     {
-        return 'Pobierz PDF teczki wycieczki lub pakietu pilota';
+        return 'Pakiet pilota i dokumenty udostępnione Ci przez biuro';
     }
 
     public static function urlFor(Event $event): string
@@ -54,18 +59,67 @@ class PilotDocumentsPage extends Page
         return static::getUrl(['event' => $event->id], panel: 'pilot');
     }
 
+    /**
+     * @return Collection<int, EventDocument>
+     */
+    public function getSharedEventDocumentsProperty(): Collection
+    {
+        if (! Schema::hasTable('event_documents')) {
+            return collect();
+        }
+
+        return EventDocument::query()
+            ->where('event_id', $this->event->id)
+            ->where('attach_to_pilot_pdf', true)
+            ->when(
+                Schema::hasColumn('event_documents', 'approval_status'),
+                fn ($q) => $q->where(function ($inner) {
+                    $inner->whereNull('approval_status')
+                        ->orWhere('approval_status', 'approved');
+                }),
+            )
+            ->orderBy('sort_order')
+            ->orderBy('name')
+            ->get();
+    }
+
+    /**
+     * @return Collection<int, EventSettlementDocument>
+     */
+    public function getSharedSettlementDocumentsProperty(): Collection
+    {
+        if (! Schema::hasTable('event_settlement_documents')
+            || ! Schema::hasColumn('event_settlement_documents', 'settlement_id')
+            || ! Schema::hasTable('event_settlements')) {
+            return collect();
+        }
+
+        if (! Schema::hasColumn('event_settlement_documents', 'attach_to_pilot_pdf')) {
+            return collect();
+        }
+
+        $settlementIds = EventSettlement::query()
+            ->where('event_id', $this->event->id)
+            ->pluck('id');
+
+        if ($settlementIds->isEmpty()) {
+            return collect();
+        }
+
+        return EventSettlementDocument::query()
+            ->whereIn('settlement_id', $settlementIds)
+            ->where('attach_to_pilot_pdf', true)
+            ->orderByDesc('id')
+            ->get();
+    }
+
     protected function getHeaderActions(): array
     {
         return [
-            Action::make('folder_pdf')
-                ->label('Teczka PDF')
-                ->icon('heroicon-o-folder')
-                ->url(route('pilot.events.pdf', ['event' => $this->event, 'audience' => 'folder']))
-                ->openUrlInNewTab(),
             Action::make('pilot_pdf')
-                ->label('Pakiet pilota PDF')
+                ->label('Teczka / pakiet pilota PDF')
                 ->icon('heroicon-o-document-text')
-                ->color('gray')
+                ->color('primary')
                 ->url(route('pilot.events.pdf', ['event' => $this->event, 'audience' => 'pilot']))
                 ->openUrlInNewTab(),
         ];

@@ -7,6 +7,7 @@ use App\Models\Concerns\HasTasks;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Database\Eloquent\Relations\BelongsToMany;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Database\Eloquent\Relations\HasOne;
 use Illuminate\Support\Facades\Schema;
@@ -82,6 +83,33 @@ class EventSettlementParticipantPayment extends Model
         return $this->hasMany(Contract::class, 'participant_payment_id');
     }
 
+    public function linkedContracts(): BelongsToMany
+    {
+        return $this->belongsToMany(
+            Contract::class,
+            'contract_participant_payments',
+            'participant_payment_id',
+            'contract_id',
+        )->withPivot('is_primary')->withTimestamps();
+    }
+
+    /**
+     * Wszystkie umowy powiązane z tym ledgerem (FK lub pivot).
+     *
+     * @return \Illuminate\Support\Collection<int, Contract>
+     */
+    public function allLinkedContracts(): \Illuminate\Support\Collection
+    {
+        $fromFk = $this->contracts()->get();
+        if (! Schema::hasTable('contract_participant_payments')) {
+            return $fromFk;
+        }
+
+        $fromPivot = $this->linkedContracts()->get();
+
+        return $fromFk->merge($fromPivot)->unique('id')->values();
+    }
+
     public function resignations(): HasMany
     {
         return $this->hasMany(EventParticipantResignation::class, 'participant_payment_id');
@@ -102,7 +130,17 @@ class EventSettlementParticipantPayment extends Model
     public function hasLinkedAgreementsBesides(int $excludeContractId = 0, int $excludeEventAgreementId = 0): bool
     {
         if (Schema::hasTable('contracts')) {
-            $contractsQuery = $this->contracts();
+            $contractsQuery = Contract::query()
+                ->where(function ($query) use ($excludeContractId): void {
+                    $query->where('participant_payment_id', $this->id);
+                    if (Schema::hasTable('contract_participant_payments')) {
+                        $query->orWhereIn('id', function ($sub): void {
+                            $sub->select('contract_id')
+                                ->from('contract_participant_payments')
+                                ->where('participant_payment_id', $this->id);
+                        });
+                    }
+                });
 
             if ($excludeContractId > 0) {
                 $contractsQuery->whereKeyNot($excludeContractId);
@@ -149,11 +187,12 @@ class EventSettlementParticipantPayment extends Model
             if ($model->isDirty(['paid_amount_pln', 'due_amount_pln'])) {
                 $paid = (float) $model->paid_amount_pln;
                 $due = (float) $model->due_amount_pln;
-                if ($paid <= 0) {
+                $tolerance = \App\Services\SettlementPaymentHealthService::TOLERANCE;
+                if ($paid <= $tolerance) {
                     $model->payment_status = 'pending';
-                } elseif ($paid < $due) {
+                } elseif ($paid < $due - $tolerance) {
                     $model->payment_status = 'partial';
-                } elseif ($paid > $due) {
+                } elseif ($paid > $due + $tolerance) {
                     $model->payment_status = 'overpaid';
                 } else {
                     $model->payment_status = 'paid';

@@ -86,7 +86,16 @@ class VendorInvoiceMatcher
         $invoice->matching_hints = $hints;
         $invoice->save();
 
-        return $invoice->fresh(['event', 'contractor', 'programPoint', 'lines']);
+        if (! $wasManual) {
+            $invoice->syncProgramPointLinks(
+                $invoice->event_program_point_id ? [(int) $invoice->event_program_point_id] : []
+            );
+        } elseif ($invoice->event_program_point_id && \Illuminate\Support\Facades\Schema::hasTable('vendor_invoice_program_point')) {
+            // Ręczne multi-linki zostawiamy; upewniamy się, że główny punkt jest w pivocie.
+            $invoice->programPoints()->syncWithoutDetaching([(int) $invoice->event_program_point_id]);
+        }
+
+        return $invoice->fresh(['event', 'contractor', 'programPoint', 'programPoints', 'lines']);
     }
 
     /**
@@ -94,17 +103,20 @@ class VendorInvoiceMatcher
      */
     private function matchByEventCode(string $text, array &$hints): ?Event
     {
-        if (! preg_match(self::EVENT_CODE_PATTERN, $text, $matches)) {
+        if (! preg_match_all(self::EVENT_CODE_PATTERN, $text, $matches)) {
             return null;
         }
 
-        $code = strtoupper($matches[1]);
-        $event = Event::query()->where('code', $code)->first();
-        if ($event) {
-            $hints[] = ['rule' => 'event_code', 'confidence' => 0.95, 'code' => $code];
+        foreach (array_unique(array_map('strtoupper', $matches[1])) as $code) {
+            $event = Event::query()->where('code', $code)->first();
+            if ($event) {
+                $hints[] = ['rule' => 'event_code', 'confidence' => 0.95, 'code' => $code];
+
+                return $event;
+            }
         }
 
-        return $event;
+        return null;
     }
 
     /**

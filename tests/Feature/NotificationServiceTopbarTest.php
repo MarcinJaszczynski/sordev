@@ -2,6 +2,7 @@
 
 namespace Tests\Feature;
 
+use App\Enums\TaskSource;
 use App\Models\ClientInvoiceRequest;
 use App\Models\Event;
 use App\Models\EventTemplate;
@@ -155,6 +156,54 @@ class NotificationServiceTopbarTest extends TestCase
         $this->assertContains('Moje utworzone', $titles);
     }
 
+    public function test_shared_system_task_stays_unread_for_other_office_users(): void
+    {
+        $assignee = User::factory()->create();
+        $assignee->assignRole('admin');
+        $colleague = User::factory()->create();
+        $colleague->assignRole('biuro');
+        $statusId = TaskStatus::query()->where('name', 'Do zrobienia')->value('id');
+
+        $task = Task::factory()->create([
+            'title' => 'Impreza potwierdzona — lista kontrolna',
+            'assignee_id' => $assignee->id,
+            'author_id' => $assignee->id,
+            'status_id' => $statusId,
+            'source' => TaskSource::System->value,
+        ]);
+
+        NotificationService::clearCacheForUser($assignee->id);
+        NotificationService::clearCacheForUser($colleague->id);
+
+        $assigneeData = NotificationService::getTopbarDataForUser($assignee->id, fresh: true);
+        $colleagueData = NotificationService::getTopbarDataForUser($colleague->id, fresh: true);
+
+        $assigneeItem = collect($assigneeData['items_by_type']['task'])
+            ->first(fn (array $row): bool => (int) ($row['id'] ?? 0) === $task->id);
+        $colleagueItem = collect($colleagueData['items_by_type']['task'])
+            ->first(fn (array $row): bool => (int) ($row['id'] ?? 0) === $task->id);
+
+        $this->assertNotNull($assigneeItem);
+        $this->assertNotNull($colleagueItem);
+
+        NotificationService::markAsRead($assignee->id, $assigneeItem['fingerprint']);
+
+        $assigneeAfter = NotificationService::getTopbarDataForUser($assignee->id, fresh: true);
+        $colleagueAfter = NotificationService::getTopbarDataForUser($colleague->id, fresh: true);
+
+        $this->assertFalse(
+            collect($assigneeAfter['items_by_type']['task'])
+                ->contains(fn (array $row): bool => (int) ($row['id'] ?? 0) === $task->id && ! ($row['is_read'] ?? false))
+        );
+        $this->assertSame(0, $assigneeAfter['counts']['tasks']);
+
+        $colleagueUnread = collect($colleagueAfter['items_by_type']['task'])
+            ->first(fn (array $row): bool => (int) ($row['id'] ?? 0) === $task->id);
+        $this->assertNotNull($colleagueUnread);
+        $this->assertFalse((bool) ($colleagueUnread['is_read'] ?? false));
+        $this->assertGreaterThanOrEqual(1, $colleagueAfter['counts']['tasks']);
+    }
+
     public function test_new_task_visible_after_create_despite_list_visit(): void
     {
         $user = User::factory()->create([
@@ -196,6 +245,66 @@ class NotificationServiceTopbarTest extends TestCase
 
         $this->assertSame(20, $data['counts']['tasks']);
         $this->assertCount(15, $data['items_by_type']['task']);
+    }
+
+    public function test_task_count_is_not_capped_by_query_limit(): void
+    {
+        $user = User::factory()->create();
+        $statusId = TaskStatus::query()->where('name', 'Do zrobienia')->value('id');
+
+        for ($i = 1; $i <= 25; $i++) {
+            Task::factory()->create([
+                'assignee_id' => $user->id,
+                'author_id' => $user->id,
+                'status_id' => $statusId,
+                'title' => 'Zadanie '.$i,
+            ]);
+        }
+
+        NotificationService::clearCacheForUser($user->id);
+        $data = NotificationService::getTopbarDataForUser($user->id, limitPerType: 15, combinedLimit: 15, taskQueryLimit: 10, fresh: true);
+
+        $this->assertSame(25, $data['counts']['tasks']);
+        $this->assertCount(10, $data['items_by_type']['task']);
+    }
+
+    public function test_subtask_increments_topbar_task_count_for_assignee(): void
+    {
+        $author = User::factory()->create();
+        $assignee = User::factory()->create();
+        $statusId = TaskStatus::query()->where('name', 'Do zrobienia')->value('id');
+
+        $parent = Task::factory()->create([
+            'assignee_id' => $assignee->id,
+            'author_id' => $author->id,
+            'status_id' => $statusId,
+            'title' => 'Rodzic',
+            'updated_at' => now()->subDay(),
+            'created_at' => now()->subDay(),
+        ]);
+
+        NotificationService::markTaskAsRead($assignee->id, $parent);
+        NotificationService::clearCacheForUser($assignee->id);
+
+        $before = NotificationService::getTopbarDataForUser($assignee->id, limitPerType: 15, combinedLimit: 15, taskQueryLimit: 30, fresh: true);
+        $this->assertSame(0, $before['counts']['tasks']);
+
+        $subtask = Task::factory()->create([
+            'assignee_id' => $assignee->id,
+            'author_id' => $author->id,
+            'status_id' => $statusId,
+            'title' => 'Podzadanie X',
+            'parent_id' => $parent->id,
+        ]);
+        $parent->touch();
+        NotificationService::clearCacheForTaskStakeholders($subtask);
+
+        $after = NotificationService::getTopbarDataForUser($assignee->id, limitPerType: 15, combinedLimit: 15, taskQueryLimit: 30, fresh: true);
+
+        $this->assertSame(2, $after['counts']['tasks']);
+        $titles = collect($after['items_by_type']['task'])->pluck('title')->all();
+        $this->assertContains('Podzadanie X', $titles);
+        $this->assertContains('Rodzic', $titles);
     }
 
     public function test_mark_task_as_read_clears_topbar_counter(): void
@@ -331,6 +440,8 @@ class NotificationServiceTopbarTest extends TestCase
         NotificationService::clearCacheForUser($user->id);
         $data = NotificationService::getTopbarDataForUser($user->id, fresh: true);
 
+        $this->assertStringContainsString('skomentował zadanie', $data['items_by_type']['comment'][0]['title']);
+        $this->assertStringContainsString($other->name, $data['items_by_type']['comment'][0]['title']);
         $this->assertStringContainsString('Treść komentarza', $data['items_by_type']['comment'][0]['meta']);
         $this->assertStringNotContainsString('<p>', $data['items_by_type']['comment'][0]['meta']);
     }
@@ -360,6 +471,48 @@ class NotificationServiceTopbarTest extends TestCase
 
         $this->assertSame(1, $data['counts']['comments']);
         $this->assertCount(1, $data['items_by_type']['comment']);
+    }
+
+    public function test_own_comment_on_owned_task_bumps_activity_counter(): void
+    {
+        $owner = User::factory()->create();
+        $statusId = TaskStatus::query()->where('name', 'Do zrobienia')->value('id');
+
+        $task = Task::factory()->create([
+            'assignee_id' => $owner->id,
+            'author_id' => $owner->id,
+            'status_id' => $statusId,
+            'title' => 'Moje zadanie',
+        ]);
+        $task->forceFill(['updated_at' => now()->subDay()])->saveQuietly();
+
+        $updatedBefore = $task->fresh()->updated_at?->timestamp ?? 0;
+
+        NotificationService::clearCacheForUser($owner->id);
+        NotificationService::getTopbarDataForUser($owner->id, fresh: true);
+
+        TaskComment::query()->create([
+            'task_id' => $task->id,
+            'user_id' => $owner->id,
+            'content' => 'Własny komentarz ownera',
+        ]);
+
+        // W testach observer bywa niezarejestrowany (Schema::hasTable przy boot) —
+        // ścieżka UI i tak woła clearCacheForTaskCommentStakeholders po create.
+        $comment = TaskComment::query()->where('task_id', $task->id)->latest('id')->firstOrFail();
+        NotificationService::clearCacheForTaskCommentStakeholders($comment);
+
+        $task->refresh();
+        $this->assertGreaterThan($updatedBefore, $task->updated_at?->timestamp ?? 0);
+
+        $after = NotificationService::getTopbarDataForUser($owner->id, fresh: true);
+        $taskItem = collect($after['items_by_type']['task'] ?? [])->firstWhere('id', $task->id)
+            ?? collect($after['items'] ?? [])->first(fn (array $item): bool => ($item['type'] ?? '') === 'task' && (int) ($item['id'] ?? 0) === (int) $task->id);
+
+        $this->assertNotNull($taskItem, 'Zadanie powinno wrócić do aktywności topbara po własnym komentarzu.');
+        $this->assertGreaterThan($updatedBefore, (int) ($taskItem['revision'] ?? 0));
+        // Własny komentarz nie wchodzi do counts.comments — bump idzie przez aktywność zadania.
+        $this->assertSame(0, $after['counts']['comments']);
     }
 
     public function test_closing_task_modal_marks_comment_notifications_as_read(): void
@@ -429,6 +582,7 @@ class NotificationServiceTopbarTest extends TestCase
     public function test_mark_read_endpoint_clears_counter(): void
     {
         $user = User::factory()->create();
+        $user->assignRole('admin');
         $this->actingAs($user);
 
         $event = $this->createEventForUser($user, Event::STATUS_INQUIRY, 'Do odczytania');
@@ -468,6 +622,7 @@ class NotificationServiceTopbarTest extends TestCase
     public function test_notification_counts_endpoint_returns_new_event_counters(): void
     {
         $user = User::factory()->create();
+        $user->assignRole('admin');
         $this->actingAs($user);
 
         $this->createEventForUser($user, Event::STATUS_INQUIRY, 'Nowe zapytanie');
@@ -500,5 +655,105 @@ class NotificationServiceTopbarTest extends TestCase
 
         $this->assertLessThanOrEqual(4, count($topbar['items_by_type']['new_event']));
         $this->assertGreaterThan(4, count($inbox['items']));
+    }
+
+    public function test_topbar_blade_does_not_embed_payload_in_x_data_attribute(): void
+    {
+        $html = view('filament.components.topbar-notifications', [
+            'newTasksCount' => 2,
+            'unreadMessagesCount' => 1,
+            'commentsCount' => 0,
+            'newEventsCount' => 1,
+            'confirmedEventsCount' => 0,
+            'pendingCancellationEventsCount' => 0,
+            'invoiceRequestsCount' => 0,
+            'totalUnread' => 3,
+            'canSeeInvoiceRequests' => true,
+            'notificationItems' => [],
+            'notificationItemsByType' => [
+                'task' => [[
+                    'type' => 'task',
+                    'id' => 1,
+                    'revision' => '1',
+                    'title' => 'Termin raty: Dopłata (90%) (Paryż) "test"',
+                    'meta' => 'Termin: 27.08.2026 | Status: Do zrobienia',
+                    'time' => '1 godzina temu',
+                    'url' => 'http://127.0.0.1:8000/admin/events/19/tasks?editTask=1',
+                    'color' => 'violet',
+                    'fingerprint' => 'abc',
+                    'is_read' => false,
+                ]],
+            ],
+        ])->render();
+
+        $this->assertStringContainsString('id="sor-topbar-notifications-boot"', $html);
+        $this->assertStringContainsString('window.sorTopbarNotifications()', $html);
+        $this->assertStringContainsString('x-data="window.sorTopbarNotifications()"', $html);
+        $this->assertStringContainsString('Dop\\u0142ata', $html);
+        $this->assertStringContainsString('Pary\\u017c', $html);
+        $this->assertDoesNotMatchRegularExpression(
+            '/custom-topbar-notifications[^>]*x-data="\{/',
+            $html,
+        );
+        $this->assertStringNotContainsString('meta[name=\\"csrf-token\\"]', $html);
+        $this->assertStringContainsString('meta[name=csrf-token]', $html);
+    }
+
+    public function test_confirmed_and_insurance_alerts_have_distinct_fingerprints(): void
+    {
+        $user = User::factory()->create();
+        $user->assignRole('admin');
+        $this->actingAs($user);
+
+        $event = $this->createEventForUser($user, Event::STATUS_CONFIRMED, 'Paryż ubezpieczenie');
+
+        if (! \Illuminate\Support\Facades\Schema::hasColumn('events', 'insurance_status')) {
+            $this->markTestSkipped('Brak kolumny insurance_status.');
+        }
+
+        if (\Illuminate\Support\Facades\Schema::hasTable('event_day_insurance')
+            && \Illuminate\Support\Facades\Schema::hasTable('insurances')) {
+            $insuranceId = \App\Models\Insurance::query()->value('id');
+
+            if (! $insuranceId) {
+                $insuranceId = \App\Models\Insurance::query()->create([
+                    'name' => 'Test insurance',
+                    'price_per_person' => 10,
+                    'active' => true,
+                ])->id;
+            }
+
+            \Illuminate\Support\Facades\DB::table('event_day_insurance')->insert([
+                'event_id' => $event->id,
+                'day' => 1,
+                'insurance_id' => $insuranceId,
+                'created_at' => now(),
+                'updated_at' => now(),
+            ]);
+        } else {
+            $this->markTestSkipped('Brak tabel ubezpieczeń.');
+        }
+
+        NotificationService::clearCacheForUser($user->id);
+        $data = NotificationService::getTopbarDataForUser($user->id, fresh: true);
+
+        $eventItems = collect($data['items_by_type']['event'])
+            ->where('id', $event->id)
+            ->values();
+
+        $this->assertGreaterThanOrEqual(1, $eventItems->count());
+
+        $fingerprints = $eventItems->pluck('fingerprint')->filter()->values();
+        $this->assertSame(
+            $fingerprints->count(),
+            $fingerprints->unique()->count(),
+            'Powiadomienia imprezy i ubezpieczenia nie mogą dzielić fingerprintu (psuje Alpine x-for).',
+        );
+
+        $types = $eventItems->pluck('type')->unique()->values();
+        if ($types->contains('insurance_alert')) {
+            $this->assertTrue($types->contains('event'));
+            $this->assertTrue($types->contains('insurance_alert'));
+        }
     }
 }

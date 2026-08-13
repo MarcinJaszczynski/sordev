@@ -2,6 +2,7 @@
 
 namespace App\Filament\Client\Pages;
 
+use App\Filament\Actions\HelpArticleAction;
 use App\Filament\Client\Concerns\AuthorizesClientTrip;
 use App\Filament\Client\Concerns\HasClientTripNav;
 use App\Models\Event;
@@ -40,6 +41,13 @@ class ClientAgreementPage extends Page
     public function getTitle(): string|Htmlable
     {
         return 'Umowa: '.$this->event->name;
+    }
+
+    protected function getHeaderActions(): array
+    {
+        return [
+            HelpArticleAction::make('umowa', 'portal'),
+        ];
     }
 
     public static function urlFor(Event $event): string

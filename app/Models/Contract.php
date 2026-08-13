@@ -4,11 +4,12 @@ namespace App\Models;
 
 use App\Models\Concerns\HasCustomAgreementContent;
 use App\Services\AgreementTemplateRenderer;
+use App\Services\AgreementTransportPayloadResolver;
 use App\Services\ContractAnnexService;
 use App\Services\ContractGroupPricingService;
 use App\Services\ContractOrderingPartyService;
-use App\Services\Contracts\ContractNumberAllocator;
 use App\Services\ContractPaymentSyncService;
+use App\Services\Contracts\ContractNumberAllocator;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
@@ -78,6 +79,7 @@ class Contract extends Model
     protected $fillable = [
         'event_id',
         'contract_template_id',
+        'payment_schedule_template_id',
         'legacy_event_agreement_id',
         'contract_type',
         'agreement_type',
@@ -178,6 +180,7 @@ class Contract extends Model
 
     public static array $paymentStatuses = [
         'pending' => 'Oczekuje na płatność',
+        'partial' => 'Częściowo opłacona',
         'paid' => 'Opłacona',
         'failed' => 'Nieudana',
     ];
@@ -315,6 +318,11 @@ class Contract extends Model
         return $this->belongsTo(ContractTemplate::class);
     }
 
+    public function paymentScheduleTemplate(): BelongsTo
+    {
+        return $this->belongsTo(PaymentScheduleTemplate::class);
+    }
+
     public function creator(): BelongsTo
     {
         return $this->belongsTo(User::class, 'created_by');
@@ -323,6 +331,47 @@ class Contract extends Model
     public function participantPayment(): BelongsTo
     {
         return $this->belongsTo(EventSettlementParticipantPayment::class, 'participant_payment_id');
+    }
+
+    public function participantPayments(): BelongsToMany
+    {
+        return $this->belongsToMany(
+            EventSettlementParticipantPayment::class,
+            'contract_participant_payments',
+            'contract_id',
+            'participant_payment_id',
+        )->withPivot('is_primary')->withTimestamps();
+    }
+
+    /**
+     * @return array<int, int>
+     */
+    public function linkedParticipantPaymentIds(): array
+    {
+        if (\Illuminate\Support\Facades\Schema::hasTable('contract_participant_payments')) {
+            $fromPivot = $this->participantPayments()
+                ->pluck('event_settlement_participant_payments.id')
+                ->all();
+            if ($fromPivot !== []) {
+                return array_map('intval', $fromPivot);
+            }
+        }
+
+        $ids = collect($this->meta['linked_participant_payment_ids'] ?? [])
+            ->filter()
+            ->map(fn ($id) => (int) $id)
+            ->values()
+            ->all();
+
+        if ($ids !== []) {
+            return $ids;
+        }
+
+        if ($this->participant_payment_id) {
+            return [(int) $this->participant_payment_id];
+        }
+
+        return [];
     }
 
     public function variants(): HasMany
@@ -577,10 +626,26 @@ class Contract extends Model
         $participantName = $this->participant_name
             ?: $this->participantPayment?->participant_name
             ?: ($this->isIndividual() ? ($this->signer_name ?: $this->customer_name) : null);
-        $orderingInstitution = (string) ($this->customer_name ?: $this->event?->client_name ?: '—');
-        $orderingPerson = (string) ($this->signer_name ?: $this->customer_name ?: '—');
-        $orderingEmail = (string) ($this->signer_email ?: $this->customer_email ?: $this->event?->client_email ?: '—');
-        $orderingPhone = (string) ($this->signer_phone ?: $this->customer_phone ?: $this->event?->client_phone ?: '—');
+
+        $awaitingParticipant = $this->isIndividual()
+            && $this->status === 'template'
+            && blank($this->signer_name)
+            && blank($this->customer_name)
+            && (bool) data_get($this->meta ?? [], 'awaiting_participant_details', true);
+
+        $pendingLabel = '[dane uzupełni uczestnik]';
+
+        if ($awaitingParticipant) {
+            $orderingInstitution = $pendingLabel;
+            $orderingPerson = $pendingLabel;
+            $orderingEmail = $pendingLabel;
+            $orderingPhone = $pendingLabel;
+        } else {
+            $orderingInstitution = (string) ($this->customer_name ?: ($this->isIndividual() ? '—' : ($this->event?->client_name ?: '—')));
+            $orderingPerson = (string) ($this->signer_name ?: $this->customer_name ?: '—');
+            $orderingEmail = (string) ($this->signer_email ?: $this->customer_email ?: ($this->isIndividual() ? '—' : ($this->event?->client_email ?: '—')));
+            $orderingPhone = (string) ($this->signer_phone ?: $this->customer_phone ?: ($this->isIndividual() ? '—' : ($this->event?->client_phone ?: '—')));
+        }
 
         $bookingReference = $this->participantPayment?->booking_reference ?: ($this->contract_number ?: ('UMOWA-'.$this->id));
         $participantCount = max(1, (int) ($this->participant_count ?: $this->event?->participant_count ?: 1));
@@ -588,6 +653,44 @@ class Contract extends Model
         $formattedAmount = number_format($amountDue, 2, ',', ' ');
         $formattedAmountPerPerson = number_format($participantCount > 0 ? ($amountDue / $participantCount) : $amountDue, 2, ',', ' ');
 
+        $foreignSuffix = '';
+        $foreignMeta = data_get($this->meta ?? [], 'foreign_prices_per_person');
+        if ((bool) data_get($this->meta ?? [], 'include_foreign', false) && is_array($foreignMeta) && $foreignMeta !== []) {
+            $parts = [];
+            foreach ($foreignMeta as $row) {
+                if (! is_array($row)) {
+                    continue;
+                }
+                $code = strtoupper((string) ($row['currency'] ?? ''));
+                $fx = round((float) ($row['price_per_person'] ?? 0) * $participantCount, 2);
+                if ($code !== '' && $fx > 0) {
+                    $parts[] = number_format($fx, 2, ',', ' ').' '.$code;
+                }
+            }
+            if ($parts !== []) {
+                $foreignSuffix = ' + '.implode(' + ', $parts);
+                $place = data_get($this->meta, 'foreign_paid_by') === 'office' ? 'biuro' : 'pilot/autokar';
+                $foreignSuffix .= ' ('.$place.')';
+            }
+        }
+        $formattedAmountWithFx = $formattedAmount.' PLN'.$foreignSuffix;
+        $unitWithFx = $formattedAmountPerPerson.' PLN';
+        if ($foreignSuffix !== '' && $participantCount > 0) {
+            $unitParts = [];
+            foreach ((array) $foreignMeta as $row) {
+                if (! is_array($row)) {
+                    continue;
+                }
+                $code = strtoupper((string) ($row['currency'] ?? ''));
+                $fx = round((float) ($row['price_per_person'] ?? 0), 2);
+                if ($code !== '' && $fx > 0) {
+                    $unitParts[] = number_format($fx, 2, ',', ' ').' '.$code;
+                }
+            }
+            if ($unitParts !== []) {
+                $unitWithFx .= ' + '.implode(' + ', $unitParts);
+            }
+        }
         $fullAddress = trim(implode(', ', array_filter([
             trim((string) data_get($signerAddress, 'street', '')).' '.trim((string) data_get($signerAddress, 'number', '')),
             trim((string) data_get($signerAddress, 'postal_code', '')).' '.trim((string) data_get($signerAddress, 'city', '')),
@@ -616,7 +719,7 @@ class Contract extends Model
             })
             ->implode("\n");
 
-        if ($orderingPartiesNames !== '—') {
+        if (! $awaitingParticipant && $orderingPartiesNames !== '—') {
             $orderingInstitution = $orderingPartiesNames;
         }
 
@@ -624,6 +727,11 @@ class Contract extends Model
         $groupPricingService = app(ContractGroupPricingService::class);
         $changeTypes = Arr::wrap($this->annex_change_types ?? []);
         $parentNumber = $this->parentContract?->contract_number;
+        $transport = app(AgreementTransportPayloadResolver::class)->forEvent(
+            $this->event,
+            $startDate,
+            $endDate,
+        );
 
         return [
             'agreement_number' => $this->contract_number ?: ('UMOWA-'.$this->id),
@@ -633,41 +741,42 @@ class Contract extends Model
             'event_name' => (string) ($eventName ?: '—'),
             'event_start_date' => $startDate ? $startDate->format('d.m.Y') : '—',
             'event_end_date' => $endDate ? $endDate->format('d.m.Y') : '—',
-            'customer_name' => $orderingInstitution,
-            'customer_email' => (string) ($this->customer_email ?: $this->event?->client_email ?: '—'),
-            'customer_phone' => (string) ($this->customer_phone ?: $this->event?->client_phone ?: '—'),
+            'customer_name' => $awaitingParticipant ? $pendingLabel : $orderingInstitution,
+            'customer_email' => $awaitingParticipant ? $pendingLabel : (string) ($this->customer_email ?: ($this->isIndividual() ? '—' : ($this->event?->client_email ?: '—'))),
+            'customer_phone' => $awaitingParticipant ? $pendingLabel : (string) ($this->customer_phone ?: ($this->isIndividual() ? '—' : ($this->event?->client_phone ?: '—'))),
             'ordering_institution' => $orderingInstitution,
             'ordering_person' => $orderingPerson,
             'ordering_email' => $orderingEmail,
             'ordering_phone' => $orderingPhone,
-            'ordering_parties_names' => $orderingPartiesNames,
-            'ordering_parties_list' => $orderingPartiesList !== '' ? $orderingPartiesList : $orderingPartiesNames,
+            'ordering_parties_names' => $awaitingParticipant ? $pendingLabel : $orderingPartiesNames,
+            'ordering_parties_list' => $awaitingParticipant
+                ? $pendingLabel
+                : ($orderingPartiesList !== '' ? $orderingPartiesList : $orderingPartiesNames),
             'ordering_party_notes' => (string) ($this->ordering_party_notes ?: '—'),
-            'signer_name' => (string) ($this->signer_name ?: $this->customer_name ?: '—'),
-            'signer_email' => (string) ($this->signer_email ?: $this->customer_email ?: '—'),
-            'signer_phone' => (string) ($this->signer_phone ?: $this->customer_phone ?: '—'),
-            'signer_address_street' => (string) (data_get($signerAddress, 'street') ?: '—'),
-            'signer_address_number' => (string) (data_get($signerAddress, 'number') ?: '—'),
-            'signer_postal_code' => (string) (data_get($signerAddress, 'postal_code') ?: '—'),
-            'signer_city' => (string) (data_get($signerAddress, 'city') ?: '—'),
-            'signer_province' => (string) (data_get($signerAddress, 'province') ?: '—'),
-            'signer_address_full' => $fullAddress !== '' ? $fullAddress : '—',
-            'participant_name' => (string) ($participantName ?: '—'),
-            'participant_birth_date' => optional($this->participant_birth_date)->format('d.m.Y') ?: '—',
-            'participant_email' => (string) ($this->participant_email ?: '—'),
-            'participant_phone' => (string) ($this->participant_phone ?: '—'),
+            'signer_name' => $awaitingParticipant ? $pendingLabel : (string) ($this->signer_name ?: $this->customer_name ?: '—'),
+            'signer_email' => $awaitingParticipant ? $pendingLabel : (string) ($this->signer_email ?: $this->customer_email ?: '—'),
+            'signer_phone' => $awaitingParticipant ? $pendingLabel : (string) ($this->signer_phone ?: $this->customer_phone ?: '—'),
+            'signer_address_street' => $awaitingParticipant ? $pendingLabel : (string) (data_get($signerAddress, 'street') ?: '—'),
+            'signer_address_number' => $awaitingParticipant ? $pendingLabel : (string) (data_get($signerAddress, 'number') ?: '—'),
+            'signer_postal_code' => $awaitingParticipant ? $pendingLabel : (string) (data_get($signerAddress, 'postal_code') ?: '—'),
+            'signer_city' => $awaitingParticipant ? $pendingLabel : (string) (data_get($signerAddress, 'city') ?: '—'),
+            'signer_province' => $awaitingParticipant ? $pendingLabel : (string) (data_get($signerAddress, 'province') ?: '—'),
+            'signer_address_full' => $awaitingParticipant ? $pendingLabel : ($fullAddress !== '' ? $fullAddress : '—'),
+            'participant_name' => $awaitingParticipant ? $pendingLabel : (string) ($participantName ?: '—'),
+            'participant_birth_date' => optional($this->participant_birth_date)->format('d.m.Y') ?: ($awaitingParticipant ? $pendingLabel : '—'),
+            'participant_email' => $awaitingParticipant ? $pendingLabel : (string) ($this->participant_email ?: '—'),
+            'participant_phone' => $awaitingParticipant ? $pendingLabel : (string) ($this->participant_phone ?: '—'),
             'participant_count' => (string) $participantCount,
-            'amount_due' => $formattedAmount,
-            'amount_per_person' => $formattedAmountPerPerson,
-            'currency' => strtoupper((string) ($this->currency ?: 'PLN')),
-            'travel_insurance' => $travelInsurance,
+            'amount_due' => $formattedAmountWithFx,
+            'amount_per_person' => $unitWithFx,
+            'currency' => strtoupper((string) ($this->currency ?: 'PLN')),            'travel_insurance' => $travelInsurance,
             'travel_insurance_label' => $travelInsuranceLabel,
-            'departure_place' => '—',
-            'departure_date' => $startDate ? $startDate->format('d.m.Y') : '—',
-            'departure_time' => '—',
-            'return_place' => '—',
-            'return_date' => $endDate ? $endDate->format('d.m.Y') : '—',
-            'return_time' => '—',
+            'departure_place' => $transport['departure_place'],
+            'departure_date' => $transport['departure_date'],
+            'departure_time' => $transport['departure_time'],
+            'return_place' => $transport['return_place'],
+            'return_date' => $transport['return_date'],
+            'return_time' => $transport['return_time'],
             'organizer_name' => (string) config('company.name', config('app.name', 'Organizator')),
             'organizer_address_line_1' => (string) config('company.address_line_1', '—'),
             'organizer_address_line_2' => (string) config('company.address_line_2', '—'),
@@ -684,6 +793,7 @@ class Contract extends Model
             'unit_price' => number_format($groupPricingService->resolvedUnitPrice($this), 2, ',', ' '),
             'payment_scheme_label' => $groupPricingService->paymentSchemeLabel($this),
             'payment_schedule_text' => $groupPricingService->formatPaymentSchedulesText($this),
+            'custom_placeholder_values' => (array) data_get($this->meta ?? [], 'custom_placeholder_values', []),
         ];
     }
 }

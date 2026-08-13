@@ -23,11 +23,6 @@ class ManageEventReservations extends SingleRelationManagerPage
 
     protected static ?string $navigationIcon = 'heroicon-o-ticket';
 
-    public function getSubheading(): ?string
-    {
-        return 'W kontekście tej imprezy — skrzynka wszystkich rezerwacji jest w menu bocznym';
-    }
-
     protected static function relationManager(): string
     {
         return ReservationsRelationManager::class;

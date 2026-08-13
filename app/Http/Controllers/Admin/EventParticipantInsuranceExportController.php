@@ -14,6 +14,8 @@ class EventParticipantInsuranceExportController extends Controller
 {
     public function __invoke(Event $event, string $format = 'xlsx'): StreamedResponse|BinaryFileResponse
     {
+        \Illuminate\Support\Facades\Gate::authorize('view', $event);
+
         $format = strtolower($format);
         $basename = Str::slug($event->name).'-lista-uczestnikow-ubezpieczenie';
 

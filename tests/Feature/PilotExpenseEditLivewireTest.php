@@ -4,6 +4,7 @@ namespace Tests\Feature;
 
 use App\Livewire\PilotTripSettlementForm;
 use App\Models\Event;
+use App\Models\EventSettlementCost;
 use App\Models\User;
 use App\Services\PilotSettlementService;
 use Illuminate\Foundation\Testing\RefreshDatabase;
@@ -54,8 +55,20 @@ class PilotExpenseEditLivewireTest extends TestCase
 
         $cost->refresh();
 
-        $this->assertSame('125.75', $cost->actual_amount);
+        // Plan/manual: actual na wierszu planu jest czyszczone — SSoT to wiersz *_payment.
+        $this->assertNull($cost->actual_amount);
         $this->assertSame('Po fakcie drożej', $cost->notes);
+
+        $payment = EventSettlementCost::query()
+            ->where('settlement_id', $cost->settlement_id)
+            ->where('source_type', 'manual_payment')
+            ->where('source_id', $cost->id)
+            ->where('paid_by', 'pilot')
+            ->latest('id')
+            ->first();
+
+        $this->assertNotNull($payment);
+        $this->assertSame(125.75, (float) $payment->actual_amount);
     }
 
     public function test_pilot_can_save_planned_program_point_actual_amount(): void
@@ -96,7 +109,18 @@ class PilotExpenseEditLivewireTest extends TestCase
 
         $cost->refresh();
 
-        $this->assertSame('95.50', $cost->actual_amount);
-        $this->assertSame('paid', $cost->payment_status);
+        $this->assertNull($cost->actual_amount);
+
+        $payment = EventSettlementCost::query()
+            ->where('settlement_id', $cost->settlement_id)
+            ->where('source_type', 'program_point_payment')
+            ->where('source_id', 999)
+            ->where('paid_by', 'pilot')
+            ->latest('id')
+            ->first();
+
+        $this->assertNotNull($payment);
+        $this->assertSame(95.50, (float) $payment->actual_amount);
+        $this->assertSame('paid', $payment->payment_status);
     }
 }

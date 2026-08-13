@@ -17,13 +17,13 @@ use App\Support\Tasks\TaskQueryFilters;
 use Filament\Forms;
 use Filament\Forms\Form;
 use Filament\Navigation\NavigationItem;
+use Filament\Notifications\Notification;
 use Filament\Resources\Resource;
 use Filament\Tables;
 use Filament\Tables\Table;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Collection;
 use Illuminate\Database\Eloquent\SoftDeletingScope;
-use Filament\Notifications\Notification;
 use Illuminate\Support\Str;
 
 class TaskResource extends Resource
@@ -90,65 +90,20 @@ class TaskResource extends Resource
     }
 
     /**
-     * Prosta lista zadań w workspace imprezy (bez ownership scopes i ciężkich kolumn).
+     * Lista zadań w workspace imprezy — ten sam układ treści co globalna „Zadania Lista”.
      *
      * @return array<int, Tables\Columns\Column>
      */
     public static function eventWorkspaceTableColumns(): array
     {
-        return [
-            Tables\Columns\TextColumn::make('title')
-                ->label('Tytuł')
-                ->searchable()
-                ->sortable()
-                ->wrap()
-                ->weight('semibold')
-                ->description(function (Task $record): ?string {
-                    if ($record->taskable instanceof \App\Models\EventProgramPoint) {
-                        $name = $record->taskable->name
-                            ?? $record->taskable->templatePoint?->name;
-
-                        return $name ? 'Punkt: '.$name : 'Punkt programu';
-                    }
-
-                    if ($record->taskable instanceof \App\Models\Reservation) {
-                        $ref = $record->taskable->booking_reference
-                            ?: ('#'.$record->taskable->getKey());
-
-                        return 'Rezerwacja: '.$ref;
-                    }
-
-                    $plain = trim(strip_tags((string) ($record->description ?? '')));
-
-                    return $plain !== '' ? \Illuminate\Support\Str::limit($plain, 80) : null;
-                }),
-            Tables\Columns\TextColumn::make('assignee.name')
-                ->label('Przypisane')
-                ->placeholder('—')
-                ->toggleable(),
-            Tables\Columns\SelectColumn::make('status_id')
-                ->label('Status')
-                ->options(fn (): array => TaskStatus::query()->orderBy('order')->pluck('name', 'id')->all())
-                ->sortable()
-                ->selectablePlaceholder(false),
-            Tables\Columns\TextColumn::make('due_date')
-                ->label('Termin')
-                ->dateTime('d.m.Y H:i')
-                ->sortable()
-                ->placeholder('—'),
-            Tables\Columns\TextColumn::make('priority')
-                ->label('Priorytet')
-                ->badge()
-                ->formatStateUsing(fn ($state): string => TaskPriority::tryFrom(TaskPriority::normalize(is_string($state) ? $state : null))?->label() ?? 'Zwykły')
-                ->color(fn ($state): string => TaskPriority::normalize(is_string($state) ? $state : null) === TaskPriority::Urgent->value ? 'danger' : 'gray'),
-        ];
+        return static::adminListTableColumns(showContextColumn: true, showSourceColumn: true);
     }
 
     public static function form(Form $form): Form
     {
         return $form
             ->schema(TaskFormFields::coreFields(compact: false))
-            ->columns(3);
+            ->columns(['default' => 1, 'md' => 2, 'xl' => 3]);
     }
 
     public static function archivedVisibilityTableFilter(): Tables\Filters\TernaryFilter
@@ -684,7 +639,7 @@ class TaskResource extends Resource
         return $count > 0 ? (string) $count : null;
     }
 
-    public static function getNavigationBadgeColor(): string | array | null
+    public static function getNavigationBadgeColor(): string|array|null
     {
         return static::getNavigationBadge() ? 'warning' : null;
     }

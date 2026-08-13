@@ -1,11 +1,24 @@
-# Workflow: Płatności i Wpłaty Ratalne
+# Workflow: Płatności i raty
 
-## 1. Sekwencja Procesu
-Przepływ zbierania wpłat indywidualnych od rodziców / uczestników.
+## 1. Sekwencja (rodzic / uczestnik)
 
 ```
-[Start Procesu] ──> [Weryfikacja Warunków] ──> [Akcja Główna (Action)] ──> [Zdarzenie (Event)] ──> [Koniec]
+Harmonogram / Moje wpłaty / link e-mail / /rodzic/{token}
+  → CTA „Zapłać online”
+  → (opcjonalnie) strona signed z danymi przelewu
+  → checkout (fake lub bramka)
+  → online-success
 ```
 
-## 2. Automatyzacje i Powiadomienia
-* Automatyczna wysyłka e-mail/SMS na wybranych etapach procesowych.
+## 2. Sekwencja (biuro)
+
+```
+Rejestr wpłat / Skrzynka płatności / Impreza → Finanse → Wpłaty
+  → księgowanie ręczne lub import bankowy
+  → deep-link do imprezy przy potrzebie korekty
+```
+
+## 3. Automatyzacje
+
+- Przypomnienia: `SendPaymentRemindersCommand` + mail szablonowy
+- Sync salda: `ParticipantPaymentBalanceService` / ledger

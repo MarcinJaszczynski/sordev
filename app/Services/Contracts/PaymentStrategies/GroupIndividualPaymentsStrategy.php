@@ -60,6 +60,8 @@ class GroupIndividualPaymentsStrategy extends AbstractContractPaymentStrategy
         }
 
         $this->syncGroupContractAggregate($contract, $totalPaid, $linkedPaymentIds);
+        app(\App\Services\ContractParticipantPaymentLinkService::class)
+            ->syncForContract($contract->fresh(), $linkedPaymentIds);
         $settlement->recalculateTotals();
     }
 
@@ -298,15 +300,9 @@ class GroupIndividualPaymentsStrategy extends AbstractContractPaymentStrategy
             ? 'paid'
             : ($totalPaid > 0 ? 'pending' : (string) $contract->payment_status);
 
-        $meta = array_merge($contract->meta ?? [], [
-            'linked_participant_payment_ids' => array_values(array_unique($linkedPaymentIds)),
-        ]);
-
         $contract->forceFill([
             'amount_paid' => round($totalPaid, 2),
             'payment_status' => $paymentStatus,
-            'meta' => $meta,
-            'participant_payment_id' => null,
         ])->saveQuietly();
     }
 
@@ -320,10 +316,8 @@ class GroupIndividualPaymentsStrategy extends AbstractContractPaymentStrategy
      */
     protected function linkedPayments(Contract $contract): \Illuminate\Support\Collection
     {
-        $ids = collect($contract->meta['linked_participant_payment_ids'] ?? [])
-            ->filter()
-            ->map(fn ($id) => (int) $id)
-            ->all();
+        $ids = app(\App\Services\ContractParticipantPaymentLinkService::class)
+            ->linkedPaymentIds($contract);
 
         if ($ids !== []) {
             return EventSettlementParticipantPayment::query()->whereIn('id', $ids)->get();

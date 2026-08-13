@@ -20,8 +20,8 @@ class EventSettlementParticipantPaymentEntry extends Model
     public const KIND_PILOT_ON_SITE = 'pilot_on_site';
 
     public static array $paymentKinds = [
-        self::KIND_REGULAR => 'Wpłata regularna',
-        self::KIND_OFFICE_ADVANCE => 'Zaliczka biuro',
+        self::KIND_REGULAR => 'Dopłata',
+        self::KIND_OFFICE_ADVANCE => 'Zaliczka',
         self::KIND_PILOT_ON_SITE => 'Dopłata u pilota',
     ];
 
@@ -34,6 +34,9 @@ class EventSettlementParticipantPaymentEntry extends Model
     protected $fillable = [
         'participant_payment_id',
         'paid_at',
+        'amount',
+        'currency_id',
+        'rate',
         'amount_pln',
         'payer_name',
         'bank_transfer_description',
@@ -47,12 +50,19 @@ class EventSettlementParticipantPaymentEntry extends Model
 
     protected $casts = [
         'paid_at' => 'datetime',
+        'amount' => 'decimal:2',
+        'rate' => 'decimal:6',
         'amount_pln' => 'decimal:2',
     ];
 
     public function participantPayment(): BelongsTo
     {
         return $this->belongsTo(EventSettlementParticipantPayment::class, 'participant_payment_id');
+    }
+
+    public function currency(): BelongsTo
+    {
+        return $this->belongsTo(Currency::class);
     }
 
     public function bankImportLine(): BelongsTo

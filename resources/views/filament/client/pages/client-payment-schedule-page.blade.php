@@ -52,18 +52,40 @@
                             </thead>
                             <tbody class="divide-y divide-gray-100">
                                 @foreach($presentation['payment_schedules'] as $schedule)
+                                    @php
+                                        $isForeign = ((float) ($schedule['amount_foreign'] ?? 0) > 0.009)
+                                            && ((float) ($schedule['amount'] ?? 0) <= 0.009);
+                                        $amountLabel = $isForeign
+                                            ? number_format((float) $schedule['amount_foreign'], 2, ',', ' ').' '.strtoupper((string) ($schedule['currency_code'] ?? ''))
+                                            : MoneyFormatter::format((float) ($schedule['amount'] ?? 0), $contract->currency ?: 'PLN');
+                                        $canPayOnline = ! $isForeign
+                                            && ! ($schedule['is_paid'] ?? false)
+                                            && ! empty($schedule['id'])
+                                            && $contract instanceof \App\Models\Contract;
+                                    @endphp
                                     <tr>
-                                        <td class="px-4 py-2">{{ $schedule['label'] ?: '—' }}</td>
+                                        <td class="px-4 py-2">
+                                            {{ $schedule['label'] ?: '—' }}
+                                            @if ($isForeign && ($schedule['paid_by'] ?? null) === 'pilot')
+                                                <span class="ml-1 text-xs text-amber-700">(u pilota)</span>
+                                            @endif
+                                        </td>
                                         <td class="px-4 py-2">{{ $schedule['due_date'] ?: '—' }}</td>
                                         <td class="px-4 py-2 text-right font-medium">
-                                            {{ MoneyFormatter::format((float) ($schedule['amount'] ?? 0), $contract->currency ?: 'PLN') }}
+                                            {{ $amountLabel }}
                                         </td>
                                         <td class="px-4 py-2 text-right">
-                                            {{ MoneyFormatter::format((float) ($schedule['paid_amount'] ?? 0), $contract->currency ?: 'PLN') }}
+                                            @if ($isForeign)
+                                                —
+                                            @else
+                                                {{ MoneyFormatter::format((float) ($schedule['paid_amount'] ?? 0), $contract->currency ?: 'PLN') }}
+                                            @endif
                                         </td>
                                         <td class="px-4 py-2">
                                             @if($schedule['is_paid'] ?? false)
                                                 <span class="text-emerald-700">Opłacona</span>
+                                            @elseif($isForeign)
+                                                <span class="text-amber-700">Gotówka / pilot</span>
                                             @elseif(filled($schedule['due_date']))
                                                 <span class="text-blue-700">W terminie</span>
                                             @else
@@ -71,13 +93,13 @@
                                             @endif
                                         </td>
                                         <td class="px-4 py-2 text-right">
-                                            @if(!($schedule['is_paid'] ?? false) && !empty($schedule['id']) && $contract instanceof \App\Models\Contract)
+                                            @if($canPayOnline)
                                                 <x-filament::button
                                                     size="sm"
                                                     color="primary"
                                                     wire:click="payInstallment({{ (int) $schedule['id'] }})"
                                                 >
-                                                    Opłać ratę
+                                                    {{ \App\Support\PaymentCta::label() }}
                                                 </x-filament::button>
                                             @else
                                                 <span class="text-gray-400">—</span>

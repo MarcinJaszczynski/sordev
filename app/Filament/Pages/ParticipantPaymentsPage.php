@@ -2,13 +2,14 @@
 
 namespace App\Filament\Pages;
 
+use App\Filament\Actions\HelpArticleAction;
 use App\Filament\Resources\EventSettlementResource;
 use App\Models\Event;
 use App\Models\EventSettlementParticipantPayment;
-use App\Support\FilamentNavigation;
-use App\Support\FinanceModuleNavigation;
 use App\Services\ParticipantPaymentBalanceService;
 use App\Services\SettlementPaymentHealthService;
+use App\Support\FilamentNavigation;
+use App\Support\FinanceModuleNavigation;
 use Filament\Pages\Page;
 use Filament\Tables;
 use Filament\Tables\Concerns\InteractsWithTable;
@@ -18,6 +19,7 @@ use Illuminate\Database\Eloquent\Builder;
 
 class ParticipantPaymentsPage extends Page implements HasTable
 {
+    use \App\Filament\Concerns\ShowsParticipantPaymentBalance;
     use InteractsWithTable;
 
     protected static ?string $navigationIcon = 'heroicon-o-users';
@@ -26,9 +28,9 @@ class ParticipantPaymentsPage extends Page implements HasTable
 
     protected static ?string $navigationGroup = FilamentNavigation::GROUP_FINANCE;
 
-    protected static ?string $navigationLabel = 'Wpłaty uczestników';
+    protected static ?string $navigationLabel = 'Rejestr wpłat';
 
-    protected static ?int $navigationSort = 2;
+    protected static ?int $navigationSort = 4;
 
     public static function canAccess(): bool
     {
@@ -39,7 +41,14 @@ class ParticipantPaymentsPage extends Page implements HasTable
 
     public function getTitle(): string
     {
-        return 'Panel płatności indywidualnych';
+        return 'Rejestr wpłat';
+    }
+
+    protected function getHeaderActions(): array
+    {
+        return [
+            HelpArticleAction::make('wplaty-i-linki'),
+        ];
     }
 
     public function getNavigationTabs(): array
@@ -55,6 +64,7 @@ class ParticipantPaymentsPage extends Page implements HasTable
                     ->with(['settlement.event', 'contracts.paymentSchedules', 'agreements'])
             )
             ->defaultSort('updated_at', 'desc')
+            ->recordUrl(fn (EventSettlementParticipantPayment $record): ?string => EventSettlementResource::getEventFinanceParticipantPaymentUrl($record))
             ->columns([
                 Tables\Columns\BadgeColumn::make('operation_type')
                     ->label('Typ operacji')
@@ -96,12 +106,12 @@ class ParticipantPaymentsPage extends Page implements HasTable
                     ->sortable(),
 
                 Tables\Columns\TextColumn::make('paid_amount_pln')
-                    ->label('Wpłacono')
+                    ->label('Wpłacone')
                     ->money('PLN')
                     ->sortable(),
 
                 Tables\Columns\TextColumn::make('remaining_pln')
-                    ->label('Brakuje')
+                    ->label('Różnica')
                     ->state(function (EventSettlementParticipantPayment $record): float {
                         $balance = app(ParticipantPaymentBalanceService::class)->balanceRow($record);
 
@@ -111,18 +121,19 @@ class ParticipantPaymentsPage extends Page implements HasTable
                     ->color(fn (float $state): string => $state > 0 ? 'danger' : 'success'),
 
                 Tables\Columns\TextColumn::make('coverage_status')
-                    ->label('Semafor')
+                    ->label('Status')
                     ->badge()
                     ->state(function (EventSettlementParticipantPayment $record): string {
                         $balance = app(ParticipantPaymentBalanceService::class)->balanceRow($record);
 
-                        return (string) ($balance['coverage_label'] ?? '—');
+                        return (string) ($balance['display_status_label'] ?? $balance['coverage_label'] ?? '—');
                     })
                     ->color(function (EventSettlementParticipantPayment $record): string {
                         $balance = app(ParticipantPaymentBalanceService::class)->balanceRow($record);
 
                         return match ($balance['coverage_status'] ?? '') {
                             SettlementPaymentHealthService::STATUS_OK => 'success',
+                            SettlementPaymentHealthService::STATUS_NA => 'gray',
                             SettlementPaymentHealthService::STATUS_DUE => 'info',
                             SettlementPaymentHealthService::STATUS_OVERDUE => 'warning',
                             default => 'danger',
@@ -137,17 +148,6 @@ class ParticipantPaymentsPage extends Page implements HasTable
                         return (string) ($balance['installment_label'] ?? '—');
                     })
                     ->placeholder('—'),
-
-                Tables\Columns\BadgeColumn::make('payment_status')
-                    ->label('Status')
-                    ->formatStateUsing(fn ($state) => EventSettlementParticipantPayment::$paymentStatuses[$state] ?? $state)
-                    ->colors([
-                        'gray' => 'pending',
-                        'warning' => 'partial',
-                        'success' => 'paid',
-                        'info' => 'overpaid',
-                        'danger' => 'cancelled',
-                    ]),
 
                 Tables\Columns\TextColumn::make('payment_date')
                     ->label('Data wpłaty')
@@ -169,7 +169,7 @@ class ParticipantPaymentsPage extends Page implements HasTable
                         : $query),
 
                 Tables\Filters\SelectFilter::make('payment_status')
-                    ->label('Status')
+                    ->label('Status (zapisany)')
                     ->options(EventSettlementParticipantPayment::$paymentStatuses),
 
                 Tables\Filters\Filter::make('shortfall_only')
@@ -199,12 +199,10 @@ class ParticipantPaymentsPage extends Page implements HasTable
                     }),
             ])
             ->actions([
-                Tables\Actions\Action::make('open_settlement')
-                    ->label('Rozliczenie')
-                    ->icon('heroicon-o-calculator')
-                    ->url(fn (EventSettlementParticipantPayment $record): ?string => $record->settlement_id
-                        ? EventSettlementResource::getUrl('edit', ['record' => $record->settlement_id])
-                        : null),
+                Tables\Actions\Action::make('open_participant_payments')
+                    ->label('Wpłaty')
+                    ->icon('heroicon-o-credit-card')
+                    ->url(fn (EventSettlementParticipantPayment $record): ?string => EventSettlementResource::getEventFinanceParticipantPaymentUrl($record)),
             ]);
     }
 }

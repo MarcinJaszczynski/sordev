@@ -29,6 +29,8 @@
 
     <hr class="divider">
 
+    @include('pdf.packages._package_overrides_intro')
+
     <div class="section">
         <div class="section-title">Podsumowanie</div>
         <div class="section-body">
@@ -42,11 +44,15 @@
         </div>
     </div>
 
-    @include('pdf.packages._program_imprezy')
+    @unless(in_array('program', $hide_sections ?? [], true))
+        @include('pdf.packages._program_imprezy')
+    @endunless
 
-    @include('pdf.packages._pilot_set_finances', ['pilotSetFinanceCards' => $pilotSetFinanceCards ?? []])
+    @unless(in_array('pilot_set_finance', $hide_sections ?? [], true))
+        @include('pdf.packages._pilot_set_finances', ['pilotSetFinanceCards' => $pilotSetFinanceCards ?? []])
+    @endunless
 
-    @if(!empty($hotelNotes) || (isset($hotelProgramPoints) && $hotelProgramPoints->isNotEmpty()) || (isset($hotelPlan) && $hotelPlan->isNotEmpty()))
+    @if(! in_array('hotel_plan', $hide_sections ?? [], true) && (!empty($hotelNotes) || (isset($hotelProgramPoints) && $hotelProgramPoints->isNotEmpty()) || (isset($hotelPlan) && $hotelPlan->isNotEmpty())))
         <div class="section">
             <div class="section-title">Hotele</div>
             <div class="section-body">
@@ -142,7 +148,11 @@
         </div>
     </div>
 
-    @include('pdf.packages._attachments')
+    @include('pdf.packages._package_overrides_extra')
+
+    @unless(in_array('attachments_list', $hide_sections ?? [], true))
+        @include('pdf.packages._attachments')
+    @endunless
     @include('pdf.packages._footer')
 </div>
 </body>

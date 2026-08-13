@@ -64,104 +64,29 @@ class PilotEventResource extends Resource
         return false;
     }
 
+    public static function canViewAny(): bool
+    {
+        $user = Auth::user();
+        if (! $user) {
+            return false;
+        }
+
+        if ($user->hasRole('pilot')) {
+            return true;
+        }
+
+        return $user->hasRole(['admin', 'super_admin', 'biuro'])
+            && \App\Http\Middleware\PilotPreviewMiddleware::isActive();
+    }
+
     protected static ?int $navigationSort = 1;
 
     public static function table(Table $table): Table
     {
+        // Lista używa custom view z kartami.
         return $table
-            ->columns([
-                Tables\Columns\TextColumn::make('name')
-                    ->label('Nazwa')
-                    ->searchable()
-                    ->wrap()
-                    ->sortable()
-                    ->description(function (Event $record): ?string {
-                        $parts = [];
-                        if ($record->start_date) {
-                            $parts[] = $record->start_date->format('d.m.Y')
-                                .($record->end_date ? ' – '.$record->end_date->format('d.m.Y') : '');
-                        }
-                        if (app(PilotAccessService::class)->isArchived($record)) {
-                            $parts[] = 'Archiwum — pełny dostęp wygasł';
-                        }
-
-                        return $parts !== [] ? implode(' · ', $parts) : null;
-                    }),
-                Tables\Columns\TextColumn::make('start_date')
-                    ->label('Start')
-                    ->date('d.m.Y')
-                    ->sortable()
-                    ->visibleFrom('md'),
-                Tables\Columns\TextColumn::make('end_date')
-                    ->label('Koniec')
-                    ->date('d.m.Y')
-                    ->visibleFrom('lg'),
-                Tables\Columns\TextColumn::make('participant_count')
-                    ->label('Plan osób')
-                    ->numeric()
-                    ->visibleFrom('md'),
-                Tables\Columns\TextColumn::make('status')
-                    ->label('Status')
-                    ->badge(),
-                Tables\Columns\TextColumn::make('activeSettlement.status')
-                    ->label('Rozliczenie')
-                    ->formatStateUsing(fn ($state) => $state ? (\App\Models\EventSettlement::$statuses[$state] ?? $state) : '—')
-                    ->badge(),
-            ])
-            ->filters([
-                Tables\Filters\SelectFilter::make('trip_phase')
-                    ->label('Faza')
-                    ->options([
-                        'upcoming' => 'Nadchodzące',
-                        'in_progress' => 'W trakcie',
-                        'past' => 'Zakończone',
-                    ])
-                    ->query(function (Builder $query, array $data) {
-                        $value = $data['value'] ?? null;
-                        if ($value === 'upcoming') {
-                            return $query->where('start_date', '>', now());
-                        }
-                        if ($value === 'in_progress') {
-                            return $query->where('start_date', '<=', now())->where('end_date', '>=', now()->startOfDay());
-                        }
-                        if ($value === 'past') {
-                            return $query->where('end_date', '<', now()->startOfDay());
-                        }
-
-                        return $query;
-                    }),
-                Tables\Filters\SelectFilter::make('settlement_status')
-                    ->label('Rozliczenie')
-                    ->options(\App\Models\EventSettlement::$statuses)
-                    ->query(fn (Builder $query, array $data) => filled($data['value'] ?? null)
-                        ? $query->whereHas('activeSettlement', fn ($q) => $q->where('status', $data['value']))
-                        : $query),
-                Tables\Filters\TernaryFilter::make('needs_settlement')
-                    ->label('Wymaga rozliczenia')
-                    ->queries(
-                        true: fn (Builder $query) => $query->whereHas('activeSettlement', fn ($q) => $q->whereIn('status', ['draft', 'active'])),
-                        false: fn (Builder $query) => $query->whereDoesntHave('activeSettlement', fn ($q) => $q->whereIn('status', ['draft', 'active'])),
-                    ),
-            ])
-            ->defaultSort('start_date', 'desc')
-            ->actions([
-                Tables\Actions\ViewAction::make(),
-                Tables\Actions\Action::make('program')
-                    ->label('Program')
-                    ->icon('heroicon-o-calendar-days')
-                    ->url(fn (Event $record) => PilotProgramPage::urlFor($record))
-                    ->visible(fn (Event $record): bool => Auth::user()?->can('viewPilotDetails', $record) ?? false),
-                Tables\Actions\Action::make('checklist')
-                    ->label('Checklista')
-                    ->icon('heroicon-o-clipboard-document-check')
-                    ->url(fn (Event $record) => PilotChecklistPage::urlFor($record))
-                    ->visible(fn (Event $record): bool => Auth::user()?->can('view', $record) ?? false),
-                Tables\Actions\Action::make('settle')
-                    ->label('Rozlicz')
-                    ->icon('heroicon-o-calculator')
-                    ->url(fn (Event $record) => PilotSettlementPage::settleUrl($record))
-                    ->visible(fn (Event $record): bool => Auth::user()?->can('viewPilotDetails', $record) ?? false),
-            ]);
+            ->columns([])
+            ->paginated(false);
     }
 
     public static function infolist(Infolist $infolist): Infolist
@@ -178,7 +103,15 @@ class PilotEventResource extends Resource
                         Infolists\Components\TextEntry::make('start_date')->label('Data startu')->date('d.m.Y'),
                         Infolists\Components\TextEntry::make('end_date')->label('Data końca')->date('d.m.Y'),
                         Infolists\Components\TextEntry::make('participant_count')
-                            ->label('Planowana liczba osób')
+                            ->label('Liczba osób')
+                            ->formatStateUsing(function ($state, $record): string {
+                                $paying = max(0, (int) ($state ?? $record->participant_count ?? 0));
+                                $gratis = max(0, (int) $record->resolveGratisCountForParticipantCount($paying ?: null));
+
+                                return $gratis > 0
+                                    ? sprintf('%d + %d (płacący + opiekunowie)', $paying, $gratis)
+                                    : (string) $paying;
+                            })
                             ->visible($pilotDetailsVisible),
                         Infolists\Components\TextEntry::make('startPlace.name')
                             ->label('Miejsce startu')
@@ -236,12 +169,6 @@ class PilotEventResource extends Resource
                         Infolists\Components\TextEntry::make('pilot_notes')
                             ->label('Uwagi biura')
                             ->html()
-                            ->columnSpanFull(),
-                    ]),
-                Infolists\Components\Section::make('Finanse setów')
-                    ->visible($pilotDetailsVisible)
-                    ->schema([
-                        Infolists\Components\View::make('filament.pilot.components.pilot-set-finance-section')
                             ->columnSpanFull(),
                     ]),
                 Infolists\Components\Section::make('Dostęp archiwalny')

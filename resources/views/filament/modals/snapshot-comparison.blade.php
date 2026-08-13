@@ -8,7 +8,7 @@
     {{-- Nagłówek porównania --}}
     <div class="bg-gray-50 dark:bg-gray-800 rounded-lg p-4">
         <h3 class="text-lg font-semibold mb-2">Porównanie snapshotów</h3>
-        <div class="grid grid-cols-2 gap-4 text-sm">
+        <div class="grid grid-cols-1 sm:grid-cols-2 gap-4 text-sm">
             <div>
                 <span class="font-medium text-gray-600 dark:text-gray-400">Snapshot:</span>
                 <p class="font-medium">{{ $snapshot->name }}</p>
@@ -24,7 +24,7 @@
     {{-- Podsumowanie zmian --}}
     <div class="bg-white dark:bg-gray-900 rounded-lg border border-gray-200 dark:border-gray-700 p-4">
         <h3 class="text-lg font-semibold mb-3">Podsumowanie zmian</h3>
-        <div class="grid grid-cols-3 gap-4">
+        <div class="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-4">
             <div class="text-center p-3 border border-gray-200 dark:border-gray-700 rounded">
                 <p class="text-sm text-gray-600 dark:text-gray-400">Zmienione dane</p>
                 <p class="text-2xl font-bold {{ count($eventChanges) > 0 ? 'text-orange-600 dark:text-orange-400' : 'text-green-600 dark:text-green-400' }}">
@@ -54,7 +54,7 @@
                 @foreach($eventChanges as $field => $change)
                     <div class="border border-orange-200 dark:border-orange-700 bg-orange-50 dark:bg-orange-900/20 rounded p-3">
                         <h4 class="font-medium capitalize">{{ str_replace('_', ' ', $field) }}</h4>
-                        <div class="grid grid-cols-2 gap-4 mt-2 text-sm">
+                        <div class="grid grid-cols-1 sm:grid-cols-2 gap-4 mt-2 text-sm">
                             <div>
                                 <span class="text-red-600 dark:text-red-400 font-medium">Poprzednia wartość:</span>
                                 <p class="text-gray-700 dark:text-gray-300">{{ $change['old'] ?? 'Brak' }}</p>
@@ -74,7 +74,7 @@
     @if(abs($costChanges['difference'] ?? 0) > 0.01)
         <div class="bg-white dark:bg-gray-900 rounded-lg border border-gray-200 dark:border-gray-700 p-4">
             <h3 class="text-lg font-semibold mb-3">Zmiany kosztów</h3>
-            <div class="grid grid-cols-3 gap-4">
+            <div class="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-4">
                 <div class="text-center p-3 bg-red-50 dark:bg-red-900/20 rounded">
                     <p class="text-sm text-gray-600 dark:text-gray-400">Koszt ze snapshotu</p>
                     <p class="text-xl font-bold text-red-600 dark:text-red-400">{{ number_format($costChanges['old_total'] ?? 0, 2) }} PLN</p>
@@ -149,7 +149,7 @@
                             <div class="bg-orange-50 dark:bg-orange-900/20 border border-orange-200 dark:border-orange-700 rounded p-3">
                                 <h5 class="font-medium mb-2">{{ $point['point_name'] ?? 'Brak nazwy' }}</h5>
                                 @foreach($point['changes'] as $field => $change)
-                                    <div class="grid grid-cols-2 gap-4 mb-2 text-sm">
+                                    <div class="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-2 text-sm">
                                         <div>
                                             <span class="text-red-600 dark:text-red-400 font-medium">{{ ucfirst($field) }} (poprzedni):</span>
                                             <p>{{ is_numeric($change['old']) ? number_format($change['old'], 2) . ' PLN' : $change['old'] }}</p>

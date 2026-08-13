@@ -1,37 +1,43 @@
 <?php
 
+declare(strict_types=1);
+
 namespace App\Console\Commands;
 
-use App\Filament\Resources\EventTemplateResource\Widgets\EventTemplatePriceTable;
 use App\Models\EventTemplate;
-use App\Models\Place;
+use App\Services\UnifiedPriceCalculator;
 use Illuminate\Console\Command;
 
 class RecalculateAllEventTemplatePrices extends Command
 {
-    protected $signature = 'event-templates:recalculate-prices';
+    protected $signature = 'event-templates:recalculate-prices {--delete-existing : Usuń istniejące ceny przed zapisem}';
 
-    protected $description = 'Przelicz ceny dla wszystkich szablonów i miejsc startowych nowym systemem oraz usuń duplikaty';
+    protected $description = 'Przelicz ceny dla wszystkich szablonów (UnifiedPriceCalculator + EventTemplateCalculationEngine) oraz usuń duplikaty';
 
-    public function handle()
+    public function handle(UnifiedPriceCalculator $calculator): int
     {
-        $templates = EventTemplate::all();
-        $places = Place::where('starting_place', true)->get();
-        $total = 0;
+        $deleteExisting = (bool) $this->option('delete-existing');
+        $templates = EventTemplate::query()->orderBy('id')->get();
+        $total = $templates->count();
+        $processed = 0;
+        $errors = 0;
+
+        $this->info("Przeliczanie cen dla {$total} szablonów…");
+
         foreach ($templates as $template) {
-            foreach ($places as $place) {
-                $widget = new EventTemplatePriceTable;
-                $widget->record = $template;
-                $widget->startPlaceId = $place->id;
-                $widget->recalculatePrices();
-                $total++;
-                $this->info("Przeliczono ceny dla szablonu #{$template->id} ({$template->name}), miejsce startowe: {$place->name}");
+            try {
+                $calculator->recalculateForTemplate($template, $deleteExisting);
+                $processed++;
+                $this->info("OK #{$template->id} ({$template->name})");
+            } catch (\Throwable $e) {
+                $errors++;
+                $this->error("Błąd #{$template->id}: {$e->getMessage()}");
             }
         }
-        // Usuwanie duplikatów
-        EventTemplatePriceTable::removeDuplicatePrices();
-        $this->info("Usunięto duplikaty cen. Przeliczono łącznie: {$total} kombinacji.");
 
-        return 0;
+        $removed = $calculator->removeDuplicatePrices();
+        $this->info("Usunięto duplikaty: {$removed}. Przeliczono: {$processed}/{$total}, błędów: {$errors}.");
+
+        return $errors === 0 ? self::SUCCESS : self::FAILURE;
     }
 }

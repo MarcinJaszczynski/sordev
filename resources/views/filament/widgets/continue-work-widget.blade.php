@@ -11,8 +11,8 @@
                             <a href="{{ $event['url'] }}" class="font-semibold text-primary-600 hover:underline">{{ $event['name'] }}</a>
                             <div class="text-xs text-gray-500">{{ $event['updated'] }}</div>
                         </div>
-                        <x-filament::button tag="a" href="{{ $event['url'] }}" size="sm" color="gray">
-                            Otwórz workspace
+                        <x-filament::button tag="a" href="{{ $event['url'] }}" size="sm" color="gray" title="Przejdź do karty imprezy">
+                            Otwórz imprezę
                         </x-filament::button>
                     </li>
                 @endforeach

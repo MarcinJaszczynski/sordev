@@ -1,4 +1,9 @@
 <x-filament-panels::page>
+    @include('filament.client.components.trip-hero', [
+        'event' => $this->event,
+        'kicker' => 'Obecność',
+    ])
+
     @if(filled($archiveMessage))
         <div class="mb-4 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">
             {{ $archiveMessage }}
@@ -22,19 +27,19 @@
     </div>
 
     @if ($this->participants === [])
-        <div class="sor-lw-card text-sm text-gray-600">
+        <div class="client-portal-section text-sm text-slate-600">
             Brak uczestników na liście. Biuro musi uzupełnić listę uczestników.
         </div>
     @else
-        <div class="sor-lw-card overflow-hidden !p-0">
-            <table class="min-w-full divide-y divide-gray-100 text-sm">
-                <thead class="bg-gray-50 text-left text-xs uppercase text-gray-500">
+        <div class="client-portal-section overflow-hidden !p-0">
+            <table class="min-w-full divide-y divide-slate-100 text-sm">
+                <thead class="bg-slate-50 text-left text-xs uppercase text-slate-500">
                     <tr>
                         <th class="px-4 py-2">Uczestnik</th>
                         <th class="px-4 py-2">Status</th>
                     </tr>
                 </thead>
-                <tbody class="divide-y divide-gray-100">
+                <tbody class="divide-y divide-slate-100">
                     @foreach ($this->participants as $participant)
                         <tr wire:key="attendance-{{ $participant->id }}-{{ $day }}">
                             <td class="px-4 py-2 font-medium">{{ $participant->fullName() }}</td>

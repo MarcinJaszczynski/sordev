@@ -3,16 +3,18 @@
 namespace App\Support;
 
 use App\Filament\Client\Pages\ClientAgreementPage;
+use App\Filament\Client\Pages\ClientContactPage;
+use App\Filament\Client\Pages\ClientExtrasPage;
 use App\Filament\Client\Pages\ClientGroupPaymentsPage;
 use App\Filament\Client\Pages\ClientInvoiceRequestPage;
-use App\Filament\Client\Pages\ClientMyPaymentsPage;
 use App\Filament\Client\Pages\ClientParticipantsPage;
-use App\Filament\Client\Pages\ClientPaymentSchedulePage;
+use App\Filament\Client\Pages\ClientPaymentsPage;
 use App\Filament\Client\Pages\ClientProgramPage;
 use App\Filament\Client\Resources\ClientEventResource;
 use App\Models\Event;
 use App\Services\ClientAccessService;
 use Illuminate\Support\Facades\Auth;
+use Illuminate\Support\Facades\Schema;
 
 /**
  * Sub-nawigacja workspace wycieczki w portalu klienta.
@@ -32,7 +34,6 @@ final class ClientTripModuleNavigation
             [
                 'key' => 'info',
                 'label' => 'Informacje',
-                'description' => 'Dane wycieczki',
                 'url' => ClientEventResource::getUrl('view', ['record' => $event->id]),
                 'icon' => 'heroicon-o-information-circle',
             ],
@@ -42,37 +43,29 @@ final class ClientTripModuleNavigation
             $tabs[] = [
                 'key' => 'program',
                 'label' => 'Program',
-                'description' => 'Plan dnia po dniu',
                 'url' => ClientProgramPage::urlFor($event),
                 'icon' => 'heroicon-o-calendar-days',
             ];
             $tabs[] = [
                 'key' => 'agreement',
                 'label' => 'Umowa',
-                'description' => 'Twoja umowa',
                 'url' => ClientAgreementPage::urlFor($event),
                 'icon' => 'heroicon-o-document-text',
             ];
-            $tabs[] = [
-                'key' => 'payment_schedule',
-                'label' => 'Harmonogram płatności',
-                'description' => 'Terminy i transze',
-                'url' => ClientPaymentSchedulePage::urlFor($event),
-                'icon' => 'heroicon-o-banknotes',
-            ];
+
+            if ($isParticipant || $isGuardian) {
+                $tabs[] = [
+                    'key' => 'payments',
+                    'label' => 'Płatności',
+                    'url' => ClientPaymentsPage::urlFor($event),
+                    'icon' => 'heroicon-o-banknotes',
+                ];
+            }
 
             if ($isParticipant) {
                 $tabs[] = [
-                    'key' => 'my_payments',
-                    'label' => 'Moje wpłaty',
-                    'description' => 'Status płatności',
-                    'url' => ClientMyPaymentsPage::urlFor($event),
-                    'icon' => 'heroicon-o-credit-card',
-                ];
-                $tabs[] = [
                     'key' => 'invoice_request',
-                    'label' => 'Wniosek o fakturę',
-                    'description' => 'Dane do faktury',
+                    'label' => 'Faktura',
                     'url' => ClientInvoiceRequestPage::urlFor($event),
                     'icon' => 'heroicon-o-receipt-percent',
                 ];
@@ -82,26 +75,41 @@ final class ClientTripModuleNavigation
                 $tabs[] = [
                     'key' => 'participants',
                     'label' => 'Uczestnicy',
-                    'description' => 'Lista, diety, zgody',
                     'url' => ClientParticipantsPage::urlFor($event),
                     'icon' => 'heroicon-o-user-group',
                 ];
                 $tabs[] = [
                     'key' => 'group_payments',
                     'label' => 'Wpłaty grupy',
-                    'description' => 'Stan wpłat uczestników',
                     'url' => ClientGroupPaymentsPage::urlFor($event),
                     'icon' => 'heroicon-o-users',
                 ];
                 if (! $isParticipant) {
                     $tabs[] = [
                         'key' => 'invoice_request',
-                        'label' => 'Wniosek o fakturę',
-                        'description' => 'Dane do faktury',
+                        'label' => 'Faktura',
                         'url' => ClientInvoiceRequestPage::urlFor($event),
                         'icon' => 'heroicon-o-receipt-percent',
                     ];
                 }
+            }
+
+            if (($isParticipant || $isGuardian) && Schema::hasTable('client_trip_inquiries')) {
+                $tabs[] = [
+                    'key' => 'contact',
+                    'label' => 'Kontakt',
+                    'url' => ClientContactPage::urlFor($event),
+                    'icon' => 'heroicon-o-chat-bubble-left-right',
+                ];
+            }
+
+            if ($isParticipant || $isGuardian) {
+                $tabs[] = [
+                    'key' => 'extras',
+                    'label' => 'Świadczenia',
+                    'url' => ClientExtrasPage::urlFor($event),
+                    'icon' => 'heroicon-o-sparkles',
+                ];
             }
         }
 

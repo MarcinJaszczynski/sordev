@@ -263,7 +263,8 @@ class ProgramPointSettlementFinanceTest extends TestCase
 
     public function test_multiple_advance_entries_persist_as_separate_payment_rows(): void
     {
-        $user = User::factory()->create();
+        $user = $this->createOfficeUser();
+        $this->actingAs($user);
         $pln = Currency::factory()->pln()->create();
 
         $event = Event::factory()->create(['assigned_to' => $user->id]);
@@ -333,6 +334,7 @@ class ProgramPointSettlementFinanceTest extends TestCase
         $this->seed(\Database\Seeders\TaskStatusSeeder::class);
 
         $user = $this->createOfficeUser();
+        $this->actingAs($user);
         $pln = Currency::factory()->pln()->create();
 
         $event = Event::factory()->create(['assigned_to' => $user->id]);
@@ -384,6 +386,7 @@ class ProgramPointSettlementFinanceTest extends TestCase
         $this->seed(\Database\Seeders\TaskStatusSeeder::class);
 
         $user = $this->createOfficeUser();
+        $this->actingAs($user);
         $pln = Currency::factory()->pln()->create();
 
         $event = Event::factory()->create(['assigned_to' => $user->id]);
@@ -454,7 +457,8 @@ class ProgramPointSettlementFinanceTest extends TestCase
 
     public function test_plan_save_does_not_delete_existing_advances(): void
     {
-        $user = User::factory()->create();
+        $user = $this->createOfficeUser();
+        $this->actingAs($user);
         $pln = Currency::factory()->pln()->create();
 
         $event = Event::factory()->create(['assigned_to' => $user->id]);

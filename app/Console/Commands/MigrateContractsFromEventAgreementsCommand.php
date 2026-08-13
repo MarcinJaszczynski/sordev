@@ -14,7 +14,9 @@ use Illuminate\Support\Facades\Schema;
 
 class MigrateContractsFromEventAgreementsCommand extends Command
 {
-    protected $signature = 'contracts:migrate-from-event-agreements {--dry-run : Preview without writing}';
+    protected $signature = 'contracts:migrate-from-event-agreements
+                            {--dry-run : Preview without writing}
+                            {--event= : Limit migration to a single event_id}';
 
     protected $description = 'Migrate legacy event_agreements rows into contracts with UFG structure';
 
@@ -33,16 +35,27 @@ class MigrateContractsFromEventAgreementsCommand extends Command
         }
 
         $dryRun = (bool) $this->option('dry-run');
+        $eventId = $this->option('event');
+        $eventId = filled($eventId) ? (int) $eventId : null;
+
         $query = DB::table('event_agreements')->orderBy('id');
+        if ($eventId) {
+            $query->where('event_id', $eventId);
+        }
+
         $total = (clone $query)->count();
 
         if ($total === 0) {
-            $this->info('No event_agreements rows found.');
+            $this->info($eventId
+                ? "No event_agreements rows for event #{$eventId}."
+                : 'No event_agreements rows found.');
 
             return self::SUCCESS;
         }
 
-        $this->info("Found {$total} legacy agreements to migrate.");
+        $this->info($eventId
+            ? "Found {$total} legacy agreements for event #{$eventId}."
+            : "Found {$total} legacy agreements to migrate.");
 
         $bar = $this->output->createProgressBar($total);
         $bar->start();

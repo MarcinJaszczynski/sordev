@@ -77,7 +77,7 @@
 
                 <!-- Content -->
                 <div class="blog-post-content">
-                    {!! $blogPost->content !!}
+                    {!! \App\Support\AgreementHtml::sanitize((string) $blogPost->content) !!}
                 </div>
 
                 <!-- Back to Blog Button -->

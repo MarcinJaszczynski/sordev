@@ -27,11 +27,6 @@ class ManageEventTasks extends SingleRelationManagerPage
 
     protected static ?string $navigationIcon = 'heroicon-o-clipboard-document-list';
 
-    public function getSubheading(): ?string
-    {
-        return 'W kontekście tej imprezy — skrzynka wszystkich zadań jest w menu bocznym';
-    }
-
     public static function shouldRegisterNavigation(array $parameters = []): bool
     {
         return true;
@@ -65,6 +60,11 @@ class ManageEventTasks extends SingleRelationManagerPage
     protected function getHeaderActions(): array
     {
         return [
+            Actions\Action::make('create_event_task')
+                ->label('Nowe zadanie')
+                ->icon('heroicon-m-plus')
+                ->color('primary')
+                ->action(fn () => $this->openEventCreateTaskModal()),
             Actions\Action::make('board')
                 ->label('Tablica zadań')
                 ->icon('heroicon-m-view-columns')

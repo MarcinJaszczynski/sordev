@@ -42,6 +42,10 @@ class EventTemplateResource extends Resource
 
     protected static ?string $navigationLabel = 'Szablony';
 
+    protected static ?string $modelLabel = 'szablon imprezy';
+
+    protected static ?string $pluralModelLabel = 'szablony imprez';
+
     protected static ?int $navigationSort = 1;
 
     /**
@@ -67,7 +71,8 @@ class EventTemplateResource extends Resource
                                 ->label('Podtytuł')
                                 ->maxLength(255),
                             Forms\Components\TextInput::make('slug')
-                                ->label('Slug')
+                                ->label('Identyfikator URL')
+                                ->helperText('Fragment adresu oferty w katalogu, np. wycieczka-krakow.')
                                 ->required(),
                             Forms\Components\Toggle::make('is_active')
                                 ->label('Aktywny')
@@ -153,7 +158,7 @@ class EventTemplateResource extends Resource
 
                             return $record->name.$descriptionText;
                         })
-                        ->columns(2),
+                        ->columns(['default' => 1, 'md' => 2]),
                 ]),
 
             Forms\Components\Section::make('Opis i materiały')
@@ -162,10 +167,8 @@ class EventTemplateResource extends Resource
                 ->schema([
                     Forms\Components\Grid::make(2)
                         ->schema([
-                            \FilamentTiptapEditor\TiptapEditor::make('event_description')
-                                ,
-                            \FilamentTiptapEditor\TiptapEditor::make('office_description')
-                                ,
+                            \FilamentTiptapEditor\TiptapEditor::make('event_description'),
+                            \FilamentTiptapEditor\TiptapEditor::make('office_description'),
                         ]),
                     Forms\Components\Grid::make(2)
                         ->schema([
@@ -403,7 +406,7 @@ class EventTemplateResource extends Resource
                                 ->maxLength(70)
                                 ->helperText('Tytuł strony widoczny w Google (max 70 znaków)'),
                             \FilamentTiptapEditor\TiptapEditor::make('seo_description')
-                                
+
                                 ->helperText('Opis strony widoczny w Google (max 350 znaków)'),
                             Forms\Components\TextInput::make('seo_keywords')
                                 ->label('Słowa kluczowe')

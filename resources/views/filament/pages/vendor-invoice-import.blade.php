@@ -5,8 +5,8 @@
         <x-filament::section>
             <x-slot name="heading">Pliki KSeF</x-slot>
             <x-slot name="description">
-                Możesz wgrać CSV, XML i zbiorczy PDF jednocześnie. Dane z CSV/XML trafią do rejestru,
-                a PDF zostanie automatycznie rozdzielony i dopięty do dopasowanych faktur.
+                Możesz wgrać CSV, XML i zbiorczy PDF jednocześnie. Po imporcie poniżej pojawi się lista faktur
+                z podglądem pozycji, przypisaniem do imprezy i skrótami do Stosu / Rejestru.
             </x-slot>
 
             <div class="space-y-5">
@@ -70,7 +70,12 @@
     </form>
 
     @if ($lastResult)
-        <x-filament::section class="mt-6" heading="Wynik importu">
+        <x-filament::section class="mt-6">
+            <x-slot name="heading">Wynik importu</x-slot>
+            <x-slot name="description">
+                Poniżej lista faktur z tego batcha — użyj Podgląd / Przypisz / Edytuj.
+            </x-slot>
+
             <dl class="grid grid-cols-2 gap-4 text-sm sm:grid-cols-4">
                 <div>
                     <dt class="font-medium text-gray-500">Zaimportowano faktur</dt>
@@ -89,6 +94,18 @@
                     <dd class="text-lg font-semibold">{{ $lastResult['pdf_attached'] ?? 0 }}</dd>
                 </div>
             </dl>
+
+            <div class="mt-4 flex flex-wrap gap-2">
+                @if (($lastResult['unmatched'] ?? 0) > 0)
+                    <x-filament::button tag="a" color="warning" :href="$this->getInboxUrl()" size="sm">
+                        Opracuj niedopasowane (Stos)
+                    </x-filament::button>
+                @endif
+                <x-filament::button tag="a" color="gray" :href="$this->getRegistryUrl()" size="sm">
+                    Otwórz rejestr faktur
+                </x-filament::button>
+            </div>
+
             @if (! empty($lastResult['errors']))
                 <div class="mt-4">
                     <p class="font-medium text-danger-600">Ostrzeżenia / błędy:</p>
@@ -101,4 +118,19 @@
             @endif
         </x-filament::section>
     @endif
+
+    <x-filament::section class="mt-6">
+        <x-slot name="heading">
+            @if ($lastBatchIds !== [])
+                Faktury z ostatniego importu
+            @else
+                Wyniki importu
+            @endif
+        </x-slot>
+        <x-slot name="description">
+            Podgląd pokazuje pozycje, kwoty, hinty matchingu i PDF. Przypisz łączy fakturę z imprezą / punktem / kontrahentem.
+        </x-slot>
+
+        {{ $this->table }}
+    </x-filament::section>
 </x-filament-panels::page>

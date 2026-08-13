@@ -8,6 +8,8 @@
                 Pobierz wyciąg w Millenecie: Moje finanse → Wyciąg z historii transakcji → format CSV.
                 System wczyta wpływy (dodatnie kwoty) i spróbuje dopasować je do umów / wpłat uczestników
                 po numerze rezerwacji, numerze umowy, kodzie imprezy lub nazwisku.
+                Niedopasowane linie możesz przypisać ręcznie poniżej albo w skrzynce
+                <a href="{{ \App\Filament\Pages\UnmatchedBankPaymentsInboxPage::getUrl() }}" class="text-primary-600 underline">Wpłaty do dopasowania</a>.
             </x-slot>
 
             <div>
@@ -77,6 +79,7 @@
                             <th class="px-3 py-2 text-right">Kwota</th>
                             <th class="px-3 py-2 text-left">Dopasowanie</th>
                             <th class="px-3 py-2 text-left">Cel</th>
+                            <th class="px-3 py-2 text-left">Akcja</th>
                         </tr>
                     </thead>
                     <tbody class="divide-y divide-gray-100 bg-white">
@@ -108,6 +111,19 @@
                                     @endif
                                 </td>
                                 <td class="px-3 py-2">{{ $line['target_label'] }}</td>
+                                <td class="px-3 py-2 whitespace-nowrap">
+                                    @if (empty($line['applied']))
+                                        <button
+                                            type="button"
+                                            class="text-sm font-medium text-primary-600 hover:underline"
+                                            wire:click="openAssignModal({{ $line['id'] }})"
+                                        >
+                                            {{ $line['match_status'] === 'unmatched' ? 'Przypisz' : 'Zmień' }}
+                                        </button>
+                                    @else
+                                        <span class="text-xs text-gray-400">—</span>
+                                    @endif
+                                </td>
                             </tr>
                         @endforeach
                     </tbody>
@@ -125,4 +141,6 @@
             </ul>
         </x-filament::section>
     @endif
+
+    @include('filament.components.bank-payment-assign-modal')
 </x-filament-panels::page>

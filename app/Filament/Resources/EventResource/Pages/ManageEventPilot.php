@@ -8,13 +8,16 @@ use App\Filament\Resources\EventResource\Concerns\HasEventOperationsSubNavigatio
 use App\Filament\Resources\EventResource\Concerns\HasEventWorkflowContext;
 use App\Models\User;
 use App\Services\PilotAdvanceService;
+use App\Services\PilotContractorAssignmentService;
 use Filament\Actions;
 use Filament\Forms;
 use Filament\Forms\Form;
 use Filament\Notifications\Notification;
 use Filament\Resources\Pages\EditRecord;
+use Illuminate\Contracts\View\View;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Schema;
+use Livewire\Attributes\On;
 
 class ManageEventPilot extends EditRecord
 {
@@ -38,7 +41,7 @@ class ManageEventPilot extends EditRecord
         return $form->schema([
             Forms\Components\Placeholder::make('pilot_empty_state')
                 ->hiddenLabel()
-                ->visible(fn (): bool => blank($this->record->assigned_to))
+                ->visible(fn (): bool => blank($this->record->pilot_contractor_id) && blank($this->record->assigned_to))
                 ->content(new \Illuminate\Support\HtmlString(
                     '<div class="rounded-lg border border-dashed border-gray-300 bg-gray-50 px-4 py-6 text-center dark:border-gray-600 dark:bg-gray-800/50">'
                     .'<p class="text-sm font-medium text-gray-900 dark:text-gray-100">Brak przypisanego pilota</p>'
@@ -73,10 +76,31 @@ class ManageEventPilot extends EditRecord
 
     protected function mutateFormDataBeforeFill(array $data): array
     {
-        $this->record->loadMissing('assignedUser');
-        $data['pilot_birth_date'] = $this->record->assignedUser?->birth_date?->format('Y-m-d');
-        $data['pilot_pesel'] = $this->record->assignedUser?->pesel;
-        $data['pilot_phone'] = $this->record->assignedUser?->phone;
+        $assignmentService = app(PilotContractorAssignmentService::class);
+
+        $this->record->loadMissing(['assignedUser', 'pilotContractor']);
+
+        if (Schema::hasColumn('events', 'pilot_contractor_id')) {
+            $data['pilot_contractor_id'] = $assignmentService->resolveContractorIdForEvent($this->record);
+
+            if (filled($data['pilot_contractor_id'])) {
+                $contractor = $this->record->pilotContractor
+                    ?? \App\Models\Contractor::query()->find($data['pilot_contractor_id']);
+                $data['pilot_birth_date'] = $contractor?->birth_date?->format('Y-m-d');
+                $data['pilot_pesel'] = $contractor?->pesel;
+            } else {
+                $data['pilot_birth_date'] = $this->record->assignedUser?->birth_date?->format('Y-m-d');
+                $data['pilot_pesel'] = $this->record->assignedUser?->pesel;
+                $data['pilot_phone'] = $this->record->assignedUser?->phone;
+                $data['pilot_email'] = $this->record->assignedUser?->email;
+            }
+        } else {
+            $data['pilot_birth_date'] = $this->record->assignedUser?->birth_date?->format('Y-m-d');
+            $data['pilot_pesel'] = $this->record->assignedUser?->pesel;
+            $data['pilot_phone'] = $this->record->assignedUser?->phone;
+            $data['pilot_email'] = $this->record->assignedUser?->email;
+        }
+
         $data['pilot_advance_planned_lines'] = app(PilotAdvanceService::class)->plannedLinesFormState($this->record);
 
         return $data;
@@ -84,7 +108,42 @@ class ManageEventPilot extends EditRecord
 
     protected function mutateFormDataBeforeSave(array $data): array
     {
-        if (Schema::hasColumn('events', 'shared_with_pilot')) {
+        $assignmentService = app(PilotContractorAssignmentService::class);
+
+        if (Schema::hasColumn('events', 'pilot_contractor_id')) {
+            $previousContractor = (int) ($this->record->pilot_contractor_id ?? 0);
+            $newContractor = (int) ($data['pilot_contractor_id'] ?? 0);
+            $previousPilot = (int) ($this->record->assigned_to ?? 0);
+
+            if ($previousContractor !== $newContractor) {
+                if (Schema::hasColumn('events', 'shared_with_pilot')) {
+                    $data['shared_with_pilot'] = false;
+                    $data['shared_with_pilot_at'] = null;
+                    $data['shared_with_pilot_by'] = null;
+
+                    if (Schema::hasColumn('events', 'pilot_trip_email_sent_at')) {
+                        $data['pilot_trip_email_sent_at'] = null;
+                    }
+                }
+            }
+
+            $contractor = $newContractor > 0
+                ? \App\Models\Contractor::query()->find($newContractor)
+                : null;
+            $data['assigned_to'] = $assignmentService->resolvePortalUserId($contractor);
+
+            if ($previousPilot !== (int) ($data['assigned_to'] ?? 0) && $previousContractor === $newContractor) {
+                if (Schema::hasColumn('events', 'shared_with_pilot')) {
+                    $data['shared_with_pilot'] = false;
+                    $data['shared_with_pilot_at'] = null;
+                    $data['shared_with_pilot_by'] = null;
+
+                    if (Schema::hasColumn('events', 'pilot_trip_email_sent_at')) {
+                        $data['pilot_trip_email_sent_at'] = null;
+                    }
+                }
+            }
+        } elseif (Schema::hasColumn('events', 'shared_with_pilot')) {
             $previousPilot = (int) ($this->record->assigned_to ?? 0);
             $newPilot = (int) ($data['assigned_to'] ?? 0);
 
@@ -126,7 +185,7 @@ class ManageEventPilot extends EditRecord
             unset($data['pilot_funds_paid']);
         }
 
-        unset($data['pilot_birth_date'], $data['pilot_pesel'], $data['pilot_phone']);
+        unset($data['pilot_birth_date'], $data['pilot_pesel'], $data['pilot_phone'], $data['pilot_email']);
 
         return $data;
     }
@@ -134,6 +193,32 @@ class ManageEventPilot extends EditRecord
     protected function afterSave(): void
     {
         $state = $this->form->getState();
+        $assignmentService = app(PilotContractorAssignmentService::class);
+        $contractorId = Schema::hasColumn('events', 'pilot_contractor_id')
+            ? (filled($state['pilot_contractor_id'] ?? null) ? (int) $state['pilot_contractor_id'] : null)
+            : null;
+
+        if ($contractorId) {
+            $assignmentService->syncContractorDemographics(
+                $contractorId,
+                $state['pilot_birth_date'] ?? null,
+                $state['pilot_pesel'] ?? null,
+            );
+        }
+
+        $assignmentService->syncPortalUserDemographicsFromContractor(
+            $contractorId,
+            filled($this->record->assigned_to) ? (int) $this->record->assigned_to : null,
+        );
+
+        if (! Schema::hasColumn('events', 'pilot_contractor_id')) {
+            User::syncPilotDemographics(
+                $this->record->assigned_to,
+                $state['pilot_birth_date'] ?? null,
+                $state['pilot_pesel'] ?? null,
+                $state['pilot_phone'] ?? null,
+            );
+        }
 
         if (Schema::hasTable('pilot_advance_lines') && ! $this->record->pilot_funds_paid) {
             app(PilotAdvanceService::class)->syncPlannedLines(
@@ -167,18 +252,11 @@ class ManageEventPilot extends EditRecord
             $this->pendingPilotPaymentApproval = false;
         }
 
-        User::syncPilotDemographics(
-            $this->record->assigned_to,
-            $state['pilot_birth_date'] ?? null,
-            $state['pilot_pesel'] ?? null,
-            $state['pilot_phone'] ?? null,
-        );
-
         $this->record->refresh();
 
         if (
             Schema::hasColumn('events', 'shared_with_pilot')
-            && filled($this->record->assigned_to)
+            && (filled($this->record->assigned_to) || filled($this->record->pilot_contractor_id))
             && ! $this->record->shared_with_pilot
         ) {
             Notification::make()
@@ -190,9 +268,49 @@ class ManageEventPilot extends EditRecord
         }
     }
 
+    #[On('pilot-portal-visibility-updated')]
+    public function refreshPilotPortalVisibility(?int $eventId = null): void
+    {
+        if ($eventId !== null && (int) $this->record->getKey() !== $eventId) {
+            return;
+        }
+
+        $this->record->refresh();
+    }
+
     protected function getHeaderActions(): array
     {
         return [
+            Actions\Action::make('currency_exchange')
+                ->label('Wymiana waluty')
+                ->icon('heroicon-o-arrows-right-left')
+                ->color('warning')
+                ->modalHeading('Wymiana waluty')
+                ->modalDescription('Zaksięguj wymianę gotówki pilota (np. PLN → EUR).')
+                ->modalWidth('3xl')
+                ->modalSubmitAction(false)
+                ->modalCancelActionLabel('Zamknij')
+                ->visible(fn (): bool => $this->getRecord()->showsPilotCurrencyExchange())
+                ->modalContent(fn (): View => view(
+                    'filament.resources.event-resource.pages.partials.pilot-currency-exchange-modal',
+                    ['event' => $this->getRecord()],
+                )),
+
+            Actions\Action::make('bus_collections')
+                ->label('Zbiórka w autokarze')
+                ->icon('heroicon-o-banknotes')
+                ->color('warning')
+                ->modalHeading('Zbiórka w autokarze')
+                ->modalDescription('Zapis zbiórki zaliczek od uczestników w gotówce.')
+                ->modalWidth('3xl')
+                ->modalSubmitAction(false)
+                ->modalCancelActionLabel('Zamknij')
+                ->visible(fn (): bool => $this->getRecord()->showsPilotBusCollections())
+                ->modalContent(fn (): View => view(
+                    'filament.resources.event-resource.pages.partials.pilot-bus-collections-modal',
+                    ['event' => $this->getRecord()],
+                )),
+
             Actions\Action::make('preview_pilot_panel')
                 ->label('Podgląd portalu')
                 ->icon('heroicon-o-eye')

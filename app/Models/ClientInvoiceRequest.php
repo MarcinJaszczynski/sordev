@@ -14,16 +14,40 @@ class ClientInvoiceRequest extends Model
 
     public const STATUS_REJECTED = 'rejected';
 
+    public const BUYER_PERSON = 'person';
+
+    public const BUYER_COMPANY = 'company';
+
+    public const SOURCE_PORTAL = 'portal';
+
+    public const SOURCE_WEB = 'web';
+
+    public const SOURCE_ADMIN = 'admin';
+
     public static array $statuses = [
         self::STATUS_PENDING => 'Oczekuje',
         self::STATUS_PROCESSED => 'Zrealizowany',
         self::STATUS_REJECTED => 'Odrzucony',
     ];
 
+    public static array $buyerTypes = [
+        self::BUYER_PERSON => 'Osoba fizyczna',
+        self::BUYER_COMPANY => 'Firma / instytucja',
+    ];
+
+    public static array $sources = [
+        self::SOURCE_PORTAL => 'Portal klienta',
+        self::SOURCE_WEB => 'Strona WWW',
+        self::SOURCE_ADMIN => 'Biuro (ręcznie)',
+    ];
+
     protected $fillable = [
         'event_id',
+        'event_code_entered',
         'contract_id',
         'user_id',
+        'buyer_type',
+        'source',
         'company_name',
         'nip',
         'street',
@@ -31,6 +55,7 @@ class ClientInvoiceRequest extends Model
         'postal_code',
         'city',
         'invoice_email',
+        'applicant_phone',
         'amount',
         'payment_reference',
         'notes',
@@ -78,6 +103,16 @@ class ClientInvoiceRequest extends Model
         return self::$statuses[$this->status] ?? $this->status;
     }
 
+    public function getBuyerTypeLabelAttribute(): string
+    {
+        return self::$buyerTypes[$this->buyer_type] ?? $this->buyer_type;
+    }
+
+    public function getSourceLabelAttribute(): string
+    {
+        return self::$sources[$this->source] ?? $this->source;
+    }
+
     public function getFullAddressAttribute(): string
     {
         return trim(implode(' ', array_filter([
@@ -86,5 +121,10 @@ class ClientInvoiceRequest extends Model
             $this->postal_code,
             $this->city,
         ])));
+    }
+
+    public function isLinkedToEvent(): bool
+    {
+        return $this->event_id !== null;
     }
 }

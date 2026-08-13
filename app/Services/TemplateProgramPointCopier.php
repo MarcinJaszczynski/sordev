@@ -102,11 +102,8 @@ class TemplateProgramPointCopier
         $pivotRows = $this->loadPivotRows($templateId);
         $templatePointIds = $pivotRows->pluck('event_template_program_point_id')->map(fn ($id) => (int) $id)->unique();
 
-        $parentChildLinks = DB::table('event_template_program_point_parent')
-            ->whereIn('parent_id', $templatePointIds)
-            ->orderBy('order')
-            ->get()
-            ->groupBy('parent_id');
+        // Rekurencyjnie zbierz całe drzewo parent→child (w tym wnuki), nie tylko bezpośrednie dzieci rootów.
+        $parentChildLinks = $this->loadParentChildTree($templatePointIds);
 
         $childIdsFromLinks = $parentChildLinks
             ->flatten(1)
@@ -122,11 +119,7 @@ class TemplateProgramPointCopier
             ->get()
             ->keyBy('id');
 
-        $childTemplateIds = $parentChildLinks
-            ->flatten(1)
-            ->pluck('child_id')
-            ->map(fn ($id) => (int) $id)
-            ->unique();
+        $childTemplateIds = $childIdsFromLinks;
 
         return [
             'template_id' => $templateId,
@@ -171,6 +164,49 @@ class TemplateProgramPointCopier
             ->orderBy('order')
             ->orderBy('id')
             ->get();
+    }
+
+    /**
+     * Ładuje powiązania parent→child dla całego drzewa (BFS), nie tylko jednego poziomu.
+     *
+     * @param  Collection<int, int>  $rootTemplatePointIds
+     * @return Collection<int, Collection<int, object>>
+     */
+    protected function loadParentChildTree(Collection $rootTemplatePointIds): Collection
+    {
+        $allLinks = collect();
+        $frontier = $rootTemplatePointIds->values()->all();
+        $seenParents = [];
+
+        while ($frontier !== []) {
+            $batch = array_values(array_filter(
+                $frontier,
+                fn (int $id): bool => ! isset($seenParents[$id])
+            ));
+
+            if ($batch === []) {
+                break;
+            }
+
+            foreach ($batch as $id) {
+                $seenParents[$id] = true;
+            }
+
+            $rows = DB::table('event_template_program_point_parent')
+                ->whereIn('parent_id', $batch)
+                ->orderBy('order')
+                ->get();
+
+            $allLinks = $allLinks->concat($rows);
+            $frontier = $rows
+                ->pluck('child_id')
+                ->map(fn ($id) => (int) $id)
+                ->unique()
+                ->values()
+                ->all();
+        }
+
+        return $allLinks->groupBy('parent_id');
     }
 
     /**

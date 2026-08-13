@@ -2,27 +2,30 @@
 
 namespace App\Filament\Resources\EventResource\RelationManagers;
 
+use App\Actions\Contracts\CreateContractAnnexesAction;
+use App\Actions\Contracts\GenerateEventContractAction;
+use App\Actions\Finance\ApplyPaymentScheduleTemplateToEventAction;
 use App\Filament\Forms\ContractAnnexFields;
 use App\Filament\Forms\ContractCustomAgreementFields;
+use App\Filament\Forms\ContractGenerationWizardFields;
 use App\Filament\Forms\ContractGroupPricingFields;
 use App\Filament\Forms\ContractOrderingPartyFields;
 use App\Filament\Forms\ContractParticipantFields;
+use App\Filament\Forms\ContractTemplateCustomValueFields;
 use App\Filament\Forms\ContractTfgForm;
 use App\Filament\Resources\ContractResource;
+use App\Filament\Resources\EventResource;
 use App\Filament\Resources\EventResource\RelationManagers\Concerns\ManagesContractAttachments;
 use App\Filament\Resources\EventResource\RelationManagers\Concerns\ManagesContractOrderingParties;
 use App\Filament\Resources\EventResource\RelationManagers\Concerns\ManagesContractPaymentSchedules;
-use App\Jobs\Tfg\SubmitTfgFeedJob;
 use App\Models\Contract;
 use App\Models\ContractTemplate;
 use App\Models\Event;
 use App\Models\EventSettlementParticipantPayment;
-use App\Services\ContractAnnexService;
+use App\Models\PaymentScheduleTemplate;
 use App\Services\ContractOrderingPartyService;
-use App\Services\ContractPaymentSyncService;
 use App\Services\ContractTfgSetupService;
 use App\Services\Contracts\ContractPaymentProgressService;
-use App\Services\NotificationService;
 use Filament\Forms;
 use Filament\Forms\Form;
 use Filament\Forms\Get;
@@ -33,6 +36,7 @@ use Filament\Resources\RelationManagers\RelationManager;
 use Filament\Tables;
 use Filament\Tables\Table;
 use Illuminate\Support\Facades\Schema;
+use InvalidArgumentException;
 
 class ContractsRelationManager extends RelationManager
 {
@@ -425,69 +429,170 @@ class ContractsRelationManager extends RelationManager
                     ->toggleable(isToggledHiddenByDefault: true),
             ])
             ->headerActions([
-                Tables\Actions\Action::make('edit_event_insurance')
-                    ->label('Ubezpieczenie imprezy')
-                    ->icon('heroicon-o-shield-check')
-                    ->color(fn (): string => $this->getOwnerRecord()->hasInsuranceDataSaved() ? 'success' : 'danger')
-                    ->visible(fn (): bool => Schema::hasColumn('events', 'insurance_policy_number'))
-                    ->form([
-                        Forms\Components\TextInput::make('insurance_policy_number')
-                            ->label('Nr polisy')
-                            ->maxLength(255),
-
-                        Forms\Components\Select::make('insurance_status')
-                            ->label('Status ubezpieczenia')
-                            ->options(Event::getInsuranceStatusOptions())
-                            ->default('pending')
-                            ->required(),
-
-                        Forms\Components\Select::make('insurance_payment_status')
-                            ->label('Status płatności ubezpieczenia')
-                            ->options(Event::getInsurancePaymentStatusOptions())
-                            ->default('pending')
-                            ->required(),
-
-                        Forms\Components\TextInput::make('insurance_amount')
-                            ->label('Kwota ubezpieczenia')
-                            ->numeric()
-                            ->suffix('PLN')
-                            ->nullable(),
-
-                        Forms\Components\DateTimePicker::make('insurance_paid_at')
-                            ->label('Data płatności')
-                            ->native(false)
-                            ->nullable(),
-
-                        Forms\Components\FileUpload::make('insurance_document_path')
-                            ->label('Dokument ubezpieczenia do wgrania')
-                            ->disk('public')
-                            ->directory('event-insurance')
-                            ->downloadable()
-                            ->openable()
-                            ->acceptedFileTypes(['application/pdf', 'image/png', 'image/jpeg', 'image/webp'])
-                            ->nullable(),
-
-                        Forms\Components\Textarea::make('insurance_terms')
-                            ->label('Warunki ubezpieczenia')
-                            ->rows(4)
-                            ->columnSpanFull(),
-                    ])
-                    ->fillForm(fn (): array => $this->resolveInsuranceFormDefaults())
+                Tables\Actions\Action::make('generate_contract')
+                    ->label('Generuj umowę')
+                    ->icon('heroicon-o-bolt')
+                    ->color('warning')
+                    ->modalHeading('Generuj umowę')
+                    ->modalWidth('5xl')
+                    ->modalSubmitActionLabel('Generuj i pokaż link')
+                    ->fillForm(fn (): array => ContractGenerationWizardFields::fillDefaults(
+                        fn () => $this->getOwnerRecord(),
+                    ))
+                    ->form(ContractGenerationWizardFields::schema(
+                        resolveEvent: fn () => $this->getOwnerRecord(),
+                        attachmentOptions: fn (): array => $this->getSelectableAttachmentOptions(),
+                        attachmentDefaults: fn (Get $get): array => $this->resolveSelectedAttachmentDefaults(
+                            null,
+                            filled($get('contract_template_id')) ? (int) $get('contract_template_id') : null,
+                        ),
+                    ))
                     ->action(function (array $data): void {
                         $event = $this->getOwnerRecord();
-                        $event->updateInsuranceFromFormData($data);
-                        $event->refresh();
+                        $data = $this->attachmentCatalogService()->mergeSelectedAttachmentsIntoFormData($data);
+                        $data = ContractTemplateCustomValueFields::mergeIntoMeta($data);
 
-                        if ($userId = auth()->id()) {
-                            NotificationService::clearCacheForUser($userId);
+                        if (($data['generation_mode'] ?? null) !== GenerateEventContractAction::MODE_GROUP_ORDERING) {
+                            $slots = max(1, (int) ($data['participants_on_contract'] ?? 1));
+                            $unit = round((float) ($data['unit_price'] ?? 0), 2);
+                            if ($unit <= 0) {
+                                $unit = $this->resolveIndividualAmountDueForEvent(
+                                    max(1, (int) ($event->participant_count ?? 1))
+                                );
+                                $data['unit_price'] = $unit;
+                            }
+                            if (! (bool) ($data['override_amount_due'] ?? false)) {
+                                $data['amount_due'] = round($unit * $slots, 2);
+                            } elseif ((float) ($data['amount_due'] ?? 0) <= 0) {
+                                $data['amount_due'] = round($unit * $slots, 2);
+                            }
+                        }
+
+                        try {
+                            $result = app(GenerateEventContractAction::class)($event, $data, auth()->id());
+                        } catch (InvalidArgumentException $e) {
+                            Notification::make()
+                                ->title($e->getMessage())
+                                ->warning()
+                                ->send();
+
+                            return;
+                        }
+
+                        $primary = $result['primary'];
+                        $companion = $result['companion'];
+                        $body = match ($result['mode']) {
+                            'individual_template', 'group_participants' => 'Wyślij ten wspólny link do wszystkich uczestników (ten sam URL). Umowa powstaje dopiero po wypełnieniu formularza — w /umowa płacą pierwszą ratę, kolejne w portalu / mailu.',
+                            default => 'Utworzono umowę grupową (płatność zamawiającego).',
+                        };
+                        if ($companion) {
+                            $body .= ' Dodatkowo: link dla uczestników do uzupełnienia danych.';
+                        }
+
+                        $actions = [
+                            NotificationAction::make('open')
+                                ->label('Otwórz link')
+                                ->url($primary->public_link)
+                                ->openUrlInNewTab(),
+                        ];
+                        if ($companion) {
+                            $actions[] = NotificationAction::make('open_companion')
+                                ->label('Link uczestników (dane)')
+                                ->url($companion->public_link)
+                                ->openUrlInNewTab();
                         }
 
                         Notification::make()
-                            ->title('Zapisano dane ubezpieczenia')
-                            ->body($event->insuranceSaveSummary())
+                            ->title('Umowa wygenerowana')
+                            ->body($body)
+                            ->success()
+                            ->actions($actions)
+                            ->send();
+                    }),
+
+                Tables\Actions\Action::make('apply_library_payment_schedule')
+                    ->label('Szablon harmonogramu')
+                    ->icon('heroicon-o-calendar-days')
+                    ->color('gray')
+                    ->visible(fn (): bool => Schema::hasTable('payment_schedule_templates'))
+                    ->modalHeading('Zastosuj szablon harmonogramu na umowy')
+                    ->modalDescription('Skopiuje szablon z biblioteki na imprezę i przeliczy raty na aktywnych umowach (zachowa dotychczasowe wpłaty).')
+                    ->form([
+                        Forms\Components\Select::make('payment_schedule_template_id')
+                            ->label('Szablon z biblioteki')
+                            ->options(fn (): array => PaymentScheduleTemplate::optionsForSelect())
+                            ->searchable()
+                            ->required(),
+                        Forms\Components\Toggle::make('copy_to_event')
+                            ->label('Zapisz też jako szablon tej imprezy')
+                            ->default(true),
+                    ])
+                    ->action(function (array $data): void {
+                        $event = $this->getOwnerRecord();
+                        try {
+                            $count = app(ApplyPaymentScheduleTemplateToEventAction::class)(
+                                (int) $data['payment_schedule_template_id'],
+                                $event,
+                                (bool) ($data['copy_to_event'] ?? true),
+                            );
+                            Notification::make()
+                                ->title($count > 0
+                                    ? "Zastosowano szablon na {$count} umów."
+                                    : 'Szablon zapisany. Brak umów do aktualizacji.')
+                                ->success()
+                                ->send();
+                        } catch (InvalidArgumentException $e) {
+                            Notification::make()->title($e->getMessage())->danger()->send();
+                        }
+                    }),
+
+                Tables\Actions\ActionGroup::make([
+                Tables\Actions\Action::make('edit_event_tfg_defaults')
+                    ->label('Domyślne dane TFG/UFG (raportowanie)')
+                    ->icon('heroicon-o-building-library')
+                    ->color('gray')
+                    ->modalHeading('Domyślne dane TFG / UFG dla imprezy')
+                    ->modalDescription('To nie jest płatność klienta. Ustawiasz tu domyślne pola do raportowania w Turystycznym Funduszu Gwarancyjnym / UFG (przedmiot, transport, kraj, sposób wpłat). Nowe umowy skopiują te wartości.')
+                    ->modalWidth('3xl')
+                    ->visible(fn (): bool => Schema::hasColumn('events', 'tfg_defaults'))
+                    ->fillForm(fn (): array => app(ContractTfgSetupService::class)->defaultsFromEvent($this->getOwnerRecord()))
+                    ->form(ContractTfgForm::schema(false, fn () => $this->getOwnerRecord()))
+                    ->action(function (array $data): void {
+                        $event = $this->getOwnerRecord();
+                        $keys = [
+                            'subject_code',
+                            'payment_method_code',
+                            'reservation_number',
+                            'tfg_travelers_count',
+                            'tfg_starts_at',
+                            'tfg_ends_at',
+                            'tfg_scope_type',
+                            'tfg_country_code',
+                            'tfg_locality',
+                            'tfg_transport_code',
+                            'tfg_icao_codes',
+                        ];
+                        $payload = [];
+                        foreach ($keys as $key) {
+                            if (array_key_exists($key, $data)) {
+                                $payload[$key] = $data[$key];
+                            }
+                        }
+                        $event->forceFill(['tfg_defaults' => $payload])->save();
+
+                        Notification::make()
+                            ->title('Zapisano domyślne dane TFG imprezy')
+                            ->body('Nowe umowy wezmą te wartości jako domyślne do raportowania UFG.')
                             ->success()
                             ->send();
                     }),
+
+                Tables\Actions\Action::make('edit_event_insurance')
+                    ->label('Ubezpieczenie')
+                    ->icon('heroicon-o-shield-check')
+                    ->color(fn (): string => $this->getOwnerRecord()->hasInsuranceDataSaved() ? 'success' : 'danger')
+                    ->visible(fn (): bool => Schema::hasColumn('events', 'insurance_policy_number'))
+                    ->url(fn (): string => EventResource::getUrl('day-insurances', ['record' => $this->getOwnerRecord()])),
 
                 Tables\Actions\Action::make('individual_agreements_report')
                     ->label('Raport umów indywidualnych')
@@ -527,258 +632,8 @@ class ContractsRelationManager extends RelationManager
                     ]))
                     ->openUrlInNewTab(),
 
-                Tables\Actions\Action::make('generate_from_event')
-                    ->label('Generuj umowę grupową')
-                    ->icon('heroicon-o-bolt')
-                    ->color('warning')
-                    ->fillForm(fn (): array => array_merge(
-                        [
-                            'title' => 'Umowa imprezy',
-                            'participant_count' => max(1, (int) ($this->getOwnerRecord()->participant_count ?? 1)),
-                            'amount_due' => (function (): float {
-                                $event = $this->getOwnerRecord();
-                                $count = max(1, (int) ($event->participant_count ?? 1));
-
-                                return $event->resolvedPricePerPerson($count) * $count;
-                            })(),
-                        ],
-                        app(ContractTfgSetupService::class)->defaultsFromEvent($this->getOwnerRecord()),
-                        $this->groupPricingService()->defaultsFromEvent($this->getOwnerRecord()),
-                    ))
-                    ->form([
-                        Forms\Components\Select::make('contract_template_id')
-                            ->label('Szablon umowy')
-                            ->options(fn () => ContractTemplate::orderBy('name')->pluck('name', 'id')->all())
-                            ->searchable()
-                            ->nullable(),
-
-                        Forms\Components\TextInput::make('title')
-                            ->label('Tytuł umowy')
-                            ->default('Umowa imprezy')
-                            ->required(),
-
-                        Forms\Components\TextInput::make('amount_due')
-                            ->label('Kwota do zapłaty')
-                            ->numeric()
-                            ->default(fn () => (function () {
-                                $event = $this->getOwnerRecord();
-                                $count = max(1, (int) ($event->participant_count ?? 1));
-
-                                return $event->resolvedPricePerPerson($count) * $count;
-                            })())
-                            ->required()
-                            ->suffix('PLN')
-                            ->helperText(fn () => (function () {
-                                $event = $this->getOwnerRecord();
-                                $count = max(1, (int) ($event->participant_count ?? 1));
-                                $pricePerPerson = $event->resolvedPricePerPerson($count);
-
-                                return sprintf(
-                                    'Kalkulacja: %s PLN/os. × %d os.',
-                                    number_format($pricePerPerson, 2, ',', ' '),
-                                    $count
-                                );
-                            })()),
-
-                        Forms\Components\TextInput::make('participant_count')
-                            ->label('Liczba uczestników')
-                            ->numeric()
-                            ->default(fn () => (int) ($this->getOwnerRecord()->participant_count ?? 1))
-                            ->minValue(1)
-                            ->live(onBlur: true)
-                            ->afterStateUpdated(fn (Set $set, Get $get) => ContractTfgForm::syncMainFieldsToTfg($set, $get)),
-
-                        Forms\Components\CheckboxList::make('selected_attachments')
-                            ->label('Załączniki do dołączenia')
-                            ->options(fn (): array => $this->getSelectableAttachmentOptions())
-                            ->columns(1)
-                            ->default(fn (Get $get): array => $this->resolveSelectedAttachmentDefaults(
-                                null,
-                                filled($get('contract_template_id')) ? (int) $get('contract_template_id') : null,
-                            ))
-                            ->helperText('Zaznaczone pliki z systemu lub katalogu pliki będą dostępne klientowi razem z umową.'),
-                        ...ContractTfgForm::schema(false, fn () => $this->getOwnerRecord()),
-                    ])
-                    ->action(function (array $data): void {
-                        $event = $this->getOwnerRecord();
-                        $data = $this->attachmentCatalogService()->mergeSelectedAttachmentsIntoFormData($data);
-                        $attachments = $data['attachments'] ?? [];
-
-                        $agreement = Contract::create([
-                            'event_id' => $event->id,
-                            'contract_template_id' => $data['contract_template_id'] ?? null,
-                            'agreement_type' => Contract::TYPE_GROUP,
-                            'title' => $data['title'],
-                            'agreement_date' => now()->toDateString(),
-                            'event_name' => $event->name,
-                            'event_start_date' => $event->start_date,
-                            'event_end_date' => $event->end_date,
-                            'customer_name' => $event->client_name,
-                            'customer_email' => $event->client_email,
-                            'customer_phone' => $event->client_phone,
-                            'participant_count' => (int) ($data['participant_count'] ?? $event->participant_count ?? 1),
-                            'amount_due' => (float) ($data['amount_due'] ?? 0),
-                            'currency' => 'PLN',
-                            'status' => 'sent',
-                            'payment_status' => 'pending',
-                            'attachments' => $attachments,
-                            'created_by' => auth()->id(),
-                            'subject_code' => $data['subject_code'] ?? null,
-                            'payment_method_code' => $data['payment_method_code'] ?? null,
-                            'reservation_number' => $data['reservation_number'] ?? null,
-                        ]);
-
-                        app(ContractTfgSetupService::class)->applyToContract($agreement, array_merge(
-                            app(ContractTfgSetupService::class)->defaultsFromEvent($event),
-                            $this->mergeGroupPricingIntoFormData($data),
-                        ));
-
-                        $this->syncOrderingPartiesForContract(
-                            $agreement,
-                            app(ContractOrderingPartyService::class)->partiesFromEvent($event),
-                        );
-
-                        $this->syncPaymentSchedulesForContract($agreement->fresh(), $data);
-
-                        $agreement->regenerateAgreementBody();
-
-                        Notification::make()
-                            ->title('Umowa wygenerowana')
-                            ->body('Utworzono umowę i link do zawarcia dla klienta.')
-                            ->success()
-                            ->actions([
-                                NotificationAction::make('open')
-                                    ->label('Otwórz link klienta')
-                                    ->url($agreement->public_link)
-                                    ->openUrlInNewTab(),
-                            ])
-                            ->send();
-                    }),
-
-                Tables\Actions\Action::make('generate_individual_from_settlement')
-                    ->label('Generuj umowy indywidualne')
-                    ->icon('heroicon-o-users')
-                    ->color('primary')
-                    ->form([
-                        Forms\Components\Select::make('contract_template_id')
-                            ->label('Szablon umowy')
-                            ->options(fn () => ContractTemplate::orderBy('name')->pluck('name', 'id')->all())
-                            ->searchable()
-                            ->nullable(),
-
-                        Forms\Components\TextInput::make('title')
-                            ->label('Tytuł umowy')
-                            ->default('Umowa uczestnika')
-                            ->required(),
-
-                        Forms\Components\TextInput::make('paying_participants_count')
-                            ->label('Liczba płatnych uczestników')
-                            ->numeric()
-                            ->minValue(1)
-                            ->required()
-                            ->default(fn () => max(1, (int) ($this->getOwnerRecord()->participant_count ?? 1)))
-                            ->helperText('Dla każdego płatnego uczestnika zostanie wygenerowany osobny link do umowy.'),
-
-                        Forms\Components\CheckboxList::make('selected_attachments')
-                            ->label('Załączniki do dołączenia')
-                            ->options(fn (): array => $this->getSelectableAttachmentOptions())
-                            ->columns(1)
-                            ->default(fn (Get $get): array => $this->resolveSelectedAttachmentDefaults(
-                                null,
-                                filled($get('contract_template_id')) ? (int) $get('contract_template_id') : null,
-                            ))
-                            ->helperText('Zaznaczone pliki z systemu lub katalogu pliki trafią do szablonu umowy indywidualnej i do każdego klonu.'),
-                        ...ContractTfgForm::schema(false, fn () => $this->getOwnerRecord()),
-                    ])
-                    ->action(function (array $data): void {
-                        $event = $this->getOwnerRecord();
-                        $payingParticipantsCount = max(1, (int) ($data['paying_participants_count'] ?? $event->participant_count ?? 1));
-                        $amountPerPerson = $this->resolveIndividualAmountDueForEvent($payingParticipantsCount);
-                        $data = $this->attachmentCatalogService()->mergeSelectedAttachmentsIntoFormData($data);
-                        $attachments = $data['attachments'] ?? [];
-
-                        if ($amountPerPerson <= 0) {
-                            Notification::make()
-                                ->title('Brak kosztu imprezy')
-                                ->body('Aby policzyć cenę za osobę, ustaw koszt imprezy większy od 0.')
-                                ->warning()
-                                ->send();
-
-                            return;
-                        }
-
-                        $existingTemplate = (int) $event->agreements()
-                            ->where('agreement_type', Contract::TYPE_INDIVIDUAL)
-                            ->where('status', 'template')
-                            ->count();
-
-                        if ($existingTemplate > 0) {
-                            Notification::make()
-                                ->title('Szablon umowy indywidualnej już istnieje')
-                                ->body('Już wygenerowałeś szablon. Wysyłaj jego link do uczestników.')
-                                ->warning()
-                                ->send();
-
-                            return;
-                        }
-
-                        // Utwórz JEDEN szablon dla wszystkich N uczestników
-                        $agreement = Contract::create([
-                            'event_id' => $event->id,
-                            'contract_template_id' => $data['contract_template_id'] ?? null,
-                            'agreement_type' => Contract::TYPE_INDIVIDUAL,
-                            'title' => ($data['title'] ?? 'Umowa uczestnika').' (szablon)',
-                            'agreement_date' => now()->toDateString(),
-                            'event_name' => $event->name,
-                            'event_start_date' => $event->start_date,
-                            'event_end_date' => $event->end_date,
-                            'customer_name' => $event->client_name,
-                            'customer_email' => $event->client_email,
-                            'customer_phone' => $event->client_phone,
-                            'participant_count' => 1,
-                            'amount_due' => $amountPerPerson,
-                            'currency' => 'PLN',
-                            'status' => 'template',
-                            'payment_status' => 'pending',
-                            'attachments' => $attachments,
-                            'created_by' => auth()->id(),
-                            'meta' => ['is_individual_template' => true, 'expected_participants' => $payingParticipantsCount],
-                            'subject_code' => $data['subject_code'] ?? null,
-                            'payment_method_code' => $data['payment_method_code'] ?? null,
-                            'reservation_number' => $data['reservation_number'] ?? null,
-                        ]);
-
-                        app(ContractTfgSetupService::class)->applyToContract($agreement, array_merge(
-                            app(ContractTfgSetupService::class)->defaultsFromEvent($event),
-                            $data,
-                            ['tfg_travelers_count' => 1],
-                        ));
-
-                        $this->syncOrderingPartiesForContract(
-                            $agreement,
-                            app(ContractOrderingPartyService::class)->partiesFromEvent($event),
-                        );
-
-                        $agreement->regenerateAgreementBody();
-
-                        Notification::make()
-                            ->title('Szablon umowy indywidualnej wygenerowany')
-                            ->body("Wysyłaj poniższy link do {$payingParticipantsCount} uczestników. Każdy wypełni formularz i zapłaci indywidualnie. Cena za osobę: ".number_format($amountPerPerson, 2, ',', ' ').' PLN.')
-                            ->success()
-                            ->actions([
-                                \Filament\Notifications\Actions\Action::make('open')
-                                    ->label('Otwórz link')
-                                    ->url($agreement->public_link)
-                                    ->openUrlInNewTab(),
-                                \Filament\Notifications\Actions\Action::make('copy')
-                                    ->label('Skopiuj link')
-                                    ->close(),
-                            ])
-                            ->send();
-                    }),
-
                 Tables\Actions\CreateAction::make()
-                    ->label('Nowa umowa')
+                    ->label('Nowa umowa (zaawansowane)')
                     ->fillForm(fn (): array => $this->resolveContractDefaultsFromEvent())
                     ->mutateFormDataUsing(function (array $data): array {
                         $event = $this->getOwnerRecord();
@@ -854,6 +709,11 @@ class ContractsRelationManager extends RelationManager
                             ->success()
                             ->send();
                     }),
+                ])
+                    ->label('Więcej')
+                    ->icon('heroicon-o-ellipsis-horizontal')
+                    ->color('gray')
+                    ->button(),
             ])
             ->actions([
                 Tables\Actions\Action::make('open_public')
@@ -862,287 +722,148 @@ class ContractsRelationManager extends RelationManager
                     ->url(fn (Contract $record) => $record->public_link)
                     ->openUrlInNewTab(),
 
-                Tables\Actions\Action::make('download_pdf')
-                    ->label('Pobierz PDF')
-                    ->icon('heroicon-o-document-arrow-down')
-                    ->color('gray')
-                    ->url(fn (Contract $record) => route('admin.contracts.agreement-pdf', ['contract' => $record]))
-                    ->openUrlInNewTab()
-                    ->visible(fn (Contract $record): bool => filled($record->agreement_body) || $record->usesUploadedAgreementDocument()),
-
-                Tables\Actions\Action::make('regenerate')
-                    ->label('Regeneruj treść')
-                    ->icon('heroicon-o-arrow-path')
-                    ->color('gray')
-                    ->visible(fn (Contract $record): bool => $record->shouldAutoGenerateAgreementBody())
-                    ->action(function (Contract $record): void {
-                        $record->regenerateAgreementBody();
-
-                        Notification::make()
-                            ->title('Treść umowy zaktualizowana')
-                            ->success()
-                            ->send();
-                    }),
-
-                Tables\Actions\Action::make('sync_group_participant_payments')
-                    ->label('Synchronizuj wpłaty uczestników')
-                    ->icon('heroicon-o-arrow-path')
-                    ->color('gray')
-                    ->visible(fn (Contract $record): bool => $record->usesIndividualParticipantPayments())
-                    ->action(function (Contract $record): void {
-                        app(ContractPaymentSyncService::class)->sync($record->fresh());
-
-                        Notification::make()
-                            ->title('Wpłaty uczestników zsynchronizowane')
-                            ->success()
-                            ->send();
-                    }),
-
-                Tables\Actions\Action::make('mark_paid')
-                    ->label('Oznacz jako opłacona')
-                    ->icon('heroicon-o-check-circle')
-                    ->color('success')
-                    ->requiresConfirmation()
-                    ->visible(fn (Contract $record) => $record->payment_status !== 'paid')
-                    ->action(function (Contract $record): void {
-                        $record->update([
-                            'status' => 'completed',
-                            'payment_status' => 'paid',
-                            'amount_paid' => (float) $record->amount_due,
-                            'paid_at' => now(),
-                        ]);
-
-                        app(ContractPaymentSyncService::class)->sync($record->fresh());
-
-                        Notification::make()
-                            ->title('Umowa oznaczona jako opłacona')
-                            ->success()
-                            ->send();
-                    }),
+                Tables\Actions\Action::make('edit_contract_page')
+                    ->label('Edytuj')
+                    ->icon('heroicon-o-pencil-square')
+                    ->url(fn (Contract $record) => ContractResource::getUrl('edit', ['record' => $record])),
 
                 Tables\Actions\Action::make('create_annex')
-                    ->label('Utwórz aneks')
+                    ->label('Aneks')
                     ->icon('heroicon-o-document-plus')
                     ->color('info')
-                    ->visible(fn (Contract $record) => ! ($record->meta['is_annex'] ?? false) && $record->status !== 'template')
+                    ->visible(fn (Contract $record): bool => ! $record->isAnnex()
+                        && $record->status !== 'template'
+                        && $record->status !== 'cancelled')
                     ->form([
                         Forms\Components\TextInput::make('title')
                             ->label('Tytuł aneksu')
                             ->required()
-                            ->default(fn (Contract $record) => sprintf(
+                            ->default(fn (Contract $record): string => sprintf(
                                 'Aneks do umowy %s',
                                 $record->contract_number ?: ('#'.$record->id),
                             )),
-
                         Forms\Components\DatePicker::make('agreement_date')
                             ->label('Data aneksu')
                             ->default(now())
                             ->required()
                             ->native(false),
-
                         Forms\Components\TextInput::make('amount_due')
                             ->label('Kwota aneksu')
                             ->numeric()
-                            ->default(fn (Contract $record) => (float) $record->amount_due)
+                            ->default(fn (Contract $record): float => (float) $record->amount_due)
                             ->required()
                             ->suffix('PLN'),
-
                         Forms\Components\TextInput::make('participant_count')
                             ->label('Liczba uczestników')
                             ->numeric()
                             ->minValue(1)
-                            ->default(fn (Contract $record) => (int) ($record->participant_count ?? 1)),
-
+                            ->default(fn (Contract $record): int => (int) ($record->participant_count ?? 1)),
                         Forms\Components\DatePicker::make('event_start_date')
                             ->label('Data rozpoczęcia')
                             ->default(fn (Contract $record) => $record->event_start_date)
                             ->native(false),
-
                         Forms\Components\DatePicker::make('event_end_date')
                             ->label('Data zakończenia')
                             ->default(fn (Contract $record) => $record->event_end_date)
                             ->native(false),
-
                         ...ContractAnnexFields::createSchema(),
-
                         ...ContractTfgForm::schema(false, fn () => $this->getOwnerRecord()),
                     ])
                     ->fillForm(fn (Contract $record): array => array_merge(
                         app(ContractTfgSetupService::class)->defaultsFromContract($record),
                         [
-                            'body_edit_mode' => $record->body_edit_mode ?? Contract::BODY_EDIT_TEMPLATE,
-                            'annex_change_types' => $record->annex_change_types ?? [],
-                            'annex_program_change_notes' => $record->annex_program_change_notes,
+                            'amount_due' => (float) $record->amount_due,
+                            'participant_count' => (int) ($record->participant_count ?? 1),
+                            'event_start_date' => optional($record->event_start_date)?->toDateString(),
+                            'event_end_date' => optional($record->event_end_date)?->toDateString(),
                         ],
                     ))
                     ->action(function (Contract $record, array $data): void {
-                        $annex = app(ContractTfgSetupService::class)->createAnnex($record, $data);
+                        try {
+                            $annex = app(CreateContractAnnexesAction::class)([$record], $data)['created'][0];
+                        } catch (InvalidArgumentException $e) {
+                            Notification::make()->title($e->getMessage())->warning()->send();
+
+                            return;
+                        }
 
                         Notification::make()
-                            ->title('Aneks utworzony')
-                            ->body('Możesz wysłać klientowi nowy link do aneksu.')
+                            ->title('Utworzono aneks')
                             ->success()
                             ->actions([
-                                NotificationAction::make('open')
-                                    ->label('Otwórz link aneksu')
-                                    ->url($annex->public_link)
-                                    ->openUrlInNewTab(),
+                                NotificationAction::make('edit')
+                                    ->label('Otwórz aneks')
+                                    ->url(ContractResource::getUrl('edit', ['record' => $annex])),
                             ])
                             ->send();
                     }),
 
-                Tables\Actions\Action::make('edit_ufg_full')
-                    ->label('Edycja UFG')
-                    ->icon('heroicon-o-pencil-square')
-                    ->color('gray')
-                    ->url(fn (Contract $record) => ContractResource::getUrl('edit', ['record' => $record]))
-                    ->openUrlInNewTab(),
-
-                Tables\Actions\Action::make('cancel_contract')
-                    ->label('Anuluj umowę')
-                    ->icon('heroicon-o-x-circle')
-                    ->color('danger')
+                Tables\Actions\DeleteAction::make()
+                    ->label('Usuń')
                     ->requiresConfirmation()
-                    ->visible(fn (Contract $record) => ! in_array($record->status, ['cancelled', 'template'], true))
-                    ->action(function (Contract $record): void {
-                        Contract::withoutEvents(function () use ($record): void {
-                            $record->update(['status' => 'cancelled']);
-                        });
-
-                        app(ContractPaymentSyncService::class)->remove($record->fresh());
-
-                        Notification::make()
-                            ->title('Umowa anulowana')
-                            ->success()
-                            ->send();
-                    }),
-
-                Tables\Actions\Action::make('reopen_contract')
-                    ->label('Przywróć umowę')
-                    ->icon('heroicon-o-arrow-uturn-left')
-                    ->color('gray')
-                    ->requiresConfirmation()
-                    ->visible(fn (Contract $record) => $record->status === 'cancelled')
-                    ->action(function (Contract $record): void {
-                        $record->update(['status' => 'sent']);
-
-                        Notification::make()
-                            ->title('Umowa przywrócona')
-                            ->success()
-                            ->send();
-                    }),
-
-                Tables\Actions\Action::make('submit_tfg')
-                    ->label('Wyślij do TFG')
-                    ->icon('heroicon-o-cloud-arrow-up')
-                    ->visible(fn (Contract $record) => $record->canSubmitNewData() && blank($record->pending_operation))
-                    ->requiresConfirmation()
-                    ->action(function (Contract $record): void {
-                        $record->queueTfgOperation(Contract::OP_NOWEDANE);
-                        SubmitTfgFeedJob::dispatch([$record->id]);
-
-                        Notification::make()
-                            ->title('Umowa w kolejce do TFG')
-                            ->success()
-                            ->send();
-                    }),
-
-                Tables\Actions\Action::make('correct_tfg')
-                    ->label('Koryguj w TFG')
-                    ->icon('heroicon-o-pencil-square')
-                    ->visible(fn (Contract $record) => $record->canCorrect())
+                    ->modalHeading('Usunąć umowę?')
+                    ->modalDescription('Usunięcie jest trwałe. Link klienta przestanie działać.'),
+            ])
+            ->bulkActions([
+                Tables\Actions\BulkAction::make('create_annexes_bulk')
+                    ->label('Utwórz aneksy (wybrane)')
+                    ->icon('heroicon-o-document-plus')
+                    ->color('info')
+                    ->deselectRecordsAfterCompletion()
                     ->form([
-                        Forms\Components\Select::make('correction_reason')
-                            ->label('Powód korekty')
-                            ->options(config('tfg.correction_reasons'))
-                            ->required(),
+                        Forms\Components\TextInput::make('title')
+                            ->label('Tytuł aneksu (wspólny wzorzec)')
+                            ->helperText('Możesz zostawić puste — wtedy „Aneks do umowy {numer}”.')
+                            ->maxLength(255),
+                        Forms\Components\DatePicker::make('agreement_date')
+                            ->label('Data aneksu')
+                            ->default(now())
+                            ->required()
+                            ->native(false),
+                        Forms\Components\TextInput::make('amount_due')
+                            ->label('Kwota aneksu (opcjonalnie — wspólna dla wszystkich)')
+                            ->numeric()
+                            ->suffix('PLN')
+                            ->helperText('Puste = zachowaj kwotę z każdej umowy źródłowej.'),
+                        Forms\Components\DatePicker::make('event_start_date')
+                            ->label('Nowa data rozpoczęcia (opcjonalnie)')
+                            ->native(false),
+                        Forms\Components\DatePicker::make('event_end_date')
+                            ->label('Nowa data zakończenia (opcjonalnie)')
+                            ->native(false),
+                        ...ContractAnnexFields::createSchema(),
                     ])
-                    ->action(function (Contract $record, array $data): void {
-                        $record->queueTfgOperation(Contract::OP_KOREKTA, $data['correction_reason']);
-                        SubmitTfgFeedJob::dispatch([$record->id]);
-
-                        Notification::make()
-                            ->title('Korekta w kolejce do TFG')
-                            ->success()
-                            ->send();
-                    }),
-
-                Tables\Actions\Action::make('terminate_tfg')
-                    ->label('Rozwiąż w TFG')
-                    ->icon('heroicon-o-no-symbol')
-                    ->color('warning')
-                    ->visible(fn (Contract $record) => $record->canTerminateOrDelete())
-                    ->requiresConfirmation()
-                    ->action(function (Contract $record): void {
-                        $record->queueTfgOperation(Contract::OP_ROZWIAZANIE);
-                        SubmitTfgFeedJob::dispatch([$record->id]);
-
-                        Notification::make()
-                            ->title('Rozwiązanie w kolejce do TFG')
-                            ->success()
-                            ->send();
-                    }),
-
-                Tables\Actions\Action::make('delete_tfg')
-                    ->label('Usuń w TFG')
-                    ->icon('heroicon-o-trash')
-                    ->color('danger')
-                    ->visible(fn (Contract $record) => $record->canTerminateOrDelete())
-                    ->requiresConfirmation()
-                    ->action(function (Contract $record): void {
-                        $record->queueTfgOperation(Contract::OP_USUNIECIE);
-                        SubmitTfgFeedJob::dispatch([$record->id]);
-
-                        Notification::make()
-                            ->title('Usunięcie w kolejce do TFG')
-                            ->success()
-                            ->send();
-                    }),
-
-                Tables\Actions\EditAction::make()
-                    ->fillForm(fn (Contract $record): array => array_merge(
-                        $record->toArray(),
-                        app(ContractTfgSetupService::class)->defaultsFromContract($record),
-                        [
-                            'ordering_parties' => app(ContractOrderingPartyService::class)->partiesToFormState($record),
-                            'payment_schedules' => $this->groupPricingService()->schedulesToFormState($record),
-                            'payment_mode' => data_get($record->meta, 'payment_mode', Contract::CUSTOM_PAYMENT_TOTAL_LUMP),
-                        ],
-                    ))
-                    ->mutateFormDataUsing(function (array $data): array {
-                        $data = $this->mergeSelectedAttachmentsIntoData($data);
-
-                        return $this->mergeContractMetaFromFormData(
-                            $this->mergeOrderingPartiesIntoFormData($data)
-                        );
-                    })
-                    ->after(function (Contract $record, array $data): void {
-                        $this->syncOrderingPartiesForContract(
-                            $record,
-                            $data['ordering_parties'] ?? [],
-                            $data['ordering_party_notes'] ?? null,
-                        );
-
-                        app(ContractTfgSetupService::class)->applyToContract($record, $data);
-
-                        $this->syncPaymentSchedulesForContract($record->fresh(), $data);
-
-                        if ($record->isAnnex()) {
-                            $annex = $record->fresh();
-                            app(ContractAnnexService::class)->applyAnnexAttributes(
-                                $annex,
-                                $data,
-                                $this->getOwnerRecord(),
-                            );
-
-                            $annex = $annex->fresh();
-
-                            if ($annex->shouldAutoGenerateAgreementBody()) {
-                                $annex->regenerateAgreementBody();
-                            }
+                    ->action(function (\Illuminate\Database\Eloquent\Collection $records, array $data): void {
+                        $payload = $data;
+                        if (! filled($payload['amount_due'] ?? null)) {
+                            unset($payload['amount_due']);
                         }
+                        if (! filled($payload['title'] ?? null)) {
+                            unset($payload['title']);
+                        }
+                        if (! filled($payload['event_start_date'] ?? null)) {
+                            unset($payload['event_start_date']);
+                        }
+                        if (! filled($payload['event_end_date'] ?? null)) {
+                            unset($payload['event_end_date']);
+                        }
+
+                        try {
+                            $result = app(CreateContractAnnexesAction::class)($records->all(), $payload);
+                        } catch (InvalidArgumentException $e) {
+                            Notification::make()->title($e->getMessage())->warning()->send();
+
+                            return;
+                        }
+
+                        Notification::make()
+                            ->title('Utworzono aneksy: '.count($result['created']))
+                            ->body($result['skipped'] > 0
+                                ? 'Pominięto: '.$result['skipped'].' (szablony/aneksy/anulowane).'
+                                : 'Dane zamawiającego i uczestnika skopiowano z umów źródłowych.')
+                            ->success()
+                            ->send();
                     }),
-                Tables\Actions\DeleteAction::make(),
             ])
             ->defaultSort('id', 'desc');
     }
@@ -1197,21 +918,6 @@ class ContractsRelationManager extends RelationManager
                 return [$payment->id => $label];
             })
             ->all();
-    }
-
-    protected function resolveInsuranceFormDefaults(): array
-    {
-        $event = $this->getOwnerRecord();
-
-        return [
-            'insurance_policy_number' => $event->insurance_policy_number,
-            'insurance_status' => $event->insurance_status ?: 'pending',
-            'insurance_payment_status' => $event->insurance_payment_status ?: 'pending',
-            'insurance_amount' => $event->insurance_amount,
-            'insurance_paid_at' => $event->insurance_paid_at,
-            'insurance_document_path' => $event->insurance_document_path,
-            'insurance_terms' => $event->insurance_terms,
-        ];
     }
 
     /**

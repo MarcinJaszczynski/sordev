@@ -36,7 +36,33 @@ class EventPolicy
 
     public function update(User $user, Event $event): bool
     {
-        return $this->view($user, $event);
+        // Pilot z samym podglądem nie edytuje imprezy (API / legacy HTTP).
+        if ($user->hasRole('pilot') && ! app(PilotAccessService::class)->shouldUseOfficeEventAccess($user)) {
+            return false;
+        }
+
+        if ($user->hasRole(['admin', 'super_admin', 'biuro', 'ksiegowosc'])) {
+            return $this->view($user, $event);
+        }
+
+        return $user->can('edit event') && $this->view($user, $event);
+    }
+
+    /**
+     * Krytyczne zapisy finansowe (wpłaty kosztów/uczestników, plan kosztów, dokumenty).
+     * Pilot ma osobny zakres przez EventSettlementPolicy — tu biuro/admin.
+     */
+    public function manageFinance(User $user, Event $event): bool
+    {
+        if ($user->hasRole(['admin', 'super_admin'])) {
+            return true;
+        }
+
+        if ($user->hasRole('pilot') && ! app(PilotAccessService::class)->shouldUseOfficeEventAccess($user)) {
+            return false;
+        }
+
+        return $this->update($user, $event);
     }
 
     public function viewClientPortal(User $user, Event $event): bool

@@ -40,7 +40,7 @@ class ViewSalesInvoice extends ViewRecord
     public function infolist(Infolist $infolist): Infolist
     {
         return $infolist->schema([
-            Infolists\Components\Section::make('Nagłówek')->columns(3)->schema([
+            Infolists\Components\Section::make('Nagłówek')->columns(['default' => 1, 'md' => 2, 'xl' => 3])->schema([
                 Infolists\Components\TextEntry::make('id')->label('ID'),
                 Infolists\Components\TextEntry::make('number')->label('Numer')->placeholder('—'),
                 Infolists\Components\TextEntry::make('status')
@@ -55,12 +55,12 @@ class ViewSalesInvoice extends ViewRecord
                     ->label('Impreza')
                     ->formatStateUsing(fn ($state, SalesInvoice $record): string => trim(($record->event?->code ? $record->event->code.' — ' : '').($state ?? ''))),
             ]),
-            Infolists\Components\Section::make('Nabywca')->columns(2)->schema([
+            Infolists\Components\Section::make('Nabywca')->columns(['default' => 1, 'md' => 2])->schema([
                 Infolists\Components\TextEntry::make('buyer_name')->label('Nazwa'),
                 Infolists\Components\TextEntry::make('buyer_nip')->label('NIP'),
                 Infolists\Components\TextEntry::make('buyer_address')->label('Adres')->columnSpanFull(),
             ]),
-            Infolists\Components\Section::make('VAT-Marża')->columns(3)->schema([
+            Infolists\Components\Section::make('VAT-Marża')->columns(['default' => 1, 'md' => 2, 'xl' => 3])->schema([
                 Infolists\Components\TextEntry::make('revenue_pln')
                     ->label('Przychód')
                     ->formatStateUsing(fn ($state): string => MoneyFormatter::format((float) $state, 'PLN')),

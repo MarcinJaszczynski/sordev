@@ -65,6 +65,7 @@ class PilotCashReconciliationTest extends TestCase
             'planned_currency_id' => $currencyId,
             'actual_currency_id' => $currencyId,
             'paid_by' => 'pilot',
+            'payment_method' => 'cash',
             'payment_status' => 'paid',
         ]);
 
@@ -78,6 +79,7 @@ class PilotCashReconciliationTest extends TestCase
             'planned_currency_id' => $currencyId,
             'actual_currency_id' => $currencyId,
             'paid_by' => 'pilot',
+            'payment_method' => 'cash',
             'payment_status' => 'paid',
         ]);
 
@@ -85,11 +87,143 @@ class PilotCashReconciliationTest extends TestCase
         $row = $service->getCashReconciliation($settlement->fresh())->first();
 
         $this->assertNotNull($row);
-        $this->assertSame(2000.0, $row->office_provided);
+        $this->assertSame(2000.0, $row->from_office);
         $this->assertSame(1832.0, $row->planned_expenses);
         $this->assertSame(1726.0, $row->actual_spent);
         $this->assertSame(274.0, $row->to_return);
         $this->assertSame(1726.0, (float) $row->cash->fresh()->spent_amount);
+    }
+
+    public function test_pilot_cash_payment_row_updates_spent_and_plan_status(): void
+    {
+        if (! Schema::hasTable('event_settlement_costs') || ! Schema::hasTable('pilot_cash_preparations')) {
+            $this->markTestSkipped('Brak tabel rozliczenia gotówki.');
+        }
+
+        Role::firstOrCreate(['name' => 'admin']);
+        $admin = User::factory()->create(['status' => 'active']);
+        $admin->assignRole('admin');
+        $this->actingAs($admin);
+
+        $event = Event::factory()->create(['status' => Event::STATUS_CONFIRMED]);
+        $settlement = EventSettlement::findOrCreateActiveForEvent($event);
+        $plnId = Currency::query()->create([
+            'name' => 'PLN', 'code' => 'PLN', 'symbol' => 'PLN', 'exchange_rate' => 1,
+        ])->id;
+
+        $settlement->pilotCashPreparations()->create([
+            'currency_id' => $plnId,
+            'provided_amount' => 1000,
+            'calculated_amount' => 500,
+            'spent_amount' => 0,
+            'status' => 'provided',
+        ]);
+
+        $plan = $settlement->costs()->create([
+            'source_type' => 'manual',
+            'name' => 'Obiad',
+            'planned_amount' => 500,
+            'planned_amount_pln' => 500,
+            'planned_currency_id' => $plnId,
+            'paid_by' => 'pilot',
+            'payment_status' => 'planned',
+            'order' => 1,
+        ]);
+
+        app(\App\Actions\Finance\RecordSettlementCostPaymentAction::class)(new \App\Data\RecordSettlementCostPaymentData(
+            planCost: $plan->fresh(['plannedCurrency']),
+            amountPln: 400,
+            paymentMethod: 'transfer', // wymuszone na cash dla pilota
+            paidBy: 'pilot',
+            advanceType: 'full',
+            paidAt: now(),
+            paidByUserId: $admin->id,
+            amount: 400,
+            rate: 1,
+            currencyId: $plnId,
+        ));
+
+        $plan->refresh();
+        $this->assertSame('partially_paid', $plan->payment_status);
+
+        $payment = $settlement->costs()->where('source_type', 'manual_payment')->first();
+        $this->assertNotNull($payment);
+        $this->assertSame('cash', $payment->payment_method);
+        $this->assertSame('pilot', $payment->paid_by);
+
+        $row = app(PilotSettlementService::class)->getCashReconciliation($settlement->fresh())->first();
+        $this->assertNotNull($row);
+        $this->assertSame(400.0, $row->actual_spent);
+        $this->assertSame(400.0, (float) $row->cash->fresh()->spent_amount);
+        $this->assertSame(600.0, $row->to_return);
+
+        // Plan bez osobnego actual — nie dubluje wydania.
+        $this->assertNull($plan->actual_amount);
+    }
+
+    public function test_zeroing_plan_expense_deletes_pilot_cash_payment_instead_of_crashing(): void
+    {
+        if (! Schema::hasTable('event_settlement_costs') || ! Schema::hasTable('pilot_cash_preparations')) {
+            $this->markTestSkipped('Brak tabel rozliczenia gotówki.');
+        }
+
+        Role::firstOrCreate(['name' => 'admin']);
+        $admin = User::factory()->create(['status' => 'active']);
+        $admin->assignRole('admin');
+        $this->actingAs($admin);
+
+        $event = Event::factory()->create(['status' => Event::STATUS_CONFIRMED]);
+        $settlement = EventSettlement::findOrCreateActiveForEvent($event);
+        $plnId = Currency::query()->create([
+            'name' => 'PLN', 'code' => 'PLN', 'symbol' => 'PLN', 'exchange_rate' => 1,
+        ])->id;
+
+        $settlement->pilotCashPreparations()->create([
+            'currency_id' => $plnId,
+            'provided_amount' => 2000,
+            'calculated_amount' => 1236,
+            'spent_amount' => 0,
+            'status' => 'provided',
+        ]);
+
+        $plan = $settlement->costs()->create([
+            'source_type' => 'program_point',
+            'source_id' => 1058,
+            'name' => 'Pilot zagraniczne',
+            'planned_amount' => 1236,
+            'planned_amount_pln' => 1236,
+            'planned_currency_id' => $plnId,
+            'paid_by' => 'pilot',
+            'payment_status' => 'planned',
+            'order' => 1,
+        ]);
+
+        app(\App\Actions\Finance\RecordSettlementCostPaymentAction::class)(new \App\Data\RecordSettlementCostPaymentData(
+            planCost: $plan->fresh(['plannedCurrency']),
+            amountPln: 1236,
+            paymentMethod: 'cash',
+            paidBy: 'pilot',
+            advanceType: 'full',
+            paidAt: now(),
+            paidByUserId: $admin->id,
+            amount: 1236,
+            rate: 1,
+            currencyId: $plnId,
+        ));
+
+        $this->assertSame(1, $settlement->costs()->where('source_type', 'program_point_payment')->count());
+
+        app(PilotSettlementService::class)->updateExpenseLine($event, $plan->fresh(), [
+            'actual_amount' => 0,
+            'actual_currency_id' => $plnId,
+            'payment_method' => 'cash',
+        ]);
+
+        $this->assertSame(0, $settlement->costs()->where('source_type', 'program_point_payment')->count());
+        $this->assertContains($plan->fresh()->payment_status, ['planned', 'advance_required']);
+
+        $row = app(PilotSettlementService::class)->getCashReconciliation($settlement->fresh())->first();
+        $this->assertSame(0.0, $row->actual_spent);
     }
 
     public function test_recalculate_pilot_cash_applies_currency_exchange_to_balance(): void

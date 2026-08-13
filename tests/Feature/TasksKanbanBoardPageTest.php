@@ -235,4 +235,54 @@ class TasksKanbanBoardPageTest extends TestCase
         $this->assertNotEmpty($links);
         $this->assertSame('Kontrahent', $links[0]['label'] ?? null);
     }
+
+    public function test_kanban_card_shows_description_context_and_comment_count(): void
+    {
+        $user = User::factory()->create();
+        $user->assignRole('admin');
+
+        $contractor = Contractor::create(['name' => 'Hotel Alpejski', 'status' => 'active']);
+
+        $task = Task::create([
+            'title' => 'Zadanie z treścią na kanbanie',
+            'description' => 'Pełna treść zadania do podglądu na karcie kanban.',
+            'status_id' => Task::getDefaultStatusId(),
+            'priority' => 'normal',
+            'author_id' => $user->id,
+            'assignee_id' => $user->id,
+            'taskable_type' => Contractor::class,
+            'taskable_id' => $contractor->id,
+        ]);
+
+        \App\Models\TaskComment::query()->create([
+            'task_id' => $task->id,
+            'user_id' => $user->id,
+            'content' => 'Pierwszy komentarz na karcie.',
+        ]);
+
+        \App\Models\TaskComment::query()->create([
+            'task_id' => $task->id,
+            'user_id' => $user->id,
+            'content' => 'Drugi komentarz — powinien być widoczny jako ostatni.',
+        ]);
+
+        $component = Livewire::actingAs($user)
+            ->test(TasksKanbanBoardPage::class);
+
+        $tasks = $component->instance()->tasks();
+        $loaded = $tasks->firstWhere('id', $task->id);
+
+        $this->assertNotNull($loaded);
+        $this->assertSame(2, (int) $loaded->comments_count);
+        $this->assertCount(2, $loaded->comments);
+        $this->assertStringContainsString('Pełna treść zadania', (string) $loaded->description);
+        $this->assertStringContainsString('Hotel Alpejski', $loaded->task_context_label);
+
+        $component
+            ->assertSee('Pełna treść zadania do podglądu na karcie kanban.', false)
+            ->assertSee('Kontrahent', false)
+            ->assertSee('Hotel Alpejski', false)
+            ->assertSee('Drugi komentarz — powinien być widoczny jako ostatni.', false)
+            ->assertSee('Wątek komentarzy (2)', false);
+    }
 }

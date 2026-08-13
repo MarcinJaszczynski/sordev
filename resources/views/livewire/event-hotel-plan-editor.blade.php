@@ -1,5 +1,5 @@
 <div class="space-y-6">
-    <div class="sticky top-0 z-10 space-y-3 rounded-xl border border-gray-200 bg-white/95 p-4 shadow-sm backdrop-blur-sm">
+    <div class="sor-sticky-toolbar space-y-3 bg-white/95 dark:bg-gray-900/95">
         <div class="flex flex-wrap items-center justify-between gap-3">
             <div>
                 <p class="text-sm font-semibold text-gray-900">Hotele — {{ $event->name }}</p>

@@ -28,6 +28,10 @@ class PlaceDistanceResource extends Resource
 
     protected static ?string $navigationLabel = 'Odległości między miejscami';
 
+    protected static ?string $modelLabel = 'odległość między miejscami';
+
+    protected static ?string $pluralModelLabel = 'odległości między miejscami';
+
     protected static ?string $navigationGroup = FilamentNavigation::GROUP_CONFIG;
 
     public static function shouldRegisterNavigation(): bool
@@ -61,7 +65,7 @@ class PlaceDistanceResource extends Resource
                     ->label('Źródło API')
                     ->nullable(),
             ])
-            ->columns(2);
+            ->columns(['default' => 1, 'md' => 2]);
     }
 
     public static function table(Table $table): Table

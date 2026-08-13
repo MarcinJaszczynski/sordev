@@ -4,13 +4,25 @@ namespace Tests\Feature;
 
 use App\Models\Event;
 use App\Models\EventSettlement;
+use App\Models\User;
 use App\Services\SettlementAggregateFinanceService;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Spatie\Permission\Models\Role;
 use Tests\TestCase;
 
 class SettlementAggregateFinanceTest extends TestCase
 {
     use RefreshDatabase;
+
+    protected function setUp(): void
+    {
+        parent::setUp();
+
+        Role::firstOrCreate(['name' => 'admin']);
+        $admin = User::factory()->create(['status' => 'active']);
+        $admin->assignRole('admin');
+        $this->actingAs($admin);
+    }
 
     public function test_transport_plan_advance_and_payment_persist(): void
     {

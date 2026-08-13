@@ -10,6 +10,8 @@ class TfgCsvExportDownloadController
 {
     public function __invoke(TfgFeedLog $feedLog): Response
     {
+        abort_unless(auth()->user()?->hasRole(['admin', 'super_admin', 'biuro', 'ksiegowosc']), 403);
+
         abort_unless(filled($feedLog->payload_path), 404);
         abort_unless(str_ends_with($feedLog->payload_path, '.csv'), 404);
         abort_unless(Storage::disk('local')->exists($feedLog->payload_path), 404);

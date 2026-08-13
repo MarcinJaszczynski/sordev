@@ -19,6 +19,7 @@ use App\Models\EventSettlementParticipantPayment;
 use App\Models\EventTemplate;
 use App\Models\EventTemplateProgramPoint;
 use App\Models\PilotCashPreparation;
+use App\Models\Reservation;
 use App\Models\Task;
 use Illuminate\Database\Eloquent\Model;
 
@@ -110,6 +111,7 @@ final class TaskNavigation
         return match (true) {
             $record instanceof Event => $record,
             $record instanceof EventProgramPoint => $record->event,
+            $record instanceof Reservation => self::loadReservationEvent($record),
             default => self::resolveEventFromSettlementRecord($record),
         };
     }
@@ -149,8 +151,16 @@ final class TaskNavigation
             $record instanceof Event => $record,
             $record instanceof EventProgramPoint => $record->event,
             $record instanceof EventDocument => $record->event,
+            $record instanceof Reservation => self::loadReservationEvent($record),
             default => self::resolveEventFromSettlementRecord($record),
         };
+    }
+
+    private static function loadReservationEvent(Reservation $reservation): ?Event
+    {
+        $reservation->loadMissing('event');
+
+        return $reservation->event;
     }
 
     private static function resolveEventFromSettlementRecord(?Model $record): ?Event

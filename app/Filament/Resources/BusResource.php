@@ -34,7 +34,7 @@ class BusResource extends Resource
     {
         return $form->schema([
             Forms\Components\Section::make('Dane podstawowe')
-                ->columns(3)
+                ->columns(['default' => 1, 'md' => 2, 'xl' => 3])
                 ->schema([
                     Forms\Components\TextInput::make('name')
                         ->label('Nazwa')
@@ -53,7 +53,7 @@ class BusResource extends Resource
                 ]),
 
             Forms\Components\Section::make('Parametry cennika')
-                ->columns(3)
+                ->columns(['default' => 1, 'md' => 2, 'xl' => 3])
                 ->schema([
                     Forms\Components\TextInput::make('package_price_per_day')
                         ->label('Cena za pakiet / dzień')
@@ -71,7 +71,7 @@ class BusResource extends Resource
                 ]),
 
             Forms\Components\Section::make('Waluta')
-                ->columns(2)
+                ->columns(['default' => 1, 'md' => 2])
                 ->schema([
                     Forms\Components\TextInput::make('currency')
                         ->label('Symbol waluty')

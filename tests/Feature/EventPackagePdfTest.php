@@ -9,6 +9,7 @@ use App\Models\EventTemplate;
 use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Schema;
+use Spatie\Permission\Models\Role;
 use Tests\TestCase;
 
 class EventPackagePdfTest extends TestCase
@@ -49,6 +50,8 @@ class EventPackagePdfTest extends TestCase
     private function createEventWithContracts(): Event
     {
         $user = User::factory()->create();
+        Role::firstOrCreate(['name' => 'admin', 'guard_name' => 'web']);
+        $user->assignRole('admin');
         $this->actingAs($user);
 
         $template = EventTemplate::factory()->create();

@@ -157,11 +157,11 @@ class PilotPortalSettingsToolbar extends Component implements HasActions, HasFor
     public function toggleCurrencyExchangeAction(): Action
     {
         return Action::make('toggleCurrencyExchange')
-            ->label('Wymiana walut')
+            ->label('Portal: wymiana')
             ->icon('heroicon-o-arrows-right-left')
             ->color(fn (): string => $this->event()->showsPilotCurrencyExchange() ? 'success' : 'gray')
             ->outlined(fn (): bool => ! $this->event()->showsPilotCurrencyExchange())
-            ->tooltip('Widoczność wymiany walut w panelu pilota (zakładka Zaliczka).')
+            ->tooltip('Widoczność formularza wymiany waluty w portalu pilota i poniżej na tej stronie.')
             ->visible(fn (): bool => Schema::hasColumn('events', 'pilot_portal_show_currency_exchange'))
             ->action(function (): void {
                 $event = $this->event();
@@ -170,22 +170,22 @@ class PilotPortalSettingsToolbar extends Component implements HasActions, HasFor
                 ]);
 
                 Notification::make()
-                    ->title('Zapisano ustawienie widoczności')
+                    ->title('Zapisano widoczność wymiany w portalu')
                     ->success()
                     ->send();
 
-                $this->dispatch('$refresh');
+                $this->dispatchPortalVisibilityUpdated();
             });
     }
 
     public function toggleBusCollectionsAction(): Action
     {
         return Action::make('toggleBusCollections')
-            ->label('Zbiórka w autokarze')
+            ->label('Portal: zbiórka')
             ->icon('heroicon-o-banknotes')
             ->color(fn (): string => $this->event()->showsPilotBusCollections() ? 'success' : 'gray')
             ->outlined(fn (): bool => ! $this->event()->showsPilotBusCollections())
-            ->tooltip('Widoczność zbiórki gotówki od uczestników w panelu pilota.')
+            ->tooltip('Widoczność formularza zbiórki w autokarze w portalu pilota i poniżej na tej stronie.')
             ->visible(fn (): bool => Schema::hasColumn('events', 'pilot_portal_show_bus_collections'))
             ->action(function (): void {
                 $event = $this->event();
@@ -194,11 +194,11 @@ class PilotPortalSettingsToolbar extends Component implements HasActions, HasFor
                 ]);
 
                 Notification::make()
-                    ->title('Zapisano ustawienie widoczności')
+                    ->title('Zapisano widoczność zbiórki w portalu')
                     ->success()
                     ->send();
 
-                $this->dispatch('$refresh');
+                $this->dispatchPortalVisibilityUpdated();
             });
     }
 
@@ -247,6 +247,12 @@ class PilotPortalSettingsToolbar extends Component implements HasActions, HasFor
     {
         return ! Schema::hasColumn('events', 'pilot_portal_show_currency_exchange')
             || ! Schema::hasColumn('events', 'pilot_portal_show_bus_collections');
+    }
+
+    protected function dispatchPortalVisibilityUpdated(): void
+    {
+        $this->dispatch('pilot-portal-visibility-updated', eventId: $this->eventId);
+        $this->dispatch('$refresh');
     }
 
     protected function event(): Event

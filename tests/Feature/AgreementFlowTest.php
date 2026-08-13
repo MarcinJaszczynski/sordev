@@ -69,6 +69,57 @@ class AgreementFlowTest extends TestCase
         $this->assertSame('Warszawa', data_get($agreement->meta, 'flow.signer_address.city'));
     }
 
+    public function test_consents_sync_to_event_participant_after_personal_step(): void
+    {
+        $this->withoutMiddleware();
+
+        if (! Schema::hasTable('event_participants') || ! Schema::hasColumn('event_participants', 'consents')) {
+            $this->markTestSkipped('Brak event_participants.consents');
+        }
+
+        $agreement = $this->createAgreement();
+
+        $this->post(route('agreement.flow.plan', ['token' => $agreement->public_token]), [
+            'travel_insurance' => 'yes',
+        ]);
+
+        $this->post(route('agreement.flow.consents.store', ['token' => $agreement->public_token]), [
+            'consent_terms' => '1',
+            'consent_insurance' => '1',
+            'consent_data' => '1',
+            'consent_comm' => '1',
+        ]);
+
+        $this->post(route('agreement.flow.personal.store', ['token' => $agreement->public_token]), [
+            'signer_name' => 'Jan Kowalski',
+            'signer_email' => 'jan@example.com',
+            'signer_phone' => '500600700',
+            'signer_address_street' => 'Polna',
+            'signer_address_number' => '1/10',
+            'signer_postal_code' => '00-001',
+            'signer_city' => 'Warszawa',
+            'signer_province' => 'Mazowieckie',
+            'participant_name' => 'Jan Kowalski',
+            'participant_birth_date' => '2012-01-01',
+        ])->assertRedirect(route('agreement.flow.payment', ['token' => $agreement->public_token]));
+
+        $participant = \App\Models\EventParticipant::query()
+            ->where('event_id', $agreement->event_id)
+            ->where(function ($q) use ($agreement) {
+                if ($agreement instanceof Contract) {
+                    $q->where('contract_id', $agreement->id);
+                } else {
+                    $q->where('event_agreement_id', $agreement->id);
+                }
+            })
+            ->first();
+
+        $this->assertNotNull($participant);
+        $this->assertTrue($participant->hasParentConsent());
+        $this->assertTrue(\App\Support\EventParticipantConsents::hasRequired($participant->consents));
+        $this->assertNotNull(data_get($participant->consents, \App\Support\EventParticipantConsents::RODO));
+    }
+
     public function test_personal_data_regenerates_agreement_body_with_flow_values(): void
     {
         $this->withoutMiddleware();
@@ -352,8 +403,9 @@ class AgreementFlowTest extends TestCase
         $pilotCash = $settlement->pilotCashPreparations()->first();
 
         $this->assertNotNull($pilotCash);
-        $this->assertSame(700.0, (float) $pilotCash->calculated_amount);
-        $this->assertSame(700.0, (float) $pilotCash->pln_equivalent);
+        // Needed = pozostałe: 300 (pełny plan) + (627 − 400) = 527
+        $this->assertSame(527.0, (float) $pilotCash->calculated_amount);
+        $this->assertSame(527.0, (float) $pilotCash->pln_equivalent);
     }
 
     public function test_individual_agreement_without_settlement_uses_event_share_amount(): void
@@ -414,6 +466,8 @@ class AgreementFlowTest extends TestCase
     private function createAgreement(array $overrides = []): EventAgreement|Contract
     {
         $user = User::factory()->create();
+        \Spatie\Permission\Models\Role::firstOrCreate(['name' => 'admin', 'guard_name' => 'web']);
+        $user->assignRole('admin');
         $this->actingAs($user);
 
         $template = EventTemplate::factory()->create([
@@ -495,7 +549,7 @@ class AgreementFlowTest extends TestCase
         $response->assertSuccessful();
     }
 
-    public function test_individual_agreement_template_clones_for_each_participant(): void
+    public function test_individual_agreement_template_does_not_clone_on_open(): void
     {
         $this->withoutMiddleware();
 
@@ -546,41 +600,19 @@ class AgreementFlowTest extends TestCase
 
         $templateToken = $templateAgreement->public_token;
 
-        // Pierwszy uczestnik wchodzi w szablon
         $response1 = $this->get(route('agreement.flow.show', ['token' => $templateToken]));
-        $this->assertEquals(302, $response1->getStatusCode()); // Redirect
+        $response1->assertSuccessful();
 
-        // W bazie są teraz dwie umowy: szablon + klon dla uczestnika 1
-        $this->assertEquals(2, $this->agreementQueryForEvent($event->id)->count());
-        $clone1 = $this->agreementQueryForEvent($event->id)
-            ->where('status', 'draft')
-            ->first();
+        // Szablon bez klonu „w ciemno”
+        $this->assertEquals(1, $this->agreementQueryForEvent($event->id)->count());
+        $this->assertSame(0, $this->agreementQueryForEvent($event->id)->where('status', 'draft')->count());
 
-        $this->assertNotNull($clone1);
-        $this->assertEquals('draft', $clone1->status);
-        $this->assertNotSame($templateToken, $clone1->public_token);
-        $this->assertEquals($templateAgreement->id, $clone1->meta['parent_template_id']);
-        $this->assertEquals(500.00, $clone1->amount_due);
-
-        // Drugi uczestnik wchodzi w ten sam szablon
         $response2 = $this->get(route('agreement.flow.show', ['token' => $templateToken]));
-        $this->assertEquals(302, $response2->getStatusCode()); // Redirect
-
-        // Teraz są trzy umowy: szablon + dwa klony
-        $this->assertEquals(3, $this->agreementQueryForEvent($event->id)->count());
-
-        $clone2 = $this->agreementQueryForEvent($event->id)
-            ->where('status', 'draft')
-            ->where('id', '!=', $clone1->id)
-            ->first();
-
-        $this->assertNotNull($clone2);
-        $this->assertNotSame($templateToken, $clone2->public_token);
-        $this->assertNotSame($clone1->public_token, $clone2->public_token);
-        $this->assertEquals($templateAgreement->id, $clone2->meta['parent_template_id']);
+        $response2->assertSuccessful();
+        $this->assertEquals(1, $this->agreementQueryForEvent($event->id)->count());
     }
 
-    public function test_individual_template_clone_copies_attachments(): void
+    public function test_individual_template_clone_copies_attachments_on_personal_submit(): void
     {
         $this->withoutMiddleware();
 
@@ -632,11 +664,36 @@ class AgreementFlowTest extends TestCase
             'meta' => ['is_individual_template' => true, 'expected_participants' => 2],
         ]);
 
-        $this->get(route('agreement.flow.show', ['token' => $templateAgreement->public_token]))
-            ->assertRedirect();
+        $token = $templateAgreement->public_token;
+
+        $this->get(route('agreement.flow.show', ['token' => $token]))->assertSuccessful();
+        $this->assertSame(0, $this->agreementQueryForEvent($event->id)->where('status', '!=', 'template')->count());
+
+        $this->post(route('agreement.flow.plan', ['token' => $token]), [
+            'travel_insurance' => 'no',
+        ])->assertRedirect();
+
+        $this->post(route('agreement.flow.consents.store', ['token' => $token]), [
+            'consent_terms' => '1',
+            'consent_insurance' => '1',
+            'consent_data' => '1',
+            'consent_comm' => '1',
+        ])->assertRedirect();
+
+        $this->post(route('agreement.flow.personal.store', ['token' => $token]), [
+            'signer_name' => 'Rodzic Test',
+            'signer_email' => 'rodzic-zal@example.com',
+            'signer_phone' => '500111222',
+            'signer_address_street' => 'Testowa',
+            'signer_address_number' => '1',
+            'signer_postal_code' => '00-001',
+            'signer_city' => 'Warszawa',
+            'participant_name' => 'Uczestnik Test',
+            'participant_birth_date' => '2012-05-05',
+        ])->assertRedirect();
 
         $clone = $this->agreementQueryForEvent($event->id)
-            ->where('status', 'draft')
+            ->where('status', 'signed')
             ->where('id', '!=', $templateAgreement->id)
             ->first();
 

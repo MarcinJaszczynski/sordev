@@ -41,4 +41,11 @@ return [
         'secret_key' => env('CF_TURNSTILE_SECRET_KEY'),
     ],
 
+    // Fakturownia.pl — wystawianie FV VAT-marża z wniosków / SalesInvoice
+    'fakturownia' => [
+        'domain' => env('FAKTUROWNIA_DOMAIN'), // np. firma lub firma.fakturownia.pl
+        'token' => env('FAKTUROWNIA_API_TOKEN'),
+        'seller_tax_no' => env('FAKTUROWNIA_SELLER_TAX_NO', env('INVOICES_AGENCY_NIP')),
+    ],
+
 ];

@@ -41,7 +41,7 @@ class VendorInvoiceResource extends Resource
 
     protected static ?string $pluralModelLabel = 'Faktury kosztowe';
 
-    protected static ?int $navigationSort = 6;
+    protected static ?int $navigationSort = 5;
 
     protected static ?string $recordTitleAttribute = 'invoice_number';
 
@@ -85,7 +85,7 @@ class VendorInvoiceResource extends Resource
     public static function form(Form $form): Form
     {
         return $form->schema([
-            Forms\Components\Section::make('Identyfikacja')->columns(3)->schema([
+            Forms\Components\Section::make('Identyfikacja')->columns(['default' => 1, 'md' => 2, 'xl' => 3])->schema([
                 Forms\Components\TextInput::make('invoice_number')->label('Numer faktury'),
                 Forms\Components\TextInput::make('ksef_number')->label('Numer KSeF')->disabled(),
                 Forms\Components\TextInput::make('seller_name')->label('Wystawca'),
@@ -97,7 +97,7 @@ class VendorInvoiceResource extends Resource
                         ? new \Illuminate\Support\HtmlString('<a class="text-primary-600 underline" href="'.$record->pdf_url.'" target="_blank">Otwórz PDF</a>')
                         : 'Brak pliku PDF'),
             ]),
-            Forms\Components\Section::make('Kwoty i daty')->columns(3)->schema([
+            Forms\Components\Section::make('Kwoty i daty')->columns(['default' => 1, 'md' => 2, 'xl' => 3])->schema([
                 Forms\Components\TextInput::make('net_amount')->label('Netto')->numeric()->prefix('PLN'),
                 Forms\Components\TextInput::make('vat_amount')->label('VAT')->numeric()->prefix('PLN'),
                 Forms\Components\TextInput::make('gross_amount')->label('Brutto')->numeric()->prefix('PLN'),
@@ -106,7 +106,7 @@ class VendorInvoiceResource extends Resource
                 Forms\Components\DatePicker::make('due_date')->label('Termin płatności'),
                 Forms\Components\DatePicker::make('received_date')->label('Data wpływu'),
             ]),
-            Forms\Components\Section::make('Płatność')->columns(3)->schema([
+            Forms\Components\Section::make('Płatność')->columns(['default' => 1, 'md' => 2, 'xl' => 3])->schema([
                 Forms\Components\Select::make('payment_status')
                     ->label('Status płatności')
                     ->options(VendorInvoice::$paymentStatuses)
@@ -121,7 +121,7 @@ class VendorInvoiceResource extends Resource
                     ->prefix('PLN')
                     ->visible(fn (Forms\Get $get) => in_array($get('payment_status'), ['paid', 'partial'], true)),
             ]),
-            Forms\Components\Section::make('Przypisanie')->columns(2)->schema([
+            Forms\Components\Section::make('Przypisanie')->columns(['default' => 1, 'md' => 2])->schema([
                 Forms\Components\Select::make('contractor_id')
                     ->label('Kontrahent')
                     ->searchable()
@@ -135,6 +135,7 @@ class VendorInvoiceResource extends Resource
                     ->label('Impreza')
                     ->searchable()
                     ->live()
+                    ->afterStateUpdated(fn (Forms\Set $set) => $set('event_program_point_ids', []))
                     ->getSearchResultsUsing(fn (string $search) => Event::query()
                         ->where('code', 'like', "%{$search}%")
                         ->orWhere('name', 'like', "%{$search}%")
@@ -142,15 +143,21 @@ class VendorInvoiceResource extends Resource
                         ->get()
                         ->mapWithKeys(fn (Event $e) => [$e->id => "{$e->code} — {$e->name}"]))
                     ->getOptionLabelUsing(fn ($value) => optional(Event::find($value), fn (Event $e) => "{$e->code} — {$e->name}")),
-                Forms\Components\Select::make('event_program_point_id')
-                    ->label('Punkt programu')
+                Forms\Components\Select::make('event_program_point_ids')
+                    ->label('Punkty programu')
+                    ->multiple()
+                    ->searchable()
+                    ->helperText('Faktura może obejmować kilka punktów w imprezie (powiązanie dokumentacyjne).')
                     ->options(fn (Forms\Get $get) => EventProgramPoint::query()
                         ->where('event_id', $get('event_id'))
                         ->with('contractor')
+                        ->orderBy('day')
+                        ->orderBy('order')
                         ->get()
                         ->mapWithKeys(fn (EventProgramPoint $p) => [
                             $p->id => ($p->contractor?->name ?? $p->name ?? 'Punkt').' (dzień '.$p->day.')',
-                        ])),
+                        ]))
+                    ->dehydrated(false),
                 Forms\Components\Select::make('event_settlement_cost_id')
                     ->label('Koszt rozliczenia')
                     ->searchable()
@@ -263,7 +270,12 @@ class VendorInvoiceResource extends Resource
                         if ($record->sync_to_settlement) {
                             app(VendorInvoiceSettlementSync::class)->sync($record->fresh());
                         }
-                        if ($record->event_program_point_id) {
+                        $linkedPointIds = $record->fresh()->programPoints()->pluck('event_program_points.id')->all();
+                        if ($linkedPointIds === [] && $record->event_program_point_id) {
+                            $linkedPointIds = [(int) $record->event_program_point_id];
+                        }
+                        // Sync kwoty tylko przy jednym punkcie (bez auto-podziału).
+                        if (count($linkedPointIds) === 1) {
                             app(VendorInvoiceProgramPointSync::class)->sync($record->fresh());
                         }
                         Notification::make()->title('Faktura zaakceptowana')->success()->send();

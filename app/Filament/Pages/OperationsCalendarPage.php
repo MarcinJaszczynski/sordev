@@ -71,20 +71,31 @@ class OperationsCalendarPage extends Page
             Actions\Action::make('createTask')
                 ->label('Dodaj zadanie')
                 ->icon('heroicon-m-plus')
+                ->tooltip('Utwórz zadanie z terminem na wybrany dzień kalendarza.')
                 ->action(fn () => $this->mountAction('createTask')),
-            Action::make('calendarEntryContext')
-                ->modalHeading(fn (): string => (string) ($this->selectedCalendarEntry['title'] ?? 'Wpis kalendarza'))
-                ->modalContent(fn (): \Illuminate\Contracts\View\View => view(
-                    'filament.pages.partials.calendar-entry-links',
-                    ['links' => $this->selectedCalendarEntry['links'] ?? []],
-                ))
-                ->modalSubmitAction(false)
-                ->modalCancelActionLabel('Zamknij')
-                ->closeModalByClickingAway(true)
-                ->action(function (): void {
-                    $this->selectedCalendarEntry = null;
-                }),
         ];
+    }
+
+    /**
+     * Modal po kliknięciu wpisu kalendarza — skróty do powiązanych ekranów.
+     * Zarejestrowany jako metoda Action (nie w nagłówku), żeby nie pokazywać angielskiego przycisku.
+     */
+    public function calendarEntryContextAction(): Action
+    {
+        return Action::make('calendarEntryContext')
+            ->label('Powiązane miejsca')
+            ->modalHeading(fn (): string => (string) ($this->selectedCalendarEntry['title'] ?? 'Wpis kalendarza'))
+            ->modalDescription('Skróty do ekranów powiązanych z tym wpisem (impreza, finanse, dokumenty itd.).')
+            ->modalContent(fn (): \Illuminate\Contracts\View\View => view(
+                'filament.pages.partials.calendar-entry-links',
+                ['links' => $this->selectedCalendarEntry['links'] ?? []],
+            ))
+            ->modalSubmitAction(false)
+            ->modalCancelActionLabel('Zamknij')
+            ->closeModalByClickingAway(true)
+            ->action(function (): void {
+                $this->selectedCalendarEntry = null;
+            });
     }
 
     public function openCreateTaskModal(string $date): void

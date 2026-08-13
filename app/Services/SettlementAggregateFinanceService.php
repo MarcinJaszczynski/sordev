@@ -2,12 +2,14 @@
 
 namespace App\Services;
 
-use App\Filament\Forms\ProgramPointSettlementFinanceFields;
+use App\Actions\Finance\UpdateSettlementCostPlanAction;
+use App\Data\UpdateSettlementCostPlanData;
 use App\Models\Currency;
 use App\Models\Event;
 use App\Models\EventSettlement;
 use App\Models\EventSettlementCost;
 use App\Support\CurrencyAmountDisplay;
+use Carbon\Carbon;
 use Illuminate\Database\Eloquent\Builder;
 
 final class SettlementAggregateFinanceService
@@ -62,7 +64,7 @@ final class SettlementAggregateFinanceService
         $plannedAmountPln = $existingCost?->planned_amount_pln;
 
         if ($plannedAmountPln === null && $convertToPln) {
-            $plannedAmountPln = ProgramPointSettlementFinanceFields::isForeignCurrency($plannedCurrencyId)
+            $plannedAmountPln = CurrencyAmountDisplay::isForeignCurrency($plannedCurrencyId)
                 ? round($plannedAmount * $plannedRate, 2)
                 : round($plannedAmount, 2);
         }
@@ -201,33 +203,43 @@ final class SettlementAggregateFinanceService
         $plannedAmountPln = array_key_exists('settlement_planned_amount_pln', $data)
             ? ($data['settlement_planned_amount_pln'] === null || $data['settlement_planned_amount_pln'] === '' ? null : (float) $data['settlement_planned_amount_pln'])
             : (
-                ! ProgramPointSettlementFinanceFields::isForeignCurrency($plannedCurrencyId)
+                ! CurrencyAmountDisplay::isForeignCurrency($plannedCurrencyId)
                     ? round($plannedAmount, 2)
                     : ($plannedConvertToPln ? round($plannedAmount * $plannedRate, 2) : null)
             );
 
-        if ($plannedAmountPln === null && $plannedConvertToPln && ! ProgramPointSettlementFinanceFields::isForeignCurrency($plannedCurrencyId)) {
+        if ($plannedAmountPln === null && $plannedConvertToPln && ! CurrencyAmountDisplay::isForeignCurrency($plannedCurrencyId)) {
             $plannedAmountPln = round($plannedAmount, 2);
         }
 
-        $cost->update([
-            'planned_amount' => $plannedAmount,
-            'planned_currency_id' => $plannedCurrencyId,
-            'planned_convert_to_pln' => $plannedConvertToPln,
-            'planned_rate' => $plannedRate,
-            'planned_amount_pln' => $plannedAmountPln,
-            'paid_by' => $data['settlement_paid_by'] ?? $cost->paid_by,
-            'advance_type' => $data['settlement_advance_type'] ?? $cost->advance_type,
-            'payment_status' => $cost->payment_status,
-            'payment_method' => $data['settlement_payment_method'] ?? $cost->payment_method,
-            'notes' => $data['settlement_notes'] ?? $cost->notes,
-            'advance_amount' => array_key_exists('settlement_advance_amount', $data)
-                ? ($data['settlement_advance_amount'] === null || $data['settlement_advance_amount'] === '' ? null : (float) $data['settlement_advance_amount'])
-                : $cost->advance_amount,
-            'advance_due_date' => array_key_exists('settlement_payment_due_date', $data)
-                ? $data['settlement_payment_due_date']
-                : $cost->advance_due_date,
-        ]);
+        $dueDateRaw = array_key_exists('settlement_payment_due_date', $data)
+            ? $data['settlement_payment_due_date']
+            : $cost->advance_due_date;
+
+        $cost = app(UpdateSettlementCostPlanAction::class)(new UpdateSettlementCostPlanData(
+            planCost: $cost,
+            plannedAmountPln: (float) ($plannedAmountPln ?? 0),
+            paidBy: (string) ($data['settlement_paid_by'] ?? $cost->paid_by ?? 'office'),
+            notes: $data['settlement_notes'] ?? $cost->notes,
+            dueDate: filled($dueDateRaw) ? Carbon::parse($dueDateRaw) : null,
+            plannedAmount: $plannedAmount,
+            plannedCurrencyId: $plannedCurrencyId,
+            plannedConvertToPln: $plannedConvertToPln,
+            plannedRate: $plannedRate,
+            paymentMethod: $data['settlement_payment_method'] ?? $cost->payment_method,
+            advanceType: $data['settlement_advance_type'] ?? $cost->advance_type,
+        ));
+
+        $cost = $cost->fresh() ?? $cost;
+
+        // Keep advance_amount on the plan row when provided by aggregate form.
+        if (array_key_exists('settlement_advance_amount', $data)) {
+            $cost->update([
+                'advance_amount' => $data['settlement_advance_amount'] === null || $data['settlement_advance_amount'] === ''
+                    ? null
+                    : (float) $data['settlement_advance_amount'],
+            ]);
+        }
 
         $existingAdvanceRow = $settlement->costs()
             ->where('source_type', $paymentSourceType)
@@ -248,7 +260,7 @@ final class SettlementAggregateFinanceService
         $advancePaidAmountPln = filled($data['settlement_advance_paid_amount_pln'] ?? null)
             ? (float) $data['settlement_advance_paid_amount_pln']
             : ($advancePaidAmount > 0
-                ? (ProgramPointSettlementFinanceFields::isForeignCurrency($advancePaidCurrencyId)
+                ? (CurrencyAmountDisplay::isForeignCurrency($advancePaidCurrencyId)
                     ? round($advancePaidAmount * $advancePaidRate, 2)
                     : round($advancePaidAmount, 2))
                 : null);
@@ -278,7 +290,9 @@ final class SettlementAggregateFinanceService
                 'actual_amount_pln' => $advancePaidAmountPln,
                 'paid_by' => $data['settlement_advance_paid_by'] ?? $cost->paid_by ?? 'office',
                 'advance_type' => $data['settlement_advance_type'] ?? 'advance',
-                'payment_method' => $data['settlement_advance_payment_method'] ?? null,
+                'payment_method' => (($data['settlement_advance_paid_by'] ?? $cost->paid_by ?? 'office') === 'pilot')
+                    ? 'cash'
+                    : ($data['settlement_advance_payment_method'] ?? null),
                 'document_number' => $advanceDocumentNumber,
                 'paid_at' => $advancePaidAt,
                 'payment_status' => $advanceStatus,
@@ -331,7 +345,7 @@ final class SettlementAggregateFinanceService
                 $actualAmountPln = filled($entry['actual_amount_pln'] ?? null)
                     ? (float) $entry['actual_amount_pln']
                     : ($actualAmount !== null
-                        ? (ProgramPointSettlementFinanceFields::isForeignCurrency($actualCurrencyId)
+                        ? (CurrencyAmountDisplay::isForeignCurrency($actualCurrencyId)
                             ? round($actualAmount * max(0, $actualRate), 2)
                             : round($actualAmount, 2))
                         : null);
@@ -350,8 +364,10 @@ final class SettlementAggregateFinanceService
                     'actual_rate' => $actualRate,
                     'actual_amount_pln' => $actualAmountPln,
                     'paid_by' => $entry['paid_by'] ?? 'office',
-                    'advance_type' => $cost->advance_type ?? 'full',
-                    'payment_method' => $entry['payment_method'] ?? null,
+                    'advance_type' => EventSettlementCost::normalizeUserAdvanceType($entry['advance_type'] ?? null),
+                    'payment_method' => (($entry['paid_by'] ?? 'office') === 'pilot')
+                        ? 'cash'
+                        : ($entry['payment_method'] ?? null),
                     'document_number' => $entry['document_number'] ?? null,
                     'paid_at' => $entry['paid_at'] ?? null,
                     'payment_status' => (filled($entry['paid_at'] ?? null) || $actualAmount !== null) ? 'paid' : 'planned',
@@ -409,6 +425,7 @@ final class SettlementAggregateFinanceService
         $remainingForeign = max(0, $plannedAmount - $paidForeign);
 
         $settlement->recalculateTotals();
+        app(\App\Services\PilotSettlementService::class)->refreshCashFromCosts($settlement);
         $cost->loadMissing('plannedCurrency');
 
         return [
@@ -446,17 +463,20 @@ final class SettlementAggregateFinanceService
             ->get() ?? collect();
 
         $paidPln = (float) $paymentRows
-            ->where('payment_status', '!=', 'cancelled')
+            ->filter(fn (EventSettlementCost $row): bool => SettlementPaymentHealthService::isBookedPaymentStatus($row->payment_status))
             ->sum(fn (EventSettlementCost $row) => (float) ($row->actual_amount_pln ?? 0));
 
         $plannedPln = $cost->planned_amount_pln !== null ? (float) $cost->planned_amount_pln : (float) ($cost->planned_amount ?? 0);
-        $remaining = max(0, $plannedPln - $paidPln);
+        $remaining = SettlementPaymentHealthService::remainingPln($paidPln, $plannedPln);
 
-        $status = match ($cost->payment_status) {
-            'paid' => 'Opłacone',
-            'partially_paid' => 'Częściowo',
-            'advance_paid', 'advance_required' => 'Zaliczka',
-            default => 'Planowane',
+        $status = match (true) {
+            $plannedPln <= SettlementPaymentHealthService::TOLERANCE => 'Brak planu',
+            SettlementPaymentHealthService::isFullyPaid($paidPln, $plannedPln) => 'Opłacone',
+            SettlementPaymentHealthService::isPartiallyPaid($paidPln, $plannedPln)
+                && in_array($cost->payment_status, ['advance_paid', 'advance_required'], true) => 'Zaliczka',
+            SettlementPaymentHealthService::isPartiallyPaid($paidPln, $plannedPln) => 'Częściowo',
+            $cost->payment_status === 'advance_required' => 'Wymaga zaliczki',
+            default => 'Do zapłaty',
         };
 
         return [

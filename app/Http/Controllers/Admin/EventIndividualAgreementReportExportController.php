@@ -13,6 +13,8 @@ class EventIndividualAgreementReportExportController extends Controller
 {
     public function __invoke(Request $request, Event $event, string $format): BinaryFileResponse
     {
+        \Illuminate\Support\Facades\Gate::authorize('view', $event);
+
         abort_unless(in_array($format, ['csv', 'xlsx'], true), 404);
 
         $writerType = $format === 'xlsx'

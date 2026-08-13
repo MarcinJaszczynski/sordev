@@ -28,4 +28,13 @@ final class BankPaymentImportEventScope
 
         return false;
     }
+
+    /** Linia bez żadnego przypisania — widoczna w panelu imprezy do ręcznego dopasowania. */
+    public static function isUnassigned(BankPaymentImportLine $line): bool
+    {
+        return $line->match_status === 'unmatched'
+            && blank($line->event_id)
+            && blank($line->contract_id)
+            && blank($line->participant_payment_id);
+    }
 }

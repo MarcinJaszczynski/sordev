@@ -102,7 +102,7 @@ class ContractOrderingPartyFields
                         ->rows(2)
                         ->columnSpanFull(),
                 ])
-                ->columns(2)
+                ->columns(['default' => 1, 'md' => 2])
                 ->minItems(1)
                 ->defaultItems(1)
                 ->addActionLabel('Dodaj zamawiającego')

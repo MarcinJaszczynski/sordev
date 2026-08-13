@@ -38,6 +38,16 @@ class ContractorType extends Model
         return ['hotel'];
     }
 
+    /**
+     * Typ kontrahenta używany jako zamawiający / klient imprezy.
+     *
+     * @return array<int, string>
+     */
+    public static function clientTypeNames(): array
+    {
+        return ['klient'];
+    }
+
     public static function idForName(string $name): ?int
     {
         $ids = static::idsForNames([$name]);
@@ -76,9 +86,17 @@ class ContractorType extends Model
             ->values()
             ->all();
 
-        static::$idsForNamesCache[$cacheKey] = $ids;
+        self::$idsForNamesCache[$cacheKey] = $ids;
 
         return $ids;
+    }
+
+    /**
+     * Czyści cache ID typów — wymagane między testami (RefreshDatabase + static).
+     */
+    public static function clearIdsForNamesCache(): void
+    {
+        self::$idsForNamesCache = [];
     }
 
     public function contractors()

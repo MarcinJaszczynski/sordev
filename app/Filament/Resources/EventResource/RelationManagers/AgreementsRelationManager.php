@@ -5,16 +5,15 @@ namespace App\Filament\Resources\EventResource\RelationManagers;
 use App\Filament\Forms\ContractCustomAgreementFields;
 use App\Filament\Forms\ContractGroupPricingFields;
 use App\Filament\Forms\ContractOrderingPartyFields;
+use App\Filament\Resources\EventResource;
 use App\Filament\Resources\EventResource\RelationManagers\Concerns\ManagesContractAttachments;
 use App\Filament\Resources\EventResource\RelationManagers\Concerns\ManagesContractOrderingParties;
 use App\Filament\Resources\EventResource\RelationManagers\Concerns\ManagesContractPaymentSchedules;
 use App\Models\ContractTemplate;
-use App\Models\Event;
 use App\Models\EventAgreement;
 use App\Models\EventSettlementParticipantPayment;
 use App\Services\AgreementPaymentSyncService;
 use App\Services\ContractOrderingPartyService;
-use App\Services\NotificationService;
 use Filament\Forms;
 use Filament\Forms\Form;
 use Filament\Forms\Get;
@@ -26,6 +25,11 @@ use Filament\Tables;
 use Filament\Tables\Table;
 use Illuminate\Support\Facades\Schema;
 
+/**
+ * @deprecated Legacy UI umów. Kanon: {@see ContractsRelationManager} (tabela `contracts`).
+ * Ładowany tylko gdy brak tabeli contracts — patrz ManageEventContracts.
+ * Gdy tabela `contracts` istnieje, RM jest read-only (freeze tworzenia/edycji).
+ */
 class AgreementsRelationManager extends RelationManager
 {
     use ManagesContractAttachments;
@@ -34,19 +38,26 @@ class AgreementsRelationManager extends RelationManager
 
     protected static string $relationship = 'agreements';
 
-    protected static ?string $title = 'Umowy i płatności';
+    protected static ?string $title = 'Umowy i płatności (legacy)';
 
     protected static ?string $recordTitleAttribute = 'agreement_number';
+
+    public function isReadOnly(): bool
+    {
+        return Schema::hasTable('contracts');
+    }
 
     public function form(Form $form): Form
     {
         return $form->schema([
             Forms\Components\Section::make('Podstawowe dane umowy')
-                ->columns(2)
+                ->columns(['default' => 1, 'md' => 2])
                 ->schema([
                     Forms\Components\Select::make('contract_template_id')
                         ->label('Szablon umowy')
-                        ->options(fn () => ContractTemplate::orderBy('name')->pluck('name', 'id')->all())
+                        ->options(fn (Get $get): array => ContractTemplate::optionsForSelect(
+                            $get('agreement_type') ?? EventAgreement::TYPE_GROUP,
+                        ))
                         ->searchable()
                         ->nullable()
                         ->live()
@@ -112,7 +123,7 @@ class AgreementsRelationManager extends RelationManager
                 ]),
 
             Forms\Components\Section::make('Dane imprezy')
-                ->columns(2)
+                ->columns(['default' => 1, 'md' => 2])
                 ->schema([
                     Forms\Components\TextInput::make('event_name')
                         ->label('Nazwa imprezy')
@@ -147,7 +158,7 @@ class AgreementsRelationManager extends RelationManager
                 ->schema(ContractOrderingPartyFields::schema()),
 
             Forms\Components\Section::make('Płatność')
-                ->columns(2)
+                ->columns(['default' => 1, 'md' => 2])
                 ->schema([
                     Forms\Components\TextInput::make('amount_due')
                         ->label('Kwota do zapłaty')
@@ -348,68 +359,12 @@ class AgreementsRelationManager extends RelationManager
             ])
             ->headerActions([
                 Tables\Actions\Action::make('edit_event_insurance')
-                    ->label('Ubezpieczenie imprezy')
+                    ->label('Ubezpieczenie')
                     ->icon('heroicon-o-shield-check')
                     ->color(fn (): string => $this->getOwnerRecord()->hasInsuranceDataSaved() ? 'success' : 'danger')
-                    ->visible(fn (): bool => Schema::hasColumn('events', 'insurance_policy_number'))
-                    ->form([
-                        Forms\Components\TextInput::make('insurance_policy_number')
-                            ->label('Nr polisy')
-                            ->maxLength(255),
-
-                        Forms\Components\Select::make('insurance_status')
-                            ->label('Status ubezpieczenia')
-                            ->options(Event::getInsuranceStatusOptions())
-                            ->default('pending')
-                            ->required(),
-
-                        Forms\Components\Select::make('insurance_payment_status')
-                            ->label('Status płatności ubezpieczenia')
-                            ->options(Event::getInsurancePaymentStatusOptions())
-                            ->default('pending')
-                            ->required(),
-
-                        Forms\Components\TextInput::make('insurance_amount')
-                            ->label('Kwota ubezpieczenia')
-                            ->numeric()
-                            ->suffix('PLN')
-                            ->nullable(),
-
-                        Forms\Components\DateTimePicker::make('insurance_paid_at')
-                            ->label('Data płatności')
-                            ->native(false)
-                            ->nullable(),
-
-                        Forms\Components\FileUpload::make('insurance_document_path')
-                            ->label('Dokument ubezpieczenia do wgrania')
-                            ->disk('public')
-                            ->directory('event-insurance')
-                            ->downloadable()
-                            ->openable()
-                            ->acceptedFileTypes(['application/pdf', 'image/png', 'image/jpeg', 'image/webp'])
-                            ->nullable(),
-
-                        Forms\Components\Textarea::make('insurance_terms')
-                            ->label('Warunki ubezpieczenia')
-                            ->rows(4)
-                            ->columnSpanFull(),
-                    ])
-                    ->fillForm(fn (): array => $this->resolveInsuranceFormDefaults())
-                    ->action(function (array $data): void {
-                        $event = $this->getOwnerRecord();
-                        $event->updateInsuranceFromFormData($data);
-                        $event->refresh();
-
-                        if ($userId = auth()->id()) {
-                            NotificationService::clearCacheForUser($userId);
-                        }
-
-                        Notification::make()
-                            ->title('Zapisano dane ubezpieczenia')
-                            ->body($event->insuranceSaveSummary())
-                            ->success()
-                            ->send();
-                    }),
+                    ->visible(fn (): bool => Schema::hasColumn('events', 'insurance_policy_number')
+                        && $this->getOwnerRecord()->requiresInsuranceWorkflow())
+                    ->url(fn (): string => EventResource::getUrl('day-insurances', ['record' => $this->getOwnerRecord()])),
 
                 Tables\Actions\Action::make('individual_agreements_report')
                     ->label('Raport umów indywidualnych')
@@ -456,7 +411,7 @@ class AgreementsRelationManager extends RelationManager
                     ->form([
                         Forms\Components\Select::make('contract_template_id')
                             ->label('Szablon umowy')
-                            ->options(fn () => ContractTemplate::orderBy('name')->pluck('name', 'id')->all())
+                            ->options(fn (): array => ContractTemplate::optionsForSelect(EventAgreement::TYPE_GROUP))
                             ->searchable()
                             ->nullable(),
 
@@ -557,7 +512,7 @@ class AgreementsRelationManager extends RelationManager
                     ->form([
                         Forms\Components\Select::make('contract_template_id')
                             ->label('Szablon umowy')
-                            ->options(fn () => ContractTemplate::orderBy('name')->pluck('name', 'id')->all())
+                            ->options(fn (): array => ContractTemplate::optionsForSelect(EventAgreement::TYPE_INDIVIDUAL))
                             ->searchable()
                             ->nullable(),
 
@@ -826,21 +781,6 @@ class AgreementsRelationManager extends RelationManager
                 return [$payment->id => $label];
             })
             ->all();
-    }
-
-    protected function resolveInsuranceFormDefaults(): array
-    {
-        $event = $this->getOwnerRecord();
-
-        return [
-            'insurance_policy_number' => $event->insurance_policy_number,
-            'insurance_status' => $event->insurance_status ?: 'pending',
-            'insurance_payment_status' => $event->insurance_payment_status ?: 'pending',
-            'insurance_amount' => $event->insurance_amount,
-            'insurance_paid_at' => $event->insurance_paid_at,
-            'insurance_document_path' => $event->insurance_document_path,
-            'insurance_terms' => $event->insurance_terms,
-        ];
     }
 
     protected function resolveAgreementDefaultsFromEvent(): array

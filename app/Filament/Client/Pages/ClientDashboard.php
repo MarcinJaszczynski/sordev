@@ -4,6 +4,7 @@ namespace App\Filament\Client\Pages;
 
 use App\Filament\Client\Resources\ClientEventResource;
 use App\Http\Middleware\ClientPreviewMiddleware;
+use App\Services\ClientAccessService;
 use Filament\Pages\Dashboard as BaseDashboard;
 use Illuminate\Support\Facades\Auth;
 
@@ -15,19 +16,16 @@ class ClientDashboard extends BaseDashboard
 
     protected static ?string $title = 'Portal klienta';
 
+    protected static string $view = 'filament.client.pages.client-dashboard';
+
     public function getColumns(): int|string|array
     {
         return 1;
     }
 
-    protected function getHeaderActions(): array
+    public function getWidgets(): array
     {
-        return [
-            \Filament\Actions\Action::make('all_trips')
-                ->label('Wszystkie wycieczki')
-                ->url(ClientEventResource::getUrl('index'))
-                ->icon('heroicon-o-map'),
-        ];
+        return [];
     }
 
     public static function canAccess(): bool
@@ -42,5 +40,26 @@ class ClientDashboard extends BaseDashboard
         }
 
         return $user->hasRole(['admin', 'super_admin', 'biuro']) && ClientPreviewMiddleware::isActive();
+    }
+
+    /**
+     * @return array{trips: \Illuminate\Support\Collection, allTripsUrl: string}
+     */
+    protected function getViewData(): array
+    {
+        $user = Auth::user();
+        $trips = $user
+            ? app(ClientAccessService::class)
+                ->visibleTripsQuery($user)
+                ->with(['eventTemplate', 'startPlace'])
+                ->orderByDesc('start_date')
+                ->limit(12)
+                ->get()
+            : collect();
+
+        return [
+            'trips' => $trips,
+            'allTripsUrl' => ClientEventResource::getUrl('index', panel: 'portal'),
+        ];
     }
 }

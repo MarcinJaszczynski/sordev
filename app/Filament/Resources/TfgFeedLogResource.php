@@ -21,11 +21,11 @@ class TfgFeedLogResource extends Resource
 
     protected static ?string $navigationIcon = 'heroicon-o-queue-list';
 
-    protected static ?string $navigationLabel = 'Logi TFG';
+    protected static ?string $navigationLabel = 'Dziennik TFG';
 
-    protected static ?string $modelLabel = 'Log feedu';
+    protected static ?string $modelLabel = 'Wpis dziennika feedu';
 
-    protected static ?string $pluralModelLabel = 'Logi feedów TFG';
+    protected static ?string $pluralModelLabel = 'Dziennik feedów TFG';
 
     protected static ?string $navigationGroup = FilamentNavigation::GROUP_FINANCE;
 
@@ -36,8 +36,8 @@ class TfgFeedLogResource extends Resource
         return $form->schema([
             Forms\Components\TextInput::make('feed_identifier')->label('Identyfikator feedu')->disabled(),
             Forms\Components\TextInput::make('operation_type')->label('Operacja')->disabled(),
-            Forms\Components\TextInput::make('sync_status')->label('Status sync')->disabled(),
-            Forms\Components\TextInput::make('async_status')->label('Status async')->disabled(),
+            Forms\Components\TextInput::make('sync_status')->label('Status synchronizacji')->disabled(),
+            Forms\Components\TextInput::make('async_status')->label('Status asynchroniczny')->disabled(),
             Forms\Components\Textarea::make('sync_errors_json')
                 ->label('Błędy sync')
                 ->formatStateUsing(fn (?TfgFeedLog $record) => json_encode($record?->sync_errors, JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE))

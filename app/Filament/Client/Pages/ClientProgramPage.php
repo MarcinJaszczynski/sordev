@@ -50,11 +50,12 @@ class ClientProgramPage extends Page
 
     protected function getViewData(): array
     {
-        $points = app(EventProgramPointOrderService::class)->pilotProgramPoints($this->event);
+        $points = app(EventProgramPointOrderService::class)->clientProgramPoints($this->event);
 
         return [
-            'event' => $this->event,
+            'event' => $this->event->loadMissing(['eventTemplate', 'startPlace']),
             'programPoints' => $points,
+            'coverUrl' => \App\Support\ClientPortalMedia::coverUrl($this->event),
             'archiveMessage' => app(ClientAccessService::class)->archiveMessage($this->event),
         ];
     }

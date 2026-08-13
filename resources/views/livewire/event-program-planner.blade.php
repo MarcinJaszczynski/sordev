@@ -105,7 +105,7 @@
                     </div>
 
                     {{-- Dzień + czasy --}}
-                    <div class="grid grid-cols-3 gap-3">
+                    <div class="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-3">
                         <div>
                             <label class="mb-1 block text-xs font-medium text-gray-700">Dzień</label>
                             <input
@@ -141,7 +141,7 @@
                         </div>
                     </div>
 
-                    <div class="grid grid-cols-2 gap-3">
+                    <div class="grid grid-cols-1 gap-3 sm:grid-cols-2">
                         <div>
                             <label class="mb-1 block text-xs font-medium text-gray-700">Data startu</label>
                             <input
@@ -308,7 +308,7 @@
                     </div>
 
                     {{-- Dzień + godziny --}}
-                    <div class="grid grid-cols-3 gap-3">
+                    <div class="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-3">
                         <div>
                             <label class="mb-1 block text-xs font-medium text-gray-700">Dzień</label>
                             <input
@@ -342,7 +342,7 @@
                         </div>
                     </div>
 
-                    <div class="grid grid-cols-2 gap-3">
+                    <div class="grid grid-cols-1 gap-3 sm:grid-cols-2">
                         <div>
                             <label class="mb-1 block text-xs font-medium text-gray-700">Data startu</label>
                             <input
@@ -375,7 +375,7 @@
                     @enderror
 
                     {{-- Cena, ilość, wielkość grupy --}}
-                    <div class="grid grid-cols-3 gap-3">
+                    <div class="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-3">
                         <div>
                             <label class="mb-1 block text-xs font-medium text-gray-700">Cena jedn. (PLN)</label>
                             <input

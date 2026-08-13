@@ -158,6 +158,62 @@ class PendingPaymentAggregatorTest extends TestCase
         $this->assertTrue($entries->contains(fn (array $row) => $row['type'] === 'vendor_invoice'));
     }
 
+    public function test_excludes_advance_paid_from_inbox(): void
+    {
+        $user = User::factory()->create();
+        $event = Event::factory()->create(['code' => 'TST-ADV']);
+        $settlement = EventSettlement::create([
+            'event_id' => $event->id,
+            'status' => 'active',
+            'created_by' => $user->id,
+        ]);
+
+        $cost = EventSettlementCost::create([
+            'settlement_id' => $settlement->id,
+            'source_type' => 'manual',
+            'name' => 'Zaliczka wpłacona',
+            'payment_status' => 'advance_paid',
+            'advance_due_date' => now()->addDays(2),
+            'planned_amount_pln' => 500,
+            'actual_amount_pln' => 200,
+            'paid_by' => 'office',
+            'advance_type' => 'advance',
+        ]);
+
+        $entries = app(PendingPaymentAggregator::class)->collect();
+
+        $this->assertFalse($entries->contains(fn (array $row) => $row['id'] === 'cost-'.$cost->id));
+    }
+
+    public function test_inbox_amount_uses_remaining_not_full_plan(): void
+    {
+        $user = User::factory()->create();
+        $event = Event::factory()->create(['code' => 'TST-REM']);
+        $settlement = EventSettlement::create([
+            'event_id' => $event->id,
+            'status' => 'active',
+            'created_by' => $user->id,
+        ]);
+
+        $cost = EventSettlementCost::create([
+            'settlement_id' => $settlement->id,
+            'source_type' => 'manual',
+            'name' => 'Hotel częściowo',
+            'payment_status' => 'partially_paid',
+            'advance_due_date' => now()->addDays(3),
+            'planned_amount_pln' => 1000,
+            'actual_amount_pln' => 400,
+            'paid_by' => 'office',
+            'advance_type' => 'advance',
+        ]);
+
+        $entries = app(PendingPaymentAggregator::class)->collect();
+        $row = $entries->first(fn (array $r) => $r['id'] === 'cost-'.$cost->id);
+
+        $this->assertNotNull($row);
+        $this->assertEquals(600.0, (float) $row['amount']);
+    }
+
     public function test_mark_completed_marks_settlement_cost_as_paid(): void
     {
         $user = User::factory()->create();

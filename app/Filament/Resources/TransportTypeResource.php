@@ -19,6 +19,10 @@ class TransportTypeResource extends Resource
 
     protected static ?string $navigationLabel = 'Rodzaj transportu';
 
+    protected static ?string $modelLabel = 'rodzaj transportu';
+
+    protected static ?string $pluralModelLabel = 'rodzaje transportu';
+
     protected static ?string $navigationGroup = FilamentNavigation::GROUP_SETTINGS;
 
     protected static ?int $navigationSort = 50;

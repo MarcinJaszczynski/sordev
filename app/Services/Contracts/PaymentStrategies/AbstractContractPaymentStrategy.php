@@ -100,9 +100,12 @@ abstract class AbstractContractPaymentStrategy implements ContractPaymentStrateg
         }
 
         $participantPayment->settlement()->associate($settlement);
-        $effectivePaidAmount = $participantPayment->exists
-            ? app(\App\Services\ParticipantPaymentLedgerService::class)->resolvedPaidAmount($participantPayment)
-            : round($paidAmount, 2);
+
+        $ledgerPaid = $participantPayment->exists
+            ? (float) app(\App\Services\ParticipantPaymentLedgerService::class)->resolvedPaidAmount($participantPayment)
+            : 0.0;
+        // Demo/flow ustawia amount_paid na umowie — ledger może jeszcze nie mieć wpisu.
+        $effectivePaidAmount = max($ledgerPaid, round($paidAmount, 2));
 
         $participantPayment->fill(array_merge([
             'participant_name' => $participantName,
@@ -116,6 +119,12 @@ abstract class AbstractContractPaymentStrategy implements ContractPaymentStrateg
             'notes' => 'Synchronizacja z umowy #'.$contract->id,
         ], $extra));
 
+        if ($contract->payment_status === 'paid' || $effectivePaidAmount >= round($dueAmount, 2)) {
+            $participantPayment->payment_status = 'paid';
+        } elseif ($effectivePaidAmount > 0) {
+            $participantPayment->payment_status = 'partial';
+        }
+
         $participantPayment->save();
 
         return $participantPayment;
@@ -123,11 +132,8 @@ abstract class AbstractContractPaymentStrategy implements ContractPaymentStrateg
 
     protected function linkContractToPayment(Contract $contract, EventSettlementParticipantPayment $participantPayment): void
     {
-        if ((int) $contract->participant_payment_id !== (int) $participantPayment->id) {
-            $contract->forceFill([
-                'participant_payment_id' => $participantPayment->id,
-            ])->saveQuietly();
-        }
+        app(\App\Services\ContractParticipantPaymentLinkService::class)
+            ->linkSingle($contract, $participantPayment, primary: true);
     }
 
     protected function defaultProgress(Contract $contract): array

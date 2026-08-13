@@ -5,6 +5,7 @@ namespace App\Models;
 use App\Models\Concerns\HasCustomAgreementContent;
 use App\Services\AgreementPaymentSyncService;
 use App\Services\AgreementTemplateRenderer;
+use App\Services\AgreementTransportPayloadResolver;
 use App\Services\ContractGroupPricingService;
 use App\Services\ContractOrderingPartyService;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
@@ -375,6 +376,12 @@ class EventAgreement extends Model
             $orderingInstitution = $orderingPartiesNames;
         }
 
+        $transport = app(AgreementTransportPayloadResolver::class)->forEvent(
+            $this->event,
+            $startDate,
+            $endDate,
+        );
+
         return [
             'agreement_number' => $this->agreement_number ?: ('UMOWA-'.$this->id),
             'agreement_date' => optional($this->agreement_date)->format('d.m.Y') ?: now()->format('d.m.Y'),
@@ -412,12 +419,12 @@ class EventAgreement extends Model
             'currency' => strtoupper((string) ($this->currency ?: 'PLN')),
             'travel_insurance' => $travelInsurance,
             'travel_insurance_label' => $travelInsuranceLabel,
-            'departure_place' => '—',
-            'departure_date' => $startDate ? $startDate->format('d.m.Y') : '—',
-            'departure_time' => '—',
-            'return_place' => '—',
-            'return_date' => $endDate ? $endDate->format('d.m.Y') : '—',
-            'return_time' => '—',
+            'departure_place' => $transport['departure_place'],
+            'departure_date' => $transport['departure_date'],
+            'departure_time' => $transport['departure_time'],
+            'return_place' => $transport['return_place'],
+            'return_date' => $transport['return_date'],
+            'return_time' => $transport['return_time'],
             'organizer_name' => (string) config('company.name', config('app.name', 'Organizator')),
             'organizer_address_line_1' => (string) config('company.address_line_1', '—'),
             'organizer_address_line_2' => (string) config('company.address_line_2', '—'),
@@ -428,6 +435,7 @@ class EventAgreement extends Model
             'unit_price' => number_format($groupPricingService->resolvedUnitPrice($this), 2, ',', ' '),
             'payment_scheme_label' => $groupPricingService->paymentSchemeLabel($this),
             'payment_schedule_text' => $groupPricingService->formatPaymentSchedulesText($this),
+            'custom_placeholder_values' => (array) data_get($this->meta ?? [], 'custom_placeholder_values', []),
         ];
     }
 }

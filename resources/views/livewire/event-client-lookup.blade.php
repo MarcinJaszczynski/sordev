@@ -46,6 +46,15 @@
                 <x-heroicon-m-magnifying-glass class="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400" />
             </div>
             <p class="mt-1 text-xs text-gray-500 dark:text-gray-400">Wpisz min. 3 znaki — wyniki pojawią się automatycznie.</p>
+            <label class="mt-2 inline-flex items-center gap-2 text-sm text-gray-700 dark:text-gray-300">
+                <input
+                    type="checkbox"
+                    wire:model.live="searchAll"
+                    class="rounded border-gray-400 text-primary-600 shadow-sm focus:ring-primary-500 dark:border-white/20 dark:bg-white/5"
+                />
+                Szukaj we wszystkich kontrahentach
+            </label>
+            <p class="mt-1 text-xs text-gray-500 dark:text-gray-400">Domyślnie tylko typ „klient”. Zaznacz, gdy firma ma źle przypisany typ.</p>
 
             @if ($showResults)
                 <div
@@ -115,6 +124,10 @@
             <div class="rounded-xl border border-dashed border-gray-300 p-4 dark:border-white/10">
                 <p class="mb-3 text-sm font-medium text-gray-800 dark:text-gray-100">Dane zamawiającego (ręcznie)</p>
                 <div class="grid gap-3 sm:grid-cols-2">
+                    <div class="sm:col-span-2">
+                        <label class="mb-1 block text-sm font-medium text-gray-700 dark:text-gray-200">Firma / instytucja</label>
+                        <input type="text" wire:model="companyName" class="fi-input block w-full rounded-lg border-gray-300 text-sm shadow-sm dark:border-white/10 dark:bg-white/5" />
+                    </div>
                     <div>
                         <label class="mb-1 block text-sm font-medium text-gray-700 dark:text-gray-200">Imię</label>
                         <input type="text" wire:model="firstName" class="fi-input block w-full rounded-lg border-gray-300 text-sm shadow-sm dark:border-white/10 dark:bg-white/5" />
@@ -131,12 +144,8 @@
                         <label class="mb-1 block text-sm font-medium text-gray-700 dark:text-gray-200">E-mail <span class="text-gray-500">(wymagany telefon lub e-mail)</span></label>
                         <input type="email" wire:model="email" class="fi-input block w-full rounded-lg border-gray-300 text-sm shadow-sm dark:border-white/10 dark:bg-white/5" />
                     </div>
-                    <div class="sm:col-span-2">
-                        <label class="mb-1 block text-sm font-medium text-gray-700 dark:text-gray-200">Firma / instytucja</label>
-                        <input type="text" wire:model="companyName" class="fi-input block w-full rounded-lg border-gray-300 text-sm shadow-sm dark:border-white/10 dark:bg-white/5" />
-                    </div>
                 </div>
-                <p class="mt-2 text-xs text-gray-500 dark:text-gray-400">Wymagany jest telefon lub e-mail. Imię, nazwisko i firma są opcjonalne.</p>
+                <p class="mt-2 text-xs text-gray-500 dark:text-gray-400">Wymagany jest telefon lub e-mail. Firma, imię i nazwisko są opcjonalne.</p>
                 <div class="mt-3 flex flex-wrap gap-2">
                     <x-filament::button type="button" wire:click="quickCreate" size="sm">
                         Użyj jako zamawiający

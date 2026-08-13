@@ -15,40 +15,51 @@ class TaskQueryFilters
 
     public const ARCHIVED_STATUS_NAMES = ['Zarchiwizowane'];
 
+    /** @var array<int, int>|null */
+    private static ?array $finishedStatusIds = null;
+
+    /** @var array<int, int>|null */
+    private static ?array $archivedStatusIds = null;
+
     /** @return array<int, int> */
     public static function finishedStatusIds(): array
     {
-        static $ids = null;
-
-        if (is_array($ids)) {
-            return $ids;
+        if (is_array(self::$finishedStatusIds)) {
+            return self::$finishedStatusIds;
         }
 
-        $ids = TaskStatus::query()
+        self::$finishedStatusIds = TaskStatus::query()
             ->whereIn('name', self::FINISHED_STATUS_NAMES)
             ->pluck('id')
             ->map(fn ($id): int => (int) $id)
             ->all();
 
-        return $ids;
+        return self::$finishedStatusIds;
     }
 
     /** @return array<int, int> */
     public static function archivedStatusIds(): array
     {
-        static $ids = null;
-
-        if (is_array($ids)) {
-            return $ids;
+        if (is_array(self::$archivedStatusIds)) {
+            return self::$archivedStatusIds;
         }
 
-        $ids = TaskStatus::query()
+        self::$archivedStatusIds = TaskStatus::query()
             ->whereIn('name', self::ARCHIVED_STATUS_NAMES)
             ->pluck('id')
             ->map(fn ($id): int => (int) $id)
             ->all();
 
-        return $ids;
+        return self::$archivedStatusIds;
+    }
+
+    /**
+     * Czyści cache ID statusów — wymagane między testami (RefreshDatabase + static).
+     */
+    public static function clearStatusIdCaches(): void
+    {
+        self::$finishedStatusIds = null;
+        self::$archivedStatusIds = null;
     }
 
     public static function archivedStatusId(): ?int
@@ -111,7 +122,7 @@ class TaskQueryFilters
     public static function applyOwnershipScope(Builder $query, string $scope, ?int $userId = null): Builder
     {
         return match ($scope) {
-            'assigned' => self::mine($query, $userId),
+            'assigned' => self::assignedTo($query, $userId),
             'authored' => self::authoredBy($query, $userId),
             default => $query,
         };

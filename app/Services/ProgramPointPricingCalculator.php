@@ -10,9 +10,11 @@ use App\Support\CurrencyAmountDisplay;
 /**
  * Jednolity algorytm wyceny punktu programu (szablon + impreza).
  *
- * group_size = 1  → cena × liczba płacących uczestników
- * group_size > 1  → cena × ⌈uczestnicy / group_size⌉ (cena za grupę)
+ * group_size = 1  → cena × qty (dla kosztów: płacący + gratis; dla ceny/os. klienta: tylko płacący)
+ * group_size > 1  → cena × ⌈qty / group_size⌉ (cena za grupę, np. 15 za 10 → 45 os. = 30)
  * group_size = 0  → cena × liczba sztuk (np. butelki alkoholu)
+ *
+ * Semantyka qty zależy od wywołującego (koszt vs cena klienta).
  */
 final class ProgramPointPricingCalculator
 {
@@ -49,6 +51,7 @@ final class ProgramPointPricingCalculator
             default => 'Cena za osobę',
         };
     }
+
     public static function normalizedGroupSize(?int $groupSize): int
     {
         $groupSize = (int) ($groupSize ?? 0);

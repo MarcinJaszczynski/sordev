@@ -2,7 +2,6 @@
 
 namespace App\Filament\Resources\EventSettlementResource\RelationManagers;
 
-use App\Filament\Resources\TaskResource;
 use App\Models\Currency;
 use App\Models\EventSettlementDocument;
 use App\Support\StoragePath;
@@ -27,7 +26,7 @@ class DocumentsRelationManager extends RelationManager
     {
         return $form->schema([
             Forms\Components\Section::make('Dokument')
-                ->columns(2)
+                ->columns(['default' => 1, 'md' => 2])
                 ->schema([
                     Forms\Components\Select::make('document_type')
                         ->label('Typ dokumentu')
@@ -115,7 +114,7 @@ class DocumentsRelationManager extends RelationManager
                             'driver' => 'PDF kierowcy',
                             'folder' => 'PDF teczki imprezy',
                         ])
-                        ->columns(2)
+                        ->columns(['default' => 1, 'md' => 2])
                         ->helperText('Wybierz, do których pakietów ten dokument może być dołączany.')
                         ->afterStateHydrated(function (Forms\Components\CheckboxList $component, $record) {
                             if (! $record) {

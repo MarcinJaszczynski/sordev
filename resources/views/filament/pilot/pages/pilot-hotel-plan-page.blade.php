@@ -30,13 +30,23 @@
                                     <span class="font-normal text-gray-600">— {{ $night['hotel_branch'] }}</span>
                                 @endif
                             </p>
-                            <p class="text-[11px] font-semibold uppercase tracking-wide text-gray-500">Adres podjazdu</p>
-                            <x-contractor-contact-meta
-                                :address="$night['hotel_address'] ?? null"
-                                :phone="$night['hotel_phone'] ?? null"
-                                :email="$night['hotel_email'] ?? null"
-                                class="mt-1 text-xs text-gray-600 dark:text-gray-300"
-                            />
+                            @if (! empty($night['hotel_address']) || ! empty($night['hotel_phone']) || ! empty($night['hotel_email']))
+                                <p class="mt-2 text-[11px] font-semibold uppercase tracking-wide text-gray-500">Adres / kontakt</p>
+                                <x-contractor-contact-meta
+                                    :address="$night['hotel_address'] ?? null"
+                                    :phone="$night['hotel_phone'] ?? null"
+                                    :email="$night['hotel_email'] ?? null"
+                                    class="mt-1 text-xs text-gray-600 dark:text-gray-300"
+                                />
+                            @else
+                                <p class="mt-2 text-xs text-amber-800 dark:text-amber-200">
+                                    Brak adresu hotelu — biuro musi przypisać hotel (kontrahenta) w planie noclegów.
+                                </p>
+                            @endif
+                        </div>
+                    @else
+                        <div class="mb-4 rounded-lg border border-dashed border-amber-300 bg-amber-50 px-3 py-2 text-sm text-amber-900 dark:border-amber-700 dark:bg-amber-950/30 dark:text-amber-100">
+                            Brak przypisanego hotelu na tę noc — uzupełnij w zakładce Hotele (biuro).
                         </div>
                     @endif
 

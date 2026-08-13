@@ -69,7 +69,7 @@ class ExecutiveProfitLossPage extends Page implements HasForms
                         ->options(['' => 'Wszystkie', ...EventSettlement::$statuses]),
                     TextInput::make('filterSearch')->label('Szukaj imprezy')->placeholder('Kod lub nazwa…'),
                 ])
-                ->columns(4)
+                ->columns(['default' => 1, 'md' => 2, 'xl' => 4])
                 ->statePath(''),
         ];
     }

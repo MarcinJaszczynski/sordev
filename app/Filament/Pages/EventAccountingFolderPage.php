@@ -28,6 +28,11 @@ class EventAccountingFolderPage extends Page implements HasForms
 
     protected static ?int $navigationSort = 12;
 
+    public static function shouldRegisterNavigation(): bool
+    {
+        return false;
+    }
+
     public ?int $eventId = null;
 
     public static function canAccess(): bool

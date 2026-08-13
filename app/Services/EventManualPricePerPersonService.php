@@ -6,7 +6,6 @@ use App\Models\Currency;
 use App\Models\Event;
 use App\Models\EventPricePerPerson;
 use App\Support\MoneyFormatter;
-use Illuminate\Support\Collection;
 
 class EventManualPricePerPersonService
 {
@@ -40,18 +39,15 @@ class EventManualPricePerPersonService
     /**
      * @return array<string, mixed>|null
      */
-    public function calculatedForEvent(Event $event, ?int $participantCount = null): ?array
+    public function calculatedForEvent(Event $event, ?int $participantCount = null, ?int $gratisCount = null): ?array
     {
         $count = max(1, (int) ($participantCount ?? $event->participant_count ?? 1));
+        $gratis = $gratisCount !== null
+            ? max(0, $gratisCount)
+            : max(0, $event->resolveGratisCountForParticipantCount($count));
 
         try {
-            $variant = $event->qtyVariants()
-                ->orderByRaw('ABS(qty - ?)', [$count])
-                ->first();
-
-            $calcQty = (int) ($variant?->qty ?? $count);
-
-            return EventCostCalculator::for($event)->calculate($calcQty);
+            return EventCostCalculator::for($event)->calculate($count, $gratis);
         } catch (\Throwable $e) {
             report($e);
 

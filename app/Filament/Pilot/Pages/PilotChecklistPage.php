@@ -2,6 +2,7 @@
 
 namespace App\Filament\Pilot\Pages;
 
+use App\Filament\Actions\HelpArticleAction;
 use App\Filament\Pilot\Concerns\AuthorizesPilotTrip;
 use App\Filament\Pilot\Concerns\HasPilotTripNav;
 use App\Models\Event;
@@ -39,7 +40,14 @@ class PilotChecklistPage extends Page
 
     public function getTitle(): string|Htmlable
     {
-        return 'Checklista: '.$this->event->name;
+        return 'Lista kontrolna: '.$this->event->name;
+    }
+
+    protected function getHeaderActions(): array
+    {
+        return [
+            HelpArticleAction::make('program-i-checklista', 'pilot'),
+        ];
     }
 
     public static function urlFor(Event $event): string

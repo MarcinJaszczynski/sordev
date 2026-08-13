@@ -122,7 +122,7 @@ class UserResource extends Resource
     {
         return $form->schema([
             Forms\Components\Section::make('Dane konta')
-                ->columns(2)
+                ->columns(['default' => 1, 'md' => 2])
                 ->schema([
                     Forms\Components\TextInput::make('name')
                         ->label('Imię i nazwisko')
@@ -167,7 +167,7 @@ class UserResource extends Resource
 
             Forms\Components\Section::make('Dane pilota')
                 ->description('Domyślnie każdy nowy użytkownik w tej sekcji jest pilotem.')
-                ->columns(2)
+                ->columns(['default' => 1, 'md' => 2])
                 ->schema([
                     Forms\Components\DatePicker::make('birth_date')
                         ->label('Data urodzenia')

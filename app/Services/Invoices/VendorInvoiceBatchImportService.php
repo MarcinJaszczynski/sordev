@@ -17,6 +17,7 @@ class VendorInvoiceBatchImportService
      *     matched: int,
      *     unmatched: int,
      *     pdf_attached: int,
+     *     batch_ids: array<int, int>,
      *     errors: array<int, string>
      * }
      */
@@ -33,6 +34,7 @@ class VendorInvoiceBatchImportService
             'matched' => 0,
             'unmatched' => 0,
             'pdf_attached' => 0,
+            'batch_ids' => [],
             'errors' => [],
         ];
 
@@ -68,8 +70,8 @@ class VendorInvoiceBatchImportService
     }
 
     /**
-     * @param  array{imported: int, matched: int, unmatched: int, errors: array<int, string>}  $source
-     * @param  array{imported: int, matched: int, unmatched: int, pdf_attached: int, errors: array<int, string>}  $target
+     * @param  array{imported?: int, matched?: int, unmatched?: int, batch_id?: int, errors?: array<int, string>}  $source
+     * @param  array{imported: int, matched: int, unmatched: int, pdf_attached: int, batch_ids: array<int, int>, errors: array<int, string>}  $target
      */
     private function merge(array &$target, array $source): void
     {
@@ -77,5 +79,9 @@ class VendorInvoiceBatchImportService
         $target['matched'] += $source['matched'] ?? 0;
         $target['unmatched'] += $source['unmatched'] ?? 0;
         $target['errors'] = array_merge($target['errors'], $source['errors'] ?? []);
+
+        if (! empty($source['batch_id'])) {
+            $target['batch_ids'][] = (int) $source['batch_id'];
+        }
     }
 }

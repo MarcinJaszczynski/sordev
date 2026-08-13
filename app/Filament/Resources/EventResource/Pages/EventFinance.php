@@ -4,34 +4,31 @@ declare(strict_types=1);
 
 namespace App\Filament\Resources\EventResource\Pages;
 
-use App\Actions\Finance\AttachSettlementCostDocumentAction;
-use App\Actions\Finance\RecordSettlementCostPaymentAction;
-use App\Actions\Finance\UpdateSettlementCostPlanAction;
-use App\Data\RecordSettlementCostPaymentData;
-use App\Data\UpdateSettlementCostPlanData;
+use App\Actions\Finance\ChangeSettlementCostPayerAction;
+use App\Data\ChangeSettlementCostPayerData;
+use App\Filament\Actions\HelpArticleAction;
 use App\Filament\Resources\EventResource;
 use App\Filament\Resources\EventResource\Concerns\HasEventFinanceSubNavigation;
 use App\Filament\Resources\EventResource\Concerns\InteractsWithEventRecord;
+use App\Filament\Resources\EventResource\Concerns\InteractsWithSettlementCostDrawer;
+use App\Models\Currency;
 use App\Models\EventSettlement;
 use App\Models\EventSettlementCost;
-use App\Models\EventSettlementCostGroup;
-use App\Models\EventSettlementDocument;
 use App\Services\EventFinanceOverviewService;
 use App\Services\EventSettlementCostGroupService;
 use App\Services\SettlementPaymentHealthService;
 use Filament\Actions;
 use Filament\Notifications\Notification;
 use Filament\Resources\Pages\Page;
-use Illuminate\Support\Carbon;
 use Livewire\Attributes\Computed;
 use Livewire\Attributes\Url;
-use Livewire\Features\SupportFileUploads\TemporaryUploadedFile;
 use Livewire\WithFileUploads;
 
 class EventFinance extends Page
 {
     use HasEventFinanceSubNavigation;
     use InteractsWithEventRecord;
+    use InteractsWithSettlementCostDrawer;
     use WithFileUploads;
 
     protected static string $resource = EventResource::class;
@@ -51,7 +48,18 @@ class EventFinance extends Page
     #[Url]
     public string $groupFilter = 'all';
 
-    public ?int $selectedCostId = null;
+    /** Domyślnie ukrywa pozycje z zerową kalkulacją, planem i zapłaconym. */
+    #[Url]
+    public bool $hideZero = true;
+
+    #[Url]
+    public string $search = '';
+
+    #[Url]
+    public string $sortBy = EventFinanceOverviewService::SORT_NAME;
+
+    #[Url]
+    public string $sortDir = 'asc';
 
     /** @var array<int, bool> */
     public array $collapsedGroups = [];
@@ -61,29 +69,13 @@ class EventFinance extends Page
 
     public ?string $bulkTargetGroupId = null;
 
+    public string $bulkPaidBy = 'office';
+
     public string $newGroupName = '';
 
     public ?int $renamingGroupId = null;
 
     public string $renameGroupName = '';
-
-    /** @var array<string, mixed> */
-    public array $paymentForm = [];
-
-    /** @var array<string, mixed> */
-    public array $planForm = [];
-
-    /** @var array<string, mixed> */
-    public array $documentForm = [];
-
-    /** @var array<int, TemporaryUploadedFile> */
-    public array $documentFiles = [];
-
-    public bool $showPaymentForm = false;
-
-    public bool $showPlanForm = false;
-
-    public bool $showDocumentForm = false;
 
     public static function shouldRegisterNavigation(array $parameters = []): bool
     {
@@ -114,20 +106,54 @@ class EventFinance extends Page
     {
         $this->record = $this->resolveRecord($record);
         abort_unless(static::getResource()::canEdit($this->getRecord()), 403);
-        $event = $this->getRecord();
-        $settlement = EventSettlement::findOrCreateActiveForEvent($event);
 
-        $hasPlanCosts = app(SettlementPaymentHealthService::class)
-            ->listPlanCosts($settlement->costs()->get())
-            ->isNotEmpty();
+        // GET nie tworzy settlementu — empty state + jawne „Utwórz rozliczenie”.
+        $settlement = EventSettlement::findActiveForEvent($this->getRecord());
+        if ($settlement) {
+            $hasPlanCosts = app(SettlementPaymentHealthService::class)
+                ->listPlanCosts($settlement->costs()->get())
+                ->isNotEmpty();
 
-        if (! $hasPlanCosts) {
-            $event->refreshActiveSettlementCosts();
+            if (! $hasPlanCosts) {
+                $this->getRecord()->refreshActiveSettlementCosts();
+            }
         }
 
-        $this->resetPaymentForm();
-        $this->resetPlanForm();
-        $this->resetDocumentForm();
+        $this->initializeSettlementCostDrawerForms();
+    }
+
+    protected function invalidateSettlementCostCaches(): void
+    {
+        unset($this->financeOverview, $this->selectedRow);
+    }
+
+    /**
+     * @return array<int, string>
+     */
+    #[Computed]
+    public function currencyOptions(): array
+    {
+        return Currency::query()
+            ->orderByRaw("CASE WHEN symbol = 'PLN' THEN 0 ELSE 1 END")
+            ->orderBy('name')
+            ->get()
+            ->mapWithKeys(fn (Currency $c): array => [
+                (int) $c->id => trim($c->name.' ('.$c->symbol.')'),
+            ])
+            ->all();
+    }
+
+    public function createSettlement(): void
+    {
+        $this->ensureSettlement();
+        $this->getRecord()->refreshActiveSettlementCosts();
+        unset($this->financeOverview, $this->selectedRow);
+
+        Notification::make()
+            ->title('Utworzono rozliczenie')
+            ->body('Możesz uzupełniać koszty, wpłaty i dokumenty.')
+            ->success()
+            ->send();
     }
 
     #[Computed]
@@ -143,7 +169,32 @@ class EventFinance extends Page
             $this->getRecord(),
             $this->filter,
             $groupFilter,
+            $this->hideZero,
+            $this->search,
+            $this->sortBy,
+            $this->sortDir,
         );
+    }
+
+    public function updatedSearch(): void
+    {
+        unset($this->financeOverview);
+    }
+
+    public function setSort(string $column): void
+    {
+        if (! in_array($column, EventFinanceOverviewService::$sortableColumns, true)) {
+            return;
+        }
+
+        if ($this->sortBy === $column) {
+            $this->sortDir = $this->sortDir === 'asc' ? 'desc' : 'asc';
+        } else {
+            $this->sortBy = $column;
+            $this->sortDir = 'asc';
+        }
+
+        unset($this->financeOverview);
     }
 
     public function setFilter(string $filter): void
@@ -158,6 +209,12 @@ class EventFinance extends Page
         unset($this->financeOverview);
     }
 
+    public function toggleHideZero(): void
+    {
+        $this->hideZero = ! $this->hideZero;
+        unset($this->financeOverview);
+    }
+
     public function toggleGroup(int $groupId): void
     {
         $this->collapsedGroups[$groupId] = ! ($this->collapsedGroups[$groupId] ?? false);
@@ -166,7 +223,7 @@ class EventFinance extends Page
     public function moveCostToGroup(int $costId, ?int $groupId): void
     {
         $cost = EventSettlementCost::query()->findOrFail($costId);
-        $settlement = EventSettlement::findOrCreateActiveForEvent($this->getRecord());
+        $settlement = $this->ensureSettlement();
         abort_unless((int) $cost->settlement_id === (int) $settlement->id, 403);
 
         app(\App\Services\EventSettlementCostGroupService::class)->moveCostToGroup(
@@ -186,7 +243,7 @@ class EventFinance extends Page
             return;
         }
 
-        $settlement = EventSettlement::findOrCreateActiveForEvent($this->getRecord());
+        $settlement = $this->ensureSettlement();
         app(\App\Services\EventSettlementCostGroupService::class)->createGroup($settlement, $name);
         $this->newGroupName = '';
         unset($this->financeOverview);
@@ -211,7 +268,7 @@ class EventFinance extends Page
         }
 
         $group = \App\Models\EventSettlementCostGroup::query()->findOrFail($this->renamingGroupId);
-        $settlement = EventSettlement::findOrCreateActiveForEvent($this->getRecord());
+        $settlement = $this->ensureSettlement();
         abort_unless((int) $group->settlement_id === (int) $settlement->id, 403);
 
         app(\App\Services\EventSettlementCostGroupService::class)->renameGroup($group, $name);
@@ -224,33 +281,71 @@ class EventFinance extends Page
     public function deleteGroup(int $groupId): void
     {
         $group = \App\Models\EventSettlementCostGroup::query()->findOrFail($groupId);
-        $settlement = EventSettlement::findOrCreateActiveForEvent($this->getRecord());
+        $settlement = $this->ensureSettlement();
         abort_unless((int) $group->settlement_id === (int) $settlement->id, 403);
 
-        app(\App\Services\EventSettlementCostGroupService::class)->deleteGroup($group);
+        try {
+            app(\App\Services\EventSettlementCostGroupService::class)->deleteGroup($group);
+        } catch (\Throwable $e) {
+            Notification::make()->title('Nie usunięto grupy')->body($e->getMessage())->danger()->send();
+
+            return;
+        }
+
         unset($this->financeOverview);
         Notification::make()->title('Usunięto grupę')->success()->send();
     }
 
-    public function openCost(int $costId): void
+    public function bulkReplaceInsuranceActual(): void
     {
-        $this->selectedCostId = $costId;
-        $this->showPaymentForm = false;
-        $this->showPlanForm = false;
-        $this->showDocumentForm = false;
-        $this->resetPaymentForm();
-        $this->resetDocumentForm();
-        $this->hydratePlanFormFromSelection();
-        unset($this->selectedRow);
-    }
+        $ids = array_map('intval', $this->selectedCostIds);
+        if ($ids === []) {
+            Notification::make()->title('Zaznacz pozycje ubezpieczeń')->warning()->send();
 
-    public function closeCost(): void
-    {
-        $this->selectedCostId = null;
-        $this->showPaymentForm = false;
-        $this->showPlanForm = false;
-        $this->showDocumentForm = false;
-        unset($this->selectedRow);
+            return;
+        }
+
+        $settlement = $this->ensureSettlement();
+        $plans = EventSettlementCost::query()
+            ->where('settlement_id', $settlement->id)
+            ->whereIn('id', $ids)
+            ->where('source_type', 'insurance_day')
+            ->get();
+
+        if ($plans->isEmpty()) {
+            Notification::make()->title('Brak zaznaczonych ubezpieczeń')->warning()->send();
+
+            return;
+        }
+
+        $replaced = 0;
+        $errors = [];
+        foreach ($plans as $plan) {
+            try {
+                app(\App\Actions\Finance\ReplaceInsuranceActualFromPlanAction::class)($plan, auth()->id());
+                $replaced++;
+            } catch (\Throwable $e) {
+                $errors[] = ($plan->name ?: '#'.$plan->id).': '.$e->getMessage();
+            }
+        }
+
+        $this->clearSelection();
+        unset($this->financeOverview, $this->selectedRow);
+
+        if ($replaced > 0) {
+            Notification::make()
+                ->title('Zastąpiono rzeczywiste ubezpieczenia')
+                ->body("Zaktualizowano pozycji: {$replaced}")
+                ->success()
+                ->send();
+        }
+        if ($errors !== []) {
+            Notification::make()
+                ->title('Część pozycji nie została zastąpiona')
+                ->body(implode("\n", array_slice($errors, 0, 5)))
+                ->warning()
+                ->send();
+        }
     }
 
     public function toggleCostSelection(int $costId): void
@@ -277,6 +372,46 @@ class EventFinance extends Page
     {
         $this->selectedCostIds = [];
         $this->bulkTargetGroupId = null;
+        $this->bulkPaidBy = 'office';
+    }
+
+    public function bulkChangePaidBy(): void
+    {
+        $ids = array_map('intval', $this->selectedCostIds);
+        if ($ids === []) {
+            Notification::make()->title('Zaznacz pozycje')->warning()->send();
+
+            return;
+        }
+
+        $paidBy = array_key_exists($this->bulkPaidBy, EventSettlementCost::$paidByOptions)
+            ? $this->bulkPaidBy
+            : 'office';
+
+        $settlement = $this->ensureSettlement();
+        $plans = EventSettlementCost::query()
+            ->where('settlement_id', $settlement->id)
+            ->whereIn('id', $ids)
+            ->get()
+            ->filter(fn (EventSettlementCost $cost): bool => ! EventSettlementCost::isPaymentSourceType($cost->source_type));
+
+        try {
+            $updated = app(ChangeSettlementCostPayerAction::class)->forMany($plans, $paidBy);
+        } catch (\Throwable $e) {
+            Notification::make()->title('Nie udało się zmienić płatnika')->body($e->getMessage())->danger()->send();
+
+            return;
+        }
+
+        $this->clearSelection();
+        unset($this->financeOverview, $this->selectedRow);
+
+        $label = EventSettlementCost::$paidByOptions[$paidBy] ?? $paidBy;
+        Notification::make()
+            ->title('Zaktualizowano płatnika')
+            ->body('Ustawiono „'.$label.'” dla '.$updated.' pozycji.')
+            ->success()
+            ->send();
     }
 
     public function bulkMoveToGroup(): void
@@ -293,7 +428,7 @@ class EventFinance extends Page
             ? null
             : (int) $target;
 
-        $settlement = EventSettlement::findOrCreateActiveForEvent($this->getRecord());
+        $settlement = $this->ensureSettlement();
         $service = app(EventSettlementCostGroupService::class);
 
         $moved = 0;
@@ -313,256 +448,27 @@ class EventFinance extends Page
         Notification::make()->title("Przeniesiono {$moved} pozycji")->success()->send();
     }
 
-    public function startAddDocument(): void
-    {
-        $this->resetDocumentForm();
-        $this->showDocumentForm = true;
-        $this->showPaymentForm = false;
-        $this->showPlanForm = false;
-    }
-
-    public function saveDocument(): void
-    {
-        $this->validate([
-            'documentFiles' => ['required', 'array', 'min:1'],
-            'documentFiles.*' => ['file', 'max:10240'],
-            'documentForm.document_type' => ['required', 'string'],
-        ], [], [
-            'documentFiles' => 'pliki',
-            'documentForm.document_type' => 'typ dokumentu',
-        ]);
-
-        if (! $this->selectedCostId) {
-            return;
-        }
-
-        $cost = EventSettlementCost::query()->findOrFail($this->selectedCostId);
-        $files = [];
-        foreach ($this->documentFiles as $file) {
-            if ($file instanceof TemporaryUploadedFile) {
-                $files[] = new \Illuminate\Http\UploadedFile(
-                    $file->getRealPath(),
-                    $file->getClientOriginalName(),
-                    $file->getMimeType(),
-                    null,
-                    true,
-                );
-            }
-        }
-
-        try {
-            app(AttachSettlementCostDocumentAction::class)(
-                planCost: $cost,
-                files: $files,
-                documentType: (string) ($this->documentForm['document_type'] ?? 'invoice'),
-                documentNumber: $this->documentForm['document_number'] ?? null,
-                notes: $this->documentForm['notes'] ?? null,
-            );
-        } catch (\Throwable $e) {
-            Notification::make()->title('Nie udało się dodać dokumentu')->body($e->getMessage())->danger()->send();
-
-            return;
-        }
-
-        $this->showDocumentForm = false;
-        $this->resetDocumentForm();
-        unset($this->financeOverview, $this->selectedRow);
-        Notification::make()->title('Dodano dokument')->success()->send();
-    }
-
-    public function deleteDocument(int $documentId): void
-    {
-        if (! $this->selectedCostId) {
-            return;
-        }
-
-        $cost = EventSettlementCost::query()->findOrFail($this->selectedCostId);
-        $document = EventSettlementDocument::query()->findOrFail($documentId);
-
-        try {
-            app(AttachSettlementCostDocumentAction::class)->delete($document, $cost);
-        } catch (\Throwable $e) {
-            Notification::make()->title('Nie udało się usunąć')->body($e->getMessage())->danger()->send();
-
-            return;
-        }
-
-        unset($this->financeOverview, $this->selectedRow);
-        Notification::make()->title('Usunięto dokument')->success()->send();
-    }
-
-    #[Computed]
-    public function selectedRow(): ?array
-    {
-        if (! $this->selectedCostId) {
-            return null;
-        }
-
-        $all = app(EventFinanceOverviewService::class)->forEvent(
-            $this->getRecord(),
-            EventFinanceOverviewService::FILTER_ALL,
-        );
-
-        foreach ($all['rows'] as $row) {
-            if ((int) $row['cost_id'] === (int) $this->selectedCostId) {
-                return $row;
-            }
-        }
-
-        return null;
-    }
-
-    public function startAddPayment(): void
-    {
-        $this->resetPaymentForm();
-        $this->showPaymentForm = true;
-        $this->showPlanForm = false;
-        $this->showDocumentForm = false;
-    }
-
-    public function startEditPlan(): void
-    {
-        $this->hydratePlanFormFromSelection();
-        $this->showPlanForm = true;
-        $this->showPaymentForm = false;
-        $this->showDocumentForm = false;
-    }
-
-    public function savePayment(): void
-    {
-        $this->validate([
-            'paymentForm.amount_pln' => ['required', 'numeric', 'min:0.01'],
-            'paymentForm.payment_method' => ['required', 'in:cash,transfer,card,other'],
-            'paymentForm.paid_by' => ['required', 'in:office,pilot'],
-            'paymentForm.advance_type' => ['required', 'in:advance,deposit,final,full'],
-        ], [], [
-            'paymentForm.amount_pln' => 'kwota',
-            'paymentForm.payment_method' => 'metoda',
-            'paymentForm.paid_by' => 'płatnik',
-            'paymentForm.advance_type' => 'rodzaj',
-        ]);
-
-        if (! $this->selectedCostId) {
-            return;
-        }
-
-        $cost = EventSettlementCost::query()->findOrFail($this->selectedCostId);
-        $form = $this->paymentForm;
-
-        try {
-            app(RecordSettlementCostPaymentAction::class)(new RecordSettlementCostPaymentData(
-                planCost: $cost,
-                amountPln: (float) $form['amount_pln'],
-                paymentMethod: (string) $form['payment_method'],
-                paidBy: (string) $form['paid_by'],
-                advanceType: (string) $form['advance_type'],
-                paidAt: filled($form['paid_at'] ?? null) ? Carbon::parse($form['paid_at']) : now(),
-                dueDate: filled($form['due_date'] ?? null) ? Carbon::parse($form['due_date']) : null,
-                documentNumber: $form['document_number'] ?? null,
-                notes: $form['notes'] ?? null,
-                paidByUserId: auth()->id(),
-            ));
-        } catch (\Throwable $e) {
-            Notification::make()->title('Nie udało się dodać wpłaty')->body($e->getMessage())->danger()->send();
-
-            return;
-        }
-
-        $this->showPaymentForm = false;
-        $this->resetPaymentForm();
-        unset($this->financeOverview, $this->selectedRow);
-        Notification::make()->title('Dodano wpłatę')->success()->send();
-    }
-
-    public function savePlan(): void
-    {
-        $this->validate([
-            'planForm.planned_amount_pln' => ['required', 'numeric', 'min:0'],
-            'planForm.paid_by' => ['required', 'in:office,pilot'],
-        ], [], [
-            'planForm.planned_amount_pln' => 'plan',
-            'planForm.paid_by' => 'płatnik',
-        ]);
-
-        if (! $this->selectedCostId) {
-            return;
-        }
-
-        $cost = EventSettlementCost::query()->findOrFail($this->selectedCostId);
-        $form = $this->planForm;
-
-        app(UpdateSettlementCostPlanAction::class)(new UpdateSettlementCostPlanData(
-            planCost: $cost,
-            plannedAmountPln: (float) $form['planned_amount_pln'],
-            paidBy: (string) $form['paid_by'],
-            notes: $form['notes'] ?? null,
-            dueDate: filled($form['due_date'] ?? null) ? Carbon::parse($form['due_date']) : null,
-        ));
-
-        $this->showPlanForm = false;
-        unset($this->financeOverview, $this->selectedRow);
-        Notification::make()->title('Zapisano plan')->success()->send();
-    }
-
     protected function getHeaderActions(): array
     {
         return [
+            HelpArticleAction::make('rozliczenie-imprezy'),
+            Actions\Action::make('add_manual_cost')
+                ->label('Dodaj wydatek')
+                ->icon('heroicon-o-plus')
+                ->color('primary')
+                ->action('startAddManualCost')
+                ->visible(fn (): bool => EventSettlement::findActiveForEvent($this->getRecord()) !== null),
+            Actions\Action::make('add_cost')
+                ->label('Koszt programu')
+                ->icon('heroicon-o-map')
+                ->color('gray')
+                ->action('startAddCost')
+                ->visible(fn (): bool => EventSettlement::findActiveForEvent($this->getRecord()) !== null),
             Actions\Action::make('full_calculation')
                 ->label('Pełna kalkulacja')
                 ->icon('heroicon-o-calculator')
                 ->color('gray')
                 ->url(fn (): string => EventResource::getUrl('calculation', ['record' => $this->record])),
-        ];
-    }
-
-    private function resetPaymentForm(): void
-    {
-        $this->paymentForm = [
-            'amount_pln' => null,
-            'advance_type' => 'advance',
-            'payment_method' => 'transfer',
-            'paid_by' => 'office',
-            'paid_at' => now()->format('Y-m-d'),
-            'due_date' => null,
-            'document_number' => null,
-            'notes' => null,
-        ];
-    }
-
-    private function resetPlanForm(): void
-    {
-        $this->planForm = [
-            'planned_amount_pln' => null,
-            'paid_by' => 'office',
-            'due_date' => null,
-            'notes' => null,
-        ];
-    }
-
-    private function resetDocumentForm(): void
-    {
-        $this->documentForm = [
-            'document_type' => 'invoice',
-            'document_number' => null,
-            'notes' => null,
-        ];
-        $this->documentFiles = [];
-    }
-
-    private function hydratePlanFormFromSelection(): void
-    {
-        $row = $this->selectedRow;
-        if (! $row) {
-            $this->resetPlanForm();
-
-            return;
-        }
-
-        $this->planForm = [
-            'planned_amount_pln' => $row['planned_pln'],
-            'paid_by' => $row['paid_by'] ?? 'office',
-            'due_date' => $row['next_due_label'] ?? null,
-            'notes' => $row['notes'] ?? null,
         ];
     }
 

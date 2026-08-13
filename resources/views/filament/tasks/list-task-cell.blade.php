@@ -40,15 +40,21 @@
         @if ($attachments->isNotEmpty())
             <div class="mt-0.5 space-y-0.5">
                 @foreach ($attachments as $attachment)
-                    <a
-                        href="{{ $attachment->download_url }}"
-                        target="_blank"
-                        rel="noopener"
-                        class="block text-[0.78rem] leading-snug text-primary-600 underline dark:text-primary-400"
-                        x-on:click.stop
-                    >
-                        {{ $attachment->filename }}
-                    </a>
+                    @php
+                        $path = (string) ($attachment->file_path ?? '');
+                        $fileExists = $path !== '' && \Illuminate\Support\Facades\Storage::disk('public')->exists($path);
+                    @endphp
+                    @if ($fileExists)
+                        <a
+                            href="{{ $attachment->download_url }}"
+                            target="_blank"
+                            rel="noopener"
+                            class="block text-[0.78rem] leading-snug text-primary-600 underline dark:text-primary-400"
+                            x-on:click.stop
+                        >
+                            {{ $attachment->filename }}
+                        </a>
+                    @endif
                 @endforeach
             </div>
         @endif

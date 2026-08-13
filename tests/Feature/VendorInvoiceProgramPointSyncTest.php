@@ -66,4 +66,55 @@ class VendorInvoiceProgramPointSyncTest extends TestCase
         $point->refresh();
         $this->assertEquals(100.0, (float) $point->paid_price);
     }
+
+    public function test_unpaid_invoice_does_not_increase_paid_price(): void
+    {
+        $user = User::factory()->create();
+        $event = Event::factory()->create(['client_name' => 'Test']);
+        $point = EventProgramPoint::create([
+            'event_id' => $event->id,
+            'name' => 'Muzeum',
+            'day' => 1,
+            'order' => 1,
+            'unit_price' => 100,
+            'quantity' => 1,
+            'active' => true,
+            'include_in_calculation' => true,
+            'planned_price' => 100,
+            'paid_price' => 0,
+        ]);
+
+        Currency::create(['name' => 'PLN', 'symbol' => 'PLN', 'code' => 'PLN', 'exchange_rate' => 1]);
+
+        EventSettlement::create([
+            'event_id' => $event->id,
+            'status' => 'active',
+            'created_by' => $user->id,
+        ]);
+
+        $invoice = VendorInvoice::create([
+            'source' => 'test',
+            'invoice_number' => 'FV/TEST/UNPAID',
+            'gross_amount' => 100,
+            'currency' => 'PLN',
+            'event_id' => $event->id,
+            'event_program_point_id' => $point->id,
+            'matching_status' => 'manual',
+            'payment_status' => 'due',
+        ]);
+
+        app(VendorInvoiceProgramPointSync::class)->sync($invoice->fresh());
+
+        $point->refresh();
+        $this->assertEquals(0.0, (float) $point->paid_price);
+
+        $payment = $point->event->activeSettlement?->costs()
+            ->where('source_type', 'program_point_payment')
+            ->where('document_number', 'FV/TEST/UNPAID')
+            ->first();
+
+        $this->assertNotNull($payment);
+        $this->assertSame('planned', $payment->payment_status);
+        $this->assertNull($payment->actual_amount_pln);
+    }
 }

@@ -5,9 +5,9 @@ namespace App\Filament\Resources\TaskResource\Pages;
 use App\Filament\Concerns\MarksTaskInboxAsSeen;
 use App\Filament\Resources\TaskResource;
 use App\Models\Task;
-use App\Support\Tasks\TaskNavigation;
 use App\Support\Tasks\TaskAuthorization;
 use App\Support\Tasks\TaskContextRegistry;
+use App\Support\Tasks\TaskNavigation;
 use Filament\Actions;
 use Filament\Resources\Pages\EditRecord;
 use Illuminate\Support\Str;
@@ -18,9 +18,12 @@ class EditTask extends EditRecord
 
     protected static string $resource = TaskResource::class;
 
-    public function mount(int | string $record): void
+    public function mount(int|string $record): void
     {
-        $this->redirect(TaskNavigation::fullViewUrl((int) $record));
+        // Resolve record first so any incidental render has a Model, then deep-link to modal editor.
+        parent::mount($record);
+
+        $this->redirect(TaskNavigation::fullViewUrl($this->getRecord()));
     }
 
     public function getBreadcrumbs(): array

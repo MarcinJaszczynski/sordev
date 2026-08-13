@@ -52,10 +52,7 @@
                 @if(! $isChild)
                     <button type="button" wire:click="openAddChild({{ $point->id }})">Dodaj podpunkt</button>
                     <button type="button" wire:click="duplicatePoint({{ $point->id }})">Duplikuj</button>
-                    <a
-                        href="{{ \App\Support\Tasks\TaskNavigation::createUrl(\App\Models\EventProgramPoint::class, $point->id) }}"
-                        target="_blank"
-                    >Nowe zadanie</a>
+                    <button type="button" wire:click="openCreateTaskForPoint({{ $point->id }})">Nowe zadanie</button>
                 @else
                     <button type="button" wire:click="detachFromSet({{ $point->id }})" wire:confirm="Odpiąć od setu?">Odepnij od setu</button>
                 @endif

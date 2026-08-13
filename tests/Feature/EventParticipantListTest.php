@@ -158,6 +158,48 @@ class EventParticipantListTest extends TestCase
         ]);
     }
 
+    public function test_propagate_to_hotel_assigns_participants_on_each_night(): void
+    {
+        if (! Schema::hasTable('event_hotel_stays')) {
+            $this->markTestSkipped('Brak modułu planu noclegów.');
+        }
+
+        $event = Event::factory()->create(['duration_days' => 3, 'participant_count' => 2]);
+
+        foreach ([1, 2] as $day) {
+            $stay = EventHotelStay::create(['event_id' => $event->id, 'day' => $day]);
+            $room = HotelRoom::create([
+                'name' => 'Dwuosobowy '.$day,
+                'people_count' => 2,
+                'price' => 100,
+                'currency' => 'PLN',
+                'convert_to_pln' => true,
+            ]);
+            EventHotelRoomLine::create([
+                'event_hotel_stay_id' => $stay->id,
+                'hotel_room_id' => $room->id,
+                'role' => 'qty',
+                'quantity' => 1,
+                'unit_price' => 100,
+                'convert_to_pln' => true,
+                'order' => 0,
+            ]);
+        }
+
+        EventParticipant::create([
+            'event_id' => $event->id,
+            'first_name' => 'Anna',
+            'last_name' => 'Noc',
+            'source' => EventParticipant::SOURCE_MANUAL,
+            'status' => EventParticipant::STATUS_ACTIVE,
+        ]);
+
+        $result = app(EventParticipantPropagationService::class)->propagateToHotelPlan($event);
+
+        $this->assertSame(2, $result['assigned']);
+        $this->assertSame(2, \App\Models\EventHotelRoomOccupant::query()->where('name', 'Anna Noc')->count());
+    }
+
     public function test_participants_page_is_registered_in_event_workflow(): void
     {
         if (! Schema::hasTable('event_participants')) {
@@ -190,7 +232,10 @@ class EventParticipantListTest extends TestCase
             ->assertRedirect(\App\Filament\Resources\EventResource::getUrl('participant-portal', ['record' => $event->id]));
 
         $this->get(\App\Filament\Resources\EventResource::getUrl('settlement-payments', ['record' => $event->id]))
-            ->assertRedirect(\App\Filament\Resources\EventResource::getUrl('participant-payments', ['record' => $event->id]));
+            ->assertRedirect(\App\Filament\Resources\EventResource::getUrl('finance-participant-payments', ['record' => $event->id]));
+
+        $this->get(\App\Filament\Resources\EventResource::getUrl('participant-payments', ['record' => $event->id]))
+            ->assertRedirect(\App\Filament\Resources\EventResource::getUrl('finance-participant-payments', ['record' => $event->id]));
     }
 
     public function test_participant_payments_page_contains_bank_import_panel(): void
@@ -204,7 +249,7 @@ class EventParticipantListTest extends TestCase
         $admin->assignRole('admin');
         $this->actingAs($admin);
 
-        $this->get(\App\Filament\Resources\EventResource::getUrl('participant-payments', ['record' => $event->id]))
+        $this->get(\App\Filament\Resources\EventResource::getUrl('finance-participant-payments', ['record' => $event->id]))
             ->assertOk()
             ->assertSee('Millennium');
     }
@@ -220,19 +265,19 @@ class EventParticipantListTest extends TestCase
         $admin->assignRole('admin');
         $this->actingAs($admin);
 
-        $participantsPage = new \App\Filament\Resources\EventResource\Pages\ManageEventSettlementPayments;
-        $participantsPage->record = $event;
+        $paymentsPage = new \App\Filament\Resources\EventResource\Pages\EventFinanceParticipantPayments;
+        $paymentsPage->record = $event;
 
         $documentsPage = new \App\Filament\Resources\EventResource\Pages\ManageEventDocuments;
         $documentsPage->record = $event;
 
-        $participantsContext = $participantsPage->getWorkflowContext();
+        $paymentsContext = $paymentsPage->getWorkflowContext();
         $documentsContext = $documentsPage->getWorkflowContext();
 
-        $this->assertNotNull($participantsContext);
-        $this->assertSame($documentsContext['title'], $participantsContext['title']);
-        $this->assertSame($documentsContext['subtitle'], $participantsContext['subtitle']);
-        $this->assertSame($documentsContext['title_url'], $participantsContext['title_url']);
-        $this->assertNotNull($participantsContext['finance'] ?? null);
+        $this->assertNotNull($paymentsContext);
+        $this->assertSame($documentsContext['title'], $paymentsContext['title']);
+        $this->assertSame($documentsContext['subtitle'], $paymentsContext['subtitle']);
+        $this->assertSame($documentsContext['title_url'], $paymentsContext['title_url']);
+        $this->assertNotNull($paymentsContext['finance'] ?? null);
     }
 }

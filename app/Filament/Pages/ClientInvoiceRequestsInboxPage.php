@@ -2,14 +2,18 @@
 
 namespace App\Filament\Pages;
 
+use App\Filament\Forms\ClientInvoiceRequestFormFields;
 use App\Filament\Resources\EventResource;
 use App\Models\ClientInvoiceRequest;
 use App\Models\Event;
 use App\Services\ClientInvoiceRequestWorkflowService;
+use App\Support\ClientInvoiceRequestAdminHelper;
 use App\Support\FilamentNavigation;
 use App\Support\FinanceModuleNavigation;
 use App\Support\MoneyFormatter;
 use App\Support\OperationalListSort;
+use Filament\Actions;
+use Filament\Forms\Components\Select;
 use Filament\Forms\Components\Textarea;
 use Filament\Notifications\Notification;
 use Filament\Pages\Page;
@@ -18,6 +22,7 @@ use Filament\Tables\Concerns\InteractsWithTable;
 use Filament\Tables\Contracts\HasTable;
 use Filament\Tables\Table;
 use Illuminate\Database\Eloquent\Builder;
+use InvalidArgumentException;
 
 class ClientInvoiceRequestsInboxPage extends Page implements HasTable
 {
@@ -32,6 +37,11 @@ class ClientInvoiceRequestsInboxPage extends Page implements HasTable
     protected static ?string $navigationLabel = 'Wnioski o fakturę';
 
     protected static ?int $navigationSort = 7;
+
+    public static function shouldRegisterNavigation(): bool
+    {
+        return false;
+    }
 
     public static function canAccess(): bool
     {
@@ -48,6 +58,30 @@ class ClientInvoiceRequestsInboxPage extends Page implements HasTable
     public function getNavigationTabs(): array
     {
         return FinanceModuleNavigation::tabs('client-invoice-requests');
+    }
+
+    protected function getHeaderActions(): array
+    {
+        return [
+            Actions\Action::make('create_manual_request')
+                ->label('Nowy wniosek (ręcznie)')
+                ->icon('heroicon-o-plus')
+                ->color('primary')
+                ->modalHeading('Wniosek o fakturę — z palca')
+                ->modalDescription('Formularz dla biura — wybierz imprezę i dane nabywcy.')
+                ->modalIcon('heroicon-o-receipt-percent')
+                ->modalWidth('3xl')
+                ->modalSubmitActionLabel('Zapisz wniosek')
+                ->form(ClientInvoiceRequestFormFields::adminModalSchema())
+                ->action(function (array $data): void {
+                    ClientInvoiceRequestAdminHelper::createFromAdminForm($data);
+
+                    Notification::make()
+                        ->title('Utworzono wniosek o fakturę')
+                        ->success()
+                        ->send();
+                }),
+        ];
     }
 
     public function table(Table $table): Table
@@ -70,26 +104,40 @@ class ClientInvoiceRequestsInboxPage extends Page implements HasTable
                         'success' => ClientInvoiceRequest::STATUS_PROCESSED,
                         'danger' => ClientInvoiceRequest::STATUS_REJECTED,
                     ]),
+                Tables\Columns\BadgeColumn::make('source')
+                    ->label('Źródło')
+                    ->formatStateUsing(fn (?string $state): string => ClientInvoiceRequest::$sources[$state] ?? ($state ?: '—'))
+                    ->toggleable(),
                 Tables\Columns\TextColumn::make('company_name')
-                    ->label('Firma / klient')
+                    ->label('Nabywca')
                     ->searchable()
-                    ->description(fn (ClientInvoiceRequest $record): string => 'NIP: '.$record->nip),
+                    ->description(fn (ClientInvoiceRequest $record): string => trim(
+                        ($record->buyer_type_label)
+                        .($record->nip ? ' · NIP: '.$record->nip : '')
+                    )),
                 Tables\Columns\TextColumn::make('user.name')
                     ->label('Składający')
-                    ->description(fn (ClientInvoiceRequest $record): ?string => $record->user?->email)
-                    ->placeholder('—'),
+                    ->description(fn (ClientInvoiceRequest $record): ?string => $record->user?->email ?? $record->invoice_email)
+                    ->placeholder('WWW'),
                 Tables\Columns\TextColumn::make('event.code')
                     ->label('Impreza')
+                    ->placeholder(fn (ClientInvoiceRequest $record): string => $record->event_code_entered
+                        ? 'Kod: '.$record->event_code_entered.' (niepowiązana)'
+                        : '— niepowiązana —')
                     ->description(fn (ClientInvoiceRequest $record): ?string => $record->event?->name)
                     ->url(fn (ClientInvoiceRequest $record): ?string => $record->event_id
                         ? EventResource::getUrl('edit', ['record' => $record->event_id])
                         : null)
-                    ->searchable(query: fn (Builder $query, string $search): Builder => $query->whereHas(
-                        'event',
-                        fn (Builder $eventQuery): Builder => $eventQuery
-                            ->where('code', 'like', '%'.$search.'%')
-                            ->orWhere('name', 'like', '%'.$search.'%'),
-                    )),
+                    ->color(fn (ClientInvoiceRequest $record): ?string => $record->event_id ? null : 'danger')
+                    ->searchable(query: fn (Builder $query, string $search): Builder => $query->where(function (Builder $q) use ($search): void {
+                        $q->where('event_code_entered', 'like', '%'.$search.'%')
+                            ->orWhereHas(
+                                'event',
+                                fn (Builder $eventQuery): Builder => $eventQuery
+                                    ->where('code', 'like', '%'.$search.'%')
+                                    ->orWhere('name', 'like', '%'.$search.'%'),
+                            );
+                    })),
                 Tables\Columns\TextColumn::make('contract.title')
                     ->label('Umowa')
                     ->placeholder('—')
@@ -122,6 +170,9 @@ class ClientInvoiceRequestsInboxPage extends Page implements HasTable
                     ->label('Status')
                     ->options(ClientInvoiceRequest::$statuses)
                     ->default(ClientInvoiceRequest::STATUS_PENDING),
+                Tables\Filters\SelectFilter::make('source')
+                    ->label('Źródło')
+                    ->options(ClientInvoiceRequest::$sources),
                 Tables\Filters\SelectFilter::make('event_id')
                     ->label('Impreza')
                     ->searchable()
@@ -133,26 +184,68 @@ class ClientInvoiceRequestsInboxPage extends Page implements HasTable
                         ->mapWithKeys(fn (Event $event): array => [$event->id => "{$event->code} — {$event->name}"])
                         ->all())
                     ->getOptionLabelUsing(fn ($value): ?string => optional(Event::find($value), fn (Event $event): string => "{$event->code} — {$event->name}")),
+                Tables\Filters\TernaryFilter::make('unlinked')
+                    ->label('Bez imprezy')
+                    ->queries(
+                        true: fn (Builder $query): Builder => $query->whereNull('event_id'),
+                        false: fn (Builder $query): Builder => $query->whereNotNull('event_id'),
+                    ),
             ])
             ->actions([
+                Tables\Actions\Action::make('attachEvent')
+                    ->label('Powiąż z imprezą')
+                    ->icon('heroicon-o-link')
+                    ->color('gray')
+                    ->visible(fn (ClientInvoiceRequest $record): bool => $record->status === ClientInvoiceRequest::STATUS_PENDING)
+                    ->form([
+                        Select::make('event_id')
+                            ->label('Impreza')
+                            ->required()
+                            ->searchable()
+                            ->default(fn (ClientInvoiceRequest $record): ?int => $record->event_id)
+                            ->getSearchResultsUsing(fn (string $search): array => Event::query()
+                                ->where('code', 'like', "%{$search}%")
+                                ->orWhere('name', 'like', "%{$search}%")
+                                ->limit(30)
+                                ->get()
+                                ->mapWithKeys(fn (Event $event): array => [$event->id => "{$event->code} — {$event->name}"])
+                                ->all())
+                            ->getOptionLabelUsing(fn ($value): ?string => optional(Event::find($value), fn (Event $event): string => "{$event->code} — {$event->name}")),
+                    ])
+                    ->action(function (ClientInvoiceRequest $record, array $data): void {
+                        $event = Event::query()->findOrFail($data['event_id']);
+                        app(ClientInvoiceRequestWorkflowService::class)->attachEvent($record, $event);
+
+                        Notification::make()->title('Wniosek powiązany z imprezą '.$event->code)->success()->send();
+                    }),
                 Tables\Actions\Action::make('markProcessed')
                     ->label('Zrealizowany')
                     ->icon('heroicon-o-check-circle')
                     ->color('success')
                     ->visible(fn (ClientInvoiceRequest $record): bool => $record->status === ClientInvoiceRequest::STATUS_PENDING)
+                    ->disabled(fn (ClientInvoiceRequest $record): bool => ! $record->event_id)
+                    ->tooltip(fn (ClientInvoiceRequest $record): ?string => $record->event_id
+                        ? null
+                        : 'Najpierw powiąż wniosek z imprezą')
                     ->form([
                         Textarea::make('admin_notes')
                             ->label('Notatka wewnętrzna')
                             ->rows(2),
                     ])
                     ->action(function (ClientInvoiceRequest $record, array $data): void {
-                        app(ClientInvoiceRequestWorkflowService::class)->markProcessed(
-                            $record,
-                            auth()->user(),
-                            $data['admin_notes'] ?? null,
-                        );
+                        try {
+                            app(ClientInvoiceRequestWorkflowService::class)->markProcessed(
+                                $record,
+                                auth()->user(),
+                                $data['admin_notes'] ?? null,
+                            );
+                        } catch (InvalidArgumentException $e) {
+                            Notification::make()->title($e->getMessage())->danger()->send();
 
-                        Notification::make()->title('Wniosek zrealizowany — utworzono szkic FV VAT-Marża')->success()->send();
+                            return;
+                        }
+
+                        Notification::make()->title('Wniosek zrealizowany — szkic FV + próba Fakturowni')->success()->send();
                     }),
                 Tables\Actions\Action::make('markRejected')
                     ->label('Odrzuć')

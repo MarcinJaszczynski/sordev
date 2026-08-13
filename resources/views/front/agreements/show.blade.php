@@ -3,6 +3,12 @@
     $isContractAnnex = ($agreement ?? null) instanceof \App\Models\Contract
         && method_exists($agreement, 'isAnnex')
         && $agreement->isAnnex();
+
+    // Nie używać @php(...) z zagnieżdżonymi nawiasami — Blade zamyka dyrektywę za wcześnie.
+    $orderingPartyService = app(\App\Services\ContractOrderingPartyService::class);
+    $orderingParties = $orderingPartyService->partiesForTemplatePayload($agreement);
+    $groupPricing = app(\App\Services\ContractGroupPricingService::class)->presentationFor($agreement);
+    $annexService = app(\App\Services\ContractAnnexService::class);
 @endphp
 
 <!doctype html>
@@ -51,8 +57,6 @@
                                 </div>
                                 <div><strong>Impreza:</strong> {{ $agreement->event_name ?: ($agreement->event?->name ?? '—') }}</div>
                                 <div><strong>Termin:</strong> {{ optional($agreement->event_start_date)->format('d.m.Y') ?: '—' }} - {{ optional($agreement->event_end_date)->format('d.m.Y') ?: '—' }}</div>
-                                @php($orderingPartyService = app(\App\Services\ContractOrderingPartyService::class))
-                                @php($orderingParties = $orderingPartyService->partiesForTemplatePayload($agreement))
                                 <div><strong>Zamawiający:</strong>
                                     @if(count($orderingParties) > 1)
                                         <ul class="mb-0 mt-1">
@@ -75,21 +79,27 @@
                                 @if($agreement->isIndividual())
                                     <div><strong>Uczestnik:</strong> {{ $agreement->participant_name ?: ($agreement->participantPayment?->participant_name ?? '—') }}</div>
                                 @endif
-                                @php($groupPricing = app(\App\Services\ContractGroupPricingService::class)->presentationFor($agreement))
                                 @if($groupPricing['is_group'] ?? false)
                                     <div><strong>Liczba uczestników:</strong> {{ $groupPricing['participant_count'] }}</div>
                                     <div><strong>Cena za osobę:</strong> {{ number_format((float) $groupPricing['unit_price'], 2, ',', ' ') }} {{ strtoupper((string) ($agreement->currency ?: 'PLN')) }}</div>
                                     <div><strong>Schemat płatności:</strong> {{ $groupPricing['payment_scheme_label'] }}</div>
                                 @endif
                                 <div><strong>Kwota do zapłaty:</strong> {{ number_format((float) ($groupPricing['total_amount'] ?? $agreement->amount_due), 2, ',', ' ') }} {{ strtoupper((string) ($agreement->currency ?: 'PLN')) }}</div>
-                                @if(($groupPricing['is_group'] ?? false) && !empty($groupPricing['payment_schedules']))
+                                @if(!empty($groupPricing['payment_schedules']))
                                     <div class="mt-2">
                                         <strong>Harmonogram płatności:</strong>
                                         <ul class="mb-0 mt-1">
                                             @foreach($groupPricing['payment_schedules'] as $schedule)
                                                 <li>
                                                     {{ $schedule['label'] ?: 'Transza' }}:
-                                                    {{ number_format((float) $schedule['amount'], 2, ',', ' ') }} PLN
+                                                    @if((float) ($schedule['amount'] ?? 0) > 0)
+                                                        {{ number_format((float) $schedule['amount'], 2, ',', ' ') }} PLN
+                                                    @endif
+                                                    @if((float) ($schedule['amount_foreign'] ?? 0) > 0)
+                                                        @if((float) ($schedule['amount'] ?? 0) > 0) + @endif
+                                                        {{ number_format((float) $schedule['amount_foreign'], 2, ',', ' ') }}
+                                                        {{ strtoupper((string) ($schedule['currency_code'] ?? '')) }}
+                                                    @endif
                                                     @if(filled($schedule['due_date']))
                                                         <span class="text-muted">(termin: {{ $schedule['due_date'] }})</span>
                                                     @endif
@@ -101,9 +111,6 @@
                             </div>
 
                             <div class="white_box">
-                                @php
-                                    $annexService = app(\App\Services\ContractAnnexService::class);
-                                @endphp
                                 <h4 class="mb-3">{{ $isContractAnnex ? 'Treść aneksu' : 'Treść umowy' }}</h4>
 
                                 @if($isContractAnnex)
@@ -132,7 +139,7 @@
                                         </a>
                                     </p>
                                 @elseif(filled($agreement->agreement_body))
-                                    <div class="border rounded p-3 bg-white agreement-body-preview">{!! $agreement->agreement_body !!}</div>
+                                    <div class="border rounded p-3 bg-white agreement-body-preview">{!! \App\Support\AgreementHtml::sanitize((string) $agreement->agreement_body) !!}</div>
                                 @else
                                     <p class="text-muted mb-0">Treść {{ $isContractAnnex ? 'aneksu' : 'umowy' }} nie została jeszcze przygotowana.</p>
                                 @endif

@@ -140,7 +140,7 @@
                 </div>
                 <div class="description-section">
                     <div class="description">
-                        {!! $item->event_description !!}
+                        {!! \App\Support\AgreementHtml::sanitize((string) ($item->event_description ?? '')) !!}
                     </div>
                 </div>
                 <div class="specifics">

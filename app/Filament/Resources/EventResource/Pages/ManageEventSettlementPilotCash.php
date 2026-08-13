@@ -1,21 +1,23 @@
 <?php
 
+declare(strict_types=1);
+
 namespace App\Filament\Resources\EventResource\Pages;
 
-use App\Filament\Resources\EventSettlementResource\RelationManagers\PilotCashRelationManager;
-
-class ManageEventSettlementPilotCash extends ManageEventSettlementFinanceSection
+/** @deprecated Bookmark → EventFinancePilotCash */
+class ManageEventSettlementPilotCash extends RedirectEventToFinance
 {
-    protected static ?string $navigationLabel = 'Gotówka pilota';
-
-    protected static ?string $title = 'Gotówka pilota';
-
-    protected static ?string $navigationIcon = 'heroicon-o-wallet';
-
-    protected static function settlementRelationManagers(): array
+    public static function getResourcePageName(): string
     {
-        return [
-            PilotCashRelationManager::class,
-        ];
+        return 'settlement-pilot-cash';
+    }
+
+    public function mount(int|string $record): void
+    {
+        $this->record = $this->resolveRecord($record);
+        abort_unless(static::getResource()::canEdit($this->getRecord()), 403);
+        $this->redirect(\App\Filament\Resources\EventResource::getUrl('finance-pilot-cash', [
+            'record' => $this->getRecord(),
+        ]));
     }
 }

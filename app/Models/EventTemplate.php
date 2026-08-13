@@ -659,7 +659,7 @@ class EventTemplate extends Model
 
     /**
      * Identyfikatory punktów startowych (podstawienia) dostępnych dla tego szablonu.
-     * Gdy brak wpisów availability — wszystkie miejsca z flagą starting_place.
+     * Tylko miejsca z availability available=true (bez fallbacku do wszystkich startowych).
      *
      * @return Collection<int, int>
      */
@@ -680,7 +680,7 @@ class EventTemplate extends Model
             ->values();
 
         if ($configured->isEmpty()) {
-            return $baseQuery->pluck('id');
+            return collect();
         }
 
         return $baseQuery->whereIn('id', $configured)->pluck('id');

@@ -9,7 +9,7 @@
         $isSetParent = (bool) $record->getAttribute('_is_set_parent');
         $isSetExpanded = (bool) $record->getAttribute('_set_expanded');
         $childCount = (int) ($record->children_count ?? 0);
-        $order = sprintf('%02d', (int) ($record->order ?? 1));
+        $order = sprintf('%02d', (int) ($record->order ?? 1)); // used in set preview
         $name = $record->name ?? $record->templatePoint?->name ?? '—';
 
         $start = $record->hide_times ? null : ($record->start_time ? substr((string) $record->start_time, 0, 5) : null);
@@ -27,11 +27,6 @@
         $hiddenChildCount = $setChildren instanceof \Illuminate\Support\Collection
             ? $setChildren->filter(fn (\App\Models\EventProgramPoint $child): bool => ! $visibleChildIds->contains((int) $child->id))->count()
             : 0;
-
-        $participantCount = max(1, (int) ($record->event?->participant_count ?? 1));
-        $costLabel = ! $isSetParent
-            ? $record->formatAmount($record->resolveEffectiveTotalPrice($participantCount))
-            : null;
     @endphp
 
     <div @class([
@@ -45,8 +40,6 @@
         @endif
 
         <div class="epp-name-head">
-            <span @class(['epp-order', 'epp-order--child' => $isChild]) @if ($isChild) title="Podpunkt setu" @endif>{{ $order }}</span>
-
             @if ($isSetParent)
                 <span class="epp-set-badge-wrap">
                     <button
@@ -83,27 +76,27 @@
                 @if ($record->is_hotel_service)
                     <span class="epp-type-icon" title="Usługa hotelu">🍽</span>
                 @endif
+                @php
+                    $gallery = is_array($record->gallery_images) ? $record->gallery_images : [];
+                    $hasAttachments = filled($record->featured_image) || count($gallery) > 0;
+                    $attachmentCount = (filled($record->featured_image) ? 1 : 0) + count($gallery);
+                @endphp
+                @if ($hasAttachments)
+                    <span class="epp-type-icon" title="Załączniki / zdjęcia: {{ $attachmentCount }}">📎 {{ $attachmentCount }}</span>
+                @endif
             </span>
         </div>
 
         <div class="epp-title">{{ $name }}</div>
 
-        @if ($costLabel && $costLabel !== '—')
-            <div class="epp-meta-row">
-                <span class="epp-meta-chip epp-meta-chip--cost" title="Koszt punktu w kalkulacji imprezy">
-                    Koszt: {{ $costLabel }}
-                </span>
-            </div>
-        @endif
-
-        @if ($record->hasResolvedOfficeNotes() || $record->hasResolvedPilotNotes())
-            <div class="epp-note-markers">
-                @if ($record->hasResolvedOfficeNotes())
-                    <span class="epp-note-marker epp-note-marker--office" title="Uwagi dla biura (podsumowanie)">Biuro</span>
-                @endif
-                @if ($record->hasResolvedPilotNotes())
-                    <span class="epp-note-marker epp-note-marker--pilot" title="Uwagi dla pilota">Pilot</span>
-                @endif
+        @php
+            // W panelu admin zawsze pokazujemy opis (show_description steruje tylko frontem / PDF).
+            $descHtml = trim((string) ($record->description ?? $record->templatePoint?->description ?? ''));
+            $descPlain = trim(preg_replace('/\s+/u', ' ', strip_tags($descHtml)) ?? '');
+        @endphp
+        @if ($descPlain !== '')
+            <div class="epp-program-desc mt-1 text-xs leading-snug text-gray-600 dark:text-gray-400" title="{{ $descPlain }}">
+                {{ \Illuminate\Support\Str::limit($descPlain, 160) }}
             </div>
         @endif
 
@@ -134,9 +127,6 @@
                         $confirmBy = filled($reservation->confirm_by)
                             ? \App\Support\Reservations\ReservationWorkflowDisplay::formatDate($reservation->confirm_by)
                             : null;
-                        $depositDue = filled($reservation->deposit_due_at)
-                            ? \App\Support\Reservations\ReservationWorkflowDisplay::formatDate($reservation->deposit_due_at)
-                            : null;
                     @endphp
                     <span class="inline-flex flex-wrap items-center gap-1">
                         @if ($reservationIsTrashed)
@@ -153,9 +143,6 @@
                         @if ($confirmBy)
                             <span class="text-[11px] text-gray-500">potw. do {{ $confirmBy }}</span>
                         @endif
-                        @if ($depositDue)
-                            <span class="text-[11px] text-gray-500">zal. do {{ $depositDue }}</span>
-                        @endif
                         @if (filled($reservation->booking_reference))
                             <span class="text-[11px] text-gray-500">nr {{ $reservation->booking_reference }}</span>
                         @endif
@@ -165,13 +152,14 @@
         @endif
 
         <div class="mt-1 flex flex-wrap items-center gap-1">
-            <a
-                href="{{ \App\Support\Tasks\TaskNavigation::createUrl(\App\Models\EventProgramPoint::class, $record->getKey()) }}"
+            <button
+                type="button"
+                wire:click="openCreateTaskForProgramPoint({{ $record->getKey() }})"
                 class="inline-flex items-center rounded-md border border-slate-300 bg-white px-2 py-0.5 text-[11px] font-medium text-slate-700 transition hover:bg-slate-50"
                 x-on:click.stop
             >
                 + Zadanie
-            </a>
+            </button>
         </div>
 
         @if ($isSetParent && ! $isSetExpanded && $setChildren instanceof \Illuminate\Support\Collection && $setChildren->isNotEmpty())

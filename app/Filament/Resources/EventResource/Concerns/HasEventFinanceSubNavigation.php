@@ -57,15 +57,15 @@ trait HasEventFinanceSubNavigation
             [
                 'key' => 'finance',
                 'label' => 'Koszty',
-                'description' => 'Plan, płatności i dokumenty kosztowe',
+                'description' => null,
                 'icon' => 'heroicon-o-banknotes',
                 'url' => EventResource::getUrl('finance', ['record' => $recordId]),
                 'badge' => $badges['finance'] ?? null,
             ],
             [
                 'key' => 'participant-payments',
-                'label' => 'Wpłaty',
-                'description' => 'Rejestr wpłat uczestników',
+                'label' => 'Wpłaty / Faktury',
+                'description' => null,
                 'icon' => 'heroicon-o-credit-card',
                 'url' => EventResource::getUrl('finance-participant-payments', ['record' => $recordId]),
                 'badge' => $badges['participant-payments'] ?? null,
@@ -73,15 +73,15 @@ trait HasEventFinanceSubNavigation
             [
                 'key' => 'calculation',
                 'label' => 'Kalkulacja',
-                'description' => 'Cena z programu i marża',
+                'description' => null,
                 'icon' => 'heroicon-o-calculator',
                 'url' => EventResource::getUrl('calculation', ['record' => $recordId]),
                 'badge' => null,
             ],
             [
                 'key' => 'pilot-cash',
-                'label' => 'Gotówka i waluty',
-                'description' => 'Zaliczka pilota wycieczki i wymiany',
+                'label' => 'Gotówka pilota',
+                'description' => null,
                 'icon' => 'heroicon-o-banknotes',
                 'url' => EventResource::getUrl('finance-pilot-cash', ['record' => $recordId]),
                 'badge' => null,
@@ -89,7 +89,7 @@ trait HasEventFinanceSubNavigation
             [
                 'key' => 'settlement-documents',
                 'label' => 'Dok. rozliczenia',
-                'description' => 'Załączniki do rozliczenia',
+                'description' => null,
                 'icon' => 'heroicon-o-paper-clip',
                 'url' => EventResource::getUrl('finance-settlement-documents', ['record' => $recordId]),
                 'badge' => null,
@@ -163,24 +163,29 @@ trait HasEventFinanceSubNavigation
     }
 
     /**
+     * Breadcrumb kończy się na module — aktywna sekcja jest w module-nav.
+     *
      * @return array<int|string, string>
      */
     protected function buildModuleBreadcrumbs(): array
     {
         $recordId = $this->getRecord()->getKey();
-        $section = match (static::financeSubNavigationActiveTab()) {
-            'finance' => 'Koszty',
-            'participant-payments' => 'Wpłaty',
-            'calculation' => 'Kalkulacja',
-            'pilot-cash' => 'Gotówka i waluty',
-            'settlement-documents' => 'Dok. rozliczenia',
-            default => 'Finanse',
-        };
 
         return $this->eventRecordBreadcrumbs(
             moduleLabel: 'Finanse',
             moduleUrl: EventResource::getUrl('finance', ['record' => $recordId]),
-            sectionLabel: $section,
+            sectionLabel: null,
         );
+    }
+
+    public function getHeading(): string|\Illuminate\Contracts\Support\Htmlable
+    {
+        // Pusty string ukrywa cały header Filament (w tym headerActions). HtmlString jest truthy.
+        return new \Illuminate\Support\HtmlString('');
+    }
+
+    public function getSubheading(): ?string
+    {
+        return null;
     }
 }

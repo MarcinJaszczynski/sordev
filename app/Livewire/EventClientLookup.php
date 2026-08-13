@@ -15,6 +15,8 @@ class EventClientLookup extends Component
 
     public bool $showQuickCreate = false;
 
+    public bool $searchAll = false;
+
     public string $firstName = '';
 
     public string $lastName = '';
@@ -34,6 +36,11 @@ class EventClientLookup extends Component
     public ?array $selected = null;
 
     public function updatedSearchQuery(): void
+    {
+        $this->refreshResults();
+    }
+
+    public function updatedSearchAll(): void
     {
         $this->refreshResults();
     }
@@ -59,7 +66,7 @@ class EventClientLookup extends Component
         }
 
         $this->results = app(ClientLookupService::class)
-            ->searchFromQuery($query)
+            ->searchFromQuery($query, $this->searchAll)
             ->all();
 
         $this->showResults = true;
@@ -197,6 +204,7 @@ class EventClientLookup extends Component
             'searchQuery',
             'showResults',
             'showQuickCreate',
+            'searchAll',
             'firstName',
             'lastName',
             'phone',

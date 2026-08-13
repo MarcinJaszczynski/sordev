@@ -9,8 +9,8 @@ use Illuminate\Foundation\Events\Dispatchable;
 use Illuminate\Queue\SerializesModels;
 
 /**
- * Hook pod przyszłe automatyzacje (umowy, SMS, zadania pilota).
- * Na razie bez listenerów — świadomie puste, żeby nie fake'ować procesów.
+ * Zmiana statusu imprezy — listener: HandleEventStatusChanged
+ * (zadania biurowe + SMS log przez EventStatusAutomationService).
  */
 class EventStatusChanged
 {

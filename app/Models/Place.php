@@ -5,7 +5,6 @@ namespace App\Models;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
-use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\Schema;
 
 class Place extends Model
@@ -69,6 +68,7 @@ class Place extends Model
 
     /**
      * Opcje selecta: punkty startowe dostępne dla szablonu (lub wszystkie startowe bez szablonu).
+     * Przy ustawionym szablonie — wyłącznie availability available=true (pusta lista gdy brak).
      *
      * @param  int|null  $includePlaceId  Zachowaj bieżącą wartość przy edycji (np. legacy).
      */
@@ -87,8 +87,13 @@ class Place extends Model
 
         if (Schema::hasColumn((new static)->getTable(), 'starting_place')) {
             $query->where(function (Builder $inner) use ($allowedIds, $includePlaceId): void {
-                if ($allowedIds !== null && $allowedIds->isNotEmpty()) {
-                    $inner->whereIn('id', $allowedIds);
+                if ($allowedIds !== null) {
+                    if ($allowedIds->isNotEmpty()) {
+                        $inner->whereIn('id', $allowedIds);
+                    } else {
+                        // Szablon bez dostępnych miejsc — pusta lista (poza legacy include).
+                        $inner->whereRaw('0 = 1');
+                    }
                 } else {
                     $inner->where('starting_place', true);
                 }
@@ -97,8 +102,12 @@ class Place extends Model
                     $inner->orWhere('id', $includePlaceId);
                 }
             });
-        } elseif ($allowedIds !== null && $allowedIds->isNotEmpty()) {
-            $query->whereIn('id', $allowedIds);
+        } elseif ($allowedIds !== null) {
+            if ($allowedIds->isNotEmpty()) {
+                $query->whereIn('id', $allowedIds);
+            } else {
+                $query->whereRaw('0 = 1');
+            }
 
             if ($includePlaceId) {
                 $query->orWhere('id', $includePlaceId);

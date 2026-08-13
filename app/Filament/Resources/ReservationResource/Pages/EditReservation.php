@@ -2,13 +2,20 @@
 
 namespace App\Filament\Resources\ReservationResource\Pages;
 
+use App\Actions\Reservations\UpsertReservationAction;
+use App\Data\UpsertReservationData;
 use App\Filament\Forms\ReservationFormFields;
 use App\Filament\Forms\ReservationFormOptions;
 use App\Filament\Resources\ReservationResource;
+use App\Filament\Resources\TaskResource;
+use App\Models\Reservation;
+use App\Support\Tasks\TaskContextRegistry;
 use Filament\Actions;
 use Filament\Forms;
 use Filament\Forms\Form;
 use Filament\Resources\Pages\EditRecord;
+use Illuminate\Database\Eloquent\Model;
+use Illuminate\Support\HtmlString;
 
 class EditReservation extends EditRecord
 {
@@ -18,8 +25,36 @@ class EditReservation extends EditRecord
     {
         return $form
             ->schema([
+                Forms\Components\Section::make('Powiązania')
+                    ->schema([
+                        Forms\Components\Placeholder::make('context_links')
+                            ->label('')
+                            ->content(function (): HtmlString {
+                                /** @var Reservation $record */
+                                $record = $this->getRecord();
+                                $links = TaskContextRegistry::linksForRecord($record);
+
+                                if ($links === []) {
+                                    return new HtmlString('<p class="text-sm text-gray-500">Brak powiązań do wyświetlenia.</p>');
+                                }
+
+                                $items = collect($links)
+                                    ->map(function (array $link): string {
+                                        $url = e($link['url']);
+                                        $label = e($link['label']);
+
+                                        return '<a href="'.$url.'" class="text-primary-600 hover:underline dark:text-primary-400">'.$label.'</a>';
+                                    })
+                                    ->implode(' · ');
+
+                                return new HtmlString('<div class="text-sm">'.$items.'</div>');
+                            }),
+                    ])
+                    ->compact()
+                    ->columnSpanFull(),
+
                 Forms\Components\Section::make('Rezerwacja')
-                    ->columns(2)
+                    ->columns(['default' => 1, 'md' => 2])
                     ->schema([
                         Forms\Components\Select::make('event_id')
                             ->label('Impreza')
@@ -42,6 +77,13 @@ class EditReservation extends EditRecord
     protected function getHeaderActions(): array
     {
         return [
+            Actions\Action::make('add_task')
+                ->label('Dodaj zadanie')
+                ->icon('heroicon-o-clipboard-document-list')
+                ->url(fn (): string => TaskResource::getUrl('create').'?'.http_build_query([
+                    'taskable_type' => Reservation::class,
+                    'taskable_id' => $this->getRecord()->getKey(),
+                ])),
             Actions\DeleteAction::make(),
         ];
     }
@@ -49,11 +91,16 @@ class EditReservation extends EditRecord
     /** @param array<string, mixed> $data */
     protected function mutateFormDataBeforeSave(array $data): array
     {
-        return ReservationFormFields::normalizeSaveData($data);
+        return $data;
     }
 
-    protected function afterSave(): void
+    protected function handleRecordUpdate(Model $record, array $data): Model
     {
-        ReservationFormFields::persistAttachments($this->getRecord(), $this->data);
+        /** @var Reservation $record */
+        return app(UpsertReservationAction::class)(UpsertReservationData::fromForm(
+            formData: $data,
+            reservation: $record,
+            attachmentData: $this->data,
+        ));
     }
 }

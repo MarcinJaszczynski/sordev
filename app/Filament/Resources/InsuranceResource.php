@@ -32,13 +32,19 @@ class InsuranceResource extends Resource
         return $form
             ->schema([
                 Forms\Components\Section::make('Dane ubezpieczenia')
-                    ->columns(3)
+                    ->columns(['default' => 1, 'md' => 2, 'xl' => 3])
                     ->schema([
                         Forms\Components\TextInput::make('name')
                             ->label('Nazwa')
                             ->required()
                             ->maxLength(255)
                             ->columnSpan(2),
+                        Forms\Components\Select::make('coverage_type')
+                            ->label('Typ (NNW / KL)')
+                            ->options(Insurance::coverageTypeOptions())
+                            ->nullable()
+                            ->visible(fn (): bool => \Illuminate\Support\Facades\Schema::hasColumn('insurances', 'coverage_type'))
+                            ->columnSpan(1),
                         Forms\Components\TextInput::make('price_per_person')
                             ->label('Cena za osobę (PLN)')
                             ->required()
@@ -52,7 +58,7 @@ class InsuranceResource extends Resource
                     ]),
 
                 Forms\Components\Section::make('Parametry ubezpieczenia')
-                    ->columns(4)
+                    ->columns(['default' => 1, 'md' => 2, 'xl' => 4])
                     ->schema([
                         Forms\Components\Toggle::make('active')
                             ->label('Aktywne')
@@ -79,6 +85,11 @@ class InsuranceResource extends Resource
                     ->label('Nazwa')
                     ->searchable()
                     ->sortable(),
+                Tables\Columns\TextColumn::make('coverage_type')
+                    ->label('Typ')
+                    ->badge()
+                    ->formatStateUsing(fn (?string $state): string => Insurance::coverageTypeLabel($state) ?? '—')
+                    ->visible(fn (): bool => \Illuminate\Support\Facades\Schema::hasColumn('insurances', 'coverage_type')),
                 Tables\Columns\TextColumn::make('price_per_person')
                     ->label('Cena za osobę')
                     ->money('PLN')

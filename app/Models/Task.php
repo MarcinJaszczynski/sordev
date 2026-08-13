@@ -64,6 +64,13 @@ class Task extends Model implements Sortable
             $task->normalizeTaskableContext();
             $task->inheritTaskableContextFromParent();
         });
+
+        // forceDelete + cascade DB omija Eloquent events na attachments — kasujemy pliki jawnie.
+        static::forceDeleting(function (Task $task): void {
+            $task->attachments()->get()->each(function (TaskAttachment $attachment): void {
+                $attachment->delete();
+            });
+        });
     }
 
     public function author(): BelongsTo

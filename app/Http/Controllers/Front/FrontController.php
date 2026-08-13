@@ -1896,8 +1896,10 @@ class FrontController extends Controller
         $section->addTextBreak(1);
         $section->addText('Faktura', ['bold' => true, 'size' => 14, 'color' => '0070C0']);
         $section->addText($this->sanitizeWordText('Aby otrzymać fakturę za udział w wycieczce, prosimy przed rozpoczęciem imprezy o przesłanie danych poprzez formularz na stronie. Faktury wysyłamy drogą elektroniczną po zakończeniu wyjazdu.'));
-        $section->addText($this->sanitizeWordText('Wniosek o fakturę na osobę fizyczną: https://bprafa.pl/wniosek-o-fakture-na-osobe-fizyczna/'));
-        $section->addText($this->sanitizeWordText('Wniosek o fakturę na firmę: https://bprafa.pl/faktura-na-firme/'));
+        $invoiceRequestUrl = route('invoice-request', [
+            'regionSlug' => \Illuminate\Support\Str::slug((string) ($startPlaceName ?? 'region')) ?: 'region',
+        ], absolute: true);
+        $section->addText($this->sanitizeWordText('Wniosek o fakturę za imprezę turystyczną (osoba fizyczna lub firma): '.$invoiceRequestUrl));
 
         $section->addTextBreak(1);
         $section->addText('Dodatkowe informacje', ['bold' => true, 'size' => 14, 'color' => '0070C0']);
@@ -2609,7 +2611,11 @@ class FrontController extends Controller
         }
 
         if (! $this->verifyTurnstileToken($request, 'contact_form')) {
-            return back()->with('success', 'Dziękujemy za wiadomość! Skontaktujemy się wkrótce.');
+            return back()
+                ->withErrors([
+                    'cf-turnstile-response' => 'Weryfikacja zabezpieczeń nie powiodła się (Cloudflare). Odśwież stronę i spróbuj ponownie.',
+                ])
+                ->withInput();
         }
 
         // Basic referer/domain check to reduce cross-origin spam posts (aktywne tylko w produkcji)

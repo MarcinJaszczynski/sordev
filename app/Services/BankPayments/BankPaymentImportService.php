@@ -113,6 +113,42 @@ class BankPaymentImportService
     }
 
     /**
+     * Ręczne przypisanie / zmiana celu księgowania (tylko linie jeszcze niezafakturowane).
+     *
+     * @param  'participant_payment'|'contract'|'pilot_advance'|'clear'  $targetType
+     */
+    public function assignLine(
+        BankPaymentImportLine $line,
+        string $targetType,
+        ?int $participantPaymentId = null,
+        ?int $contractId = null,
+        ?int $eventId = null,
+    ): BankPaymentImportLine {
+        if ($line->applied) {
+            throw new \RuntimeException('Linia już zaksięgowana — nie można zmienić przypisania.');
+        }
+
+        $payload = match ($targetType) {
+            'clear' => [
+                'match_status' => 'unmatched',
+                'match_reason' => null,
+                'contract_id' => null,
+                'participant_payment_id' => null,
+                'event_id' => null,
+                'selected' => false,
+            ],
+            'participant_payment' => $this->buildParticipantAssignment($participantPaymentId),
+            'contract' => $this->buildContractAssignment($contractId),
+            'pilot_advance' => $this->buildPilotAdvanceAssignment($eventId),
+            default => throw new \InvalidArgumentException('Nieznany typ przypisania: '.$targetType),
+        };
+
+        $line->forceFill($payload)->save();
+
+        return $line->fresh(['contract.event', 'participantPayment.settlement.event', 'event']);
+    }
+
+    /**
      * @param  array<int, int>  $lineIds
      * @return array{applied: int, skipped: int, errors: array<int, string>}
      */
@@ -160,13 +196,92 @@ class BankPaymentImportService
             }
         });
 
+        $pendingUnmatched = $batch->lines()
+            ->where('applied', false)
+            ->where('match_status', 'unmatched')
+            ->exists();
+
         $batch->update([
             'lines_applied' => $batch->lines()->where('applied', true)->count(),
             'lines_skipped' => $batch->lines()->where('applied', false)->count(),
-            'status' => 'completed',
+            'status' => $pendingUnmatched ? 'preview' : 'completed',
         ]);
 
         return $result;
+    }
+
+    public static function unmatchedPendingQuery()
+    {
+        return BankPaymentImportLine::query()
+            ->where('applied', false)
+            ->where('match_status', 'unmatched');
+    }
+
+    /**
+     * @return array<string, mixed>
+     */
+    private function buildParticipantAssignment(?int $participantPaymentId): array
+    {
+        if (! $participantPaymentId) {
+            throw new \InvalidArgumentException('Wybierz uczestnika (wpłatę rozliczeniową).');
+        }
+
+        $payment = EventSettlementParticipantPayment::query()
+            ->with('settlement')
+            ->findOrFail($participantPaymentId);
+
+        $contractId = $payment->contracts()->value('id');
+
+        return [
+            'match_status' => 'matched_payment',
+            'match_reason' => 'Ręczne przypisanie — uczestnik',
+            'contract_id' => $contractId ? (int) $contractId : null,
+            'participant_payment_id' => $payment->id,
+            'event_id' => $payment->settlement?->event_id,
+            'selected' => true,
+        ];
+    }
+
+    /**
+     * @return array<string, mixed>
+     */
+    private function buildContractAssignment(?int $contractId): array
+    {
+        if (! $contractId) {
+            throw new \InvalidArgumentException('Wybierz umowę.');
+        }
+
+        $contract = Contract::query()->findOrFail($contractId);
+
+        return [
+            'match_status' => 'matched_contract',
+            'match_reason' => 'Ręczne przypisanie — umowa',
+            'contract_id' => $contract->id,
+            'participant_payment_id' => $contract->participant_payment_id,
+            'event_id' => $contract->event_id,
+            'selected' => true,
+        ];
+    }
+
+    /**
+     * @return array<string, mixed>
+     */
+    private function buildPilotAdvanceAssignment(?int $eventId): array
+    {
+        if (! $eventId) {
+            throw new \InvalidArgumentException('Wybierz imprezę dla zaliczki pilota.');
+        }
+
+        Event::query()->findOrFail($eventId);
+
+        return [
+            'match_status' => 'matched_pilot_advance',
+            'match_reason' => 'Ręczne przypisanie — zaliczka pilota',
+            'contract_id' => null,
+            'participant_payment_id' => null,
+            'event_id' => $eventId,
+            'selected' => true,
+        ];
     }
 
     private function applyLine(BankPaymentImportLine $line): void

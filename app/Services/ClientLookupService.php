@@ -2,7 +2,6 @@
 
 namespace App\Services;
 
-use App\Filament\Forms\EventOrderingPartyFields;
 use App\Models\Contact;
 use App\Models\Contractor;
 use Illuminate\Support\Collection;
@@ -18,7 +17,7 @@ class ClientLookupService
      * @param  array<string, mixed>  $criteria
      * @return Collection<int, array<string, mixed>>
      */
-    public function search(array $criteria): Collection
+    public function search(array $criteria, bool $searchAll = false): Collection
     {
         $criteria = $this->normalizeCriteria($criteria);
 
@@ -26,14 +25,19 @@ class ClientLookupService
             return collect();
         }
 
-        $contacts = $this->searchContacts($criteria);
-        $contractors = $this->searchContractors($criteria);
+        $clientTypeNames = $searchAll ? [] : \App\Models\ContractorType::clientTypeNames();
+        $contacts = $this->searchContacts($criteria, $searchAll);
+        $contractors = $this->searchContractors($criteria, $searchAll);
 
         $results = collect();
         $seenPairs = [];
 
         foreach ($contacts as $contact) {
-            $contact->loadMissing('contractors');
+            if ($clientTypeNames === []) {
+                $contact->loadMissing('contractors');
+            } else {
+                $contact->loadMissing(['contractors' => fn ($q) => $q->withAnyTypeName($clientTypeNames)]);
+            }
 
             if ($contact->contractors->isNotEmpty()) {
                 foreach ($contact->contractors as $contractor) {
@@ -46,7 +50,7 @@ class ClientLookupService
                     $seenPairs[$key] = true;
                     $results->push($this->makePairRow($contact, $contractor));
                 }
-            } else {
+            } elseif ($searchAll) {
                 $results->push($this->makeContactRow($contact));
             }
         }
@@ -86,7 +90,7 @@ class ClientLookupService
     /**
      * @return Collection<int, array<string, mixed>>
      */
-    public function searchFromQuery(string $query): Collection
+    public function searchFromQuery(string $query, bool $searchAll = false): Collection
     {
         $query = trim($query);
 
@@ -94,7 +98,7 @@ class ClientLookupService
             return collect();
         }
 
-        return $this->searchUnified($query);
+        return $this->searchUnified($query, $searchAll);
     }
 
     /**
@@ -102,31 +106,18 @@ class ClientLookupService
      *
      * @return Collection<int, array<string, mixed>>
      */
-    private function searchUnified(string $term): Collection
+    private function searchUnified(string $term, bool $searchAll = false): Collection
     {
         $like = '%'.$term.'%';
+        $clientTypeNames = $searchAll ? [] : \App\Models\ContractorType::clientTypeNames();
 
-        $contacts = Contact::query()
-            ->where(function ($builder) use ($like): void {
-                $builder->where('first_name', 'like', $like)
-                    ->orWhere('last_name', 'like', $like)
-                    ->orWhere('phone', 'like', $like)
-                    ->orWhere('email', 'like', $like);
+        $contractorsQuery = Contractor::query();
 
-                if (Schema::hasColumn('contacts', 'address')) {
-                    $builder->orWhere('address', 'like', $like);
-                }
+        if ($clientTypeNames !== []) {
+            $contractorsQuery->withAnyTypeName($clientTypeNames);
+        }
 
-                if (Schema::hasColumn('contacts', 'notes')) {
-                    $builder->orWhere('notes', 'like', $like);
-                }
-            })
-            ->orderBy('last_name')
-            ->orderBy('first_name')
-            ->limit(self::RESULT_LIMIT)
-            ->get();
-
-        $contractors = Contractor::query()
+        $contractors = $contractorsQuery
             ->where(function ($builder) use ($like): void {
                 $builder->where('name', 'like', $like)
                     ->orWhere('phone', 'like', $like)
@@ -152,11 +143,42 @@ class ClientLookupService
             ->limit(self::RESULT_LIMIT)
             ->get();
 
+        // Kontakty: domyślnie tylko powiązane z typem „klient”; przy searchAll — też sieroty.
+        $contactsQuery = Contact::query()
+            ->where(function ($builder) use ($like): void {
+                $builder->where('first_name', 'like', $like)
+                    ->orWhere('last_name', 'like', $like)
+                    ->orWhere('phone', 'like', $like)
+                    ->orWhere('email', 'like', $like);
+
+                if (Schema::hasColumn('contacts', 'address')) {
+                    $builder->orWhere('address', 'like', $like);
+                }
+
+                if (Schema::hasColumn('contacts', 'notes')) {
+                    $builder->orWhere('notes', 'like', $like);
+                }
+            });
+
+        if ($clientTypeNames !== []) {
+            $contactsQuery->whereHas('contractors', fn ($q) => $q->withAnyTypeName($clientTypeNames));
+        }
+
+        $contacts = $contactsQuery
+            ->orderBy('last_name')
+            ->orderBy('first_name')
+            ->limit(self::RESULT_LIMIT)
+            ->get();
+
         $results = collect();
         $seenPairs = [];
 
         foreach ($contacts as $contact) {
-            $contact->loadMissing('contractors');
+            if ($clientTypeNames === []) {
+                $contact->loadMissing('contractors');
+            } else {
+                $contact->loadMissing(['contractors' => fn ($q) => $q->withAnyTypeName($clientTypeNames)]);
+            }
 
             if ($contact->contractors->isNotEmpty()) {
                 foreach ($contact->contractors as $contractor) {
@@ -169,7 +191,7 @@ class ClientLookupService
                     $seenPairs[$key] = true;
                     $results->push($this->makePairRow($contact, $contractor));
                 }
-            } else {
+            } elseif ($searchAll) {
                 $results->push($this->makeContactRow($contact));
             }
         }
@@ -239,7 +261,10 @@ class ClientLookupService
             'office_notes' => null,
         ];
 
-        $contractorId = EventOrderingPartyFields::createContractorFromFormData($contractorPayload);
+        $contractorId = app(EventOrderingPartyService::class)->createContractorFromFormData(
+            $contractorPayload,
+            typeNames: \App\Models\ContractorType::clientTypeNames(),
+        );
 
         $contactId = null;
 
@@ -315,9 +340,14 @@ class ClientLookupService
      * @param  array<string, string>  $criteria
      * @return Collection<int, Contact>
      */
-    private function searchContacts(array $criteria): Collection
+    private function searchContacts(array $criteria, bool $searchAll = false): Collection
     {
         $query = Contact::query();
+
+        if (! $searchAll) {
+            $clientTypeNames = \App\Models\ContractorType::clientTypeNames();
+            $query->whereHas('contractors', fn ($q) => $q->withAnyTypeName($clientTypeNames));
+        }
 
         $query->where(function ($builder) use ($criteria): void {
             $this->applyContactCriteria($builder, $criteria);
@@ -334,9 +364,13 @@ class ClientLookupService
      * @param  array<string, string>  $criteria
      * @return Collection<int, Contractor>
      */
-    private function searchContractors(array $criteria): Collection
+    private function searchContractors(array $criteria, bool $searchAll = false): Collection
     {
         $query = Contractor::query();
+
+        if (! $searchAll) {
+            $query->withAnyTypeName(\App\Models\ContractorType::clientTypeNames());
+        }
 
         $query->where(function ($builder) use ($criteria): void {
             $this->applyContractorCriteria($builder, $criteria);
@@ -509,6 +543,39 @@ class ClientLookupService
     }
 
     /**
+     * Wybranie firmy jako zamawiającego uzupełnia typ „klient” (np. po „szukaj wszędzie”).
+     */
+    private function ensureClientTypeAttached(int $contractorId): void
+    {
+        $contractor = Contractor::query()->find($contractorId);
+
+        if (! $contractor) {
+            return;
+        }
+
+        $typeNames = \App\Models\ContractorType::clientTypeNames();
+        $typeIds = \App\Models\ContractorType::idsForNames($typeNames);
+
+        if ($typeIds === []) {
+            foreach ($typeNames as $typeName) {
+                $normalized = is_string($typeName) ? mb_strtolower(trim($typeName)) : '';
+                if ($normalized === '') {
+                    continue;
+                }
+
+                \App\Models\ContractorType::query()->firstOrCreate(['name' => $normalized]);
+            }
+
+            \App\Models\ContractorType::clearIdsForNamesCache();
+            $typeIds = \App\Models\ContractorType::idsForNames($typeNames);
+        }
+
+        if ($typeIds !== []) {
+            $contractor->types()->syncWithoutDetaching($typeIds);
+        }
+    }
+
+    /**
      * @param  array<string, mixed>  $result
      * @return array<int, array<string, mixed>>
      */
@@ -525,6 +592,12 @@ class ClientLookupService
                 ? (string) $result['preview']['department']
                 : null,
         ]];
+
+        $contractorId = filled($result['contractor_id'] ?? null) ? (int) $result['contractor_id'] : 0;
+
+        if ($contractorId > 0) {
+            $this->ensureClientTypeAttached($contractorId);
+        }
 
         app(ContactContractorLinkService::class)->linkParties(
             collect($parties)

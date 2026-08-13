@@ -1,171 +1,182 @@
 @php
     use App\Models\EventSettlementCost;
+    use Illuminate\Support\Facades\Storage;
+
     $editable = $editable ?? true;
     $compact = $compact ?? false;
 @endphp
 
-<div class="space-y-4">
+<div class="space-y-3">
   @if($editable)
     <div class="flex flex-wrap items-center gap-2">
       <button type="button" wire:click="refreshTripExpenses" class="{{ $compact ? 'pilot-touch-btn border border-gray-300 bg-white text-gray-900 text-sm' : 'text-sm text-primary-600 hover:underline' }}">
         Odśwież z wycieczki
       </button>
-      <span class="text-xs text-gray-500">Pobiera z wycieczki tylko pozycje z płatnikiem „pilot”.</span>
+      <span class="text-xs text-gray-500">Tylko pozycje z płatnikiem „pilot”.</span>
     </div>
   @endif
 
-  <div class="divide-y rounded-lg border overflow-hidden">
-    @forelse($this->expenseLines as $cost)
-      @php
-        $currency = $cost->actualCurrency ?? $cost->plannedCurrency;
-        $planned = (float) ($cost->planned_amount ?? 0);
-        $actual = $cost->actual_amount !== null ? (float) $cost->actual_amount : null;
-        $sourceLabel = EventSettlementCost::$sourceTypeLabels[$cost->source_type] ?? $cost->source_type;
-        $paidByLabel = EventSettlementCost::$paidByOptions[$cost->paid_by] ?? $cost->paid_by;
-        $docs = $cost->linkedDocuments();
-        $isEditing = (int) $this->editingCostId === (int) $cost->id;
-      @endphp
+  <div class="overflow-x-auto rounded-lg border border-gray-200 dark:border-gray-700">
+    <table class="min-w-full divide-y divide-gray-200 text-sm dark:divide-gray-700">
+      <thead class="bg-gray-50 text-left text-[11px] font-semibold uppercase tracking-wide text-gray-500 dark:bg-gray-800/80">
+        <tr>
+          <th class="px-3 py-2">Punkt / set</th>
+          <th class="px-3 py-2 whitespace-nowrap">Zapłacono</th>
+          <th class="px-3 py-2">Plik / zdjęcie</th>
+          <th class="px-3 py-2">Komu</th>
+          <th class="px-3 py-2">Uwagi</th>
+          @if($editable)
+            <th class="px-3 py-2"></th>
+          @endif
+        </tr>
+      </thead>
+      <tbody class="divide-y divide-gray-100 bg-white dark:divide-gray-800 dark:bg-gray-900">
+        @forelse($this->expenseLines as $cost)
+          @php
+            $currency = $cost->actualCurrency ?? $cost->plannedCurrency;
+            $symbol = $currency?->symbol ?? $currency?->code ?? 'PLN';
+            $planned = (float) ($cost->planned_amount ?? 0);
+            $officePaid = (float) ($cost->ledger_office_paid ?? 0);
+            $pilotDue = (float) ($cost->ledger_pilot_due ?? max(0, $planned - $officePaid));
+            $actual = $cost->ledger_paid_amount !== null
+                ? (float) $cost->ledger_paid_amount
+                : ($cost->actual_amount !== null ? (float) $cost->actual_amount : null);
+            $docs = $cost->linkedDocuments();
+            $firstFile = null;
+            foreach ($docs as $document) {
+                foreach (collect($document->files ?? [])->filter() as $path) {
+                    $firstFile = ['path' => $path, 'doc' => $document];
+                    break 2;
+                }
+            }
+            $payee = $cost->contractor?->displayLabel() ?? '—';
+            $isEditing = (int) $this->editingCostId === (int) $cost->id;
+          @endphp
 
-      <div class="px-3 py-3 {{ $compact ? 'text-sm' : '' }} {{ $isEditing ? 'bg-gray-50' : '' }}" wire:key="pilot-cost-{{ $cost->id }}">
-        @if($isEditing)
-          <div class="space-y-3">
-            <div class="font-medium text-gray-900">{{ $cost->name }}</div>
-            @if($planned > 0)
-              <p class="text-xs text-gray-600">Plan: {{ number_format($planned, 2, ',', ' ') }} {{ $currency?->symbol ?? 'PLN' }}</p>
-            @endif
-
-            <div class="grid gap-3 {{ $compact ? '' : 'md:grid-cols-2' }}">
-              <div>
-                <label class="mb-1 block text-xs font-medium text-gray-600">Kwota faktyczna *</label>
-                <input
-                  type="text"
-                  inputmode="decimal"
-                  autocomplete="off"
-                  wire:model.live.debounce.500ms="editCostActualAmount"
-                  class="{{ $compact ? 'pilot-field' : 'fi-input w-full rounded-lg border px-3 py-2 text-sm' }}"
-                />
-                @error('editCostActualAmount') <p class="mt-1 text-xs text-red-600">{{ $message }}</p> @enderror
-              </div>
-              <div>
-                <label class="mb-1 block text-xs font-medium text-gray-600">Waluta</label>
-                <select wire:model.live.debounce.500ms="editCostCurrencyId" class="{{ $compact ? 'pilot-field' : 'fi-select-input w-full rounded-lg border px-3 py-2 text-sm' }}">
-                  @foreach($this->getCurrencyOptions() as $id => $name)
-                    <option value="{{ $id }}">{{ $name }}</option>
-                  @endforeach
-                </select>
-                @error('editCostCurrencyId') <p class="mt-1 text-xs text-red-600">{{ $message }}</p> @enderror
-              </div>
-              <div>
-                <label class="mb-1 block text-xs font-medium text-gray-600">Forma płatności</label>
-                <select wire:model.live.debounce.500ms="editCostPaymentMethod" class="{{ $compact ? 'pilot-field' : 'fi-select-input w-full rounded-lg border px-3 py-2 text-sm' }}">
-                  @foreach(EventSettlementCost::$paymentMethods as $value => $label)
-                    <option value="{{ $value }}">{{ $label }}</option>
-                  @endforeach
-                </select>
-                @error('editCostPaymentMethod') <p class="mt-1 text-xs text-red-600">{{ $message }}</p> @enderror
-              </div>
-              <div>
-                <label class="mb-1 block text-xs font-medium text-gray-600">Numer faktury</label>
-                <input type="text" wire:model.live.debounce.500ms="editCostInvoiceNumber" class="{{ $compact ? 'pilot-field' : 'fi-input w-full rounded-lg border px-3 py-2 text-sm' }}" />
-                @error('editCostInvoiceNumber') <p class="mt-1 text-xs text-red-600">{{ $message }}</p> @enderror
-              </div>
-              <div>
-                <label class="mb-1 block text-xs font-medium text-gray-600">Numer paragonu</label>
-                <input type="text" wire:model.live.debounce.500ms="editCostReceiptNumber" class="{{ $compact ? 'pilot-field' : 'fi-input w-full rounded-lg border px-3 py-2 text-sm' }}" />
-                @error('editCostReceiptNumber') <p class="mt-1 text-xs text-red-600">{{ $message }}</p> @enderror
-              </div>
-              <div class="{{ $compact ? '' : 'md:col-span-2' }}">
-                <label class="mb-1 block text-xs font-medium text-gray-600">Uwagi pilota</label>
-                <input type="text" wire:model.live.debounce.500ms="editCostNotes" class="{{ $compact ? 'pilot-field' : 'fi-input w-full rounded-lg border px-3 py-2 text-sm' }}" />
-                @error('editCostNotes') <p class="mt-1 text-xs text-red-600">{{ $message }}</p> @enderror
-              </div>
-            </div>
-
-            <div class="flex flex-wrap gap-2">
-              @if($compact)
-                <button
-                  type="button"
-                  wire:click="saveCost"
-                  wire:loading.attr="disabled"
-                  wire:target="saveCost"
-                  class="pilot-touch-btn bg-gray-800 text-white text-sm disabled:opacity-60"
-                >
-                  <span wire:loading.remove wire:target="saveCost">Zapisz kwotę</span>
-                  <span wire:loading wire:target="saveCost">Zapisywanie…</span>
-                </button>
-              @else
-                <x-filament::button type="button" wire:click="saveCost" size="sm" wire:target="saveCost">
-                  Zapisz kwotę
-                </x-filament::button>
-              @endif
-              <button type="button" wire:click="cancelEditCost" class="text-sm text-gray-600">Anuluj</button>
-            </div>
-          </div>
-        @else
-          <div class="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
-            <div class="min-w-0 flex-1">
-              <div class="font-medium text-gray-900">{{ $cost->name }}</div>
-              <div class="mt-1 flex flex-wrap gap-x-2 gap-y-1 text-xs text-gray-600">
-                <span class="rounded bg-gray-100 px-1.5 py-0.5">{{ $sourceLabel }}</span>
-                <span class="rounded bg-amber-100 text-amber-900 px-1.5 py-0.5">{{ $paidByLabel }}</span>
-                @if($planned > 0)
-                  <span>plan: {{ number_format($planned, 2, ',', ' ') }} {{ $currency?->symbol ?? 'PLN' }}</span>
-                @endif
-              </div>
-              <div class="mt-1 text-sm text-gray-800">
-                @if($actual !== null)
-                  Faktycznie:
-                  <strong>{{ number_format($actual, 2, ',', ' ') }} {{ $currency?->symbol ?? 'PLN' }}</strong>
-                @else
-                  <span class="text-amber-700">Brak kwoty faktycznej</span>
+          @if($isEditing)
+            <tr class="bg-sky-50/60 dark:bg-sky-950/20" wire:key="pilot-cost-edit-{{ $cost->id }}">
+              <td colspan="{{ $editable ? 6 : 5 }}" class="px-3 py-3">
+                <div class="space-y-3">
+                  <div class="font-medium text-gray-900 dark:text-gray-100">{{ $cost->name }}</div>
                   @if($planned > 0)
-                    <span class="text-gray-500">(plan: {{ number_format($planned, 2, ',', ' ') }})</span>
+                    <p class="text-xs text-gray-600">
+                      Plan: {{ number_format($planned, 2, ',', ' ') }} {{ $symbol }}
+                      @if($officePaid > 0.009)
+                        · zaliczka biura: {{ number_format($officePaid, 2, ',', ' ') }}
+                        · dopłata: {{ number_format($pilotDue, 2, ',', ' ') }}
+                      @endif
+                    </p>
                   @endif
+
+                  <div class="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+                    <div>
+                      <label class="mb-1 block text-xs font-medium text-gray-600">Kwota faktyczna *</label>
+                      <input type="text" inputmode="decimal" autocomplete="off" wire:model.live.debounce.500ms="editCostActualAmount" class="{{ $compact ? 'pilot-field' : 'fi-input w-full rounded-lg border px-3 py-2 text-sm' }}" />
+                      @error('editCostActualAmount') <p class="mt-1 text-xs text-red-600">{{ $message }}</p> @enderror
+                    </div>
+                    <div>
+                      <label class="mb-1 block text-xs font-medium text-gray-600">Waluta</label>
+                      <select wire:model.live.debounce.500ms="editCostCurrencyId" class="{{ $compact ? 'pilot-field' : 'fi-select-input w-full rounded-lg border px-3 py-2 text-sm' }}">
+                        @foreach($this->getCurrencyOptions() as $id => $name)
+                          <option value="{{ $id }}">{{ $name }}</option>
+                        @endforeach
+                      </select>
+                    </div>
+                    <div>
+                      <label class="mb-1 block text-xs font-medium text-gray-600">Uwagi</label>
+                      <input type="text" wire:model.live.debounce.500ms="editCostNotes" class="{{ $compact ? 'pilot-field' : 'fi-input w-full rounded-lg border px-3 py-2 text-sm' }}" />
+                    </div>
+                    <div>
+                      <label class="mb-1 block text-xs font-medium text-gray-600">Nr faktury / paragonu</label>
+                      <input type="text" wire:model.live.debounce.500ms="editCostInvoiceNumber" class="{{ $compact ? 'pilot-field' : 'fi-input w-full rounded-lg border px-3 py-2 text-sm' }}" placeholder="Faktura" />
+                      <input type="text" wire:model.live.debounce.500ms="editCostReceiptNumber" class="mt-1 {{ $compact ? 'pilot-field' : 'fi-input w-full rounded-lg border px-3 py-2 text-sm' }}" placeholder="Paragon" />
+                    </div>
+                  </div>
+
+                  <div class="flex flex-wrap gap-2">
+                    <button type="button" wire:click="saveCost" wire:loading.attr="disabled" wire:target="saveCost" class="{{ $compact ? 'pilot-touch-btn bg-gray-800 text-white text-sm' : 'rounded-lg bg-gray-900 px-3 py-1.5 text-sm text-white' }}">
+                      Zapisz
+                    </button>
+                    <button type="button" wire:click="cancelEditCost" class="text-sm text-gray-600">Anuluj</button>
+                  </div>
+                </div>
+              </td>
+            </tr>
+          @else
+            <tr wire:key="pilot-cost-{{ $cost->id }}">
+              <td class="px-3 py-2 align-top">
+                <div class="font-medium text-gray-900 dark:text-gray-100">{{ $cost->name }}</div>
+                @if($planned > 0.009)
+                  <div class="mt-0.5 text-[11px] text-gray-500">
+                    plan {{ number_format($planned, 2, ',', ' ') }} {{ $symbol }}
+                    @if($pilotDue > 0.009 && ($actual === null || abs($actual - $pilotDue) > 0.009))
+                      · do zapłaty {{ number_format($pilotDue, 2, ',', ' ') }}
+                    @endif
+                  </div>
                 @endif
-                @if($cost->notes)
-                  <span class="text-gray-600">· {{ $cost->notes }}</span>
+              </td>
+              <td class="px-3 py-2 align-top whitespace-nowrap">
+                @if($actual !== null)
+                  <span class="font-semibold text-gray-900 dark:text-gray-100">{{ number_format($actual, 2, ',', ' ') }} {{ $symbol }}</span>
+                @elseif($pilotDue > 0.009)
+                  <span class="text-amber-700">—</span>
+                @else
+                  <span class="text-teal-700 text-xs">pokryte biurem</span>
                 @endif
+              </td>
+              <td class="px-3 py-2 align-top">
+                @if($firstFile)
+                  @php
+                    $name = basename((string) $firstFile['path']);
+                    $url = Storage::disk('public')->url($firstFile['path']);
+                    $isImage = (bool) preg_match('/\.(jpe?g|png|gif|webp)$/i', $name);
+                  @endphp
+                  <a href="{{ $url }}" target="_blank" rel="noopener" class="inline-flex items-center gap-1 text-xs font-medium text-[#0663fc] hover:underline">
+                    {{ $isImage ? '📷 Zdjęcie' : '📄 Plik' }}
+                  </a>
+                  @if($docs->flatMap(fn ($d) => collect($d->files ?? []))->filter()->count() > 1)
+                    <span class="text-[11px] text-gray-500">+{{ $docs->flatMap(fn ($d) => collect($d->files ?? []))->filter()->count() - 1 }}</span>
+                  @endif
+                @elseif($editable)
+                  <div class="max-w-[11rem]">
+                    @include('pilot.partials.photo-upload', [
+                        'wireModel' => 'costDocumentFiles.'.$cost->id,
+                        'compact' => true,
+                    ])
+                  </div>
+                @else
+                  <span class="text-xs text-gray-400">—</span>
+                @endif
+              </td>
+              <td class="px-3 py-2 align-top text-gray-700 dark:text-gray-300">{{ $payee }}</td>
+              <td class="px-3 py-2 align-top text-gray-600 dark:text-gray-400">
+                {{ $cost->notes ?: '—' }}
                 @if($cost->invoice_number)
-                  <span class="text-gray-600">· fv: {{ $cost->invoice_number }}</span>
+                  <span class="block text-[11px] text-gray-500">fv: {{ $cost->invoice_number }}</span>
                 @endif
                 @if($cost->receipt_number)
-                  <span class="text-gray-600">· par: {{ $cost->receipt_number }}</span>
+                  <span class="block text-[11px] text-gray-500">par: {{ $cost->receipt_number }}</span>
                 @endif
-                @if(! $cost->invoice_number && $cost->document_number)
-                  <span class="text-gray-600">· dok: {{ $cost->document_number }}</span>
-                @endif
-              </div>
-              @if($docs->isNotEmpty())
-                <div class="mt-1 text-xs text-gray-600">
-                  Dokumenty: {{ $docs->map(fn ($d) => $d->vendor_name ?: ('#'.$d->id))->join(', ') }}
-                </div>
+              </td>
+              @if($editable)
+                <td class="px-3 py-2 align-top whitespace-nowrap text-right">
+                  <button type="button" wire:click="startEditCost({{ $cost->id }})" class="text-xs font-medium text-[#0663fc] hover:underline">Edytuj</button>
+                  @if($cost->source_type === 'manual')
+                    <button type="button" wire:click="deleteExpense({{ $cost->id }})" class="ml-2 text-xs text-red-600 hover:underline">Usuń</button>
+                  @endif
+                </td>
               @endif
-            </div>
-            @if($editable)
-              <div class="flex shrink-0 flex-wrap gap-2">
-                <button type="button" wire:click="startEditCost({{ $cost->id }})" class="text-sm text-primary-600 hover:underline">Edytuj kwotę</button>
-                @if($cost->source_type === 'manual')
-                  <button type="button" wire:click="deleteExpense({{ $cost->id }})" class="text-sm text-danger-600 hover:underline">Usuń</button>
-                @endif
-              </div>
-            @endif
-          </div>
-
-          @if($editable)
-            <div class="mt-3 border-t border-dashed pt-3">
-              <label class="mb-2 block text-xs font-medium text-gray-600">Dołącz skan do tego wydatku</label>
-              @include('pilot.partials.photo-upload', [
-                  'wireModel' => 'costDocumentFiles.'.$cost->id,
-                  'compact' => $compact,
-              ])
-            </div>
+            </tr>
           @endif
-        @endif
-      </div>
-    @empty
-      <div class="px-4 py-6 text-center text-sm text-gray-500">
-        Brak wydatków pilota. @if($editable) Odśwież z wycieczki (jeśli biuro oznaczyło pozycje) lub dodaj wydatek nieprzewidziany. @endif
-      </div>
-    @endforelse
+        @empty
+          <tr>
+            <td colspan="{{ $editable ? 6 : 5 }}" class="px-4 py-6 text-center text-sm text-gray-500">
+              Brak wydatków pilota.
+              @if($editable) Odśwież z wycieczki albo dodaj wydatek nieprzewidziany. @endif
+            </td>
+          </tr>
+        @endforelse
+      </tbody>
+    </table>
   </div>
 </div>

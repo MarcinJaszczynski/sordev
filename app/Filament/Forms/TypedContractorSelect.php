@@ -26,6 +26,7 @@ final class TypedContractorSelect
         mixed $default = null,
         int|string|array|null $columnSpan = null,
         ?callable $restrictToContractorIds = null,
+        ?string $searchAllHelperText = null,
     ): array {
         $lookup = app(ContractorLookupService::class);
 
@@ -116,11 +117,13 @@ final class TypedContractorSelect
             $select->default($default);
         }
 
+        $defaultSearchAllHelper = $restrictToContractorIds !== null
+            ? 'Lista ograniczona do hoteli z planu noclegów tej imprezy. Zaznacz, gdy hotel ma źle przypisany typ.'
+            : 'Domyślnie lista jest ograniczona do wybranych typów. Zaznacz, aby przeszukać wszystkie firmy w bazie.';
+
         $checkbox = Forms\Components\Checkbox::make($searchAllField)
             ->label('Szukaj we wszystkich kontrahentach')
-            ->helperText($restrictToContractorIds !== null
-                ? 'Lista ograniczona do hoteli z planu noclegów tej imprezy. Zaznacz, gdy hotel ma źle przypisany typ.'
-                : 'Domyślnie lista jest ograniczona do przewoźników i kierowców. Zaznacz, aby przeszukać wszystkie firmy w bazie.')
+            ->helperText($searchAllHelperText ?? $defaultSearchAllHelper)
             ->dehydrated(false)
             ->live();
 

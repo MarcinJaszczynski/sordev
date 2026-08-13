@@ -12,6 +12,11 @@ class EventDayInsurance extends Model
         'event_id',
         'day',
         'insurance_id',
+        'is_done',
+    ];
+
+    protected $casts = [
+        'is_done' => 'boolean',
     ];
 
     public function event()

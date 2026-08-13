@@ -40,6 +40,21 @@ class TaskAttachment extends Model
         $this->attributes['file_path'] = StoragePath::normalize($value);
     }
 
+    protected static function booted(): void
+    {
+        static::deleting(function (self $attachment): void {
+            $path = $attachment->file_path;
+            if (! is_string($path) || $path === '') {
+                return;
+            }
+
+            $disk = \Illuminate\Support\Facades\Storage::disk('public');
+            if ($disk->exists($path)) {
+                $disk->delete($path);
+            }
+        });
+    }
+
     public function getPublicUrlAttribute(): ?string
     {
         return $this->download_url;

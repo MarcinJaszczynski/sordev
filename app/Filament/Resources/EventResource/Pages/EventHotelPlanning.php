@@ -35,10 +35,11 @@ class EventHotelPlanning extends Page
     /**
      * @return array{
      *   participants: int,
-     *   beds: int,
-     *   assigned: int,
-     *   free_beds: int,
-     *   occupancy_percent: float,
+     *   gratis: int,
+     *   staff: int,
+     *   drivers: int,
+     *   pilot: int,
+     *   required_beds_per_night: int,
      *   stays: list<array<string, mixed>>
      * }
      */

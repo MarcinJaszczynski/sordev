@@ -12,18 +12,17 @@ final class EventReadinessIndicators
      */
     public static function forEvent(Event $event): array
     {
-        $items = [
+        // Kanoniczne 4 karty: odprawa, zaliczka pilota, ubezpieczenie, kierowca.
+        return [
             self::checkInItem($event),
             self::pilotFundsItem($event),
             self::insuranceItem($event),
             self::driverItem($event),
         ];
-
-        return $items;
     }
 
     /**
-     * @return array<int, array{key: string, label: string, short: string, tone: string, title: string, icon: string, status_label: string}>
+     * @return array<int, array{key: string, label: string, short: string, tone: string, title: string, icon: string, status_label: string, url: ?string}>
      */
     public static function forEventOverview(Event $event): array
     {
@@ -32,9 +31,119 @@ final class EventReadinessIndicators
                 ...$item,
                 'icon' => self::iconForKey($item['key']),
                 'status_label' => self::statusLabel($item),
+                'url' => self::urlForKey($event, $item['key']),
             ],
             self::forEvent($event),
         );
+    }
+
+    /**
+     * Kompaktowe podsumowanie na listę imprez: score + blockers.
+     *
+     * @return array{
+     *   total: int,
+     *   done: int,
+     *   open: int,
+     *   tone: string,
+     *   label: string,
+     *   title: string,
+     *   blockers: array<int, array{key: string, label: string, short: string, tone: string, title: string}>
+     * }
+     */
+    public static function summaryForList(Event $event): array
+    {
+        $relevant = array_values(array_filter(
+            self::forEvent($event),
+            fn (array $item): bool => ($item['tone'] ?? '') !== 'muted' && ($item['short'] ?? '') !== '—',
+        ));
+
+        $total = count($relevant);
+        $done = count(array_filter($relevant, fn (array $item): bool => ($item['short'] ?? '') === 'OK'));
+        $open = max(0, $total - $done);
+
+        $blockers = array_values(array_filter(
+            $relevant,
+            fn (array $item): bool => in_array($item['tone'] ?? '', ['danger', 'warn'], true),
+        ));
+
+        usort($blockers, function (array $a, array $b): int {
+            $rank = ['danger' => 0, 'warn' => 1, 'ok' => 2, 'muted' => 3];
+
+            return ($rank[$a['tone']] ?? 9) <=> ($rank[$b['tone']] ?? 9);
+        });
+
+        $blockers = array_slice($blockers, 0, 2);
+
+        $tone = match (true) {
+            $total === 0 => 'muted',
+            $open === 0 => 'ok',
+            collect($blockers)->contains(fn (array $i): bool => ($i['tone'] ?? '') === 'danger') => 'danger',
+            default => 'warn',
+        };
+
+        $title = $blockers === []
+            ? ($total > 0 ? 'Gotowość kompletna' : 'Brak aktywnych wskaźników')
+            : implode(' · ', array_map(fn (array $i): string => $i['label'].': '.$i['title'], $blockers));
+
+        return [
+            'total' => $total,
+            'done' => $done,
+            'open' => $open,
+            'tone' => $tone,
+            'label' => $total > 0 ? "{$done}/{$total}" : '—',
+            'title' => $title,
+            'blockers' => $blockers,
+        ];
+    }
+
+    public static function renderHtml(Event $event): string
+    {
+        return self::renderSummaryHtml($event);
+    }
+
+    public static function renderSummaryHtml(Event $event): string
+    {
+        $summary = self::summaryForList($event);
+        $blockers = array_map(
+            fn (array $item): string => sprintf(
+                '<span class="event-indicator event-indicator--%s" title="%s">%s</span>',
+                e($item['tone']),
+                e($item['title']),
+                e($item['label']),
+            ),
+            $summary['blockers'],
+        );
+
+        return sprintf(
+            '<div class="event-readiness-summary event-readiness-summary--%s" title="%s">'.
+                '<span class="event-readiness-summary__score">%s</span>'.
+                '%s'.
+            '</div>',
+            e($summary['tone']),
+            e($summary['title']),
+            e($summary['label']),
+            $blockers !== [] ? '<span class="event-readiness-summary__blockers">'.implode('', $blockers).'</span>' : '',
+        );
+    }
+
+    protected static function urlForKey(Event $event, string $key): ?string
+    {
+        if (! $event->getKey()) {
+            return null;
+        }
+
+        try {
+            return match ($key) {
+                'check_in' => \App\Filament\Resources\EventResource::getUrl('edit', ['record' => $event]),
+                'pilot_funds' => \App\Filament\Resources\EventResource::getUrl('pilot', ['record' => $event]),
+                // Polisa / status „Gotowe”: Operacje → Ubezpieczenia.
+                'insurance' => \App\Filament\Resources\EventResource::getUrl('day-insurances', ['record' => $event]),
+                'driver' => \App\Filament\Resources\EventResource::getUrl('transport', ['record' => $event]),
+                default => null,
+            };
+        } catch (\Throwable) {
+            return null;
+        }
     }
 
     protected static function iconForKey(string $key): string
@@ -61,22 +170,6 @@ final class EventReadinessIndicators
             '—' => 'Nie dotyczy',
             default => (string) $item['short'],
         };
-    }
-
-    public static function renderHtml(Event $event): string
-    {
-        $pills = array_map(
-            fn (array $item): string => sprintf(
-                '<span class="event-indicator event-indicator--%s" title="%s">%s: %s</span>',
-                e($item['tone']),
-                e($item['title']),
-                e($item['label']),
-                e($item['short']),
-            ),
-            self::forEvent($event),
-        );
-
-        return '<div class="event-indicators event-indicators--clickable">'.implode('', $pills).'</div>';
     }
 
     /**
@@ -121,7 +214,7 @@ final class EventReadinessIndicators
         if (! Schema::hasColumn('events', 'pilot_funds_paid') || ! $event->assigned_to) {
             return [
                 'key' => 'pilot_funds',
-                'label' => 'Zaliczka',
+                'label' => 'Zaliczka pilota',
                 'short' => '—',
                 'tone' => 'muted',
                 'title' => 'Brak przypisanego pilota',
@@ -136,7 +229,7 @@ final class EventReadinessIndicators
 
             return [
                 'key' => 'pilot_funds',
-                'label' => 'Zaliczka',
+                'label' => 'Zaliczka pilota',
                 'short' => 'OK',
                 'tone' => 'ok',
                 'title' => 'Zaliczka wypłacona'.($when !== '' ? ' ('.$when.')' : '').($amount !== '' ? ' · '.$amount : ''),
@@ -148,7 +241,7 @@ final class EventReadinessIndicators
 
             return [
                 'key' => 'pilot_funds',
-                'label' => 'Zaliczka',
+                'label' => 'Zaliczka pilota',
                 'short' => 'plan',
                 'tone' => 'warn',
                 'title' => 'Zaplanowano zaliczkę: '.$amount.' — czeka na wypłatę',
@@ -157,7 +250,7 @@ final class EventReadinessIndicators
 
         return [
             'key' => 'pilot_funds',
-            'label' => 'Zaliczka',
+            'label' => 'Zaliczka pilota',
             'short' => 'brak',
             'tone' => 'danger',
             'title' => 'Brak planu zaliczki pilota',
@@ -169,33 +262,14 @@ final class EventReadinessIndicators
      */
     protected static function insuranceItem(Event $event): array
     {
-        if (! $event->requiresInsuranceWorkflow()) {
-            return [
-                'key' => 'insurance',
-                'label' => 'Ubezp.',
-                'short' => '—',
-                'tone' => 'muted',
-                'title' => 'Brak wymogu ubezpieczenia',
-            ];
-        }
-
-        if ($event->isInsuranceCompleted()) {
+        // Gotowość: tylko zrobione / nie — bez „nie dotyczy” i bez stanu pośredniego.
+        if (($event->insurance_status ?? 'pending') === 'completed') {
             return [
                 'key' => 'insurance',
                 'label' => 'Ubezp.',
                 'short' => 'OK',
                 'tone' => 'ok',
-                'title' => 'Ubezpieczenie kompletne',
-            ];
-        }
-
-        if ($event->hasInsuranceDataSaved()) {
-            return [
-                'key' => 'insurance',
-                'label' => 'Ubezp.',
-                'short' => 'w toku',
-                'tone' => 'warn',
-                'title' => $event->insuranceChecklistLabel(),
+                'title' => 'Ubezpieczenie oznaczone jako gotowe',
             ];
         }
 
@@ -204,7 +278,7 @@ final class EventReadinessIndicators
             'label' => 'Ubezp.',
             'short' => 'brak',
             'tone' => 'danger',
-            'title' => 'Ubezpieczenie do wystawienia',
+            'title' => 'Uzupełnij w Operacje → Ubezpieczenia i ustaw status „Gotowe”',
         ];
     }
 
@@ -251,4 +325,6 @@ final class EventReadinessIndicators
                 : 'Nie wysłano informacji o podstawieniu kierowcy',
         ];
     }
+
 }
+

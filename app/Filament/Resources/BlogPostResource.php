@@ -22,6 +22,10 @@ class BlogPostResource extends Resource
 
     protected static ?string $navigationLabel = 'Blog';
 
+    protected static ?string $modelLabel = 'wpis na blogu';
+
+    protected static ?string $pluralModelLabel = 'wpisy na blogu';
+
     protected static ?string $navigationGroup = FilamentNavigation::GROUP_SYSTEM;
 
     protected static ?int $navigationSort = 50;
@@ -35,7 +39,7 @@ class BlogPostResource extends Resource
     {
         return $form->schema([
             Forms\Components\Section::make('Podstawowe')
-                ->columns(2)
+                ->columns(['default' => 1, 'md' => 2])
                 ->schema([
                     Forms\Components\TextInput::make('title')
                         ->label('Tytuł')
@@ -48,6 +52,8 @@ class BlogPostResource extends Resource
                             }
                         }),
                     Forms\Components\TextInput::make('slug')
+                        ->label('Identyfikator URL')
+                        ->helperText('Fragment adresu wpisu, generowany z tytułu.')
                         ->required()
                         ->unique(ignorable: fn ($record) => $record),
                     Forms\Components\TextInput::make('excerpt')
@@ -60,12 +66,12 @@ class BlogPostResource extends Resource
                     \FilamentTiptapEditor\TiptapEditor::make('content')
                         ->label('Treść')
                         ->required()
-                        
+
                         ->columnSpanFull(),
                 ]),
 
-            Forms\Components\Section::make('Media')
-                ->columns(2)
+            Forms\Components\Section::make('Multimedia')
+                ->columns(['default' => 1, 'md' => 2])
                 ->schema([
                     Forms\Components\FileUpload::make('featured_image')
                         ->image()
@@ -127,7 +133,7 @@ class BlogPostResource extends Resource
                 ]),
 
             Forms\Components\Section::make('Publikacja i tagi')
-                ->columns(3)
+                ->columns(['default' => 1, 'md' => 2, 'xl' => 3])
                 ->schema([
                     Forms\Components\Select::make('tags')
                         ->label('Tagi')

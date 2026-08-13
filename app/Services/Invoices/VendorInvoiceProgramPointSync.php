@@ -48,6 +48,10 @@ class VendorInvoiceProgramPointSync
                 ->where('document_number', $invoice->invoice_number ?? $invoice->ksef_number)
                 ->first();
 
+            $invoiceIsPaid = $invoice->payment_status === 'paid';
+            $actualAmount = $invoiceIsPaid ? $gross : null;
+            $actualAmountPln = $invoiceIsPaid ? $actualPln : null;
+
             $paymentPayload = [
                 'source_type' => self::PAYMENT_SOURCE_TYPE,
                 'source_id' => $point->id,
@@ -56,18 +60,20 @@ class VendorInvoiceProgramPointSync
                 'planned_currency_id' => $cost->planned_currency_id,
                 'planned_rate' => $cost->planned_rate,
                 'planned_amount_pln' => 0,
-                'actual_amount' => $gross,
-                'actual_currency_id' => $currencyId,
-                'actual_rate' => $rate,
-                'actual_amount_pln' => $actualPln,
+                // Actual tylko gdy faktura faktycznie opłacona — inaczej nie zawyża „Opłacone”.
+                'actual_amount' => $actualAmount,
+                'actual_currency_id' => $invoiceIsPaid ? $currencyId : null,
+                'actual_rate' => $invoiceIsPaid ? $rate : null,
+                'actual_amount_pln' => $actualAmountPln,
                 'paid_by' => 'office',
                 'advance_type' => 'full',
                 'payment_method' => $invoice->payment_method,
                 'document_number' => $invoice->invoice_number ?? $invoice->ksef_number,
-                'paid_at' => $invoice->payment_date ?? $invoice->issue_date,
-                'payment_status' => $invoice->payment_status === 'paid' ? 'paid' : 'planned',
+                'paid_at' => $invoiceIsPaid ? ($invoice->payment_date ?? $invoice->issue_date) : null,
+                'payment_status' => $invoiceIsPaid ? 'paid' : 'planned',
                 'contractor_id' => $invoice->contractor_id ?? $cost->contractor_id,
-                'notes' => 'Synchronizacja z faktury KSeF #'.$invoice->id,
+                'notes' => 'Synchronizacja z faktury KSeF #'.$invoice->id
+                    .($invoiceIsPaid ? '' : ' (faktura jeszcze nieopłacona)'),
             ];
 
             if ($payment) {
@@ -76,19 +82,11 @@ class VendorInvoiceProgramPointSync
                 $payment = $settlement->costs()->create($paymentPayload);
             }
 
-            $paidPln = (float) $settlement->costs()
-                ->where('source_type', self::PAYMENT_SOURCE_TYPE)
-                ->where('source_id', $point->id)
-                ->where('payment_status', '!=', 'cancelled')
-                ->sum('actual_amount_pln');
-
-            $plannedPln = (float) ($cost->planned_amount_pln ?? 0);
-            $statusFromPayments = 'planned';
-            if ($plannedPln > 0 && $paidPln >= $plannedPln - 0.01) {
-                $statusFromPayments = 'paid';
-            } elseif ($paidPln > 0) {
-                $statusFromPayments = 'partially_paid';
-            }
+            $health = app(\App\Services\SettlementPaymentHealthService::class);
+            $allCosts = $settlement->costs()->get();
+            $paidPln = $health->paidPlnForPlanCost($cost, $allCosts);
+            $plannedPln = $health->plannedPlnForCost($cost);
+            $statusFromPayments = $health->planPaymentStatusFromAmounts($paidPln, $plannedPln);
 
             $cost->update([
                 'actual_amount' => null,

@@ -33,6 +33,12 @@ trait HandlesPilotExpenseLedger
     /** @var array<int|string, TemporaryUploadedFile|array<int, TemporaryUploadedFile>> */
     public array $costDocumentFiles = [];
 
+    /** @var array<int|string, string> Typ dokumentu jak w Kosztach (invoice, payment_proof, receipt…). */
+    public array $costDocumentTypes = [];
+
+    /** @var array<int|string, string> */
+    public array $costDocumentNumbers = [];
+
     /** @var array<int|string, string> */
     public array $cashReturned = [];
 
@@ -84,8 +90,9 @@ trait HandlesPilotExpenseLedger
         $cost = EventSettlementCost::findOrFail($costId);
         $this->editingCostId = $cost->id;
         $this->editCostPaidBy = 'pilot';
-        $this->editCostActualAmount = $cost->actual_amount !== null
-            ? (string) $cost->actual_amount
+        $paidDisplay = $cost->ledger_paid_amount ?? $cost->actual_amount;
+        $this->editCostActualAmount = $paidDisplay !== null
+            ? (string) $paidDisplay
             : (string) ($cost->planned_amount ?? '');
         $this->editCostCurrencyId = $cost->actual_currency_id
             ?? $cost->planned_currency_id
@@ -94,7 +101,7 @@ trait HandlesPilotExpenseLedger
         $this->editCostNotes = (string) ($cost->notes ?? '');
         $this->editCostInvoiceNumber = (string) ($cost->invoice_number ?? $cost->document_number ?? '');
         $this->editCostReceiptNumber = (string) ($cost->receipt_number ?? '');
-        $this->editCostPaymentMethod = filled($cost->payment_method) ? $cost->payment_method : 'cash';
+        $this->editCostPaymentMethod = 'cash';
     }
 
     public function cancelEditCost(): void
@@ -112,6 +119,8 @@ trait HandlesPilotExpenseLedger
 
     public function saveCost(): void
     {
+        $this->ensurePilotMutationsAllowed();
+
         if (! $this->editingCostId) {
             return;
         }
@@ -147,7 +156,7 @@ trait HandlesPilotExpenseLedger
             'notes' => $this->editCostNotes,
             'invoice_number' => $this->editCostInvoiceNumber,
             'receipt_number' => $this->editCostReceiptNumber,
-            'payment_method' => $this->editCostPaymentMethod,
+            'payment_method' => 'cash',
         ]);
 
         $this->cancelEditCost();
@@ -157,6 +166,8 @@ trait HandlesPilotExpenseLedger
 
     public function saveCashReporting(): void
     {
+        $this->ensurePilotMutationsAllowed();
+
         $settlement = app(PilotSettlementService::class)->getOrCreateSettlement($this->event);
         $currencyIds = app(PilotSettlementService::class)
             ->getCashReconciliation($settlement)
@@ -201,6 +212,8 @@ trait HandlesPilotExpenseLedger
 
     public function uploadCostDocument(int $costId): void
     {
+        $this->ensurePilotMutationsAllowed();
+
         $cost = EventSettlementCost::findOrFail($costId);
         $files = $this->normalizeUploadedFiles($this->costDocumentFiles[$costId] ?? []);
 
@@ -210,14 +223,26 @@ trait HandlesPilotExpenseLedger
             return;
         }
 
+        $allowedTypes = array_keys(EventSettlementDocument::$documentTypes);
+        $documentType = (string) ($this->costDocumentTypes[$costId] ?? 'invoice');
+        if (! in_array($documentType, $allowedTypes, true)) {
+            $documentType = 'invoice';
+        }
+
+        $documentNumber = trim((string) ($this->costDocumentNumbers[$costId] ?? ''));
+
         app(PilotSettlementService::class)->uploadDocument(
             $this->event,
-            ['document_type' => 'receipt'],
+            [
+                'document_type' => $documentType,
+                'document_number' => $documentNumber !== '' ? $documentNumber : null,
+            ],
             $files,
             $cost,
         );
 
-        unset($this->costDocumentFiles[$costId]);
+        unset($this->costDocumentFiles[$costId], $this->costDocumentNumbers[$costId]);
+        $this->costDocumentTypes[$costId] = $documentType;
         $this->notifyLedger('Dokument dołączony do wydatku');
     }
 
@@ -261,7 +286,37 @@ trait HandlesPilotExpenseLedger
     public function deleteDocument(int $documentId): void
     {
         $document = EventSettlementDocument::findOrFail($documentId);
-        app(PilotSettlementService::class)->deleteDocument($this->event, $document);
+
+        try {
+            app(PilotSettlementService::class)->deleteDocument($this->event, $document);
+        } catch (\Illuminate\Validation\ValidationException $e) {
+            $this->addError('document', collect($e->errors())->flatten()->first() ?: $e->getMessage());
+
+            return;
+        }
+
+        $this->loadCashReportingFields();
         $this->notifyLedger('Dokument usunięty');
+    }
+
+    public function deleteDocumentFile(int $documentId, int $fileIndex): void
+    {
+        $document = EventSettlementDocument::findOrFail($documentId);
+
+        try {
+            app(PilotSettlementService::class)->deleteDocumentFile($this->event, $document, $fileIndex);
+        } catch (\Illuminate\Validation\ValidationException $e) {
+            $this->addError('document', collect($e->errors())->flatten()->first() ?: $e->getMessage());
+
+            return;
+        }
+
+        $this->loadCashReportingFields();
+        $this->notifyLedger('Plik usunięty z dokumentu');
+    }
+
+    protected function ensurePilotMutationsAllowed(): void
+    {
+        app(\App\Services\PilotAccessService::class)->assertPilotMutationsAllowed();
     }
 }

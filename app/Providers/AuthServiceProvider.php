@@ -19,6 +19,7 @@ class AuthServiceProvider extends ServiceProvider
         Bus::class => BusPolicy::class,
         Markup::class => MarkupPolicy::class,
         \App\Models\Event::class => \App\Policies\EventPolicy::class,
+        \App\Models\EventSettlement::class => \App\Policies\EventSettlementPolicy::class,
     ];
 
     /**

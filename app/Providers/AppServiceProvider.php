@@ -2,7 +2,9 @@
 
 namespace App\Providers;
 
+use App\Events\EventStatusChanged;
 use App\Filament\Resources\TaskResource\RelationManagers\TasksRelationManager;
+use App\Listeners\HandleEventStatusChanged;
 use App\Models\ClientInvoiceRequest;
 use App\Models\ContractPaymentSchedule;
 use App\Models\Event;
@@ -21,7 +23,8 @@ use App\Observers\EventSettlementCostObserver;
 use App\Observers\PlaceObserver;
 use App\Observers\TaskCommentObserver;
 use App\Observers\VendorInvoiceObserver;
-use Illuminate\Support\Facades\Schema;
+use App\Services\Sms\LogSmsChannel;
+use App\Services\Sms\SmsChannelInterface;
 use App\Services\Tfg\HttpTfgFeedClient;
 use App\Services\Tfg\MockTfgFeedClient;
 use App\Services\Tfg\TfgFeedClientInterface;
@@ -29,6 +32,9 @@ use App\Support\FilamentFormBinding;
 use App\Support\ViteAssetResolver;
 use Filament\Support\Assets\Css;
 use Filament\Support\Facades\FilamentAsset;
+use Illuminate\Support\Facades\Event as EventFacade;
+use Illuminate\Support\Facades\Mail;
+use Illuminate\Support\Facades\Schema;
 use Illuminate\Support\Facades\URL;
 use Illuminate\Support\Facades\Vite;
 use Illuminate\Support\ServiceProvider;
@@ -46,6 +52,8 @@ class AppServiceProvider extends ServiceProvider
                 ? app(HttpTfgFeedClient::class)
                 : app(MockTfgFeedClient::class);
         });
+
+        $this->app->bind(SmsChannelInterface::class, LogSmsChannel::class);
     }
 
     /**
@@ -53,7 +61,11 @@ class AppServiceProvider extends ServiceProvider
      */
     public function boot(): void
     {
-        \FilamentTiptapEditor\TiptapEditor::macro('maxLength', function (int | \Closure | null $length): \FilamentTiptapEditor\TiptapEditor {
+        $this->app->terminating(static function (): void {
+            \App\Services\EventCostCalculator::clearRequestCache();
+        });
+
+        \FilamentTiptapEditor\TiptapEditor::macro('maxLength', function (int|\Closure|null $length): \FilamentTiptapEditor\TiptapEditor {
             $this->rules(fn (): array => filled($value = $this->evaluate($length)) ? ["max:{$value}"] : []);
 
             return $this;
@@ -75,6 +87,13 @@ class AppServiceProvider extends ServiceProvider
         }, isImportant: false);
 
         FilamentFormBinding::apply();
+
+        $demoRedirect = \App\Support\DemoMailMode::redirectTo();
+        if ($demoRedirect) {
+            Mail::alwaysTo($demoRedirect);
+        }
+
+        EventFacade::listen(EventStatusChanged::class, HandleEventStatusChanged::class);
 
         Vite::useBuildDirectory('vite-dist');
 

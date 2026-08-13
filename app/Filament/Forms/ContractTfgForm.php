@@ -23,7 +23,7 @@ class ContractTfgForm
 
         $section = Forms\Components\Section::make('Parametry UFG / TFG')
             ->description('Wymagane do raportowania w UFG. Domyślnie uzupełniane z danych imprezy (liczba uczestników, terminy, transport).')
-            ->columns(2)
+            ->columns(['default' => 1, 'md' => 2])
             ->schema([
                 Forms\Components\Select::make('subject_code')
                     ->label('Przedmiot umowy')
@@ -92,7 +92,7 @@ class ContractTfgForm
 
                 Forms\Components\TagsInput::make('tfg_icao_codes')
                     ->label('Kody ICAO (lot)')
-                    ->placeholder('np. EPWA')
+                    ->placeholder('Wpisz kod ICAO')
                     ->visible(fn (Get $get) => TfgDictionaryItem::requiresIcao((string) $get('tfg_transport_code')))
                     ->columnSpanFull(),
             ]);

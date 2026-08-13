@@ -53,4 +53,19 @@ class BankPaymentImportLine extends Model
     {
         return $this->belongsTo(Event::class);
     }
+
+    public function scopeUnmatchedPending($query)
+    {
+        return $query->where('applied', false)->where('match_status', 'unmatched');
+    }
+
+    public function scopeAssignable($query)
+    {
+        return $query->where('applied', false);
+    }
+
+    public function isMatched(): bool
+    {
+        return $this->match_status !== 'unmatched';
+    }
 }

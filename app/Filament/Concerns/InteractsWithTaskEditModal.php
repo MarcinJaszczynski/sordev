@@ -54,6 +54,14 @@ trait InteractsWithTaskEditModal
         $this->mountAction('createTask');
     }
 
+    public function openCreateTaskForProgramPoint(int $programPointId): void
+    {
+        $this->openCreateTaskModal([
+            'taskable_type' => \App\Models\EventProgramPoint::class,
+            'taskable_id' => $programPointId,
+        ]);
+    }
+
     #[On('task-full-editor-saved')]
     #[On('task-full-editor-updated')]
     public function handleTaskFullEditorSaved(int $taskId): void
@@ -69,6 +77,15 @@ trait InteractsWithTaskEditModal
     public function handleTaskCommentAddedForTopbar(): void
     {
         $this->dispatchTopbarNotificationRefresh();
+
+        // Odśwież listę/tablicę zadań (np. licznik i preview komentarzy na Kanban).
+        if ($this->editingTaskId) {
+            $task = Task::query()->find($this->editingTaskId);
+
+            if ($task) {
+                $this->afterTaskModalSaved($task);
+            }
+        }
     }
 
     protected function openDeepLinkedTaskIfPresent(): void

@@ -37,7 +37,7 @@ class TaxResource extends Resource
                             ->label('Nazwa podatku')
                             ->required()
                             ->maxLength(255)
-                            ->placeholder('np. VAT, Podatek miejski'),
+                            ->placeholder('Wpisz nazwę podatku'),
                         Forms\Components\TextInput::make('percentage')
                             ->label('Procent podatku')
                             ->required()
@@ -46,12 +46,12 @@ class TaxResource extends Resource
                             ->step(0.01)
                             ->minValue(0)
                             ->maxValue(100)
-                            ->placeholder('np. 23.00'),
+                            ->placeholder('Wpisz stawkę procentową'),
                         Forms\Components\Toggle::make('is_active')
                             ->label('Aktywny')
                             ->default(true)
                             ->helperText('Czy podatek jest aktywny i może być używany w kalkulacjach'),
-                    ])->columns(2),
+                    ])->columns(['default' => 1, 'md' => 2]),
 
                 Forms\Components\Section::make('Podstawa naliczania')
                     ->description('Wybierz od czego ma być naliczany podatek')
@@ -62,12 +62,12 @@ class TaxResource extends Resource
                         Forms\Components\Toggle::make('apply_to_markup')
                             ->label('Naliczaj od narzutu')
                             ->helperText('Podatek będzie naliczony od kwoty narzutu'),
-                    ])->columns(2),
+                    ])->columns(['default' => 1, 'md' => 2]),
 
                 Forms\Components\Section::make('Dodatkowe informacje')
                     ->schema([
                         \FilamentTiptapEditor\TiptapEditor::make('description')
-                            ->placeholder('Dodatkowe informacje o podatku...'),
+                            ->placeholder('Wpisz dodatkowe informacje o podatku'),
                     ]),
             ]);
     }

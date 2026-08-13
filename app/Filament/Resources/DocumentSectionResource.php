@@ -18,7 +18,11 @@ class DocumentSectionResource extends Resource
 
     protected static ?string $navigationIcon = 'heroicon-o-folder';
 
-    protected static ?string $navigationLabel = 'Sekcje dokumentów';
+    protected static ?string $navigationLabel = 'Sekcje dokumentów CMS';
+
+    protected static ?string $modelLabel = 'sekcja dokumentów';
+
+    protected static ?string $pluralModelLabel = 'sekcje dokumentów';
 
     protected static ?string $navigationGroup = FilamentNavigation::GROUP_SYSTEM;
 
@@ -32,9 +36,13 @@ class DocumentSectionResource extends Resource
     public static function form(Form $form): Form
     {
         return $form->schema([
-            Forms\Components\TextInput::make('title')->required(),
-            Forms\Components\TextInput::make('slug')->required()->unique(ignoreRecord: true),
-            Forms\Components\TextInput::make('order_number')->default(0)->numeric(),
+            Forms\Components\TextInput::make('title')->label('Tytuł')->required(),
+            Forms\Components\TextInput::make('slug')
+                ->label('Identyfikator URL')
+                ->helperText('Fragment adresu sekcji w URL.')
+                ->required()
+                ->unique(ignoreRecord: true),
+            Forms\Components\TextInput::make('order_number')->label('Kolejność')->default(0)->numeric(),
         ]);
     }
 
@@ -42,7 +50,7 @@ class DocumentSectionResource extends Resource
     {
         return $table->columns([
             TextColumn::make('title')->searchable(),
-            TextColumn::make('slug'),
+            TextColumn::make('slug')->label('Identyfikator URL'),
             TextColumn::make('order_number')->label('Kolejność')->sortable(),
         ])->defaultSort('order_number');
     }

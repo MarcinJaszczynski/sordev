@@ -196,7 +196,7 @@
                 @if ($restoreManifest)
                     <div class="rounded-lg border border-gray-200 dark:border-gray-700 p-4 space-y-3">
                         <h4 class="text-sm font-semibold text-gray-900 dark:text-white">Zawartość archiwum</h4>
-                        <div class="grid grid-cols-2 gap-2 text-sm text-gray-600 dark:text-gray-400">
+                        <div class="grid grid-cols-1 sm:grid-cols-2 gap-2 text-sm text-gray-600 dark:text-gray-400">
                             <span>Data utworzenia:</span>
                             <span class="font-medium text-gray-900 dark:text-white">{{ \Carbon\Carbon::parse($restoreManifest['created_at'] ?? '')->format('Y-m-d H:i') }}</span>
                             <span>PHP:</span>

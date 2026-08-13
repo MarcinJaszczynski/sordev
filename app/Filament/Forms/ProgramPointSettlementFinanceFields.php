@@ -89,7 +89,7 @@ final class ProgramPointSettlementFinanceFields
 
             Forms\Components\Select::make('settlement_advance_type')
                 ->label('Typ płatności')
-                ->options(EventSettlementCost::$advanceTypes)
+                ->options(EventSettlementCost::userSelectableAdvanceTypes())
                 ->required(),
 
             self::payableUntilField('settlement_advance_due_date'),
@@ -200,6 +200,12 @@ final class ProgramPointSettlementFinanceFields
                 ->options(EventSettlementCost::$paidByOptions)
                 ->required(),
 
+            Forms\Components\Select::make('advance_type')
+                ->label('Typ płatności')
+                ->options(EventSettlementCost::userSelectableAdvanceTypes())
+                ->default('final')
+                ->required(),
+
             self::payableUntilField('due_date'),
 
             Forms\Components\TextInput::make('actual_amount')
@@ -260,7 +266,7 @@ final class ProgramPointSettlementFinanceFields
     {
         return [
             Forms\Components\Section::make('Dokument zaliczki')
-                ->columns(2)
+                ->columns(['default' => 1, 'md' => 2])
                 ->collapsed()
                 ->schema(self::documentFields(prefix: 'advance_')),
         ];

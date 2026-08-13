@@ -70,10 +70,18 @@ class EventPaymentScheduleService
         $invoicesByPointId = collect();
 
         if (Schema::hasTable('vendor_invoices')) {
-            $invoicesByPointId = VendorInvoice::query()
-                ->whereIn('event_program_point_id', $pointIds)
-                ->get()
-                ->groupBy('event_program_point_id');
+            $invoices = VendorInvoice::queryForProgramPoints($pointIds)
+                ->with(['programPoints:id'])
+                ->get();
+
+            foreach ($pointIds as $pointId) {
+                $invoicesByPointId->put(
+                    $pointId,
+                    $invoices
+                        ->filter(fn (VendorInvoice $invoice): bool => $invoice->isLinkedToProgramPoint((int) $pointId))
+                        ->values()
+                );
+            }
         }
 
         foreach ($missing as $point) {
@@ -167,9 +175,7 @@ class EventPaymentScheduleService
             return $point->vendorInvoices;
         }
 
-        return VendorInvoice::query()
-            ->where('event_program_point_id', $point->id)
-            ->get();
+        return VendorInvoice::queryForProgramPoints([$point->id])->get();
     }
 
     /**
@@ -195,7 +201,7 @@ class EventPaymentScheduleService
             'title' => $invoice->invoice_number ?: ($invoice->ksef_number ?: 'Faktura #'.$invoice->id),
             'amount_label' => \App\Support\MoneyFormatter::format($amount, $invoice->currency ?: 'PLN'),
             'is_overdue' => $invoice->due_date->isPast(),
-            'url' => \App\Filament\Resources\VendorInvoiceResource::getUrl('edit', ['record' => $invoice->id]),
+            'url' => \App\Support\AdminPanelUrls::vendorInvoiceEdit($invoice),
             'source_type' => 'vendor_invoice',
             'source_id' => $invoice->id,
             'event_id' => $event?->id ?? $point->event_id,
@@ -388,8 +394,8 @@ class EventPaymentScheduleService
             'amount_label' => $this->formatSettlementCostAmount($cost, $kind),
             'is_overdue' => $dueDate->isPast(),
             'url' => $cost->settlement_id
-                ? \App\Filament\Resources\EventSettlementResource::getUrl('edit', ['record' => $cost->settlement_id])
-                : \App\Filament\Resources\EventResource::getUrl('settlement-summary', ['record' => $event->id]),
+                ? \App\Support\AdminPanelUrls::eventFinanceForSettlement($cost->settlement_id)
+                : \App\Support\AdminPanelUrls::eventFinance($event),
             'source_type' => 'settlement_cost',
             'source_id' => $cost->id,
             'event_id' => $event->id,
@@ -421,7 +427,7 @@ class EventPaymentScheduleService
             'amount_label' => \App\Support\MoneyFormatter::format((float) $schedule->amount, $contract->currency ?: 'PLN'),
             'is_overdue' => $schedule->due_date->isPast(),
             'url' => $contract->id
-                ? \App\Filament\Resources\ContractResource::getUrl('edit', ['record' => $contract->id])
+                ? \App\Support\AdminPanelUrls::contractEdit($contract)
                 : null,
             'source_type' => 'contract_schedule',
             'source_id' => $schedule->id,
@@ -453,7 +459,7 @@ class EventPaymentScheduleService
             'title' => $schedule->label ?: ('Rata #'.($schedule->sort_order ?? '?')),
             'amount_label' => \App\Support\MoneyFormatter::format((float) $schedule->amount, 'PLN'),
             'is_overdue' => $schedule->due_date->isPast(),
-            'url' => \App\Filament\Resources\EventResource::getUrl('edit', ['record' => $event->id]),
+            'url' => \App\Support\AdminPanelUrls::eventEdit($event),
             'source_type' => 'agreement_schedule',
             'source_id' => $schedule->id,
             'event_id' => $event->id,
@@ -483,7 +489,7 @@ class EventPaymentScheduleService
             'title' => $invoice->invoice_number ?: ($invoice->ksef_number ?: 'Faktura #'.$invoice->id),
             'amount_label' => \App\Support\MoneyFormatter::format($amount, $invoice->currency ?: 'PLN'),
             'is_overdue' => $invoice->due_date->isPast(),
-            'url' => \App\Filament\Resources\VendorInvoiceResource::getUrl('edit', ['record' => $invoice->id]),
+            'url' => \App\Support\AdminPanelUrls::vendorInvoiceEdit($invoice),
             'source_type' => 'vendor_invoice',
             'source_id' => $invoice->id,
             'event_id' => $event->id,

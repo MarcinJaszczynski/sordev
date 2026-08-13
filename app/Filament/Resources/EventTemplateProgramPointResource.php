@@ -2,7 +2,7 @@
 
 namespace App\Filament\Resources;
 
-use App\Filament\Forms\CurrencyConversionFields;
+use App\Filament\Forms\EventProgramPointPricingFields;
 use App\Filament\Resources\EventTemplateProgramPointResource\Pages;
 use App\Filament\Resources\TaskResource\RelationManagers\TasksRelationManager;
 use App\Models\Currency;
@@ -41,6 +41,10 @@ class EventTemplateProgramPointResource extends Resource
 
     protected static ?string $navigationLabel = 'Punkty programu';
 
+    protected static ?string $modelLabel = 'punkt programu';
+
+    protected static ?string $pluralModelLabel = 'punkty programu';
+
     protected static ?int $navigationSort = 2;
 
     /**
@@ -55,7 +59,7 @@ class EventTemplateProgramPointResource extends Resource
                 Forms\Components\Section::make('Podstawowe informacje')
                     ->description('Główne dane punktu programu')
                     ->icon('heroicon-o-information-circle')
-                    ->columns(2)
+                    ->columns(['default' => 1, 'md' => 2])
                     ->schema([
                         Forms\Components\TextInput::make('name')
                             ->label('Nazwa punktu programu')
@@ -66,22 +70,22 @@ class EventTemplateProgramPointResource extends Resource
 
                         \FilamentTiptapEditor\TiptapEditor::make('description')
                             ->label('Opis punktu programu')
-                            ->placeholder('Opisz szczegóły punktu programu, np. przebieg, atrakcje, ważne informacje...')
+                            ->placeholder('Wpisz opis punktu programu')
                             ->hint('Opis widoczny dla uczestników i organizatorów. Możesz używać pogrubień, list, linków.')
-                            
+
                             ->nullable()
                             ->columnSpanFull(),
 
                         Forms\Components\TextInput::make('duration_hours')
                             ->label('Czas trwania (godziny)')
-                            ->placeholder('np. 2')
+                            ->placeholder('Wpisz liczbę godzin')
                             ->hint('Podaj liczbę pełnych godzin trwania punktu programu.')
                             ->numeric()
                             ->required(),
 
                         Forms\Components\TextInput::make('duration_minutes')
                             ->label('Czas trwania (minuty)')
-                            ->placeholder('np. 30')
+                            ->placeholder('Wpisz liczbę minut')
                             ->hint('Podaj dodatkowe minuty (0-59).')
                             ->numeric()
                             ->required(),
@@ -92,19 +96,17 @@ class EventTemplateProgramPointResource extends Resource
                     ->description('Informacje dla biura i pilotów')
                     ->icon('heroicon-o-clipboard-document-list')
                     ->collapsible()
-                    ->columns(2)
+                    ->columns(['default' => 1, 'md' => 2])
                     ->schema([
                         \FilamentTiptapEditor\TiptapEditor::make('office_notes')
                             ->label('Uwagi dla biura')
-                            ->placeholder('Wpisz uwagi organizacyjne, np. wymagania, kontakty, szczegóły logistyczne...')
-                            ->hint('Tylko dla pracowników biura. Nie widoczne dla uczestników.')
-                            ,
+                            ->placeholder('Wpisz uwagi organizacyjne')
+                            ->hint('Tylko dla pracowników biura. Nie widoczne dla uczestników.'),
 
                         \FilamentTiptapEditor\TiptapEditor::make('pilot_notes')
                             ->label('Uwagi dla pilota')
-                            ->placeholder('Wskazówki dla pilota/opiekuna grupy, np. na co zwrócić uwagę, co przekazać uczestnikom...')
-                            ->hint('Tylko dla pilota/opiekuna. Nie widoczne dla uczestników.')
-                            ,
+                            ->placeholder('Wpisz wskazówki dla pilota')
+                            ->hint('Tylko dla pilota/opiekuna. Nie widoczne dla uczestników.'),
                     ]),
 
                 // Sekcja zdjęć
@@ -317,29 +319,10 @@ class EventTemplateProgramPointResource extends Resource
                     ]),
 
                 // Sekcja cenowa
-                Forms\Components\Section::make('Wycena i koszty')
-                    ->description('Ustawienia finansowe punktu programu')
-                    ->icon('heroicon-o-currency-dollar')
-                    ->columns(2)
-                    ->schema([
-                        Forms\Components\TextInput::make('unit_price')
-                            ->label('Cena jednostkowa')
-                            ->placeholder('np. 120.00')
-                            ->hint('Podaj cenę za osobę lub grupę, zgodnie z charakterem punktu.')
-                            ->numeric()
-                            ->required(),
-
-                        Forms\Components\TextInput::make('group_size')
-                            ->label('Wielkość grupy')
-                            ->placeholder('np. 20')
-                            ->hint('Podaj liczbę osób w grupie. Jeśli nie dotyczy, wpisz 1.')
-                            ->numeric()
-                            ->default(1),
-
-                        CurrencyConversionFields::currencySelect(),
-                        CurrencyConversionFields::convertToggle(),
-                        CurrencyConversionFields::plnPreview('unit_price'),
-                    ]),
+                EventProgramPointPricingFields::section([
+                    'for_template' => true,
+                    'default_participant_count' => 1,
+                ]),
 
                 // Sekcja tagów i kategoryzacji
                 Forms\Components\Section::make('Tagi i kategoryzacja')
@@ -360,9 +343,8 @@ class EventTemplateProgramPointResource extends Resource
                                     ->required(),
                                 \FilamentTiptapEditor\TiptapEditor::make('description')
                                     ->label('Opis tagu')
-                                    ->placeholder('Opcjonalny opis tagu, np. do czego służy, kiedy stosować...')
-                                    ->hint('Opis widoczny tylko dla administratorów.')
-                                    ,
+                                    ->placeholder('Wpisz opis tagu')
+                                    ->hint('Opis widoczny tylko dla administratorów.'),
                                 Forms\Components\Select::make('visibility')
                                     ->label('Widoczność tagu')
                                     ->options([

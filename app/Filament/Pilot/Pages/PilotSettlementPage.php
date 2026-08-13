@@ -2,6 +2,7 @@
 
 namespace App\Filament\Pilot\Pages;
 
+use App\Filament\Actions\HelpArticleAction;
 use App\Filament\Pilot\Concerns\AuthorizesPilotTrip;
 use App\Filament\Pilot\Concerns\HasPilotTripNav;
 use App\Models\Event;
@@ -39,12 +40,13 @@ class PilotSettlementPage extends Page
 
     public function getTitle(): string|Htmlable
     {
-        return 'Rozliczenie: '.$this->event->name;
+        return 'Gotówka i rozliczenie: '.$this->event->name;
     }
 
     protected function getHeaderActions(): array
     {
         return [
+            HelpArticleAction::make('zaliczka-i-rozliczenie', 'pilot'),
             Action::make('folder')
                 ->label('Teczka PDF')
                 ->icon('heroicon-o-folder-open')
@@ -64,7 +66,11 @@ class PilotSettlementPage extends Page
             return true;
         }
 
-        return $user->hasRole(['admin', 'super_admin']) && \App\Http\Middleware\PilotPreviewMiddleware::isActive();
+        if ($user->hasRole(['admin', 'super_admin', 'biuro']) && \App\Http\Middleware\PilotPreviewMiddleware::isActive()) {
+            return true;
+        }
+
+        return false;
     }
 
     public static function settleUrl(Event|int $event, bool $isAbsolute = true): string

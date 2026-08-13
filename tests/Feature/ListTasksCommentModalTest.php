@@ -93,6 +93,7 @@ class ListTasksCommentModalTest extends TestCase
             'status_id' => Task::getDefaultStatusId(),
             'priority' => 'normal',
             'author_id' => $user->id,
+            'assignee_id' => $user->id,
         ]);
 
         TaskComment::query()->create([

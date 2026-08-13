@@ -36,6 +36,12 @@ class ListEvents extends ListRecords
 
         return [
             'all' => Tab::make('Wszystkie'),
+            'inquiry' => Tab::make('Zapytania')
+                ->modifyQueryUsing(fn (Builder $query): Builder => $query
+                    ->where('status', Event::STATUS_INQUIRY)),
+            'confirmed' => Tab::make('Potwierdzone')
+                ->modifyQueryUsing(fn (Builder $query): Builder => $query
+                    ->where('status', Event::STATUS_CONFIRMED)),
             'upcoming' => Tab::make('Nadchodzące')
                 ->modifyQueryUsing(fn (Builder $query): Builder => $query
                     ->whereDate('start_date', '>=', $today)
@@ -66,7 +72,7 @@ class ListEvents extends ListRecords
         $sortColumn = $this->activeTab === 'settled' ? 'updated_at' : 'start_date';
         $sortDirection = $this->activeTab === 'settled' ? 'desc' : 'asc';
 
-        if (in_array($this->activeTab, ['all', 'cancelled', 'to_settle', 'mine'], true)) {
+        if (in_array($this->activeTab, ['all', 'inquiry', 'confirmed', 'cancelled', 'to_settle', 'mine'], true)) {
             $sortColumn = 'updated_at';
             $sortDirection = 'desc';
         }

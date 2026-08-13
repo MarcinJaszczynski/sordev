@@ -8,12 +8,16 @@ use App\Data\CreateInquiryFromWebData;
 use App\Models\Contact;
 use App\Models\Event;
 use App\Models\Task;
+use App\Services\EventInquiryNotificationService;
 use Illuminate\Support\Facades\DB;
-use Illuminate\Support\Facades\Schema;
 use Illuminate\Support\Str;
 
 final class CreateInquiryFromWebAction
 {
+    public function __construct(
+        private readonly EventInquiryNotificationService $inquiryNotifications,
+    ) {}
+
     /**
      * @return array{contact: Contact, event: Event, task: ?Task}
      */
@@ -56,31 +60,21 @@ final class CreateInquiryFromWebAction
                 'client_phone' => $data->telephone,
                 'status' => Event::STATUS_INQUIRY,
                 'participant_count' => 1,
+                // start_date jest NOT NULL — lead WWW zwykle bez daty → placeholder do korekty w biurze
+                'start_date' => now()->addMonth()->toDateString(),
+                'duration_days' => 1,
                 'office_notes' => $notes,
                 'notes' => $notes,
             ]);
 
-            $task = null;
-            if (Schema::hasTable('tasks')) {
-                $payload = [
-                    'title' => 'Lead WWW: '.$event->name,
-                    'description' => $notes,
-                ];
+            // Ten sam write-path powiadomień co CreateEvent (notify office).
+            $this->inquiryNotifications->notifyOfficeAboutNewInquiry($event);
 
-                if (Schema::hasColumn('tasks', 'event_id')) {
-                    $payload['event_id'] = $event->id;
-                }
-
-                if (Schema::hasColumn('tasks', 'status_id') && class_exists(Task::class) && method_exists(Task::class, 'getDefaultStatusId')) {
-                    $payload['status_id'] = Task::getDefaultStatusId();
-                }
-
-                try {
-                    $task = Task::query()->create($payload);
-                } catch (\Throwable) {
-                    $task = null;
-                }
-            }
+            $task = Task::query()
+                ->where('taskable_type', Event::class)
+                ->where('taskable_id', $event->id)
+                ->latest('id')
+                ->first();
 
             return [
                 'contact' => $contact,

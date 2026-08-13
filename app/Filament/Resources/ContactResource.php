@@ -96,7 +96,7 @@ class ContactResource extends Resource
     {
         return $form->schema([
             Forms\Components\Section::make('Dane osobowe')
-                ->columns(2)
+                ->columns(['default' => 1, 'md' => 2])
                 ->schema([
                     Forms\Components\TextInput::make('first_name')
                         ->label('Imię')

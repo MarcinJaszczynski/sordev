@@ -28,6 +28,11 @@ class VendorInvoiceReportsPage extends Page implements HasTable
 
     protected static ?int $navigationSort = 7;
 
+    public static function shouldRegisterNavigation(): bool
+    {
+        return false;
+    }
+
     public string $activeTab = 'due';
 
     public static function canAccess(): bool

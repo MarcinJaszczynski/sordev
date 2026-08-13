@@ -4,8 +4,10 @@ namespace App\Filament\Resources\TaskResource\RelationManagers;
 
 use App\Enums\TaskPriority;
 use App\Enums\TaskSource;
+use App\Filament\Concerns\DispatchesTopbarNotificationRefresh;
 use App\Filament\Resources\TaskResource;
 use App\Models\Task;
+use App\Services\NotificationService;
 use Filament\Forms;
 use Filament\Forms\Form;
 use Filament\Resources\RelationManagers\RelationManager;
@@ -15,6 +17,8 @@ use Illuminate\Support\Facades\Auth;
 
 class SubtasksRelationManager extends RelationManager
 {
+    use DispatchesTopbarNotificationRefresh;
+
     protected static string $relationship = 'subtasks';
 
     protected static ?string $recordTitleAttribute = 'title';
@@ -30,6 +34,12 @@ class SubtasksRelationManager extends RelationManager
         }
 
         $this->dispatch('task-full-editor-updated', taskId: $this->getOwnerRecord()->getKey());
+    }
+
+    protected function refreshTopbarAfterSubtaskChange(Task $subtask): void
+    {
+        NotificationService::clearCacheForTaskStakeholders($subtask);
+        $this->dispatchTopbarNotificationRefresh();
     }
 
     public function form(Form $form): Form
@@ -113,17 +123,34 @@ class SubtasksRelationManager extends RelationManager
 
                         return $data;
                     })
-                    ->after(fn () => $this->dispatchPanelUpdated()),
+                    ->after(function (Task $record): void {
+                        // Nowe podzadanie na górę stosu + odśwież aktywność rodzica (sort listy).
+                        $record->moveToStart();
+                        $parent = $this->getOwnerRecord();
+                        $parent->touch();
+                        $parent->loadCount('subtasks');
+                        $this->refreshTopbarAfterSubtaskChange($record);
+                        $this->dispatchPanelUpdated();
+                    }),
             ])
             ->recordUrl(null)
             ->recordAction('edit')
             ->actions([
                 $this->panelMode
                     ? Tables\Actions\EditAction::make()
-                        ->after(fn () => $this->dispatchPanelUpdated())
+                        ->after(function (Task $record): void {
+                            $this->refreshTopbarAfterSubtaskChange($record);
+                            $this->dispatchPanelUpdated();
+                        })
                     : TaskResource::modalEditTableAction(),
                 Tables\Actions\DeleteAction::make()
-                    ->after(fn () => $this->dispatchPanelUpdated()),
+                    ->after(function (Task $record): void {
+                        $parent = $this->getOwnerRecord();
+                        $parent->touch();
+                        $parent->loadCount('subtasks');
+                        $this->refreshTopbarAfterSubtaskChange($record);
+                        $this->dispatchPanelUpdated();
+                    }),
             ])
             ->bulkActions($this->panelMode ? [] : [
                 Tables\Actions\BulkActionGroup::make([

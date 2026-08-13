@@ -2,6 +2,8 @@
 
 namespace App\Filament\Pages;
 
+use App\Filament\Actions\HelpArticleAction;
+use App\Filament\Concerns\InteractsWithBankPaymentAssignment;
 use App\Models\BankPaymentImportBatch;
 use App\Models\BankPaymentImportLine;
 use App\Services\BankPayments\BankPaymentImportService;
@@ -15,6 +17,7 @@ use Livewire\WithFileUploads;
 
 class BankPaymentImportPage extends Page
 {
+    use InteractsWithBankPaymentAssignment;
     use WithFileUploads;
 
     protected static ?string $navigationIcon = 'heroicon-o-building-library';
@@ -26,6 +29,11 @@ class BankPaymentImportPage extends Page
     protected static ?string $navigationLabel = 'Import wpłat bankowych';
 
     protected static ?int $navigationSort = 3;
+
+    public static function shouldRegisterNavigation(): bool
+    {
+        return false;
+    }
 
     /** @var TemporaryUploadedFile|null */
     public $csvFile = null;
@@ -44,6 +52,13 @@ class BankPaymentImportPage extends Page
         $user = auth()->user();
 
         return $user && ($user->hasRole(['admin', 'super_admin', 'ksiegowosc']) || $user->can('view_any_event::settlement'));
+    }
+
+    protected function getHeaderActions(): array
+    {
+        return [
+            HelpArticleAction::make('import-bankowy'),
+        ];
     }
 
     public function getTitle(): string
@@ -98,15 +113,21 @@ class BankPaymentImportPage extends Page
             $this->lastApplySummary = null;
             $this->loadPreviewLines();
 
+            $body = sprintf(
+                'Wpływy: %d • dopasowane: %d • bez dopasowania: %d • pominięte duplikaty: %d',
+                $summary['total'],
+                $summary['matched'],
+                $summary['unmatched'],
+                $summary['duplicate'],
+            );
+
+            if (($summary['unmatched'] ?? 0) > 0) {
+                $body .= ' Niedopasowane trafiają też do skrzynki „Wpłaty do dopasowania”.';
+            }
+
             Notification::make()
                 ->title('Wczytano wyciąg')
-                ->body(sprintf(
-                    'Wpływy: %d • dopasowane: %d • bez dopasowania: %d • pominięte duplikaty: %d',
-                    $summary['total'],
-                    $summary['matched'],
-                    $summary['unmatched'],
-                    $summary['duplicate'],
-                ))
+                ->body($body)
                 ->success()
                 ->send();
         } catch (\Throwable $exception) {
@@ -200,6 +221,16 @@ class BankPaymentImportPage extends Page
                 'applied' => (bool) $line->applied,
             ])
             ->all();
+    }
+
+    protected function afterBankPaymentAssignmentSaved(): void
+    {
+        $this->loadPreviewLines();
+    }
+
+    protected function canManageBankPaymentLine(BankPaymentImportLine $line): bool
+    {
+        return $this->batchId && (int) $line->batch_id === (int) $this->batchId;
     }
 
     private function resolveTargetLabel(BankPaymentImportLine $line): string

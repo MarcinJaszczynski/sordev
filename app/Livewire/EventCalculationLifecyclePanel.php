@@ -120,7 +120,7 @@ class EventCalculationLifecyclePanel extends Component
         return view('livewire.event-calculation-lifecycle-panel', [
             'life' => $life,
             'settlementUrl' => $settlementId
-                ? EventSettlementResource::getUrl('edit', ['record' => $settlementId])
+                ? EventSettlementResource::getEventFinanceUrlForSettlement($settlementId)
                 : null,
             'resignationsUrl' => EventResource::getUrl('participant-resignations', ['record' => $this->event->id]),
         ]);

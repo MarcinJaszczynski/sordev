@@ -96,7 +96,7 @@ class EventHotelPlanService
             return;
         }
 
-        $groupCounts = $this->resolveGroupCounts($event);
+        $groupCounts = $this->resolveAllocationGroupCounts($event);
         $hotelDays = $template->hotelDays()->orderBy('day')->get();
         $hotelPointsByDay = $event->hotelProgramPoints()->get()->keyBy('day');
 
@@ -243,6 +243,144 @@ class EventHotelPlanService
             'staff' => (int) ($qtyVariant->staff ?? 0),
             'driver' => (int) ($qtyVariant->driver ?? 0),
         ];
+    }
+
+    /**
+     * Liczebność grup do algorytmu DP pokoi — pilot liczy się jak dodatkowe miejsce w roli staff.
+     *
+     * @return array{qty: int, gratis: int, staff: int, driver: int}
+     */
+    public function resolveAllocationGroupCounts(Event $event): array
+    {
+        $counts = $this->resolveGroupCounts($event);
+
+        if ($event->assigned_to) {
+            $counts['staff'] = ($counts['staff'] ?? 0) + 1;
+        }
+
+        return $counts;
+    }
+
+    /**
+     * Uzupełnia / odświeża strukturę pokoi (linie, bez uczestników) wg szablonu i aktualnych liczności grup.
+     * Używane przy tworzeniu imprezy, zmianie liczby osób oraz gdy nocleg istnieje bez linii pokoi.
+     *
+     * @return bool true gdy coś zapisano
+     */
+    public function refreshRoomStructureFromTemplate(Event $event, bool $onlyEmptyStays = false): bool
+    {
+        if (! Schema::hasTable('event_hotel_stays')) {
+            return false;
+        }
+
+        $template = $event->eventTemplate;
+        if (! $template) {
+            return false;
+        }
+
+        $hotelDays = $template->hotelDays()->orderBy('day')->get()->keyBy('day');
+        if ($hotelDays->isEmpty()) {
+            return false;
+        }
+
+        $event->load(['hotelStays.roomLines']);
+
+        $allocationCounts = $this->resolveAllocationGroupCounts($event);
+        $hotelPointsByDay = $event->hotelProgramPoints()->get()->keyBy('day');
+        $changed = false;
+
+        foreach ($event->hotelStays as $stay) {
+            $hotelDay = $hotelDays->get((int) $stay->day);
+            if (! $hotelDay) {
+                continue;
+            }
+
+            if ($onlyEmptyStays && $stay->roomLines()->exists()) {
+                if ($this->stayStructureIsComplete($stay, $hotelDay, $allocationCounts)) {
+                    continue;
+                }
+            }
+
+            $this->replaceStayRoomLines($stay, $hotelDay, $allocationCounts);
+            $changed = true;
+        }
+
+        if ($changed) {
+            $this->syncAllRoomUnitsForEvent($event->fresh());
+            app(EventParticipantPropagationService::class)->assignOperationalOccupants($event->fresh());
+            $this->linkStaysToProgramPoints($event->fresh());
+        }
+
+        return $changed;
+    }
+
+    /**
+     * @param  array{qty: int, gratis: int, staff: int, driver: int}  $allocationCounts
+     */
+    private function replaceStayRoomLines(EventHotelStay $stay, EventTemplateHotelDay $hotelDay, array $allocationCounts): void
+    {
+        $stay->roomLines()->each(function (EventHotelRoomLine $line) {
+            $line->occupants()->delete();
+            $line->units()->delete();
+        });
+        $stay->roomLines()->delete();
+
+        $order = 0;
+        foreach (['qty', 'gratis', 'staff', 'driver'] as $role) {
+            $roomIds = $hotelDay->{"hotel_room_ids_{$role}"} ?? [];
+            $peopleCount = $allocationCounts[$role] ?? 0;
+            if ($peopleCount <= 0 || empty($roomIds)) {
+                continue;
+            }
+
+            foreach ($this->allocateRoomLines($peopleCount, $roomIds, $role) as $lineData) {
+                $stay->roomLines()->create(array_merge($lineData, ['order' => $order++]));
+            }
+        }
+    }
+
+    private function templateHotelDaysByDay(Event $event): Collection
+    {
+        $template = $event->eventTemplate;
+        if (! $template) {
+            return collect();
+        }
+
+        return $template->hotelDays()->orderBy('day')->get()->keyBy('day');
+    }
+
+    /**
+     * @param  array{qty: int, gratis: int, staff: int, driver: int}  $allocationCounts
+     */
+    private function stayStructureIsComplete(
+        EventHotelStay $stay,
+        EventTemplateHotelDay $hotelDay,
+        array $allocationCounts,
+    ): bool {
+        $stay->loadMissing('roomLines');
+
+        foreach (['qty', 'gratis', 'staff', 'driver'] as $role) {
+            $needed = $allocationCounts[$role] ?? 0;
+            $roomIds = $hotelDay->{"hotel_room_ids_{$role}"} ?? [];
+            if ($needed <= 0 || empty($roomIds)) {
+                continue;
+            }
+
+            $roleLines = $stay->roomLines->where('role', $role);
+            if ($roleLines->isEmpty()) {
+                return false;
+            }
+
+            $beds = $roleLines->sum(
+                fn (EventHotelRoomLine $line) => $line->effectivePeopleCount() * max(1, (int) ($line->quantity ?? 1))
+            );
+
+            if ($beds < $needed) {
+                return false;
+            }
+        }
+
+        return true;
     }
 
     public function copyStructureToStay(EventHotelStay $source, EventHotelStay $target, bool $copyHotel = true): void
@@ -530,37 +668,28 @@ class EventHotelPlanService
             return;
         }
 
-        if ($event->hotelStays()->count() >= $nights) {
-            return;
+        if (! $event->hotelStays()->exists()) {
+            $this->snapshotFromTemplate($event);
         }
 
-        if ($event->hotelStays()->exists()) {
-            $existingDays = $event->hotelStays()->pluck('day')->all();
-            $groupCounts = $this->resolveGroupCounts($event);
-            $hotelPointsByDay = $event->hotelProgramPoints()->get()->keyBy('day');
+        $groupCounts = $this->resolveAllocationGroupCounts($event);
+        $hotelPointsByDay = $event->hotelProgramPoints()->get()->keyBy('day');
+        $hotelDaysByDay = $this->templateHotelDaysByDay($event);
+        $existingDays = $event->hotelStays()->pluck('day')->all();
 
-            for ($day = 1; $day <= $nights; $day++) {
-                if (! in_array($day, $existingDays, true)) {
-                    $this->createStayFromDay($event, $day, null, $groupCounts, $hotelPointsByDay->get($day));
-                }
-            }
-
-            return;
-        }
-
-        $this->snapshotFromTemplate($event);
-
-        if ($event->hotelStays()->count() < $nights) {
-            $existingDays = $event->hotelStays()->pluck('day')->all();
-            $groupCounts = $this->resolveGroupCounts($event);
-            $hotelPointsByDay = $event->hotelProgramPoints()->get()->keyBy('day');
-
-            for ($day = 1; $day <= $nights; $day++) {
-                if (! in_array($day, $existingDays, true)) {
-                    $this->createStayFromDay($event, $day, null, $groupCounts, $hotelPointsByDay->get($day));
-                }
+        for ($day = 1; $day <= $nights; $day++) {
+            if (! in_array($day, $existingDays, true)) {
+                $this->createStayFromDay(
+                    $event,
+                    $day,
+                    $hotelDaysByDay->get($day),
+                    $groupCounts,
+                    $hotelPointsByDay->get($day),
+                );
             }
         }
+
+        $this->refreshRoomStructureFromTemplate($event, onlyEmptyStays: true);
     }
 
     /**
@@ -1018,6 +1147,8 @@ class EventHotelPlanService
         $event->loadMissing([
             'hotelStays.contractor',
             'hotelStays.contractorLocation',
+            'hotelStays.programPoint.contractor',
+            'hotelStays.programPoint.contractorLocation',
             'hotelStays.roomLines.hotelRoom',
             'hotelStays.roomLines.occupants',
             'hotelStays.roomLines.units',
@@ -1092,11 +1223,13 @@ class EventHotelPlanService
                 ]);
             }
 
-            $hotelMeta = ContractorContactDetails::operationalMeta($stay->contractor, $stay->contractorLocation);
+            $contractor = $stay->contractor ?? $stay->programPoint?->contractor;
+            $location = $stay->contractorLocation ?? $stay->programPoint?->contractorLocation;
+            $hotelMeta = ContractorContactDetails::operationalMeta($contractor, $location);
 
             return [
                 'day' => $stay->day,
-                'hotel_name' => $stay->contractor?->name,
+                'hotel_name' => $contractor?->name,
                 'hotel_branch' => $hotelMeta['branch_name'],
                 'hotel_address' => $hotelMeta['address'],
                 'hotel_phone' => $hotelMeta['phone'],

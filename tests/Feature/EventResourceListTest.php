@@ -8,6 +8,7 @@ use App\Models\EventTemplate;
 use App\Models\Place;
 use App\Models\User;
 use App\Support\EventListFinanceColumn;
+use App\Support\MoneyFormatter;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Schema;
@@ -216,7 +217,7 @@ class EventResourceListTest extends TestCase
         $this->assertNotContains($inProgress->id, $completedIds);
     }
 
-    public function test_finance_column_uses_total_cost_without_price_table(): void
+    public function test_finance_column_shows_stored_base_cost_without_program_points(): void
     {
         $user = User::factory()->create();
         $this->actingAs($user);
@@ -239,11 +240,13 @@ class EventResourceListTest extends TestCase
             'status' => Event::STATUS_INQUIRY,
         ]);
 
+        EventListFinanceColumn::resetWarmCache();
         $record = EventResource::getEloquentQuery()->findOrFail($event->id);
         $html = EventListFinanceColumn::html($record, 'PLN');
 
-        $this->assertStringContainsString('12', $html);
-        $this->assertStringContainsString('345', $html);
+        $this->assertStringContainsString('Koszt bazowy:', $html);
+        $this->assertStringContainsString(MoneyFormatter::format(12345.67, 'PLN'), $html);
+        $this->assertStringContainsString('Cena za os.:', $html);
         $this->assertStringNotContainsString('EventPriceTable', $html);
     }
 }

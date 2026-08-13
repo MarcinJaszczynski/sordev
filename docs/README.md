@@ -38,6 +38,8 @@ Dokumentacja pełni rolę "Konstytucji Projektu" dla programistów oraz agentów
 │   └── reports.md
 │
 ├── workflows/
+│   ├── office_path.md
+│   ├── permissions_matrix.md
 │   ├── reservation.md
 │   ├── payment.md
 │   ├── settlement.md

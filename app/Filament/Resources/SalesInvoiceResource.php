@@ -71,12 +71,12 @@ class SalesInvoiceResource extends Resource
     public static function form(Form $form): Form
     {
         return $form->schema([
-            Forms\Components\Section::make('Nabywca')->columns(2)->schema([
+            Forms\Components\Section::make('Nabywca')->columns(['default' => 1, 'md' => 2])->schema([
                 Forms\Components\TextInput::make('buyer_name')->label('Nazwa')->disabled(),
                 Forms\Components\TextInput::make('buyer_nip')->label('NIP')->disabled(),
                 Forms\Components\Textarea::make('buyer_address')->label('Adres')->rows(2)->disabled()->columnSpanFull(),
             ]),
-            Forms\Components\Section::make('Kwoty VAT-Marża')->columns(3)->schema([
+            Forms\Components\Section::make('Kwoty VAT-Marża')->columns(['default' => 1, 'md' => 2, 'xl' => 3])->schema([
                 Forms\Components\TextInput::make('revenue_pln')->label('Przychód')->disabled(),
                 Forms\Components\TextInput::make('cost_pln')->label('Koszt')->disabled(),
                 Forms\Components\TextInput::make('margin_gross_pln')->label('Marża brutto')->disabled(),

@@ -22,6 +22,56 @@ class EventOrderingPartyFields
         return Forms\Components\Repeater::make('ordering_parties')
             ->label('Zamawiający')
             ->schema([
+                Forms\Components\Select::make('contractor_id')
+                    ->label('Firma / instytucja')
+                    ->searchable()
+                    ->preload()
+                    ->required()
+                    ->options(fn (Get $get): array => $service->contractorOptionsForContact(
+                        filled($get('contact_id')) ? (int) $get('contact_id') : null,
+                    ))
+                    ->getSearchResultsUsing(fn (string $search, Get $get): array => $service->contractorOptionsForContact(
+                        filled($get('contact_id')) ? (int) $get('contact_id') : null,
+                        $search,
+                    ))
+                    ->getOptionLabelUsing(function ($value): ?string {
+                        if (! $value) {
+                            return null;
+                        }
+
+                        $contractor = Contractor::find($value);
+
+                        return $contractor
+                            ? app(EventOrderingPartyService::class)->formatContractorLabel($contractor)
+                            : null;
+                    })
+                    ->createOptionForm(static::contractorQuickCreateSchema())
+                    ->createOptionUsing(function (array $data, Get $get): int {
+                        $contactId = filled($get('contact_id')) ? (int) $get('contact_id') : null;
+
+                        return static::createContractorFromFormData(
+                            $data,
+                            $contactId,
+                            \App\Models\ContractorType::clientTypeNames(),
+                        );
+                    })
+                    ->live()
+                    ->afterStateUpdated(function (?string $state, Set $set, Get $get): void {
+                        if (! $state) {
+                            return;
+                        }
+
+                        $contactId = filled($get('contact_id')) ? (int) $get('contact_id') : null;
+
+                        if ($contactId) {
+                            app(ContactContractorLinkService::class)->link($contactId, (int) $state);
+                        }
+
+                        static::applyPartyRowToClientFields($get('../../ordering_parties'), $set);
+                    })
+                    ->helperText('Najpierw wybierz firmę / instytucję. Możesz dodać nową.')
+                    ->columnSpanFull(),
+
                 Forms\Components\Select::make('contact_id')
                     ->label('Osoba kontaktowa')
                     ->searchable()
@@ -71,56 +121,10 @@ class EventOrderingPartyFields
                     ->helperText('Wyszukaj osobę po imieniu, nazwisku, e-mailu lub telefonie. Możesz dodać nową osobę.')
                     ->columnSpanFull(),
 
-                Forms\Components\Select::make('contractor_id')
-                    ->label('Firma / instytucja')
-                    ->searchable()
-                    ->preload()
-                    ->required()
-                    ->options(fn (Get $get): array => $service->contractorOptionsForContact(
-                        filled($get('contact_id')) ? (int) $get('contact_id') : null,
-                    ))
-                    ->getSearchResultsUsing(fn (string $search, Get $get): array => $service->contractorOptionsForContact(
-                        filled($get('contact_id')) ? (int) $get('contact_id') : null,
-                        $search,
-                    ))
-                    ->getOptionLabelUsing(function ($value): ?string {
-                        if (! $value) {
-                            return null;
-                        }
-
-                        $contractor = Contractor::find($value);
-
-                        return $contractor
-                            ? app(EventOrderingPartyService::class)->formatContractorLabel($contractor)
-                            : null;
-                    })
-                    ->createOptionForm(static::contractorQuickCreateSchema())
-                    ->createOptionUsing(function (array $data, Get $get): int {
-                        $contactId = filled($get('contact_id')) ? (int) $get('contact_id') : null;
-
-                        return static::createContractorFromFormData($data, $contactId);
-                    })
-                    ->live()
-                    ->afterStateUpdated(function (?string $state, Set $set, Get $get): void {
-                        if (! $state) {
-                            return;
-                        }
-
-                        $contactId = filled($get('contact_id')) ? (int) $get('contact_id') : null;
-
-                        if ($contactId) {
-                            app(ContactContractorLinkService::class)->link($contactId, (int) $state);
-                        }
-
-                        static::applyPartyRowToClientFields($get('../../ordering_parties'), $set);
-                    })
-                    ->helperText('Ta sama osoba może zamawiać z różnych firm — wybierz właściwą instytucję.')
-                    ->columnSpanFull(),
-
                 Forms\Components\TextInput::make('department_label')
                     ->label('Dział / oddział / szkoła')
                     ->maxLength(255)
-                    ->placeholder('np. SP nr 3, dział marketingu')
+                    ->placeholder('Wpisz dział, oddział lub szkołę')
                     ->live(onBlur: true)
                     ->afterStateUpdated(fn ($state, Set $set, Get $get) => static::applyPartyRowToClientFields($get('../../ordering_parties'), $set))
                     ->columnSpanFull(),
@@ -153,16 +157,8 @@ class EventOrderingPartyFields
             ))
             ->live()
             ->afterStateUpdated(fn ($state, Set $set) => static::applyPartyRowToClientFields($state, $set))
-            ->helperText('Dodaj jedną lub więcej par: osoba kontaktowa + firma. Pierwszy wpis ustawia główne dane zamawiającego poniżej.')
+            ->helperText('Dodaj jedną lub więcej par: firma + osoba kontaktowa. Pierwszy wpis ustawia główne dane zamawiającego poniżej.')
             ->columnSpanFull();
-    }
-
-    /**
-     * @deprecated Użyj orderingPartiesRepeater()
-     */
-    public static function orderingContractorsSelect(): Forms\Components\Repeater
-    {
-        return static::orderingPartiesRepeater();
     }
 
     /**
@@ -245,24 +241,13 @@ class EventOrderingPartyFields
         return static::contractorQuickCreateSchema();
     }
 
-    public static function createContractorFromFormData(array $data, ?int $contactId = null): int
+    /**
+     * @param  array<string, mixed>  $data
+     * @param  array<int, string>  $typeNames
+     */
+    public static function createContractorFromFormData(array $data, ?int $contactId = null, array $typeNames = []): int
     {
-        $contractorId = Contractor::create([
-            'name' => $data['name'],
-            'phone' => $data['phone'] ?? null,
-            'email' => $data['email'] ?? null,
-            'nip' => $data['nip'] ?? null,
-            'street' => $data['street'] ?? null,
-            'house_number' => $data['house_number'] ?? null,
-            'city' => $data['city'] ?? null,
-            'postal_code' => $data['postal_code'] ?? null,
-            'office_notes' => $data['office_notes'] ?? null,
-            'status' => 'active',
-        ])->getKey();
-
-        app(ContactContractorLinkService::class)->link($contactId, (int) $contractorId);
-
-        return (int) $contractorId;
+        return app(EventOrderingPartyService::class)->createContractorFromFormData($data, $contactId, $typeNames);
     }
 
     /**

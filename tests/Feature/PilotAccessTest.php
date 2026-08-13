@@ -86,6 +86,35 @@ class PilotAccessTest extends TestCase
         $this->assertStringContainsString('nie jest przypisana', (string) $reason);
     }
 
+    public function test_admin_with_pilot_role_can_download_office_exports_outside_filament_panel(): void
+    {
+        Role::firstOrCreate(['name' => 'admin']);
+
+        $pilotAdmin = User::factory()->create(['status' => 'active']);
+        $pilotAdmin->assignRole(['pilot', 'admin']);
+
+        $event = Event::factory()->create([
+            'assigned_to' => User::factory()->create()->id,
+            'shared_with_pilot' => false,
+        ]);
+
+        $this->assertFalse($pilotAdmin->can('view', $event));
+
+        $this->actingAs($pilotAdmin)
+            ->get(route('admin.events.participants.import-template', [
+                'event' => $event,
+                'format' => 'csv',
+            ]))
+            ->assertOk();
+
+        $this->actingAs($pilotAdmin)
+            ->get(route('admin.events.offer.word', $event))
+            ->assertOk();
+
+        Filament::setServingStatus(false);
+        Filament::setCurrentPanel(null);
+    }
+
     public function test_ksiegowosc_can_view_any_event_in_admin_panel(): void
     {
         $accountant = User::factory()->create(['status' => 'active']);

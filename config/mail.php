@@ -119,4 +119,16 @@ return [
     // Optional recipients for inquiries (comma-separated or single) via ENV
     'inquiries_to' => env('MAIL_INQUIRIES_TO', null),
 
+    /*
+    |--------------------------------------------------------------------------
+    | Demo mail redirect
+    |--------------------------------------------------------------------------
+    |
+    | When set (e.g. local/demo), ALL outgoing mail is redirected to this
+    | address via Mail::alwaysTo — useful so m.jaszczynski@gmail.com receives
+    | office + applicant copies without touching production recipients in code.
+    |
+    */
+    'demo_to' => env('MAIL_DEMO_TO', null),
+
 ];

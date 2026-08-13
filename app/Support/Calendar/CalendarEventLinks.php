@@ -2,13 +2,13 @@
 
 namespace App\Support\Calendar;
 
-use App\Filament\Resources\ContractResource;
 use App\Filament\Resources\ContractorResource;
+use App\Filament\Resources\ContractResource;
 use App\Filament\Resources\EventResource;
 use App\Filament\Resources\EventSettlementResource;
 use App\Filament\Resources\ReservationResource;
-use App\Models\Task;
 use App\Filament\Resources\VendorInvoiceResource;
+use App\Models\Task;
 
 final class CalendarEventLinks
 {
@@ -92,6 +92,22 @@ final class CalendarEventLinks
     /**
      * @return array{label: string, url: string, icon: string}|null
      */
+    public static function eventReservations(?int $eventId, string $label = 'Rezerwacje imprezy'): ?array
+    {
+        if (! $eventId) {
+            return null;
+        }
+
+        return self::link(
+            EventResource::getUrl('reservations', ['record' => $eventId]),
+            $label,
+            'heroicon-o-ticket',
+        );
+    }
+
+    /**
+     * @return array{label: string, url: string, icon: string}|null
+     */
     public static function eventDocuments(?int $eventId): ?array
     {
         if (! $eventId) {
@@ -168,9 +184,11 @@ final class CalendarEventLinks
      */
     public static function settlement(int $settlementId): ?array
     {
+        $url = EventSettlementResource::getEventFinanceUrlForSettlement($settlementId);
+
         return self::link(
-            EventSettlementResource::getUrl('edit', ['record' => $settlementId]),
-            'Rozliczenie',
+            $url,
+            'Finanse imprezy',
             'heroicon-o-banknotes',
         );
     }

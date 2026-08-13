@@ -2,37 +2,20 @@
 
 namespace App\Filament\Resources\EventSettlementResource\Pages;
 
-use App\Filament\Concerns\SingleRelationManagerPage;
 use App\Filament\Resources\EventSettlementResource;
-use App\Filament\Resources\EventSettlementResource\Concerns\HasEventSettlementWorkflowContext;
-use App\Filament\Resources\EventSettlementResource\RelationManagers\ProgramPointsCostsRelationManager;
-use App\Filament\Resources\EventSettlementResource\RelationManagers\SettlementCostsRelationManager;
+use App\Filament\Resources\EventSettlementResource\Concerns\RedirectsToEventFinance;
+use Filament\Resources\Pages\Page;
 
-class ManageSettlementCosts extends SingleRelationManagerPage
+/** @deprecated Redirects to EventFinance — bookmark/legacy URL only. */
+class ManageSettlementCosts extends Page
 {
-    use HasEventSettlementWorkflowContext;
+    use RedirectsToEventFinance;
 
     protected static string $resource = EventSettlementResource::class;
 
-    protected static string $view = 'filament.resources.event-settlement-resource.pages.manage-settlement-costs';
+    protected static string $view = 'filament.resources.event-resource.pages.event-finance-redirect';
 
     protected static ?string $navigationLabel = 'Koszty';
 
-    protected static ?string $navigationIcon = 'heroicon-o-banknotes';
-
-    protected static function relationManager(): string
-    {
-        return SettlementCostsRelationManager::class;
-    }
-
-    /**
-     * @return array<class-string>
-     */
-    protected function getAllRelationManagers(): array
-    {
-        return [
-            SettlementCostsRelationManager::class,
-            ProgramPointsCostsRelationManager::class,
-        ];
-    }
+    protected static bool $shouldRegisterNavigation = false;
 }

@@ -72,24 +72,38 @@ class Currency extends Model
         return $this->hasMany(CurrencyRateSnapshot::class);
     }
 
+    /** @var list<int>|null */
+    protected static ?array $plnIdsCache = null;
+
     /**
      * Zwraca (cache static) tablicę ID waluty PLN (różne warianty nazwy/kodu).
+     *
+     * @return list<int>
      */
     public static function plnIds(): array
     {
-        static $cache = null;
-        if ($cache !== null) {
-            return $cache;
+        if (static::$plnIdsCache !== null) {
+            return static::$plnIdsCache;
         }
-        $cache = static::where(function ($q) {
+
+        static::$plnIdsCache = static::where(function ($q) {
             $q->where('name', 'like', '%polski%złoty%')
                 ->orWhere('name', 'like', '%złoty%polski%')
                 ->orWhere('name', '=', 'Polski złoty')
                 ->orWhere('name', '=', 'Złoty polski')
-                ->orWhere('code', '=', 'PLN');
-        })->pluck('id')->toArray();
+                ->orWhere('code', '=', 'PLN')
+                ->orWhere('symbol', '=', 'PLN');
+        })->pluck('id')->map(fn ($id): int => (int) $id)->all();
 
-        return $cache;
+        return static::$plnIdsCache;
+    }
+
+    /**
+     * Czyści cache ID PLN — wymagane między testami (RefreshDatabase + static).
+     */
+    public static function clearPlnIdsCache(): void
+    {
+        static::$plnIdsCache = null;
     }
 
     public function displayLabel(): string
