@@ -44,7 +44,7 @@
                 </tr>
                 <tr>
                     <td class="lbl">Miejsce podstawienia</td>
-                    <td class="val">{!! nl2br(e($event->pickup_place_details ? strip_tags($event->pickup_place_details) : ($event->startPlace?->name ?? '—'))) !!}</td>
+                    <td class="val">{!! nl2br(e($event->adress_transport_start ? strip_tags($event->adress_transport_start) : ($event->pickup_place_details ? strip_tags($event->pickup_place_details) : ($event->startPlace?->name ?? '—')))) !!}</td>
                 </tr>
                 <tr>
                     <td class="lbl">Szkoła / zamawiający</td>
@@ -71,7 +71,7 @@
                 </tr>
                 <tr>
                     <td class="lbl">Docelowe miejsce</td>
-                    <td class="val">{!! nl2br(e($travelLegends['destination'] ?? '—')) !!}</td>
+                    <td class="val">{!! nl2br(e($event->adress_transport_end ? strip_tags($event->adress_transport_end) : ($travelLegends['destination'] ?? '—'))) !!}</td>
                 </tr>
                 <tr>
                     <td class="lbl">Powrót</td>

@@ -87,6 +87,8 @@ class Event extends Model
         'vehicle_registration',
         'bus_info',
         'pickup_place_details',
+        'adress_transport_start',
+        'adress_transport_end',
         'insurance_policy_number',
         'insurance_terms',
         'insurance_document_path',
