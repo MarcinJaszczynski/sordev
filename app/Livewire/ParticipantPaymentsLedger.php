@@ -327,7 +327,7 @@ class ParticipantPaymentsLedger extends Component implements HasActions, HasForm
                 ];
             })
             ->form([
-                Forms\Components\DateTimePicker::make('paid_at')
+                Forms\Components\DatePicker::make('paid_at')
                     ->label('Data wpłaty')
                     ->required()
                     ->default(now()),

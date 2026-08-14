@@ -83,6 +83,20 @@
                             
                         </div>
                         <div class="text-xs text-gray-500">{{ $hotelLabels[$stay['contractor_id']] ?? 'Hotel nie wybrany' }}</div>
+                        @php $hint = $stayContactHints[$index] ?? []; @endphp
+                        @if (! empty($hint['phone']) || ! empty($hint['city']) || ! empty($hint['address']))
+                            <div class="mt-0.5 text-[0.65rem] leading-snug text-gray-600">
+                                @if (! empty($hint['city']))
+                                    {{ $hint['city'] }}
+                                @elseif (! empty($hint['address']))
+                                    {{ $hint['address'] }}
+                                @endif
+                                @if (! empty($hint['phone']))
+                                    @if (! empty($hint['city']) || ! empty($hint['address'])) · @endif
+                                    {{ $hint['phone'] }}
+                                @endif
+                            </div>
+                        @endif
                         @if ($activeStep === 1)
                             <div class="mt-1 text-[0.65rem] leading-snug text-gray-600">{{ $summary }}</div>
                             <div class="mt-1 text-xs font-semibold text-gray-800">
@@ -154,6 +168,56 @@
                                         <p class="text-xs text-gray-500">Adres podjazdu dla pilota — nie adres rozliczeniowy sieci hotelowej.</p>
                                     @endif
                                     <p class="text-xs text-gray-500">Hotel zapisuje się automatycznie po wyborze z listy. Domyślnie lista obejmuje kontrahentów typu hotel. Zaznacz opcję powyżej, gdy hotel ma źle przypisany typ.</p>
+
+                                    @if ($activeContractor)
+                                        <div class="mt-3 rounded-lg border border-gray-200 bg-gray-50 px-3 py-3 dark:border-gray-700 dark:bg-gray-900/40">
+                                            <div class="flex flex-wrap items-start justify-between gap-2">
+                                                <div>
+                                                    <p class="text-xs font-semibold uppercase tracking-wide text-gray-500">Hotel tej nocy</p>
+                                                    <p class="mt-0.5 text-sm font-semibold text-gray-900 dark:text-gray-100">
+                                                        {{ $activeContractor->displayLabel() }}
+                                                    </p>
+                                                </div>
+                                                <div class="flex flex-wrap gap-2">
+                                                    @if ($contractorEditUrl)
+                                                        <a
+                                                            href="{{ $contractorEditUrl }}"
+                                                            target="_blank"
+                                                            rel="noopener noreferrer"
+                                                            class="inline-flex items-center rounded-md border border-gray-300 bg-white px-2.5 py-1 text-xs font-medium text-gray-700 hover:bg-gray-50 dark:border-gray-600 dark:bg-gray-800 dark:text-gray-200"
+                                                        >
+                                                            Edytuj hotel
+                                                        </a>
+                                                    @endif
+                                                    <a
+                                                        href="{{ $programUrl }}"
+                                                        class="inline-flex items-center rounded-md border border-gray-300 bg-white px-2.5 py-1 text-xs font-medium text-gray-700 hover:bg-gray-50 dark:border-gray-600 dark:bg-gray-800 dark:text-gray-200"
+                                                    >
+                                                        Program D{{ $stay['day'] }}
+                                                    </a>
+                                                </div>
+                                            </div>
+
+                                            <x-contractor-contact-details
+                                                :contractor="$activeContractor"
+                                                :location="$activeLocation"
+                                                address-label="Adres / podjazd"
+                                                class="mt-2 text-xs text-gray-700 dark:text-gray-300"
+                                            />
+
+                                            @if ($linkedProgramPoint)
+                                                <p class="mt-2 text-xs text-emerald-800 dark:text-emerald-200">
+                                                    Podpięte do punktu programu:
+                                                    <span class="font-semibold">{{ $linkedProgramPoint->name ?: ($linkedProgramPoint->templatePoint?->name ?? ('#'.$linkedProgramPoint->id)) }}</span>
+                                                    (dzień {{ (int) ($linkedProgramPoint->day ?? $stay['day']) }})
+                                                </p>
+                                            @else
+                                                <p class="mt-2 text-xs text-amber-800 dark:text-amber-200">
+                                                    Brak punktu programu z oznaczeniem hotel na dzień {{ $stay['day'] }} — dane kontaktu nie trafią automatycznie do programu/PDF.
+                                                </p>
+                                            @endif
+                                        </div>
+                                    @endif
                                 </div>
                                 <div class="flex flex-wrap items-end gap-2">
                                     <x-filament::button wire:click="applySameHotelEverywhere" color="gray" size="sm" icon="heroicon-o-building-office-2">

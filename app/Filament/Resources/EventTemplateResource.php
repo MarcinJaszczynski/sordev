@@ -163,12 +163,15 @@ class EventTemplateResource extends Resource
 
             Forms\Components\Section::make('Opis i materiały')
                 ->icon('heroicon-o-document-text')
+                ->description('Opisy oferty oraz zdjęcia. Bibliotekę plików otworzysz przyciskami „z biblioteki” albo w menu Multimedia.')
                 ->collapsible()
                 ->schema([
                     Forms\Components\Grid::make(2)
                         ->schema([
-                            \FilamentTiptapEditor\TiptapEditor::make('event_description'),
-                            \FilamentTiptapEditor\TiptapEditor::make('office_description'),
+                            \FilamentTiptapEditor\TiptapEditor::make('event_description')
+                                ->label('Opis wydarzenia'),
+                            \FilamentTiptapEditor\TiptapEditor::make('office_description')
+                                ->label('Opis dla biura'),
                         ]),
                     Forms\Components\Grid::make(2)
                         ->schema([
@@ -187,6 +190,12 @@ class EventTemplateResource extends Resource
                                 ->nullable()
                                 ->default(fn ($record) => is_string($record?->featured_image) ? $record->featured_image : null),
                             FormActions::make([
+                                FormAction::make('open_media_library')
+                                    ->label('Otwórz bibliotekę Multimedia')
+                                    ->icon('heroicon-o-photo')
+                                    ->url(fn () => MediaResource::getUrl('index'))
+                                    ->openUrlInNewTab()
+                                    ->color('gray'),
                                 FormAction::make('choose_featured_from_media')
                                     ->label('Wybierz z biblioteki')
                                     ->icon('heroicon-o-photo')
@@ -406,7 +415,7 @@ class EventTemplateResource extends Resource
                                 ->maxLength(70)
                                 ->helperText('Tytuł strony widoczny w Google (max 70 znaków)'),
                             \FilamentTiptapEditor\TiptapEditor::make('seo_description')
-
+                                ->label('Opis SEO')
                                 ->helperText('Opis strony widoczny w Google (max 350 znaków)'),
                             Forms\Components\TextInput::make('seo_keywords')
                                 ->label('Słowa kluczowe')
@@ -601,6 +610,11 @@ class EventTemplateResource extends Resource
                     ->icon('heroicon-o-plus-circle')
                     ->color('success')
                     ->url(fn ($record) => route('filament.admin.resources.events.create', ['template' => $record->id]))
+                    ->openUrlInNewTab(),
+                Tables\Actions\Action::make('preview_offer')
+                    ->label('Podgląd oferty')
+                    ->icon('heroicon-o-globe-alt')
+                    ->url(fn (EventTemplate $record) => $record->prettyUrl())
                     ->openUrlInNewTab(),
                 Tables\Actions\ViewAction::make()
                     ->label('Podgląd'),

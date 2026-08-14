@@ -155,14 +155,13 @@ class TaskQueryFilters
 
         $commentsSub = "(SELECT MAX(COALESCE(updated_at, created_at)) FROM task_comments WHERE task_id = {$tasksTable}.id)";
         $attachmentsSub = "(SELECT MAX(COALESCE(updated_at, created_at)) FROM task_attachments WHERE task_id = {$tasksTable}.id)";
-        $subtasksSub = "(SELECT MAX(COALESCE(updated_at, created_at)) FROM tasks AS task_subtasks WHERE task_subtasks.parent_id = {$tasksTable}.id)";
 
+        // Podzadania mają własną aktywność i sortują się osobno — nie podbijają rodzica.
         $parts = [
             "COALESCE({$tasksTable}.updated_at, {$tasksTable}.created_at, '1970-01-01 00:00:00')",
             "COALESCE({$tasksTable}.created_at, '1970-01-01 00:00:00')",
             "COALESCE({$commentsSub}, '1970-01-01 00:00:00')",
             "COALESCE({$attachmentsSub}, '1970-01-01 00:00:00')",
-            "COALESCE({$subtasksSub}, '1970-01-01 00:00:00')",
         ];
 
         if ($driver === 'sqlite') {

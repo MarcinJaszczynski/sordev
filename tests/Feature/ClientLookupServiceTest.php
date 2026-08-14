@@ -198,4 +198,64 @@ class ClientLookupServiceTest extends TestCase
             ]);
         }
     }
+
+    public function test_selected_from_event_builds_pair_card_preview(): void
+    {
+        $contractor = Contractor::create([
+            'name' => 'LO Test',
+            'phone' => '111222333',
+            'email' => 'lo@example.com',
+            'city' => 'Warszawa',
+            'status' => 'active',
+        ]);
+        $this->markAsClient($contractor);
+
+        $contact = Contact::create([
+            'first_name' => 'Piotr',
+            'last_name' => 'Zieliński',
+            'phone' => '600100200',
+            'email' => 'piotr@example.com',
+        ]);
+        $contractor->contacts()->attach($contact->id);
+
+        $event = \App\Models\Event::factory()->create([
+            'client_name' => 'Piotr Zieliński · LO Test',
+            'client_email' => 'piotr@example.com',
+            'client_phone' => '600100200',
+            'contractor_id' => $contractor->id,
+        ]);
+        $event->syncOrderingParties([[
+            'contact_id' => $contact->id,
+            'contractor_id' => $contractor->id,
+            'department_label' => null,
+        ]]);
+
+        $selected = app(ClientLookupService::class)->selectedFromEvent($event->fresh());
+
+        $this->assertNotNull($selected);
+        $this->assertSame('pair', $selected['type']);
+        $this->assertSame($contact->id, (int) $selected['contact_id']);
+        $this->assertSame($contractor->id, (int) $selected['contractor_id']);
+        $this->assertSame('Piotr Zieliński', $selected['preview']['person']);
+        $this->assertSame('LO Test', $selected['preview']['company']);
+        $this->assertSame('600100200', $selected['preview']['phone']);
+    }
+
+    public function test_selected_from_event_falls_back_to_legacy_client_fields(): void
+    {
+        $event = \App\Models\Event::factory()->create([
+            'client_name' => 'Klient legacy',
+            'client_email' => 'legacy@example.com',
+            'client_phone' => '500500500',
+            'contractor_id' => null,
+        ]);
+
+        $selected = app(ClientLookupService::class)->selectedFromEvent($event);
+
+        $this->assertNotNull($selected);
+        $this->assertSame('legacy', $selected['type']);
+        $this->assertSame('Klient legacy', $selected['label']);
+        $this->assertSame('legacy@example.com', $selected['preview']['email']);
+        $this->assertSame('500500500', $selected['preview']['phone']);
+    }
 }

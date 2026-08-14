@@ -197,12 +197,12 @@ class Reservation extends Model
     ];
 
     public static array $statuses = [
-        'pending' => 'Oczekuje',
-        'confirmed' => 'Potwierdzona',
-        'partially_confirmed' => 'Częściowo potwierdzona',
-        'cancelled' => 'Anulowana',
-        'completed' => 'Zakończona',
-        'not_required' => 'Nie wymaga',
+        'pending' => 'Rez. oczekuje',
+        'confirmed' => 'Rez. potwierdzona',
+        'partially_confirmed' => 'Rez. częściowo potwierdzona',
+        'cancelled' => 'Rez. anulowana',
+        'completed' => 'Rez. zakończona',
+        'not_required' => 'Rez. nie wymaga',
     ];
 
     public static array $amountBases = [

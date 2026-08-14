@@ -103,6 +103,7 @@
                         <span class="muted">({{ \App\Support\MoneyFormatter::format($day['day_total_pln'] ?? 0) }})</span>
                     @endif
                 </div>
+                @include('pdf.packages._hotel_night_contact', ['day' => $day])
 
                 @if(!empty($day['offer_notes']))
                     <p class="muted" style="margin:4px 0;"><strong>W cenie:</strong> {{ strip_tags((string) $day['offer_notes']) }}</p>

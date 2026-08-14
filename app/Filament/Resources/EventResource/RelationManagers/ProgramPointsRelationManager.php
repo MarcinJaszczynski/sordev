@@ -2,13 +2,9 @@
 
 namespace App\Filament\Resources\EventResource\RelationManagers;
 
-use App\Actions\Reservations\UpsertReservationAction;
-use App\Data\UpsertReservationData;
 use App\Filament\Concerns\InteractsWithTaskEditModal;
 use App\Filament\Forms\ContractorWithLocationFields;
 use App\Filament\Forms\EventProgramPointPricingFields;
-use App\Filament\Forms\ReservationFormFields;
-use App\Filament\Forms\ReservationFormOptions;
 use App\Filament\Resources\EventResource\Concerns\InteractsWithSettlementCostDrawer;
 use App\Filament\Resources\EventResource\Concerns\ManagesProgramPointSettlementFinance;
 use App\Filament\Resources\EventResource\Pages\EditEventProgram;
@@ -37,6 +33,7 @@ use Filament\Forms\Form;
 use Filament\Resources\RelationManagers\RelationManager;
 use Filament\Tables;
 use Filament\Tables\Enums\FiltersLayout;
+use Filament\Tables\Grouping\Group;
 use Filament\Tables\Table;
 use Illuminate\Contracts\Pagination\CursorPaginator;
 use Illuminate\Contracts\Pagination\Paginator;
@@ -404,8 +401,16 @@ class ProgramPointsRelationManager extends RelationManager
                 Forms\Components\TextInput::make('order')
                     ->label('Kolejność')
                     ->numeric()
-                    ->minValue(1)
-                    ->required(),
+                    ->minValue(0)
+                    ->required()
+                    ->afterStateHydrated(function (Forms\Components\TextInput $component, mixed $state, ?EventProgramPoint $record): void {
+                        if (filled($state) || $record === null) {
+                            return;
+                        }
+
+                        // Prefill z bieżącej kolejności rekordu (w tym legacy order=0).
+                        $component->state((int) ($record->order ?? 0));
+                    }),
 
                 $this->programPointRichTextField('description')
                     ->label('Opis punktu programu (dla tej imprezy)')
@@ -480,7 +485,7 @@ class ProgramPointsRelationManager extends RelationManager
                             ->get();
 
                         if ($reservations->isEmpty()) {
-                            return new HtmlString('<div class="text-sm text-gray-500">Brak rezerwacji — dodaj z menu „Więcej” lub przyciskiem w tabeli.</div>');
+                            return new HtmlString('<div class="text-sm text-gray-500">Brak rezerwacji — dodaj w bocznym panelu „Płatności”.</div>');
                         }
 
                         $html = $reservations
@@ -510,6 +515,11 @@ class ProgramPointsRelationManager extends RelationManager
                 Forms\Components\Toggle::make('include_in_calculation')
                     ->label('Uwzględnij w kalkulacji')
                     ->default(true),
+
+                Forms\Components\Toggle::make('include_gratis_in_cost')
+                    ->label('Liczyć z opiekunami / gratisami')
+                    ->helperText('Domyślnie tylko płacący.')
+                    ->default(false),
 
                 Forms\Components\Toggle::make('active')
                     ->label('Aktywny')
@@ -556,32 +566,34 @@ class ProgramPointsRelationManager extends RelationManager
             ->striped(false)
             ->recordAction('edit')
             ->recordClasses(fn (EventProgramPoint $record): string => $this->resolveProgramPointRowClass($record))
+            ->groups(fn (): array => $this->isProgramListView()
+                ? [
+                    Group::make('day')
+                        ->label('Dzień')
+                        ->titlePrefixedWithLabel(false)
+                        ->collapsible(false)
+                        ->getTitleFromRecordUsing(
+                            fn (EventProgramPoint $record): string => $this->resolveProgramDayLabel((int) ($record->day ?? 1))
+                        )
+                        ->getDescriptionFromRecordUsing(function (EventProgramPoint $record): ?string {
+                            $event = $this->getOwnerRecord();
+                            $day = (int) ($record->day ?? 1);
+
+                            if ($event->isFacultativeProgramDay($day)) {
+                                return null;
+                            }
+
+                            return $event->dateForProgramDay($day)?->format('d.m.Y');
+                        }),
+                ]
+                : [])
+            ->defaultGroup(fn (): ?string => $this->isProgramListView() ? 'day' : null)
+            ->groupingSettingsHidden()
             ->columns([
-                Tables\Columns\TextColumn::make('day')
-                    ->label('Dzień')
-                    ->hidden(fn (): bool => $this->isProgramDaysTabView())
-                    ->formatStateUsing(function ($state, EventProgramPoint $record): string {
-                        if (! $record->getAttribute('_show_day_header')) {
-                            return '<span class="epp-day-spacer" aria-hidden="true"></span>';
-                        }
-
-                        $day = (int) ($record->day ?? 1);
-                        $label = e($this->resolveProgramDayLabel($day));
-                        $event = $this->getOwnerRecord();
-                        $dateHint = $event->dateForProgramDay($day)?->format('d.m.Y');
-
-                        return '<div class="epp-day-banner">'
-                            .'<span class="epp-day-banner__label">'.$label.'</span>'
-                            .($dateHint ? '<span class="epp-day-banner__date">'.$dateHint.'</span>' : '')
-                            .'</div>';
-                    })
-                    ->html()
-                    ->sortable(false)
-                    ->width('7.5rem'),
-
                 Tables\Columns\ViewColumn::make('program_point_name')
                     ->label('Punkt programu')
                     ->view('filament.components.program-point-name-cell')
+                    ->extraAttributes(['class' => 'epp-name-col'])
                     ->searchable(query: function (\Illuminate\Database\Eloquent\Builder $query, string $search): \Illuminate\Database\Eloquent\Builder {
                         return $query->where(function ($q) use ($search) {
                             $q->whereHas('templatePoint', fn ($q) => $q->where('name', 'like', "%{$search}%"))
@@ -631,46 +643,59 @@ class ProgramPointsRelationManager extends RelationManager
                     })
                     ->placeholder('—')
                     ->disabled(fn (EventProgramPoint $record): bool => (bool) $record->getAttribute('_is_set_parent'))
-                    ->width('6.5rem'),
+                    ->width('5.5rem'),
 
                 Tables\Columns\TextColumn::make('finance_calc')
-                    ->label('Kalkulacja')
+                    ->label('Szablon')
                     ->alignEnd()
-                    ->toggleable()
-                    ->state(function (EventProgramPoint $record): string {
-                        $s = $this->buildProgramPointPricesSummaryViewData($record);
-
-                        return ! empty($s['hideSetParentFinance']) ? '—' : ($s['calc'] ?? '—');
-                    })
-                    ->extraAttributes(['class' => 'tabular-nums text-xs']),
-
-                Tables\Columns\TextColumn::make('finance_plan')
-                    ->label('Plan')
-                    ->alignEnd()
-                    ->state(function (EventProgramPoint $record): string {
-                        $s = $this->buildProgramPointPricesSummaryViewData($record);
-
-                        return ! empty($s['hideSetParentFinance']) ? '—' : ($s['planned'] ?? '—');
-                    })
                     ->tooltip(function (EventProgramPoint $record): ?string {
                         $s = $this->buildProgramPointPricesSummaryViewData($record);
                         if (! empty($s['hideSetParentFinance'])) {
                             return null;
                         }
+
+                        $full = trim(($s['calc'] ?? '').' '.($s['calcSub'] ?? ''));
+
+                        return $full !== '' && $full !== '—'
+                            ? 'Cena z szablonu (informacyjnie): '.$full
+                            : 'Brak ceny w szablonie';
+                    })
+                    ->state(function (EventProgramPoint $record): string {
+                        $s = $this->buildProgramPointPricesSummaryViewData($record);
+
+                        return ! empty($s['hideSetParentFinance']) ? '—' : ($s['calc'] ?? '—');
+                    })
+                    ->extraAttributes(['class' => 'tabular-nums text-xs money-nowrap epp-money-col']),
+
+                Tables\Columns\TextColumn::make('finance_plan')
+                    ->label('Plan')
+                    ->alignEnd()
+                    ->weight('semibold')
+                    ->color(fn (EventProgramPoint $record): ?string => $this->buildProgramPointPricesSummaryViewData($record)['planDiffersFromCalc'] ?? false ? 'warning' : null)
+                    ->tooltip(function (EventProgramPoint $record): ?string {
+                        $s = $this->buildProgramPointPricesSummaryViewData($record);
+                        if (! empty($s['hideSetParentFinance'])) {
+                            return null;
+                        }
+                        $full = trim(($s['planned'] ?? '').' '.($s['plannedSub'] ?? ''));
                         if (! empty($s['planDiffersFromCalc'])) {
-                            return 'Plan różni się od kalkulacji (kosztorys): '.$s['calc'];
+                            return 'Plan ≠ szablon ('.$s['calc'].'). '.$full;
                         }
 
-                        return null;
+                        return $full !== '' ? $full : null;
                     })
-                    ->color(fn (EventProgramPoint $record): ?string => $this->buildProgramPointPricesSummaryViewData($record)['planDiffersFromCalc'] ?? false ? 'warning' : null)
-                    ->weight('semibold')
-                    ->extraAttributes(['class' => 'tabular-nums text-xs']),
+                    ->state(function (EventProgramPoint $record): string {
+                        $s = $this->buildProgramPointPricesSummaryViewData($record);
+
+                        return ! empty($s['hideSetParentFinance']) ? '—' : ($s['planned'] ?? '—');
+                    })
+                    ->extraAttributes(['class' => 'tabular-nums text-xs money-nowrap epp-money-col']),
 
                 Tables\Columns\TextColumn::make('finance_paid')
-                    ->label('Zapłacono')
+                    ->label('Zapł.')
                     ->alignEnd()
                     ->html()
+                    ->extraAttributes(['class' => 'money-nowrap epp-money-col'])
                     ->state(function (EventProgramPoint $record): string {
                         $s = $this->buildProgramPointPricesSummaryViewData($record);
                         if (! empty($s['hideSetParentFinance'])) {
@@ -683,85 +708,49 @@ class ProgramPointsRelationManager extends RelationManager
                             default => 'text-gray-700 dark:text-gray-200',
                         };
 
-                        $html = '<div class="text-xs leading-snug tabular-nums text-right">';
+                        $title = e(trim(($s['paid'] ?? '').' '.($s['paidSub'] ?? '').' · '.($s['paymentHint'] ?? '')));
+                        $html = '<div class="text-xs leading-snug tabular-nums text-right money-nowrap" title="'.$title.'">';
                         $html .= '<div class="font-semibold '.$paidClass.'">'.e($s['paid'] ?? '—').'</div>';
-                        // Tylko faktyczne wpłaty — nie „do zapłaty przez pilota”.
-                        if (! empty($s['paymentHint'])) {
-                            $html .= '<div class="mt-0.5 text-[10px] font-normal text-sky-700 dark:text-sky-300 max-w-[11rem] truncate" title="'.e($s['paymentHint']).'">'.e($s['paymentHint']).'</div>';
+                        if (($s['paidStatus'] ?? '') === 'full') {
+                            $html .= '<div class="text-[10px] text-emerald-700">opłacone</div>';
+                        } elseif (($s['remaining'] ?? '—') !== '—') {
+                            $html .= '<div class="text-[10px] text-rose-700">zost. '.e($s['remaining']).'</div>';
                         }
                         $html .= '</div>';
 
                         return $html;
                     }),
 
-                Tables\Columns\TextColumn::make('finance_remaining')
-                    ->label('Pozostało')
-                    ->alignEnd()
+                Tables\Columns\TextColumn::make('finance_doc')
+                    ->label('Faktura')
+                    ->alignCenter()
                     ->html()
+                    ->disabledClick()
+                    ->extraCellAttributes(['class' => 'epp-doc-col'])
+                    ->tooltip(fn (EventProgramPoint $record): ?string => $this->buildProgramPointPricesSummaryViewData($record)['documentStatusLabel'] ?? null)
                     ->state(function (EventProgramPoint $record): string {
                         $s = $this->buildProgramPointPricesSummaryViewData($record);
                         if (! empty($s['hideSetParentFinance'])) {
                             return '<span class="text-gray-400">—</span>';
                         }
 
-                        if (($s['paidStatus'] ?? '') === 'full') {
-                            return '<span class="text-emerald-700 font-semibold text-xs">✓ Opłacone</span>';
+                        $hint = (string) ($s['documentHint'] ?? 'Brak pliku');
+                        $url = (string) ($s['documentFirstUrl'] ?? '');
+                        $hasFile = ! empty($s['hasUploadedFile']) && $url !== '';
+
+                        if ($hasFile) {
+                            return '<a href="'.e($url).'" target="_blank" rel="noopener noreferrer"'
+                                .' class="epp-invoice-btn"'
+                                .' title="'.e($s['documentStatusLabel'] ?? $hint).'">'
+                                .e($hint)
+                                .'</a>';
                         }
 
-                        $remaining = (string) ($s['remaining'] ?? '—');
-                        $html = '<div class="text-xs leading-snug tabular-nums text-right">';
-                        $html .= '<div class="font-semibold text-rose-700 dark:text-rose-300">'.e($remaining).'</div>';
-                        if (! empty($s['dueDateLabel'])) {
-                            $html .= '<div class="mt-0.5 text-[10px] text-gray-500">do '.e($s['dueDateLabel']).'</div>';
-                        }
-                        if (! empty($s['pilotDueHint'])) {
-                            $html .= '<div class="mt-0.5 text-[10px] font-medium text-blue-700 dark:text-blue-300 max-w-[11rem] truncate" title="'.e($s['pilotDueHint']).'">'.e($s['pilotDueHint']).'</div>';
-                        } elseif (($s['paidBy'] ?? '') === 'pilot' && $remaining !== '—') {
-                            $html .= '<div class="mt-0.5 text-[10px] text-blue-700 dark:text-blue-300">płaci pilot</div>';
-                        }
-                        $html .= '</div>';
-
-                        return $html;
-                    }),
-
-                Tables\Columns\TextColumn::make('finance_status')
-                    ->label('Status')
-                    ->badge()
-                    ->state(function (EventProgramPoint $record): string {
-                        $s = $this->buildProgramPointPricesSummaryViewData($record);
-
-                        return ! empty($s['hideSetParentFinance'])
-                            ? '—'
-                            : (string) ($s['statusLabel'] ?? '—');
-                    })
-                    ->color(fn (EventProgramPoint $record): string => $this->buildProgramPointPricesSummaryViewData($record)['statusColor'] ?? 'gray')
-                    ->placeholder('—'),
-
-                Tables\Columns\TextColumn::make('finance_doc')
-                    ->label('Dok.')
-                    ->alignCenter()
-                    ->tooltip(fn (EventProgramPoint $record): ?string => $this->buildProgramPointPricesSummaryViewData($record)['documentStatusLabel'] ?? null)
-                    ->state(function (EventProgramPoint $record): string {
-                        $s = $this->buildProgramPointPricesSummaryViewData($record);
-                        if (! empty($s['hideSetParentFinance'])) {
-                            return '—';
+                        if ($hint !== '' && $hint !== 'Brak pliku') {
+                            return '<span class="epp-invoice-btn epp-invoice-btn--warn" title="'.e($hint).'">'.e($hint).'</span>';
                         }
 
-                        if (! empty($s['hasUploadedFile'])) {
-                            return '✓';
-                        }
-
-                        $hint = (string) ($s['documentHint'] ?? '');
-                        if ($hint === '' || $hint === 'Brak pliku') {
-                            return '—';
-                        }
-
-                        return '⚠';
-                    })
-                    ->color(fn (EventProgramPoint $record): ?string => match (true) {
-                        ! empty($this->buildProgramPointPricesSummaryViewData($record)['hasUploadedFile']) => 'success',
-                        in_array($this->buildProgramPointPricesSummaryViewData($record)['documentHint'] ?? '', ['', 'Brak pliku'], true) => null,
-                        default => 'warning',
+                        return '<span class="epp-invoice-btn epp-invoice-btn--empty">Brak</span>';
                     }),
 
                 Tables\Columns\TextColumn::make('payment_due_dates')
@@ -830,10 +819,11 @@ class ProgramPointsRelationManager extends RelationManager
                     ->label('Dzień')
                     ->hidden(fn (): bool => $this->isProgramDaysTabView())
                     ->options(function () {
-                        $maxDay = (int) ($this->getOwnerRecord()->duration_days ?? 1);
+                        $event = $this->getOwnerRecord();
+                        $maxDay = $event->resolveProgramDaysCount();
                         $options = [];
                         for ($i = 1; $i <= $maxDay; $i++) {
-                            $options[$i] = "Dzień {$i}";
+                            $options[$i] = $event->programDayLabel($i);
                         }
 
                         return $options;
@@ -1047,25 +1037,32 @@ class ProgramPointsRelationManager extends RelationManager
                                 Forms\Components\Select::make('day')
                                     ->label('Dzień')
                                     ->options(function () {
-                                        $maxDay = (int) ($this->getOwnerRecord()->duration_days ?? 1);
+                                        $event = $this->getOwnerRecord();
+                                        $maxDay = $event->resolveProgramDaysCount();
                                         $options = [];
                                         for ($i = 1; $i <= $maxDay; $i++) {
-                                            $options[$i] = "Dzień {$i}";
+                                            $options[$i] = $event->programDayLabel($i);
                                         }
 
                                         return $options;
                                     })
-                                    ->default(1)
+                                    ->default(fn (): int => max(1, (int) ($this->getActiveProgramDayTab() ?? $this->ownerProgramDay ?? 1)))
+                                    ->live()
+                                    ->afterStateUpdated(function (mixed $state, Forms\Set $set, Forms\Get $get): void {
+                                        $set('order', $this->nextProgramPointOrderForDay(
+                                            max(1, (int) ($state ?? 1)),
+                                            filled($get('parent_id')) ? (int) $get('parent_id') : null,
+                                        ));
+                                    })
                                     ->required(),
 
                                 Forms\Components\TextInput::make('order')
                                     ->label('Kolejność')
                                     ->numeric()
-                                    ->default(function () {
-                                        return $this->getOwnerRecord()
-                                            ->programPoints()
-                                            ->max('order') + 1;
-                                    })
+                                    ->minValue(0)
+                                    ->default(fn (): int => $this->nextProgramPointOrderForDay(
+                                        max(1, (int) ($this->getActiveProgramDayTab() ?? $this->ownerProgramDay ?? 1)),
+                                    ))
                                     ->required(),
                             ]),
 
@@ -1074,6 +1071,13 @@ class ProgramPointsRelationManager extends RelationManager
                             ->searchable()
                             ->preload()
                             ->nullable()
+                            ->live()
+                            ->afterStateUpdated(function (mixed $state, Forms\Set $set, Forms\Get $get): void {
+                                $set('order', $this->nextProgramPointOrderForDay(
+                                    max(1, (int) ($get('day') ?? 1)),
+                                    filled($state) ? (int) $state : null,
+                                ));
+                            })
                             ->options(function () {
                                 return $this->getOwnerRecord()
                                     ->programPoints()
@@ -1127,7 +1131,7 @@ class ProgramPointsRelationManager extends RelationManager
                             ->label('Uwagi dla pilota')
                             ->columnSpanFull(),
 
-                        Forms\Components\Grid::make(3)
+                        Forms\Components\Grid::make(2)
                             ->schema([
                                 Forms\Components\Toggle::make('include_in_program')
                                     ->label('Uwzględnij w programie')
@@ -1136,6 +1140,11 @@ class ProgramPointsRelationManager extends RelationManager
                                 Forms\Components\Toggle::make('include_in_calculation')
                                     ->label('Uwzględnij w kalkulacji')
                                     ->default(true),
+
+                                Forms\Components\Toggle::make('include_gratis_in_cost')
+                                    ->label('Liczyć z opiekunami / gratisami')
+                                    ->helperText('Domyślnie tylko płacący.')
+                                    ->default(false),
 
                                 Forms\Components\Toggle::make('active')
                                     ->label('Aktywny')
@@ -1187,6 +1196,7 @@ class ProgramPointsRelationManager extends RelationManager
                                     'pilot_notes' => $data['pilot_notes'] ?? $templatePoint->pilot_notes ?? null,
                                     'include_in_program' => $data['include_in_program'],
                                     'include_in_calculation' => $data['include_in_calculation'],
+                                    'include_gratis_in_cost' => (bool) ($data['include_gratis_in_cost'] ?? $templatePoint->include_gratis_in_cost ?? false),
                                     'active' => $data['active'],
                                 ],
                             );
@@ -1227,6 +1237,7 @@ class ProgramPointsRelationManager extends RelationManager
                                 'pilot_notes' => $data['pilot_notes'] ?? null,
                                 'include_in_program' => $data['include_in_program'],
                                 'include_in_calculation' => $data['include_in_calculation'],
+                                'include_gratis_in_cost' => (bool) ($data['include_gratis_in_cost'] ?? false),
                                 'active' => $data['active'],
                             ]);
                         }
@@ -1350,10 +1361,14 @@ class ProgramPointsRelationManager extends RelationManager
                                         ->helperText('Domyślnie: identyczne punkty (ten sam szablon / nazwa). Szersze zakresy na dole listy.'),
                                     Forms\Components\CheckboxList::make('days')
                                         ->label('Dni')
-                                        ->options(fn (): array => app(ProgramPointContractorBulkAssignService::class)
-                                            ->availableDays($this->getOwnerRecord())
-                                            ->mapWithKeys(fn (int $day) => [$day => "Dzień {$day}"])
-                                            ->all())
+                                        ->options(function (): array {
+                                            $event = $this->getOwnerRecord();
+
+                                            return app(ProgramPointContractorBulkAssignService::class)
+                                                ->availableDays($event)
+                                                ->mapWithKeys(fn (int $day) => [$day => $event->programDayLabel($day)])
+                                                ->all();
+                                        })
                                         ->visible(fn (Forms\Get $get): bool => $get('scope') === 'selected_days')
                                         ->columns(['default' => 1, 'md' => 2, 'xl' => 3]),
                                 ])
@@ -1370,125 +1385,6 @@ class ProgramPointsRelationManager extends RelationManager
                                         ->body($updated > 0
                                             ? "Zaktualizowano {$updated} punktów programu."
                                             : 'Brak punktów do aktualizacji.')
-                                        ->success()
-                                        ->send();
-                                }),
-                            Tables\Actions\Action::make('add_reservation_from_modal')
-                                ->label('Rezerwacja')
-                                ->icon('heroicon-o-calendar-days')
-                                ->color('success')
-                                ->modalHeading(fn (EventProgramPoint $record): string => 'Rezerwacja: '.($record->name ?? $record->templatePoint?->name ?? 'punkt'))
-                                ->modalWidth(ReservationFormFields::MODAL_WIDTH)
-                                ->form(fn (EventProgramPoint $record): array => ReservationFormFields::schema($this->reservationFormOptions($record)))
-                                ->fillForm(fn (EventProgramPoint $record): array => ReservationFormFields::defaultModalData($this->reservationFormOptions($record)))
-                                ->action(function (EventProgramPoint $record, array $data): void {
-                                    $this->storeReservationForProgramPoint($record, $data);
-                                }),
-                            Tables\Actions\Action::make('edit_reservation_from_modal')
-                                ->label('Edytuj rezerwację')
-                                ->icon('heroicon-o-pencil-square')
-                                ->color('gray')
-                                ->visible(fn (EventProgramPoint $record): bool => $record->reservations()->exists())
-                                ->modalHeading(fn (EventProgramPoint $record): string => 'Rezerwacja: '.($record->name ?? $record->templatePoint?->name ?? 'punkt'))
-                                ->modalWidth(ReservationFormFields::MODAL_WIDTH)
-                                ->form(function (EventProgramPoint $record): array {
-                                    $reservations = $record->reservations()->orderByDesc('id')->get();
-                                    $latest = $reservations->first();
-                                    $options = $this->reservationFormOptions($record);
-                                    $options = new ReservationFormOptions(
-                                        eventId: $options->eventId,
-                                        event: $options->event,
-                                        defaultContractorId: $options->defaultContractorId,
-                                        defaultProgramPointId: $options->defaultProgramPointId,
-                                        defaultAmount: $options->defaultAmount,
-                                        defaultCurrencyId: $options->defaultCurrencyId,
-                                        isHotelContext: $options->isHotelContext,
-                                        showHotelNotes: $options->showHotelNotes,
-                                        simplified: true,
-                                        lockContractor: true,
-                                        editingReservation: $latest,
-                                    );
-
-                                    $fields = [];
-
-                                    if ($reservations->count() > 1) {
-                                        $fields[] = Forms\Components\Select::make('reservation_id')
-                                            ->label('Którą rezerwację edytujesz')
-                                            ->options(
-                                                $reservations->mapWithKeys(function (Reservation $reservation): array {
-                                                    $ref = $reservation->booking_reference ?: ('#'.$reservation->id);
-                                                    $status = Reservation::$statuses[$reservation->status] ?? $reservation->status;
-
-                                                    return [$reservation->id => $ref.' — '.$status];
-                                                })->all()
-                                            )
-                                            ->required()
-                                            ->live()
-                                            ->afterStateUpdated(function ($state, Forms\Set $set): void {
-                                                $reservation = Reservation::query()->find($state);
-
-                                                if (! $reservation) {
-                                                    return;
-                                                }
-
-                                                foreach ([
-                                                    'booking_reference', 'status', 'confirm_by', 'confirmed_at',
-                                                    'deposit_due_at', 'deposit_paid_at', 'participant_count',
-                                                    'reserved_amount', 'currency_id', 'amount_basis',
-                                                    'participant_scope', 'convert_to_pln', 'office_notes',
-                                                ] as $field) {
-                                                    $value = $reservation->{$field};
-                                                    $set($field, $value instanceof \Carbon\CarbonInterface
-                                                        ? $value->toDateString()
-                                                        : $value);
-                                                }
-                                            });
-                                    }
-
-                                    return [
-                                        ...$fields,
-                                        ...ReservationFormFields::schema($options),
-                                    ];
-                                })
-                                ->fillForm(function (EventProgramPoint $record): array {
-                                    $reservation = $record->reservations()->latest('id')->first();
-
-                                    if (! $reservation) {
-                                        return ReservationFormFields::defaultModalData($this->reservationFormOptions($record));
-                                    }
-
-                                    return [
-                                        'reservation_id' => $reservation->id,
-                                        ...$reservation->only([
-                                            'booking_reference', 'status', 'confirm_by', 'confirmed_at',
-                                            'deposit_due_at', 'deposit_paid_at', 'participant_count',
-                                            'reserved_amount', 'currency_id', 'amount_basis',
-                                            'participant_scope', 'convert_to_pln', 'office_notes',
-                                        ]),
-                                    ];
-                                })
-                                ->action(function (EventProgramPoint $record, array $data): void {
-                                    $reservationId = $data['reservation_id'] ?? null;
-                                    unset($data['reservation_id']);
-
-                                    $reservation = $reservationId
-                                        ? $record->reservations()->whereKey($reservationId)->first()
-                                        : $record->reservations()->latest('id')->first();
-
-                                    if (! $reservation) {
-                                        $this->storeReservationForProgramPoint($record, $data);
-
-                                        return;
-                                    }
-
-                                    app(UpsertReservationAction::class)(UpsertReservationData::fromForm(
-                                        formData: $data,
-                                        reservation: $reservation,
-                                        programPoint: $record,
-                                    ));
-
-                                    \Filament\Notifications\Notification::make()
-                                        ->title('Zapisano rezerwację')
                                         ->success()
                                         ->send();
                                 }),
@@ -1659,14 +1555,7 @@ class ProgramPointsRelationManager extends RelationManager
 
     protected function resolveProgramDayLabel(int $day): string
     {
-        $day = max(1, $day);
-        $durationDays = max(1, (int) ($this->getOwnerRecord()->duration_days ?? $this->getOwnerRecord()->eventTemplate?->duration_days ?? 1));
-
-        if ($day > $durationDays) {
-            return 'Opcje fakultatywne';
-        }
-
-        return 'Dzień '.$day;
+        return $this->getOwnerRecord()->programDayLabel($day);
     }
 
     protected function updateProgramPointVisibility(
@@ -1907,12 +1796,9 @@ class ProgramPointsRelationManager extends RelationManager
     protected function annotateProgramPointsForTable(EloquentCollection $records): EloquentCollection
     {
         $ordered = $records->values();
-        $lastDay = null;
 
         foreach ($ordered as $index => $record) {
             $day = (int) ($record->day ?? 1);
-            $record->setAttribute('_show_day_header', $lastDay !== $day);
-            $lastDay = $day;
 
             $next = $ordered->get($index + 1);
             $isChild = filled($record->parent_id);
@@ -1958,10 +1844,6 @@ class ProgramPointsRelationManager extends RelationManager
     protected function resolveProgramPointRowClass(EventProgramPoint $record): string
     {
         $classes = ['epp-table-row'];
-
-        if ($record->getAttribute('_show_day_header')) {
-            $classes[] = 'epp-table-row--day-start';
-        }
 
         if ($record->getAttribute('_is_set_parent')) {
             $classes[] = 'epp-table-row--set-parent';
@@ -2069,6 +1951,12 @@ class ProgramPointsRelationManager extends RelationManager
             && ($this->ownerProgramView ?? 'days') === 'days';
     }
 
+    protected function isProgramListView(): bool
+    {
+        return $this->getPageClass() === EditEventProgram::class
+            && ($this->ownerProgramView ?? 'days') === 'list';
+    }
+
     protected function getActiveProgramDayTab(): ?int
     {
         if (! $this->isProgramDaysTabView()) {
@@ -2078,36 +1966,22 @@ class ProgramPointsRelationManager extends RelationManager
         return max(1, (int) ($this->ownerProgramDay ?? 1));
     }
 
-    protected function reservationFormOptions(EventProgramPoint $record): ReservationFormOptions
+    /**
+     * Następny numer kolejności w dniu (rodzice vs dzieci osobno — jak EventProgramPointCreator).
+     */
+    protected function nextProgramPointOrderForDay(int $day, ?int $parentId = null): int
     {
-        $event = $this->getOwnerRecord();
+        $query = $this->getOwnerRecord()
+            ->programPoints()
+            ->where('day', $day);
 
-        return new ReservationFormOptions(
-            eventId: $event->id,
-            event: $event,
-            defaultContractorId: $record->contractor_id,
-            defaultProgramPointId: $record->id,
-            defaultAmount: $record->total_price,
-            defaultCurrencyId: $record->currency_id,
-            isHotelContext: (bool) $record->is_hotel,
-            showHotelNotes: (bool) $record->is_hotel,
-            simplified: true,
-            lockContractor: true,
-        );
-    }
+        if ($parentId) {
+            $query->where('parent_id', $parentId);
+        } else {
+            $query->whereNull('parent_id');
+        }
 
-    /** @param array<string, mixed> $data */
-    protected function storeReservationForProgramPoint(EventProgramPoint $record, array $data): void
-    {
-        app(UpsertReservationAction::class)(UpsertReservationData::fromForm(
-            formData: $data,
-            programPoint: $record,
-        ));
-
-        \Filament\Notifications\Notification::make()
-            ->title('Zapisano rezerwację')
-            ->success()
-            ->send();
+        return (int) ($query->max('order') ?? 0) + 1;
     }
 
     protected static function renderReservationPreviewHtml(Reservation $reservation): string
@@ -2192,17 +2066,22 @@ class ProgramPointsRelationManager extends RelationManager
     {
         return [
             'calc' => '—',
+            'calcSub' => null,
             'planned' => '—',
+            'plannedSub' => null,
             'paid' => '—',
+            'paidSub' => null,
             'paidStatus' => 'none',
             'advanceHtml' => null,
             'paymentHint' => null,
             'pilotDueHint' => null,
             'remainingHint' => null,
             'remaining' => '—',
+            'remainingSub' => null,
             'dueDateLabel' => null,
             'documentHint' => null,
             'documentStatusLabel' => null,
+            'documentFirstUrl' => null,
             'hasUploadedFile' => false,
             'statusLabel' => null,
             'statusColor' => 'gray',

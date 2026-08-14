@@ -46,6 +46,7 @@ class ProgramEventTemplate extends Page
     protected function getHeaderActions(): array
     {
         return [
+            $this->makePreviewOfferAction(),
             $this->makeGenerateEventAction(),
             Actions\Action::make('back')
                 ->label('Wróć do edycji')

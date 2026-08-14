@@ -218,43 +218,58 @@ class EventHotelServicesRelationManager extends RelationManager
                     }),
 
                 Tables\Columns\TextColumn::make('finance_calc')
-                    ->label('Kalkulacja')
+                    ->label('Szablon')
                     ->alignEnd()
-                    ->state(fn (EventProgramPoint $record): string => $this->hotelFinanceViewData($record)['calc']),
+                    ->extraAttributes(['class' => 'tabular-nums text-xs money-nowrap epp-money-col'])
+                    ->tooltip(fn (EventProgramPoint $record): ?string => trim(($this->hotelFinanceViewData($record)['calc'] ?? '').' '.($this->hotelFinanceViewData($record)['calcSub'] ?? '')) ?: null)
+                    ->state(fn (EventProgramPoint $record): string => $this->hotelFinanceViewData($record)['calc'] ?? '—'),
 
                 Tables\Columns\TextColumn::make('finance_plan')
                     ->label('Plan')
                     ->alignEnd()
-                    ->state(fn (EventProgramPoint $record): string => $this->hotelFinanceViewData($record)['planned']),
+                    ->weight('semibold')
+                    ->extraAttributes(['class' => 'tabular-nums text-xs money-nowrap epp-money-col'])
+                    ->tooltip(fn (EventProgramPoint $record): ?string => trim(($this->hotelFinanceViewData($record)['planned'] ?? '').' '.($this->hotelFinanceViewData($record)['plannedSub'] ?? '')) ?: null)
+                    ->state(fn (EventProgramPoint $record): string => $this->hotelFinanceViewData($record)['planned'] ?? '—'),
 
                 Tables\Columns\TextColumn::make('finance_paid')
-                    ->label('Zapłacone')
+                    ->label('Zapł.')
                     ->alignEnd()
                     ->html()
+                    ->extraAttributes(['class' => 'money-nowrap epp-money-col'])
                     ->state(function (EventProgramPoint $record): string {
                         $s = $this->hotelFinanceViewData($record);
-                        $html = '<div class="text-xs leading-snug tabular-nums text-right"><div>'.e($s['paid']).'</div>';
-                        if (! empty($s['paymentHint'])) {
-                            $html .= '<div class="text-[11px] text-sky-700">'.e($s['paymentHint']).'</div>';
-                        }
-                        if (! empty($s['pilotDueHint'])) {
-                            $html .= '<div class="text-[11px] text-blue-700">'.e($s['pilotDueHint']).'</div>';
+                        $html = '<div class="text-xs leading-snug tabular-nums text-right money-nowrap"><div class="font-semibold">'.e($s['paid'] ?? '—').'</div>';
+                        if (($s['remaining'] ?? '—') !== '—' && ($s['paidStatus'] ?? '') !== 'full') {
+                            $html .= '<div class="text-[10px] text-rose-700">zost. '.e($s['remaining']).'</div>';
                         }
                         $html .= '</div>';
 
                         return $html;
                     }),
 
-                Tables\Columns\TextColumn::make('finance_status')
-                    ->label('Status')
-                    ->badge()
-                    ->state(fn (EventProgramPoint $record): string => $this->hotelFinanceViewData($record)['statusLabel'] ?? '—')
-                    ->color(fn (EventProgramPoint $record): string => $this->hotelFinanceViewData($record)['statusColor'] ?? 'gray'),
-
                 Tables\Columns\TextColumn::make('finance_doc')
-                    ->label('Dok.')
+                    ->label('Faktura')
                     ->alignCenter()
-                    ->state(fn (EventProgramPoint $record): string => $this->hotelFinanceViewData($record)['documentHint'] ?? '—'),
+                    ->html()
+                    ->disabledClick()
+                    ->extraAttributes(['class' => 'epp-doc-col'])
+                    ->state(function (EventProgramPoint $record): string {
+                        $s = $this->hotelFinanceViewData($record);
+                        $hint = (string) ($s['documentHint'] ?? 'Brak pliku');
+                        $url = (string) ($s['documentFirstUrl'] ?? '');
+                        $hasFile = ! empty($s['hasUploadedFile']) && $url !== '';
+
+                        if ($hasFile) {
+                            return '<a href="'.e($url).'" target="_blank" rel="noopener noreferrer" class="epp-invoice-btn">'.e($hint).'</a>';
+                        }
+
+                        if ($hint !== '' && $hint !== 'Brak pliku') {
+                            return '<span class="epp-invoice-btn epp-invoice-btn--warn">'.e($hint).'</span>';
+                        }
+
+                        return '<span class="epp-invoice-btn epp-invoice-btn--empty">Brak</span>';
+                    }),
             ])
             ->filters([
                 Tables\Filters\SelectFilter::make('hotel_scope')

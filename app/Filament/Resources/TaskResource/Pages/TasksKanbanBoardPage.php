@@ -834,6 +834,7 @@ class TasksKanbanBoardPage extends Page implements HasForms
 
     protected function getTaskActivityTimestamp(Task $task): int
     {
+        // Podzadania sortują się osobno — ich aktywność nie podbija karty rodzica.
         $timestamps = [
             $task->updated_at?->timestamp,
             $task->created_at?->timestamp,
@@ -841,8 +842,6 @@ class TasksKanbanBoardPage extends Page implements HasForms
             optional($task->comments?->max('created_at'))->timestamp,
             optional($task->attachments?->max('updated_at'))->timestamp,
             optional($task->attachments?->max('created_at'))->timestamp,
-            optional($task->subtasks?->max('updated_at'))->timestamp,
-            optional($task->subtasks?->max('created_at'))->timestamp,
         ];
 
         return (int) max(array_filter($timestamps, fn ($value) => ! is_null($value)) ?: [0]);

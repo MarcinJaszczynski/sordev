@@ -19,6 +19,7 @@ use Filament\Notifications\Notification;
 use Filament\Resources\Pages\EditRecord;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Schema;
+use Livewire\Attributes\On;
 
 class EditEvent extends EditRecord
 {
@@ -49,6 +50,9 @@ class EditEvent extends EditRecord
 
     /** @var array{use: bool, lines: array<int, array{amount?: mixed, currency_id?: mixed}>}|null */
     protected ?array $pendingManualPriceSync = null;
+
+    /** @var array<int, array<string, mixed>>|null */
+    protected ?array $pendingOrderingParties = null;
 
     protected ?int $previousParticipantCount = null;
 
@@ -153,6 +157,9 @@ class EditEvent extends EditRecord
             : ($this->record->start_place_id ? (int) $this->record->start_place_id : null);
 
         $this->pendingGratisCount = $gratisCount;
+        $this->pendingOrderingParties = is_array($data['ordering_parties'] ?? null)
+            ? $data['ordering_parties']
+            : (is_array($this->data['ordering_parties'] ?? null) ? $this->data['ordering_parties'] : null);
         unset($data['gratis_count'], $data['ordering_parties']);
 
         // Przygotuj dane dla synchronizacji ceny ręcznej
@@ -274,7 +281,9 @@ class EditEvent extends EditRecord
             $this->dispatch('event-price-table-refresh');
         }
 
-        $parties = $this->form->getState()['ordering_parties'] ?? null;
+        $parties = $this->pendingOrderingParties;
+        $this->pendingOrderingParties = null;
+
         if (is_array($parties)) {
             $this->record->syncOrderingParties($parties);
         } else {
@@ -322,6 +331,60 @@ class EditEvent extends EditRecord
         }
 
         $this->dispatch('event-program-points-refresh');
+    }
+
+    /**
+     * @param  array<int, array<string, mixed>>  $orderingParties
+     */
+    #[On('client-lookup-applied')]
+    public function applyClientLookup(
+        array $orderingParties,
+        string $clientName = '',
+        ?string $clientEmail = null,
+        ?string $clientPhone = null,
+    ): void {
+        $additional = array_values(array_slice(
+            is_array($this->data['ordering_parties'] ?? null) ? $this->data['ordering_parties'] : [],
+            1,
+        ));
+        $primary = $orderingParties[0] ?? null;
+
+        $this->data['ordering_parties'] = $primary
+            ? array_values(array_merge([$primary], $additional))
+            : $additional;
+        $this->data['client_name'] = $clientName;
+        $this->data['client_email'] = $clientEmail;
+        $this->data['client_phone'] = $clientPhone;
+    }
+
+    #[On('client-lookup-cleared')]
+    public function clearClientLookup(): void
+    {
+        $additional = array_values(array_slice(
+            is_array($this->data['ordering_parties'] ?? null) ? $this->data['ordering_parties'] : [],
+            1,
+        ));
+
+        $this->data['ordering_parties'] = $additional;
+        $this->data['client_name'] = null;
+        $this->data['client_email'] = null;
+        $this->data['client_phone'] = null;
+    }
+
+    /**
+     * @param  array<int, array<string, mixed>>  $additionalParties
+     */
+    #[On('additional-ordering-parties-updated')]
+    public function applyAdditionalOrderingParties(array $additionalParties): void
+    {
+        $current = is_array($this->data['ordering_parties'] ?? null)
+            ? $this->data['ordering_parties']
+            : [];
+        $primary = $current[0] ?? null;
+
+        $this->data['ordering_parties'] = $primary
+            ? array_values(array_merge([$primary], array_values($additionalParties)))
+            : array_values($additionalParties);
     }
 
     public function financials(): array

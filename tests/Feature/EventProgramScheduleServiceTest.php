@@ -187,6 +187,62 @@ class EventProgramScheduleServiceTest extends TestCase
         $this->assertSame('13:00:00', substr((string) $fourth->end_time, 0, 8));
     }
 
+    public function test_manual_edit_allows_overnight_when_end_date_is_next_day(): void
+    {
+        $event = Event::factory()->create(['duration_days' => 2]);
+        $service = app(EventProgramScheduleService::class);
+
+        $overnight = $this->makeRootPoint($event, [
+            'name' => 'Przejazd nocny',
+            'order' => 1,
+            'day' => 1,
+            'duration_hours' => 22,
+            'duration_minutes' => 0,
+            'start_time' => '18:00:00',
+            'end_time' => '18:00:00',
+            'start_date' => '2026-09-20',
+            'end_date' => '2026-09-21',
+        ]);
+
+        $following = $this->makeRootPoint($event, [
+            'name' => 'Po przejeździe tego dnia',
+            'order' => 2,
+            'day' => 1,
+            'duration_hours' => 1,
+            'duration_minutes' => 0,
+            'start_time' => '19:00:00',
+            'end_time' => '20:00:00',
+        ]);
+
+        $service->applyManualTimeChange($overnight, '18:00', '16:00');
+
+        $overnight->refresh();
+        $following->refresh();
+
+        $this->assertSame('18:00:00', substr((string) $overnight->start_time, 0, 8));
+        $this->assertSame('16:00:00', substr((string) $overnight->end_time, 0, 8));
+        $this->assertTrue((bool) $overnight->times_manually_locked);
+        // Same-day followers must not be shifted from next-day end time (16:00).
+        $this->assertSame('19:00:00', substr((string) $following->start_time, 0, 8));
+        $this->assertSame('20:00:00', substr((string) $following->end_time, 0, 8));
+    }
+
+    public function test_manual_edit_still_rejects_end_before_start_on_same_day(): void
+    {
+        $event = Event::factory()->create(['duration_days' => 1]);
+        $point = $this->makeRootPoint($event, [
+            'start_time' => '10:00:00',
+            'end_time' => '12:00:00',
+            'start_date' => '2026-09-20',
+            'end_date' => '2026-09-20',
+        ]);
+
+        $this->expectException(\InvalidArgumentException::class);
+        $this->expectExceptionMessage('Godzina końca musi być późniejsza niż godzina startu.');
+
+        app(EventProgramScheduleService::class)->applyManualTimeChange($point, '18:00', '16:00');
+    }
+
     public function test_manual_edit_of_set_parent_propagates_times_to_children(): void
     {
         $event = Event::factory()->create(['duration_days' => 1]);

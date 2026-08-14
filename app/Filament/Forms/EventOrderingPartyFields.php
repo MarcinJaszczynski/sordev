@@ -15,6 +15,57 @@ class EventOrderingPartyFields
 {
     use SearchContractorTrait;
 
+    /**
+     * Lookup klienta (karta jak przy zakładaniu) + ukryte client_* + zwinięty repeater.
+     *
+     * @return array<int, Forms\Components\Component>
+     */
+    public static function clientLookupFields(): array
+    {
+        return [
+            Forms\Components\View::make('filament.components.event-client-lookup-wrapper')
+                ->viewData(function (?\Illuminate\Database\Eloquent\Model $record): array {
+                    $initialSelected = null;
+                    $initialAdditional = [];
+                    $primaryContractorId = null;
+                    $wireKey = 'event-client-lookup-create';
+
+                    if ($record instanceof \App\Models\Event && $record->exists) {
+                        $lookup = app(\App\Services\ClientLookupService::class);
+                        $initialSelected = $lookup->selectedFromEvent($record);
+                        $initialAdditional = $lookup->additionalSelectedFromEvent($record);
+                        $primaryContractorId = filled($initialSelected['contractor_id'] ?? null)
+                            ? (int) $initialSelected['contractor_id']
+                            : ($record->contractor_id ? (int) $record->contractor_id : null);
+                        $wireKey = 'event-client-lookup-edit-'.$record->getKey();
+                    }
+
+                    return [
+                        'initialSelected' => $initialSelected,
+                        'initialAdditional' => $initialAdditional,
+                        'primaryContractorId' => $primaryContractorId,
+                        'wireKey' => $wireKey,
+                        'additionalWireKey' => $wireKey.'-additional',
+                    ];
+                })
+                ->columnSpanFull(),
+            Forms\Components\Hidden::make('client_name')
+                ->required()
+                ->dehydrated(),
+            Forms\Components\Hidden::make('client_email')
+                ->dehydrated(),
+            Forms\Components\Hidden::make('client_phone')
+                ->dehydrated(),
+            // Stan formularza (dehydrated) — UI edycji jest w Livewire powyżej.
+            static::orderingPartiesRepeater()
+                ->hidden()
+                ->dehydrated()
+                ->minItems(0)
+                ->defaultItems(0)
+                ->columnSpanFull(),
+        ];
+    }
+
     public static function orderingPartiesRepeater(): Forms\Components\Repeater
     {
         $service = app(EventOrderingPartyService::class);
@@ -22,11 +73,21 @@ class EventOrderingPartyFields
         return Forms\Components\Repeater::make('ordering_parties')
             ->label('Zamawiający')
             ->schema([
+                Forms\Components\Placeholder::make('party_role_badge')
+                    ->label('')
+                    ->content(function (Get $get, Forms\Components\Component $component): string {
+                        return static::isPrimaryOrderingPartyItem($get, $component)
+                            ? 'Główny zamawiający — te dane trafiają na kartę klienta i do pól imprezy.'
+                            : 'Dodatkowy kontakt — nie zmienia karty głównego zamawiającego.';
+                    })
+                    ->columnSpanFull(),
+
                 Forms\Components\Select::make('contractor_id')
                     ->label('Firma / instytucja')
                     ->searchable()
                     ->preload()
                     ->required()
+                    // Szukamy w całej bazie; contactId tylko priorytetyzuje już powiązane firmy.
                     ->options(fn (Get $get): array => $service->contractorOptionsForContact(
                         filled($get('contact_id')) ? (int) $get('contact_id') : null,
                     ))
@@ -56,7 +117,7 @@ class EventOrderingPartyFields
                         );
                     })
                     ->live()
-                    ->afterStateUpdated(function (?string $state, Set $set, Get $get): void {
+                    ->afterStateUpdated(function (?string $state, Set $set, Get $get, Forms\Components\Component $component): void {
                         if (! $state) {
                             return;
                         }
@@ -67,17 +128,24 @@ class EventOrderingPartyFields
                             app(ContactContractorLinkService::class)->link($contactId, (int) $state);
                         }
 
-                        static::applyPartyRowToClientFields($get('../../ordering_parties'), $set);
+                        if (static::isPrimaryOrderingPartyItem($get, $component)) {
+                            static::applyPartyRowToClientFields($get('../../ordering_parties'), $set);
+                        }
                     })
-                    ->helperText('Najpierw wybierz firmę / instytucję. Możesz dodać nową.')
+                    ->helperText('Wyszukaj firmę z bazy (po nazwie, NIP, mieście, telefonie, e-mailu) albo dodaj nową.')
                     ->columnSpanFull(),
 
                 Forms\Components\Select::make('contact_id')
                     ->label('Osoba kontaktowa')
                     ->searchable()
                     ->preload()
-                    ->options(fn (): array => $service->contactOptions())
-                    ->getSearchResultsUsing(fn (string $search): array => $service->contactOptions($search))
+                    ->options(fn (Get $get): array => $service->contactOptionsForContractor(
+                        filled($get('contractor_id')) ? (int) $get('contractor_id') : null,
+                    ))
+                    ->getSearchResultsUsing(fn (string $search, Get $get): array => $service->contactOptionsForContractor(
+                        filled($get('contractor_id')) ? (int) $get('contractor_id') : null,
+                        $search,
+                    ))
                     ->getOptionLabelUsing(function ($value): ?string {
                         if (! $value) {
                             return null;
@@ -96,7 +164,7 @@ class EventOrderingPartyFields
                         return app(EventOrderingPartyService::class)->createContact($data, $contractorId);
                     })
                     ->live()
-                    ->afterStateUpdated(function (?string $state, Set $set, Get $get): void {
+                    ->afterStateUpdated(function (?string $state, Set $set, Get $get, Forms\Components\Component $component): void {
                         if (! $state) {
                             return;
                         }
@@ -116,9 +184,11 @@ class EventOrderingPartyFields
                             );
                         }
 
-                        static::applyPartyRowToClientFields($get('../../ordering_parties'), $set);
+                        if (static::isPrimaryOrderingPartyItem($get, $component)) {
+                            static::applyPartyRowToClientFields($get('../../ordering_parties'), $set);
+                        }
                     })
-                    ->helperText('Wyszukaj osobę po imieniu, nazwisku, e-mailu lub telefonie. Możesz dodać nową osobę.')
+                    ->helperText('Po wyborze firmy lista podpowiada jej kontakty. Dalej możesz szukać w całej bazie.')
                     ->columnSpanFull(),
 
                 Forms\Components\TextInput::make('department_label')
@@ -126,7 +196,19 @@ class EventOrderingPartyFields
                     ->maxLength(255)
                     ->placeholder('Wpisz dział, oddział lub szkołę')
                     ->live(onBlur: true)
-                    ->afterStateUpdated(fn ($state, Set $set, Get $get) => static::applyPartyRowToClientFields($get('../../ordering_parties'), $set))
+                    ->afterStateUpdated(function ($state, Set $set, Get $get, Forms\Components\Component $component): void {
+                        if (static::isPrimaryOrderingPartyItem($get, $component)) {
+                            static::applyPartyRowToClientFields($get('../../ordering_parties'), $set);
+                        }
+                    })
+                    ->columnSpanFull(),
+
+                Forms\Components\Textarea::make('notes')
+                    ->label('Rola / notatka')
+                    ->rows(2)
+                    ->maxLength(1000)
+                    ->placeholder('np. rodzic odpowiedzialny za rozliczenie, nauczyciel jadący na wycieczkę')
+                    ->helperText('Widoczne tylko wewnętrznie — pomaga rozróżnić kontakty przy tej samej firmie.')
                     ->columnSpanFull(),
 
                 Forms\Components\ViewField::make('party_details_preview')
@@ -147,18 +229,40 @@ class EventOrderingPartyFields
             ])
             ->minItems(1)
             ->defaultItems(1)
-            ->addActionLabel('Dodaj zamawiającego')
+            ->addActionLabel('Dodaj dodatkowy kontakt')
             ->reorderable()
             ->collapsible()
-            ->itemLabel(fn (array $state): string => app(EventOrderingPartyService::class)->formatPartyLabel(
+            ->itemLabel(fn (array $state): string => app(EventOrderingPartyService::class)->formatPartyItemHeading(
                 filled($state['contact_id'] ?? null) ? (int) $state['contact_id'] : null,
                 filled($state['contractor_id'] ?? null) ? (int) $state['contractor_id'] : null,
                 $state['department_label'] ?? null,
+                $state['notes'] ?? null,
             ))
             ->live()
             ->afterStateUpdated(fn ($state, Set $set) => static::applyPartyRowToClientFields($state, $set))
-            ->helperText('Dodaj jedną lub więcej par: firma + osoba kontaktowa. Pierwszy wpis ustawia główne dane zamawiającego poniżej.')
+            ->helperText('Pierwsza pozycja = główny zamawiający. Kolejne = dodatkowe kontakty. Kolejność możesz zmieniać przeciąganiem.')
             ->columnSpanFull();
+    }
+
+    /**
+     * Czy bieżący wiersz repeatera jest pierwszym (głównym) zamawiającym.
+     */
+    public static function isPrimaryOrderingPartyItem(Get $get, Forms\Components\Component $component): bool
+    {
+        $itemPath = $component->getContainer()->getStatePath();
+        $uuid = str_contains($itemPath, '.')
+            ? substr($itemPath, (int) strrpos($itemPath, '.') + 1)
+            : $itemPath;
+
+        $parties = $get('../../ordering_parties');
+
+        if (! is_array($parties) || $parties === []) {
+            return true;
+        }
+
+        $firstKey = array_key_first($parties);
+
+        return $firstKey === $uuid;
     }
 
     /**

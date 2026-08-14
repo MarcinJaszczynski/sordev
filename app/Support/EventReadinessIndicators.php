@@ -223,16 +223,15 @@ final class EventReadinessIndicators
 
         if ($event->pilot_funds_paid) {
             $when = $event->pilot_funds_paid_at?->format('d.m.Y') ?? '';
-            $amount = filled($event->pilot_advance_planned_amount)
-                ? number_format((float) $event->pilot_advance_planned_amount, 0, ',', ' ').' zł'
-                : '';
+            $amount = app(\App\Services\PilotAdvanceService::class)->formatOfficePayoutLabel($event);
+            $amountSuffix = ($amount !== '' && $amount !== '—') ? ' · '.$amount : '';
 
             return [
                 'key' => 'pilot_funds',
                 'label' => 'Zaliczka pilota',
                 'short' => 'OK',
                 'tone' => 'ok',
-                'title' => 'Zaliczka wypłacona'.($when !== '' ? ' ('.$when.')' : '').($amount !== '' ? ' · '.$amount : ''),
+                'title' => 'Zaliczka wypłacona'.($when !== '' ? ' ('.$when.')' : '').$amountSuffix,
             ];
         }
 

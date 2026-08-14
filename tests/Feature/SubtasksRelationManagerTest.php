@@ -98,10 +98,19 @@ class SubtasksRelationManagerTest extends TestCase
 
         $after = NotificationService::getTopbarDataForUser($assignee->id, fresh: true);
 
-        $this->assertGreaterThanOrEqual(1, $after['counts']['tasks']);
+        $this->assertSame(1, $after['counts']['tasks']);
+        $taskItems = collect($after['items_by_type']['task']);
         $this->assertTrue(
-            collect($after['items_by_type']['task'])
-                ->contains(fn (array $row): bool => ($row['title'] ?? '') === 'Nowe podzadanie topbar')
+            $taskItems->contains(fn (array $row): bool => ($row['title'] ?? '') === 'Nowe podzadanie topbar')
         );
+        $this->assertFalse(
+            $taskItems->contains(fn (array $row): bool => ($row['title'] ?? '') === 'Zadanie nadrzędne')
+        );
+
+        $subtask = Task::query()->where('title', 'Nowe podzadanie topbar')->first();
+        $this->assertNotNull($subtask);
+        $subtaskItem = $taskItems->first(fn (array $row): bool => ($row['title'] ?? '') === 'Nowe podzadanie topbar');
+        $this->assertStringContainsString('editTask='.$subtask->id, (string) ($subtaskItem['url'] ?? ''));
+        $this->assertStringContainsString('Podzadanie → Zadanie nadrzędne', (string) ($subtaskItem['meta'] ?? ''));
     }
 }

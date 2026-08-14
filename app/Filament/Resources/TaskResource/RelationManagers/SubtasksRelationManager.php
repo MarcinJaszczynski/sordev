@@ -124,11 +124,10 @@ class SubtasksRelationManager extends RelationManager
                         return $data;
                     })
                     ->after(function (Task $record): void {
-                        // Nowe podzadanie na górę stosu + odśwież aktywność rodzica (sort listy).
+                        // Podzadanie jest pełnoprawnym Task — nie touchujemy rodzica,
+                        // żeby topbar/lista prowadziły do podzadania, a nie do zadania głównego.
                         $record->moveToStart();
-                        $parent = $this->getOwnerRecord();
-                        $parent->touch();
-                        $parent->loadCount('subtasks');
+                        $this->getOwnerRecord()->loadCount('subtasks');
                         $this->refreshTopbarAfterSubtaskChange($record);
                         $this->dispatchPanelUpdated();
                     }),
@@ -145,9 +144,7 @@ class SubtasksRelationManager extends RelationManager
                     : TaskResource::modalEditTableAction(),
                 Tables\Actions\DeleteAction::make()
                     ->after(function (Task $record): void {
-                        $parent = $this->getOwnerRecord();
-                        $parent->touch();
-                        $parent->loadCount('subtasks');
+                        $this->getOwnerRecord()->loadCount('subtasks');
                         $this->refreshTopbarAfterSubtaskChange($record);
                         $this->dispatchPanelUpdated();
                     }),

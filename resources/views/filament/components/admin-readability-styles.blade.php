@@ -919,9 +919,9 @@
         margin-bottom: 0.5rem;
     }
 
-    /* Dropdown filtrów tabeli programu — nad sticky toolbar i nad ciałem tabeli */
+    /* Dropdown filtrów tabeli programu — toolbar nad ciałem; scroll poziomy zostaje na content */
     .fi-page:has(.admin-program-toolbar) .fi-resource-relation-managers .fi-ta-ctn {
-        overflow: visible !important;
+        overflow: visible;
     }
 
     .fi-page:has(.admin-program-toolbar) .fi-resource-relation-managers .fi-ta-header-ctn {
@@ -936,9 +936,50 @@
         overflow: visible !important;
     }
 
-    .fi-page:has(.admin-program-toolbar) .fi-resource-relation-managers .fi-ta-content {
+    .fi-page:has(.admin-program-toolbar) .fi-resource-relation-managers .fi-ta-content,
+    .fi-page:has(.admin-program-toolbar) .fi-resource-relation-managers .fi-ta-table-ctn {
         position: relative;
         z-index: 1;
+        overflow-x: auto !important;
+        overflow-y: visible;
+        -webkit-overflow-scrolling: touch;
+        max-width: 100%;
+    }
+
+    .fi-page:has(.admin-program-toolbar) .fi-resource-relation-managers .fi-ta-table {
+        width: 100%;
+        min-width: 52rem;
+        table-layout: auto;
+    }
+
+    .fi-page:has(.admin-program-toolbar) .fi-resource-relation-managers .fi-ta-cell.epp-name-col,
+    .fi-ta-cell.epp-name-col {
+        width: 28%;
+        min-width: 12rem;
+        max-width: 22rem;
+        white-space: normal !important;
+        word-break: break-word !important;
+        overflow-wrap: anywhere;
+    }
+
+    .fi-page:has(.admin-program-toolbar) .fi-resource-relation-managers .fi-ta-cell.epp-money-col,
+    .fi-ta-cell.epp-money-col {
+        white-space: nowrap !important;
+        word-break: normal !important;
+        overflow-wrap: normal !important;
+        width: 1%;
+        min-width: 5.5rem;
+        vertical-align: top;
+    }
+
+    .fi-page:has(.admin-program-toolbar) .fi-resource-relation-managers .fi-ta-cell.epp-doc-col,
+    .fi-ta-cell.epp-doc-col {
+        white-space: nowrap !important;
+        word-break: normal !important;
+        overflow-wrap: normal !important;
+        width: 1%;
+        min-width: 7.5rem;
+        vertical-align: middle;
     }
 
     .fi-page:has(.admin-program-toolbar) .fi-resource-relation-managers .fi-dropdown-panel {
@@ -1090,9 +1131,46 @@
         vertical-align: top;
     }
 
-    .fi-ta-row.epp-table-row--day-start > td {
-        border-top-width: 2px;
-        border-top-color: #cbd5e1;
+    /* Lista programu: nagłówek dnia na pełną szerokość (Filament Group), potem wiersze punktów */
+    .fi-page:has(.admin-program-toolbar) .fi-ta-group-header {
+        background: #e8eef9 !important;
+        border-block: 1px solid #c7d2fe;
+        padding: 0.55rem 0.9rem;
+        gap: 0.75rem;
+    }
+
+    .fi-page:has(.admin-program-toolbar) tr:has(.fi-ta-group-header) > td {
+        padding: 0 !important;
+        border-top: 2px solid #94a3b8;
+        background: #e8eef9 !important;
+    }
+
+    .fi-page:has(.admin-program-toolbar) .fi-ta-group-header h4 {
+        font-size: 0.82rem;
+        font-weight: 800;
+        letter-spacing: 0.04em;
+        text-transform: uppercase;
+        color: #1e3a8a;
+    }
+
+    .fi-page:has(.admin-program-toolbar) .fi-ta-group-header p {
+        font-size: 0.75rem;
+        color: #64748b;
+        margin-top: 0.1rem;
+    }
+
+    .dark .fi-page:has(.admin-program-toolbar) .fi-ta-group-header {
+        background: rgba(30, 58, 138, 0.28) !important;
+        border-block-color: rgba(147, 197, 253, 0.35);
+    }
+
+    .dark .fi-page:has(.admin-program-toolbar) tr:has(.fi-ta-group-header) > td {
+        border-top-color: #64748b;
+        background: rgba(30, 58, 138, 0.28) !important;
+    }
+
+    .dark .fi-page:has(.admin-program-toolbar) .fi-ta-group-header h4 {
+        color: #bfdbfe;
     }
 
     .fi-ta-row.epp-table-row--set-parent > td {
@@ -1156,39 +1234,61 @@
         background-color: #f1f5f9 !important;
     }
 
-    .epp-day-banner {
-        display: flex;
-        flex-direction: column;
-        gap: 0.1rem;
-        padding-top: 0.35rem;
-    }
-
-    .epp-day-banner__label {
-        font-size: 0.78rem;
-        font-weight: 800;
-        letter-spacing: 0.04em;
-        text-transform: uppercase;
-        color: #1e3a8a;
-        white-space: nowrap;
-    }
-
-    .epp-day-banner__date {
-        font-size: 0.72rem;
-        color: #64748b;
-        white-space: nowrap;
-    }
-
-    .epp-day-spacer {
-        display: block;
-        min-height: 0.25rem;
-    }
-
     .epp-name-cell {
         display: flex;
         flex-direction: column;
         gap: 0.28rem;
-        min-width: 14rem;
+        min-width: 0;
+        max-width: 22rem;
         position: relative;
+    }
+
+    .epp-program-desc {
+        margin-top: 0.15rem;
+        font-size: 0.72rem;
+        line-height: 1.3;
+        color: #64748b;
+        display: -webkit-box;
+        -webkit-box-orient: vertical;
+        -webkit-line-clamp: 2;
+        overflow: hidden;
+        max-width: 100%;
+    }
+
+    .epp-invoice-btn {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        max-width: 9.5rem;
+        padding: 0.28rem 0.55rem;
+        border-radius: 0.4rem;
+        background: #ecfdf5;
+        color: #065f46;
+        box-shadow: inset 0 0 0 1px #6ee7b7;
+        font-size: 0.72rem;
+        font-weight: 700;
+        line-height: 1.2;
+        text-decoration: none;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+    }
+
+    .epp-invoice-btn:hover {
+        background: #d1fae5;
+    }
+
+    .epp-invoice-btn--warn {
+        background: #fffbeb;
+        color: #92400e;
+        box-shadow: inset 0 0 0 1px #fcd34d;
+    }
+
+    .epp-invoice-btn--empty {
+        background: #f8fafc;
+        color: #94a3b8;
+        box-shadow: inset 0 0 0 1px #e2e8f0;
+        font-weight: 600;
     }
 
     .epp-name-cell--set-parent {
@@ -1669,6 +1769,27 @@
         white-space: nowrap;
     }
 
+    .epp-money {
+        display: inline-flex;
+        flex-direction: column;
+        align-items: flex-end;
+        gap: 0.02rem;
+        line-height: 1.2;
+    }
+
+    .epp-money__main {
+        white-space: nowrap;
+        font-variant-numeric: tabular-nums;
+    }
+
+    .epp-money__sub {
+        white-space: nowrap;
+        font-size: 0.62rem;
+        font-weight: 500;
+        color: #64748b;
+        font-variant-numeric: tabular-nums;
+    }
+
     .epp-prices-row--paid {
         margin-top: 0.08rem;
         padding: 0.18rem 0.35rem;
@@ -1727,6 +1848,10 @@
         line-height: 1.3;
         color: #b45309;
         font-weight: 700;
+        max-width: 14rem;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
     }
 
     .epp-prices-advance--empty {
@@ -1740,6 +1865,10 @@
         line-height: 1.25;
         color: #1d4ed8;
         font-weight: 600;
+        max-width: 14rem;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
     }
 
     .epp-prices-row--remaining .epp-prices-remaining-inline {
@@ -1759,7 +1888,7 @@
 
     .epp-prices-doc {
         margin-top: 0.15rem;
-        max-width: 11rem;
+        max-width: 100%;
         overflow: hidden;
         text-overflow: ellipsis;
         white-space: nowrap;
@@ -1774,6 +1903,41 @@
 
     .epp-prices-doc--missing {
         color: #b45309;
+    }
+
+    .epp-prices-doc--chip {
+        display: inline-flex;
+        max-width: 100%;
+        margin-top: 0.2rem;
+        margin-left: auto;
+        padding: 0.18rem 0.45rem;
+        border-radius: 0.35rem;
+        background: #ecfdf5;
+        color: #065f46;
+        box-shadow: inset 0 0 0 1px #a7f3d0;
+        text-decoration: none;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+    }
+
+    .epp-prices-doc--chip:hover {
+        background: #d1fae5;
+    }
+
+    .epp-prices-doc--chip-warn {
+        display: inline-flex;
+        max-width: 100%;
+        margin-top: 0.2rem;
+        margin-left: auto;
+        padding: 0.18rem 0.45rem;
+        border-radius: 0.35rem;
+        background: #fffbeb;
+        color: #92400e;
+        box-shadow: inset 0 0 0 1px #fde68a;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
     }
 
     @media (max-width: 1024px) {
@@ -2896,8 +3060,13 @@
     }
 
     .money-nowrap,
-    .fi-ta-text-item .money-nowrap {
+    .fi-ta-text-item .money-nowrap,
+    .fi-ta-cell.money-nowrap,
+    .fi-ta-cell.money-nowrap .fi-ta-text-item,
+    .fi-ta-cell.money-nowrap .fi-ta-text-item-label {
         white-space: nowrap !important;
+        word-break: normal !important;
+        overflow-wrap: normal !important;
     }
 
     @media (max-width: 767.98px) {

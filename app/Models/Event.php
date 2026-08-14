@@ -96,6 +96,7 @@ class Event extends Model
         'insurance_policy_number',
         'insurance_terms',
         'insurance_document_path',
+        'insurance_insured_list_path',
         'insurance_amount',
         'insurance_payment_status',
         'insurance_status',
@@ -103,6 +104,7 @@ class Event extends Model
         'tfg_defaults',
         'created_by',
         'assigned_to',
+        'office_caretaker_id',
         'pilot_contractor_id',
         'pilot_funds_paid',
         'pilot_funds_paid_at',
@@ -459,6 +461,14 @@ class Event extends Model
                 $oldValue = $event->getOriginal($field);
                 $event->logHistory('updated', $field, $oldValue, $newValue, "Zmieniono {$field}");
             }
+
+            if ($event->wasChanged('office_caretaker_id') && $event->office_caretaker_id) {
+                $caretaker = $event->officeCaretaker()->first();
+                if ($caretaker) {
+                    app(\App\Services\ClientTripInquiryOfficeNotifier::class)
+                        ->notifyNewCaretakerAboutOpenInquiries($event, $caretaker);
+                }
+            }
         });
     }
 
@@ -496,6 +506,10 @@ class Event extends Model
 
         if (Schema::hasColumn('event_contractor', 'department_label')) {
             $pivotColumns[] = 'department_label';
+        }
+
+        if (Schema::hasColumn('event_contractor', 'notes')) {
+            $pivotColumns[] = 'notes';
         }
 
         return $relation->withPivot($pivotColumns);
@@ -557,6 +571,7 @@ class Event extends Model
                 $service = app(\App\Services\EventOrderingPartyService::class);
                 $hasContactPivot = Schema::hasColumn('event_contractor', 'contact_id');
                 $hasDepartmentPivot = Schema::hasColumn('event_contractor', 'department_label');
+                $hasNotesPivot = Schema::hasColumn('event_contractor', 'notes');
 
                 $contactIds = $hasContactPivot
                     ? $this->orderingContractors
@@ -571,16 +586,26 @@ class Event extends Model
                 $contactsById = self::contactsByIdsCached($contactIds);
 
                 return $this->orderingContractors
-                    ->map(function (Contractor $contractor) use ($service, $hasContactPivot, $hasDepartmentPivot, $contactsById): string {
+                    ->values()
+                    ->map(function (Contractor $contractor, int $index) use ($service, $hasContactPivot, $hasDepartmentPivot, $hasNotesPivot, $contactsById): string {
                         $contactId = $hasContactPivot
                             ? ($contractor->pivot->contact_id ?? null)
                             : null;
                         $department = $hasDepartmentPivot
                             ? ($contractor->pivot->department_label ?? null)
                             : null;
+                        $notes = $hasNotesPivot
+                            ? ($contractor->pivot->notes ?? null)
+                            : null;
                         $contact = $contactId ? $contactsById->get((int) $contactId) : null;
 
-                        return $service->formatPartyLabelFromModels($contact, $contractor, $department);
+                        return $service->formatPartyLabelFromModels(
+                            $contact,
+                            $contractor,
+                            $department,
+                            $notes,
+                            $index === 0,
+                        );
                     })
                     ->implode(', ');
             }
@@ -670,6 +695,14 @@ class Event extends Model
         return $this->belongsTo(User::class, 'assigned_to');
     }
 
+    /**
+     * Opiekun imprezy w biurze (opcjonalny) — pierwsze powiadomienia z portalu.
+     */
+    public function officeCaretaker(): BelongsTo
+    {
+        return $this->belongsTo(User::class, 'office_caretaker_id');
+    }
+
     public function pilotContractor(): BelongsTo
     {
         return $this->belongsTo(Contractor::class, 'pilot_contractor_id');
@@ -708,10 +741,10 @@ class Event extends Model
     public function showsPilotCurrencyExchange(): bool
     {
         if (! Schema::hasColumn('events', 'pilot_portal_show_currency_exchange')) {
-            return true;
+            return false;
         }
 
-        return (bool) ($this->pilot_portal_show_currency_exchange ?? true);
+        return (bool) ($this->pilot_portal_show_currency_exchange ?? false);
     }
 
     public function showsPilotBusCollections(): bool
@@ -791,7 +824,7 @@ class Event extends Model
     {
         return $this->hasMany(EventProgramPoint::class)
             ->where('is_hotel', true)
-            ->with('contractor')
+            ->with(['contractor', 'contractorLocation'])
             ->orderBy('day')
             ->orderBy('order');
     }
@@ -803,7 +836,7 @@ class Event extends Model
     {
         return $this->hasMany(EventProgramPoint::class)
             ->where('is_hotel_service', true)
-            ->with('contractor')
+            ->with(['contractor', 'contractorLocation'])
             ->orderBy('day')
             ->orderBy('order');
     }
@@ -858,12 +891,13 @@ class Event extends Model
     }
 
     /**
-     * Liczba dni programu widoczna w UI (trasy, zakładki).
+     * Horyzont trwania imprezy (bez dnia fakultatywnego).
      *
-     * Bierze max(duration_days, szablon, span dat, max dzień punktów), żeby błędne
-     * duration_days=1 nie obcinało tras / programu.
+     * Bierze max(duration_days, szablon, span dat) — świadomie bez max(day) punktów,
+     * bo punkty na day = core+1 to opcje fakultatywne, nie wydłużenie wycieczki.
+     * Chroni też przed błędnym duration_days=1 przy prawidłowym szablonie.
      */
-    public function resolveProgramDaysCount(): int
+    public function resolveCoreProgramDaysCount(): int
     {
         $this->loadMissing('eventTemplate');
 
@@ -873,6 +907,44 @@ class Event extends Model
                 ->diffInDays($this->end_date->copy()->startOfDay()) + 1);
         }
 
+        return max(
+            1,
+            (int) ($this->duration_days ?? 0),
+            (int) ($this->eventTemplate?->duration_days ?? 0),
+            $fromDates,
+        );
+    }
+
+    /**
+     * Czy dzień programu to slot opcji fakultatywnych (po horyzoncie trwania).
+     */
+    public function isFacultativeProgramDay(int $day): bool
+    {
+        return max(1, $day) > $this->resolveCoreProgramDaysCount();
+    }
+
+    /**
+     * Etykieta dnia w UI programu (Lista / zakładki).
+     */
+    public function programDayLabel(int $day): string
+    {
+        $day = max(1, $day);
+
+        if ($this->isFacultativeProgramDay($day)) {
+            return 'Opcje fakultatywne';
+        }
+
+        return 'Dzień '.$day;
+    }
+
+    /**
+     * Liczba dni programu widoczna w UI (trasy, zakładki).
+     *
+     * Bierze max(core, max dzień punktów), żeby błędne duration_days=1
+     * nie obcinało tras / programu, a dzień fakultatywny nadal był widoczny na końcu.
+     */
+    public function resolveProgramDaysCount(): int
+    {
         $maxPointDay = 1;
         if ($this->exists && Schema::hasTable('event_program_points')) {
             $maxPointDay = max(1, (int) EventProgramPoint::query()
@@ -881,10 +953,7 @@ class Event extends Model
         }
 
         return max(
-            1,
-            (int) ($this->duration_days ?? 0),
-            (int) ($this->eventTemplate?->duration_days ?? 0),
-            $fromDates,
+            $this->resolveCoreProgramDaysCount(),
             $maxPointDay,
         );
     }
@@ -1103,6 +1172,7 @@ class Event extends Model
         return filled($this->insurance_policy_number)
             || filled($this->insurance_terms)
             || filled($this->insurance_document_path)
+            || filled($this->insurance_insured_list_path)
             || filled($this->insurance_amount)
             || filled($this->insurance_paid_at)
             || ($this->insurance_status && $this->insurance_status !== 'pending')
@@ -1122,7 +1192,8 @@ class Event extends Model
         if (($this->insurance_status ?? 'pending') === 'in_progress' || $this->hasInsuranceDataSaved()) {
             $parts = array_filter([
                 filled($this->insurance_policy_number) ? 'polisa '.$this->insurance_policy_number : null,
-                filled($this->insurance_document_path) ? 'dokument wgrany' : null,
+                filled($this->insurance_document_path) ? 'polisa wgrana' : null,
+                filled($this->insurance_insured_list_path) ? 'lista ubezpieczonych' : null,
             ]);
 
             return 'W trakcie'.($parts !== [] ? ' ('.implode(', ', $parts).')' : '');
@@ -1140,9 +1211,39 @@ class Event extends Model
         return filled($path) ? (string) $path : null;
     }
 
+    /**
+     * Pliki operacyjne ubezpieczenia widoczne dla pilota (panel + pakiet PDF).
+     *
+     * @return list<array{key: string, label: string, path: string}>
+     */
+    public function insuranceFilesForPilot(): array
+    {
+        $files = [];
+
+        $policyPath = self::normalizeInsuranceDocumentPath($this->insurance_document_path);
+        if (filled($policyPath)) {
+            $files[] = [
+                'key' => 'policy',
+                'label' => 'Polisa ubezpieczeniowa',
+                'path' => (string) $policyPath,
+            ];
+        }
+
+        $listPath = self::normalizeInsuranceDocumentPath($this->insurance_insured_list_path ?? null);
+        if (filled($listPath)) {
+            $files[] = [
+                'key' => 'insured_list',
+                'label' => 'Oryginalna lista ubezpieczonych',
+                'path' => (string) $listPath,
+            ];
+        }
+
+        return $files;
+    }
+
     public function updateInsuranceFromFormData(array $data): void
     {
-        $this->update([
+        $payload = [
             'insurance_policy_number' => $data['insurance_policy_number'] ?? null,
             'insurance_status' => $data['insurance_status'] ?? 'pending',
             'insurance_payment_status' => $data['insurance_payment_status'] ?? 'pending',
@@ -1150,14 +1251,33 @@ class Event extends Model
             'insurance_paid_at' => $data['insurance_paid_at'] ?? null,
             'insurance_document_path' => self::normalizeInsuranceDocumentPath($data['insurance_document_path'] ?? null),
             'insurance_terms' => $data['insurance_terms'] ?? null,
-        ]);
+        ];
+
+        if (Schema::hasColumn('events', 'insurance_insured_list_path')) {
+            $payload['insurance_insured_list_path'] = self::normalizeInsuranceDocumentPath(
+                $data['insurance_insured_list_path'] ?? null
+            );
+        }
+
+        $this->update($payload);
+
+        // Lustro do Finansów (EventSettlementDocument + koszty insurance_day) — tylko polisa.
+        try {
+            app(\App\Services\EventInsurancePolicySettlementSync::class)->sync($this->fresh() ?? $this);
+        } catch (\Throwable $e) {
+            \Illuminate\Support\Facades\Log::warning('Event insurance policy settlement sync failed', [
+                'event_id' => $this->id,
+                'error' => $e->getMessage(),
+            ]);
+        }
     }
 
     public function insuranceSaveSummary(): string
     {
         $parts = array_filter([
             filled($this->insurance_policy_number) ? 'Polisa: '.$this->insurance_policy_number : null,
-            filled($this->insurance_document_path) ? 'Dokument zapisany' : null,
+            filled($this->insurance_document_path) ? 'Plik polisy zapisany' : null,
+            filled($this->insurance_insured_list_path) ? 'Lista ubezpieczonych zapisana' : null,
             $this->insuranceChecklistLabel(),
         ]);
 
@@ -1525,17 +1645,17 @@ class Event extends Model
 
     /**
      * Przelicz ilości (quantity) w punktach programu na podstawie osób koszowych
-     * (płacący + gratis). Dotyczy punktów z group_size > 0 (1za1 lub XzaY).
+     * (płacący; + gratis tylko gdy include_gratis_in_cost). Dotyczy punktów z group_size > 0.
      */
     public function resyncProgramPointQuantities(): void
     {
         $payingCount = max(1, (int) ($this->participant_count ?? 1));
-        $costHeadcount = ProgramPointCostPricing::costHeadcount($this, $payingCount);
 
         $this->programPoints()
             ->whereNotNull('group_size')
             ->where('group_size', '>', 0)
-            ->each(function ($point) use ($costHeadcount) {
+            ->each(function ($point) use ($payingCount) {
+                $costHeadcount = ProgramPointCostPricing::costHeadcountForPoint($point, $this, $payingCount);
                 $groupSize = max(1, (int) $point->group_size);
                 $newQuantity = max(1, (int) ceil($costHeadcount / $groupSize));
                 $previousQuantity = max(1, (int) ($point->quantity ?? 1));
@@ -2041,16 +2161,40 @@ class Event extends Model
         return $this->hasMany(EventPackageDocument::class);
     }
 
+    /**
+     * Heurystyka: nazwa wskazuje na nocleg, a nie dojazd/przejazd „do hotelu”.
+     * „Przejazd do hotelu” zawiera „hotel”, ale to nie punkt hotelowy.
+     */
     public static function templatePointLooksLikeHotel(object $point): bool
     {
         $name = mb_strtolower(trim((string) ($point->name ?? '')));
 
-        if ($name === '') {
+        if ($name === '' || self::programPointNameLooksLikeHotelTransfer($name)) {
             return false;
         }
 
         foreach (['hotel', 'nocleg', 'zakwater', 'pensjonat', 'hostel'] as $needle) {
             if (str_contains($name, $needle)) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    /**
+     * Przejazd / dojazd / transfer związany z hotelem — nie mylić z samym noclegiem.
+     */
+    public static function programPointNameLooksLikeHotelTransfer(?string $name): bool
+    {
+        $normalized = mb_strtolower(trim((string) $name));
+
+        if ($normalized === '') {
+            return false;
+        }
+
+        foreach (['przejazd', 'dojazd', 'transfer', 'powrót', 'powrot', 'wyjazd', 'odjazd', 'przyjazd'] as $needle) {
+            if (str_contains($normalized, $needle)) {
                 return true;
             }
         }

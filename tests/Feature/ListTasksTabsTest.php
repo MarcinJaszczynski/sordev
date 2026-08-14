@@ -6,6 +6,7 @@ use App\Filament\Resources\TaskResource\Pages\ListTasks;
 use App\Models\Task;
 use App\Models\User;
 use App\Services\Tasks\TaskInboxService;
+use App\Support\Tasks\TaskQueryFilters;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Livewire\Livewire;
 use Spatie\Permission\Models\Role;
@@ -156,6 +157,10 @@ class ListTasksTabsTest extends TestCase
             'author_id' => $user->id,
             'assignee_id' => $user->id,
         ]);
+        $parent->forceFill([
+            'created_at' => now()->subDay(),
+            'updated_at' => now()->subDay(),
+        ])->saveQuietly();
 
         $subtask = Task::create([
             'title' => 'Podzadanie',
@@ -165,10 +170,21 @@ class ListTasksTabsTest extends TestCase
             'assignee_id' => $user->id,
             'parent_id' => $parent->id,
         ]);
+        $subtask->forceFill([
+            'created_at' => now(),
+            'updated_at' => now(),
+        ])->saveQuietly();
 
         Livewire::actingAs($user)
             ->test(ListTasks::class)
             ->call('setTasksScope', 'all')
             ->assertCanSeeTableRecords([$parent, $subtask]);
+
+        // Flat sort: świeższe podzadanie przed starszym rodzicem, nie „pod” nim.
+        $ids = TaskQueryFilters::orderByLatestActivityDesc(Task::query())
+            ->pluck('id')
+            ->all();
+
+        $this->assertSame([$subtask->id, $parent->id], array_slice($ids, 0, 2));
     }
 }

@@ -70,10 +70,30 @@
                         </thead>
                         <tbody>
                             @foreach($hotelProgramPoints as $hp)
+                                @php
+                                    $hpMeta = $hp->contractor
+                                        ? \App\Support\ContractorContactDetails::operationalMeta($hp->contractor, $hp->contractorLocation)
+                                        : ['branch_name' => null, 'address' => null, 'phone' => null, 'email' => null];
+                                @endphp
                                 <tr>
                                     <td>{{ (int) ($hp->day ?? 1) }}</td>
                                     <td>{{ $hp->name ?: ($hp->templatePoint?->name ?? '—') }}</td>
-                                    <td>{{ $hp->contractor?->name ?? '—' }}</td>
+                                    <td>
+                                        {{ $hp->contractor?->name ?? '—' }}
+                                        @if(! empty($hpMeta['branch_name']))
+                                            <br><small>{{ $hpMeta['branch_name'] }}</small>
+                                        @endif
+                                        @if(! empty($hpMeta['address']))
+                                            <br><small>{{ $hpMeta['address'] }}</small>
+                                        @endif
+                                        @if(! empty($hpMeta['phone']) || ! empty($hpMeta['email']))
+                                            <br><small>
+                                                @if(! empty($hpMeta['phone']))tel. {{ $hpMeta['phone'] }}@endif
+                                                @if(! empty($hpMeta['phone']) && ! empty($hpMeta['email'])) · @endif
+                                                @if(! empty($hpMeta['email'])){{ $hpMeta['email'] }}@endif
+                                            </small>
+                                        @endif
+                                    </td>
                                 </tr>
                             @endforeach
                         </tbody>
@@ -81,6 +101,7 @@
                 @endif
                 @foreach($hotelPlan as $day)
                     <div class="program-day-title" style="margin-top:8px;">Dzień {{ $day['day'] }} — pokoje</div>
+                    @include('pdf.packages._hotel_night_contact', ['day' => $day])
                     <table class="program-table">
                         <thead>
                             <tr><th>Uczestnicy</th><th>{{ \App\Support\EventParticipantGroupLabels::GRATIS }}</th><th>Obsługa</th><th>Kierowca</th></tr>

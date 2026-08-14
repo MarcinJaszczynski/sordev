@@ -9,6 +9,7 @@ use App\Data\ChangeEventStatusData;
 use App\Filament\Forms\EventKeyInfoFields;
 use App\Filament\Forms\EventNotesFields;
 use App\Filament\Forms\EventReadinessFields;
+use App\Filament\Forms\EventTransportCostSummaryFields;
 use App\Filament\Forms\EventTransportFields;
 use App\Filament\Forms\TypedContractorSelect;
 use App\Filament\Resources\EventResource\Pages;
@@ -26,6 +27,7 @@ use App\Models\TransportType;
 use App\Filament\Forms\TransportContractorContactsFields;
 use App\Services\PilotContractorAssignmentService;
 use App\Support\ContractorContactDetails;
+use App\Support\EventBusSeatCapacity;
 use App\Support\EventListFinanceColumn;
 use App\Support\EventReadinessIndicators;
 use App\Support\ExecutiveAccess;
@@ -259,7 +261,7 @@ class EventResource extends Resource
     {
         return Forms\Components\Section::make('Przewoźnik i kierowca')
             ->icon('heroicon-o-truck')
-            ->description('Firma transportowa, autokar, miejsce podstawienia i dane kierowcy.')
+            ->description('Firma, autokar, km i ryczałt. Kwota transportu aktualizuje się na żywo; zapis przelicza imprezę.')
             ->columns(['default' => 1, 'md' => 2, 'xl' => 3])
             ->schema([
                 ...TypedContractorSelect::make(
@@ -308,6 +310,12 @@ class EventResource extends Resource
                     ->live()
                     ->afterStateUpdated(fn ($livewire) => $livewire->dispatch('event-price-table-refresh')),
 
+                Forms\Components\Placeholder::make('bus_seat_capacity_warning')
+                    ->hiddenLabel()
+                    ->visible(fn (callable $get, ?Event $record): bool => EventBusSeatCapacity::resolveMessage($get, $record) !== null)
+                    ->content(fn (callable $get, ?Event $record) => EventBusSeatCapacity::warningHtml($get, $record) ?? '')
+                    ->columnSpanFull(),
+
                 Forms\Components\Select::make('start_place_id')
                     ->label('Miejsce wyjazdu (podstawienia)')
                     ->options(fn (callable $get, ?Event $record) => Place::startingPlaceSelectOptionsForTemplate(
@@ -344,6 +352,37 @@ class EventResource extends Resource
 
                         static::refreshTotalCostFromTemplateState($set, $get);
                     }),
+
+                Forms\Components\Fieldset::make('Terminy transportu')
+                    ->columns(['default' => 1, 'md' => 2, 'xl' => 4])
+                    ->columnSpanFull()
+                    ->schema([
+                        Forms\Components\DatePicker::make('start_date')
+                            ->label('Data podstawienia / wyjazdu')
+                            ->required()
+                            ->native(false)
+                            ->live()
+                            ->helperText('Ta sama data co rozpoczęcie imprezy (Podsumowanie).')
+                            ->afterStateUpdated(function ($state, Forms\Get $get, callable $set, ?Event $record): void {
+                                if (empty($state)) {
+                                    return;
+                                }
+
+                                $start = \Carbon\Carbon::parse($state);
+                                $fallbackDuration = ($record?->start_date && $record?->end_date)
+                                    ? max(1, $record->start_date->diffInDays($record->end_date) + 1)
+                                    : 1;
+                                $duration = max(1, (int) ($get('duration_days') ?? $record?->duration_days ?? $fallbackDuration));
+
+                                $set('end_date', $start->copy()->addDays($duration - 1)->toDateString());
+                                $set('duration_days', $duration);
+                            }),
+
+                        Forms\Components\Hidden::make('end_date'),
+                        Forms\Components\Hidden::make('duration_days'),
+
+                        ...EventTransportFields::transportTimeFields(),
+                    ]),
 
                 Forms\Components\Select::make('program_start_place_id')
                     ->label('Początek programu')
@@ -398,6 +437,8 @@ class EventResource extends Resource
                     ]),
 
                 ...EventTransportFields::manualTransportCostFields(),
+
+                ...EventTransportCostSummaryFields::placeholder(),
 
                 Forms\Components\Textarea::make('bus_info')
                     ->label('Informacje o autokarze')

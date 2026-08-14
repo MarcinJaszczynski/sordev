@@ -6,7 +6,7 @@
                     <p class="text-xs font-semibold uppercase tracking-wide text-primary-700 dark:text-primary-300">Wybrany klient</p>
                     <p class="mt-1 text-sm font-semibold text-gray-900 dark:text-white">{{ $selected['label'] ?? '—' }}</p>
                     <dl class="mt-3 grid gap-1 text-sm text-gray-600 dark:text-gray-300 sm:grid-cols-2">
-                        @foreach (['person' => 'Osoba', 'company' => 'Firma', 'phone' => 'Telefon', 'email' => 'E-mail', 'address' => 'Adres'] as $key => $label)
+                        @foreach (['company' => 'Firma', 'person' => 'Osoba', 'department' => 'Dział', 'phone' => 'Telefon', 'email' => 'E-mail', 'address' => 'Adres'] as $key => $label)
                             @if (! empty($selected['preview'][$key] ?? null))
                                 <div>
                                     <dt class="text-xs uppercase tracking-wide text-gray-500 dark:text-gray-400">{{ $label }}</dt>

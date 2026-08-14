@@ -167,11 +167,15 @@ class UserJourneyRemainingPathsTest extends TestCase
             'invoice',
             'FV/1/2026',
             'Test attach',
+            attachToPilotPdf: true,
+            attachToHotelPdf: true,
         );
 
         $this->assertInstanceOf(EventSettlementDocument::class, $document);
         $this->assertSame('invoice', $document->document_type);
         $this->assertSame('FV/1/2026', $document->document_number);
+        $this->assertTrue((bool) $document->attach_to_pilot_pdf);
+        $this->assertTrue((bool) $document->attach_to_hotel_pdf);
         $this->assertContains($plan->id, collect($document->linked_cost_ids)->map(fn ($id) => (int) $id)->all());
         $this->assertNotEmpty($document->files);
 

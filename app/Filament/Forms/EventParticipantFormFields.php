@@ -138,7 +138,7 @@ class EventParticipantFormFields
                     ->minValue(0)
                     ->suffix('PLN'),
 
-                Forms\Components\DateTimePicker::make('first_payment_paid_at')
+                Forms\Components\DatePicker::make('first_payment_paid_at')
                     ->label('Data wpłaty')
                     ->default(now())
                     ->native(false),

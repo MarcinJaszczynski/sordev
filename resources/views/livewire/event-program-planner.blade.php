@@ -1,23 +1,22 @@
 <div class="space-y-3">
     <div class="rounded-lg border border-amber-200 bg-amber-50 p-3 text-xs text-amber-900">
-        Planer pokazuje wyłącznie punkty <b>uwzględnione w programie</b> (jak filtr „W programie” na liście).
-        Elementy spoza programu dodajesz w widoku <b>Lista</b> lub <b>Dzień</b>.
-        Podpunkty setów pojawiają się pod rodzicem (↳) i mogą mieć własne godziny w jego ramach.
-        Przeciągaj i rozciągaj bloki, aby zmieniać czas — zmiany synchronizują się z listą punktów.
-        <b>Kliknij blok</b>, aby edytować. <b>Zaznacz pusty obszar</b>, aby dodać nowy punkt.
+        Planer służy do <b>ustawiania godzin</b>: przeciągaj i rozciągaj bloki.
+        Pełną edycję punktów (nazwa, opis, notatki, cena) robisz w zakładce <b>Lista</b> lub <b>Dzień</b>.
+        Pokazuje wyłącznie punkty <b>uwzględnione w programie</b>.
+        <b>Kliknij blok</b>, aby usunąć go z programu.
     </div>
 
     <div class="flex items-center gap-2">
         <x-filament::button wire:click="repairOrderNow" color="gray" size="xs">
             Napraw kolejność teraz
         </x-filament::button>
-        <span class="text-xs text-gray-500">Kliknij blok w kalendarzu, aby go edytować. Zaznacz pusty obszar, aby dodać nowy punkt.</span>
+        <span class="text-xs text-gray-500">Przeciągnij lub rozciągnij blok, aby zmienić czas. Kliknij, aby usunąć z programu.</span>
     </div>
 
     @if(empty($plannerData['events']))
         <div class="rounded-lg border border-dashed border-gray-300 bg-gray-50 p-6 text-center text-sm text-gray-600">
             <p class="font-medium text-gray-800">Planer jest pusty</p>
-            <p class="mt-1">Brak punktów oznaczonych jako „w programie”. Oznacz je w widoku <strong>Lista</strong> lub <strong>Dzień</strong>, albo dodaj nowy punkt zaznaczając pusty obszar kalendarza.</p>
+            <p class="mt-1">Brak punktów oznaczonych jako „w programie”. Oznacz je w widoku <strong>Lista</strong> lub <strong>Dzień</strong>.</p>
         </div>
     @endif
 
@@ -49,15 +48,14 @@
         ></div>
     </div>
 
-    {{-- Modal edycji punktu --}}
-    @if($showEditModal)
+    @if($showDeleteModal)
         <div
             class="fixed inset-0 z-50 flex items-center justify-center bg-black/50"
             wire:click.self="closeModals"
         >
-            <div class="w-full max-w-lg rounded-xl bg-white p-6 shadow-2xl">
+            <div class="w-full max-w-md rounded-xl bg-white p-6 shadow-2xl">
                 <div class="mb-4 flex items-center justify-between">
-                    <h3 class="text-base font-semibold text-gray-900">Edycja punktu programu</h3>
+                    <h3 class="text-base font-semibold text-gray-900">Usuń z programu</h3>
                     <button wire:click="closeModals" class="text-gray-400 hover:text-gray-600">
                         <svg class="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/>
@@ -65,367 +63,18 @@
                     </button>
                 </div>
 
-                <div class="space-y-4">
-                    {{-- Nazwa --}}
-                    <div>
-                        <label class="mb-1 block text-xs font-medium text-gray-700">Nazwa punktu</label>
-                        @if($editingData['is_custom'])
-                            <input
-                                type="text"
-                                wire:model="editingData.custom_name"
-                                class="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-primary-500 focus:ring-1 focus:ring-primary-500"
-                            >
-                        @else
-                            <p class="rounded-lg bg-gray-50 px-3 py-2 text-sm text-gray-700">{{ $editingData['name'] }}</p>
-                        @endif
-                    </div>
-
-                    <div>
-                        <label class="mb-1 block text-xs font-medium text-gray-700">Opis punktu</label>
-                        <textarea
-                            wire:model="editingData.description"
-                            rows="3"
-                            class="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-primary-500 focus:ring-1 focus:ring-primary-500"
-                        ></textarea>
-                    </div>
-
-                    <div>
-                        <label class="mb-1 block text-xs font-medium text-gray-700">Punkt nadrzędny (opcjonalnie)</label>
-                        <select
-                            wire:model="editingData.parent_id"
-                            class="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-primary-500 focus:ring-1 focus:ring-primary-500"
-                        >
-                            <option value="">Brak punktu nadrzędnego</option>
-                            @foreach($parentPointOptions as $parentId => $parentLabel)
-                                @if((int) $parentId !== (int) $editingPointId)
-                                    <option value="{{ $parentId }}">{{ $parentLabel }}</option>
-                                @endif
-                            @endforeach
-                        </select>
-                    </div>
-
-                    {{-- Dzień + czasy --}}
-                    <div class="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-3">
-                        <div>
-                            <label class="mb-1 block text-xs font-medium text-gray-700">Dzień</label>
-                            <input
-                                type="number"
-                                wire:model="editingData.day"
-                                min="1"
-                                class="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-primary-500 focus:ring-1 focus:ring-primary-500"
-                            >
-                        </div>
-                        <div>
-                            <label class="mb-1 block text-xs font-medium text-gray-700">Godz. start</label>
-                            <select
-                                wire:model="editingData.start_time"
-                                class="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-primary-500 focus:ring-1 focus:ring-primary-500"
-                            >
-                                <option value="">—</option>
-                                @foreach($timeSlotOptions as $slot)
-                                    <option value="{{ $slot }}">{{ $slot }}</option>
-                                @endforeach
-                            </select>
-                        </div>
-                        <div>
-                            <label class="mb-1 block text-xs font-medium text-gray-700">Godz. koniec</label>
-                            <select
-                                wire:model="editingData.end_time"
-                                class="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-primary-500 focus:ring-1 focus:ring-primary-500"
-                            >
-                                <option value="">—</option>
-                                @foreach($timeSlotOptions as $slot)
-                                    <option value="{{ $slot }}">{{ $slot }}</option>
-                                @endforeach
-                            </select>
-                        </div>
-                    </div>
-
-                    <div class="grid grid-cols-1 gap-3 sm:grid-cols-2">
-                        <div>
-                            <label class="mb-1 block text-xs font-medium text-gray-700">Data startu</label>
-                            <input
-                                type="date"
-                                wire:model="editingData.start_date"
-                                class="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-primary-500 focus:ring-1 focus:ring-primary-500"
-                            >
-                        </div>
-                        <div>
-                            <label class="mb-1 block text-xs font-medium text-gray-700">Data końca</label>
-                            <input
-                                type="date"
-                                wire:model="editingData.end_date"
-                                class="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-primary-500 focus:ring-1 focus:ring-primary-500"
-                            >
-                        </div>
-                    </div>
-
-                    <div class="flex items-center gap-2">
-                        <input
-                            id="planner-edit-hide-times"
-                            type="checkbox"
-                            wire:model="editingData.hide_times"
-                            class="h-4 w-4 rounded border-gray-300 text-primary-600 focus:ring-primary-500"
-                        >
-                        <label for="planner-edit-hide-times" class="text-sm text-gray-700">Ukryj godziny w programie</label>
-                    </div>
-                    @error('editingData.end_time')
-                        <p class="text-xs text-red-600">{{ $message }}</p>
-                    @enderror
-
-                    {{-- Notatki biura --}}
-                    <div>
-                        <label class="mb-1 block text-xs font-medium text-gray-700">Notatki biura</label>
-                        <textarea
-                            wire:model="editingData.office_notes"
-                            rows="2"
-                            class="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-primary-500 focus:ring-1 focus:ring-primary-500"
-                        ></textarea>
-                    </div>
-
-                    {{-- Notatki pilota --}}
-                    <div>
-                        <label class="mb-1 block text-xs font-medium text-gray-700">Notatki pilota</label>
-                        <textarea
-                            wire:model="editingData.pilot_notes"
-                            rows="2"
-                            class="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-primary-500 focus:ring-1 focus:ring-primary-500"
-                        ></textarea>
-                    </div>
-                </div>
-
-                <div class="mt-6 flex items-center justify-between gap-2">
-                    <x-filament::button wire:click="removeEditingPoint" color="danger" size="sm">
-                        Usuń z programu
-                    </x-filament::button>
-
-                    <div class="flex gap-2">
-                        <x-filament::button wire:click="closeModals" color="gray" size="sm">
-                            Anuluj
-                        </x-filament::button>
-                        <x-filament::button wire:click="saveEditingPoint" color="primary" size="sm">
-                            Zapisz zmiany
-                        </x-filament::button>
-                    </div>
-                </div>
-            </div>
-        </div>
-    @endif
-
-    {{-- Modal dodawania nowego punktu --}}
-    @if($showAddModal)
-        <div
-            class="fixed inset-0 z-50 flex items-center justify-center bg-black/50"
-            wire:click.self="closeModals"
-        >
-            <div class="w-full max-w-lg rounded-xl bg-white p-6 shadow-2xl">
-                <div class="mb-4 flex items-center justify-between">
-                    <h3 class="text-base font-semibold text-gray-900">Dodaj punkt programu</h3>
-                    <button wire:click="closeModals" class="text-gray-400 hover:text-gray-600">
-                        <svg class="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/>
-                        </svg>
-                    </button>
-                </div>
-
-                <div class="space-y-4">
-                    {{-- Wyszukiwanie w bibliotece --}}
-                    <div class="relative">
-                        <label class="mb-1 block text-xs font-medium text-gray-700">Szukaj w bibliotece punktów (opcjonalne)</label>
-                        @if($newPointData['template_id'])
-                            <div class="flex items-center justify-between rounded-lg border border-green-300 bg-green-50 px-3 py-2">
-                                <span class="text-sm font-medium text-green-800">
-                                    <svg class="mr-1 inline h-4 w-4 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/></svg>
-                                    {{ $newPointData['name'] }}
-                                </span>
-                                <button wire:click="clearPlannerTemplate" class="ml-2 text-green-600 hover:text-red-500" title="Wyczyść wybór">
-                                    <svg class="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/></svg>
-                                </button>
-                            </div>
-                        @else
-                            <input
-                                type="text"
-                                wire:model.live.debounce.400ms="plannerSearch"
-                                placeholder="Wpisz nazwę aby wyszukać w bibliotece..."
-                                class="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-primary-500 focus:ring-1 focus:ring-primary-500"
-                            >
-                            @if(count($templateResults) > 0)
-                                <div class="absolute z-20 mt-1 max-h-52 w-full overflow-y-auto rounded-lg border border-gray-200 bg-white shadow-xl">
-                                    @foreach($templateResults as $result)
-                                        <button
-                                            wire:click="selectPlannerTemplate({{ $result['id'] }})"
-                                            class="flex w-full items-center justify-between px-3 py-2 text-left text-sm hover:bg-primary-50"
-                                        >
-                                            <span class="font-medium text-gray-800">{{ $result['name'] }}</span>
-                                            <span class="ml-2 shrink-0 text-xs text-gray-400">
-                                                @if($result['unit_price']) {{ number_format($result['unit_price'], 2) }} PLN @endif
-                                                @if($result['group_size']) · {{ $result['group_size'] }} os. @endif
-                                            </span>
-                                        </button>
-                                    @endforeach
-                                </div>
-                            @elseif(strlen($plannerSearch) >= 3)
-                                <div class="absolute z-20 mt-1 w-full rounded-lg border border-gray-200 bg-white px-3 py-2 shadow-xl">
-                                    <p class="text-xs text-gray-500">Brak wyników — wypełnij pola poniżej, aby stworzyć nowy punkt.</p>
-                                </div>
-                            @endif
-                        @endif
-                    </div>
-
-                    {{-- Nazwa --}}
-                    <div>
-                        <label class="mb-1 block text-xs font-medium text-gray-700">Nazwa punktu <span class="text-red-500">*</span></label>
-                        <input
-                            type="text"
-                            wire:model="newPointData.name"
-                            placeholder="np. Zwiedzanie muzeum"
-                            class="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-primary-500 focus:ring-1 focus:ring-primary-500"
-                            autofocus
-                        >
-                    </div>
-
-                    <div>
-                        <label class="mb-1 block text-xs font-medium text-gray-700">Opis punktu (dla tej imprezy)</label>
-                        <textarea
-                            wire:model="newPointData.description"
-                            rows="3"
-                            placeholder="Opis widoczny w programie imprezy..."
-                            class="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-primary-500 focus:ring-1 focus:ring-primary-500"
-                        ></textarea>
-                    </div>
-
-                    <div>
-                        <label class="mb-1 block text-xs font-medium text-gray-700">Punkt nadrzędny (opcjonalnie)</label>
-                        <select
-                            wire:model="newPointData.parent_id"
-                            class="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-primary-500 focus:ring-1 focus:ring-primary-500"
-                        >
-                            <option value="">Brak punktu nadrzędnego</option>
-                            @foreach($parentPointOptions as $parentId => $parentLabel)
-                                <option value="{{ $parentId }}">{{ $parentLabel }}</option>
-                            @endforeach
-                        </select>
-                    </div>
-
-                    {{-- Dzień + godziny --}}
-                    <div class="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-3">
-                        <div>
-                            <label class="mb-1 block text-xs font-medium text-gray-700">Dzień</label>
-                            <input
-                                type="number"
-                                wire:model="newPointData.day"
-                                min="1"
-                                class="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-primary-500 focus:ring-1 focus:ring-primary-500"
-                            >
-                        </div>
-                        <div>
-                            <label class="mb-1 block text-xs font-medium text-gray-700">Godz. start</label>
-                            <select
-                                wire:model="newPointData.start_time"
-                                class="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-primary-500 focus:ring-1 focus:ring-primary-500"
-                            >
-                                @foreach($timeSlotOptions as $slot)
-                                    <option value="{{ $slot }}">{{ $slot }}</option>
-                                @endforeach
-                            </select>
-                        </div>
-                        <div>
-                            <label class="mb-1 block text-xs font-medium text-gray-700">Godz. koniec</label>
-                            <select
-                                wire:model="newPointData.end_time"
-                                class="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-primary-500 focus:ring-1 focus:ring-primary-500"
-                            >
-                                @foreach($timeSlotOptions as $slot)
-                                    <option value="{{ $slot }}">{{ $slot }}</option>
-                                @endforeach
-                            </select>
-                        </div>
-                    </div>
-
-                    <div class="grid grid-cols-1 gap-3 sm:grid-cols-2">
-                        <div>
-                            <label class="mb-1 block text-xs font-medium text-gray-700">Data startu</label>
-                            <input
-                                type="date"
-                                wire:model="newPointData.start_date"
-                                class="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-primary-500 focus:ring-1 focus:ring-primary-500"
-                            >
-                        </div>
-                        <div>
-                            <label class="mb-1 block text-xs font-medium text-gray-700">Data końca</label>
-                            <input
-                                type="date"
-                                wire:model="newPointData.end_date"
-                                class="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-primary-500 focus:ring-1 focus:ring-primary-500"
-                            >
-                        </div>
-                    </div>
-
-                    <div class="flex items-center gap-2">
-                        <input
-                            id="planner-add-hide-times"
-                            type="checkbox"
-                            wire:model="newPointData.hide_times"
-                            class="h-4 w-4 rounded border-gray-300 text-primary-600 focus:ring-primary-500"
-                        >
-                        <label for="planner-add-hide-times" class="text-sm text-gray-700">Ukryj godziny w programie</label>
-                    </div>
-                    @error('newPointData.end_time')
-                        <p class="text-xs text-red-600">{{ $message }}</p>
-                    @enderror
-
-                    {{-- Cena, ilość, wielkość grupy --}}
-                    <div class="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-3">
-                        <div>
-                            <label class="mb-1 block text-xs font-medium text-gray-700">Cena jedn. (PLN)</label>
-                            <input
-                                type="number"
-                                wire:model="newPointData.unit_price"
-                                step="0.01"
-                                min="0"
-                                placeholder="0.00"
-                                class="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-primary-500 focus:ring-1 focus:ring-primary-500"
-                            >
-                        </div>
-                        <div>
-                            <label class="mb-1 block text-xs font-medium text-gray-700">Ilość</label>
-                            <input
-                                type="number"
-                                wire:model="newPointData.quantity"
-                                min="1"
-                                class="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-primary-500 focus:ring-1 focus:ring-primary-500"
-                            >
-                        </div>
-                        <div>
-                            <label class="mb-1 block text-xs font-medium text-gray-700">Wielkość grupy</label>
-                            <input
-                                type="number"
-                                wire:model="newPointData.group_size"
-                                min="1"
-                                placeholder="—"
-                                class="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-primary-500 focus:ring-1 focus:ring-primary-500"
-                            >
-                        </div>
-                    </div>
-
-                    {{-- Uwzględnij w kalkulacji --}}
-                    <div class="flex items-center gap-2">
-                        <input
-                            id="planner-include-in-calc"
-                            type="checkbox"
-                            wire:model="newPointData.include_in_calculation"
-                            class="h-4 w-4 rounded border-gray-300 text-primary-600 focus:ring-primary-500"
-                        >
-                        <label for="planner-include-in-calc" class="text-sm text-gray-700">Uwzględnij w kalkulacji</label>
-                    </div>
-                </div>
+                <p class="text-sm text-gray-700">
+                    Czy na pewno chcesz usunąć z programu punkt
+                    <span class="font-semibold">{{ $deletingPointName }}</span>?
+                    Punkt pozostanie na liście kosztów / poza programem — pełną edycję zrobisz w zakładce Lista lub Dzień.
+                </p>
 
                 <div class="mt-6 flex justify-end gap-2">
                     <x-filament::button wire:click="closeModals" color="gray" size="sm">
                         Anuluj
                     </x-filament::button>
-                    <x-filament::button wire:click="saveNewPoint" color="success" size="sm">
-                        Dodaj do programu
+                    <x-filament::button wire:click="confirmRemovePoint" color="danger" size="sm">
+                        Usuń z programu
                     </x-filament::button>
                 </div>
             </div>
@@ -587,7 +236,8 @@
             eventDurationEditable: true,
             eventResizableFromStart: true,
             nowIndicator: true,
-            selectable: true,
+            selectable: false,
+            selectMirror: false,
             slotMinTime: '00:00:00',
             slotMaxTime: '24:00:00',
             slotDuration: '00:30:00',
@@ -624,21 +274,7 @@
                     return;
                 }
 
-                component.call('openEditModal', Number(info.event.id));
-            },
-            select: (info) => {
-                const component = window.Livewire?.find(componentId);
-                if (!component) {
-                    return;
-                }
-
-                const instance = window.__eventProgramPlannerRegistry[componentId];
-                component.call(
-                    'openAddModal',
-                    formatLocalDateTime(info.start),
-                    formatLocalDateTime(info.end),
-                );
-                instance?.unselect();
+                component.call('openDeleteModal', Number(info.event.id));
             },
         });
 

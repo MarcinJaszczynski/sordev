@@ -105,7 +105,7 @@ final class EventPrintPdfDataFactory
         $attachmentFlag = $this->attachmentFlagForAudience($audience);
         $selectedDocuments = collect($event->activeSettlement?->documents ?? [])
             ->filter(fn ($document) => (bool) ($document->{$attachmentFlag} ?? false))
-            ->filter(fn ($document) => ($document->approval_status ?? 'pending') === 'approved')
+            ->filter(fn ($document) => ($document->approval_status ?? 'pending') !== 'rejected')
             ->values();
 
         $attachedFiles = $selectedDocuments
@@ -135,7 +135,7 @@ final class EventPrintPdfDataFactory
 
         $eventDocumentsAttached = $event->documents
             ->filter(fn ($doc) => (bool) ($doc->{$attachmentFlag} ?? false) && $doc->file_path)
-            ->filter(fn ($doc) => ($doc->approval_status ?? 'pending') === 'approved')
+            ->filter(fn ($doc) => ($doc->approval_status ?? 'pending') !== 'rejected')
             ->map(function ($doc) {
                 $resolved = $this->resolveStoredFile($doc->file_path);
                 if (! $resolved) {
@@ -156,6 +156,33 @@ final class EventPrintPdfDataFactory
             ->values();
 
         $attachedFiles = $attachedFiles->merge($eventDocumentsAttached)->values();
+
+        $insuranceAttached = collect();
+        if (in_array($audience, ['pilot', 'folder'], true)) {
+            $insuranceAttached = collect($event->insuranceFilesForPilot())
+                ->map(function (array $file) {
+                    $resolved = $this->resolveStoredFile((string) $file['path']);
+                    if (! $resolved) {
+                        return null;
+                    }
+
+                    $label = (string) $file['label'];
+
+                    return [
+                        'document_id' => 'insurance-'.$file['key'],
+                        'document_label' => $label,
+                        'document_type' => 'Ubezpieczenie',
+                        'relative_path' => $file['path'],
+                        'absolute_path' => $resolved['absolute_path'],
+                        'base_name' => $resolved['base_name'],
+                        'zip_name' => 'Ubezpieczenie/'.$label.'/'.$resolved['base_name'],
+                    ];
+                })
+                ->filter()
+                ->values();
+
+            $attachedFiles = $attachedFiles->merge($insuranceAttached)->values();
+        }
 
         $selectedDocumentsForView = $selectedDocuments
             ->map(function ($document) use ($attachedFiles) {
@@ -183,12 +210,23 @@ final class EventPrintPdfDataFactory
             ]);
         }
 
+        foreach ($insuranceAttached as $insDoc) {
+            $selectedDocumentsForView->push([
+                'id' => $insDoc['document_id'],
+                'label' => $insDoc['document_label'],
+                'type' => $insDoc['document_type'],
+                'vendor_name' => null,
+                'files' => collect([$insDoc]),
+            ]);
+        }
+
         $documentFocus = [
             'pilot' => [
                 'Harmonogram dzienny i godziny punktów programu',
                 'Notatki pilota i notatki operacyjne biura',
                 'Liczba uczestników i kontakt do biura/klienta',
                 'Plan transportu i status płatności grupy',
+                'Polisa i oryginalna lista ubezpieczonych (jeśli wgrane)',
             ],
             'hotel' => [
                 'Daty przyjazdu/wyjazdu oraz liczebność grupy',

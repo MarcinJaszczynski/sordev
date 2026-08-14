@@ -237,4 +237,49 @@ class TaskQueryFiltersTest extends TestCase
 
         $this->assertSame($olderTask->id, $ids[0]);
     }
+
+    public function test_creating_subtask_does_not_bump_parent_latest_activity(): void
+    {
+        $user = User::factory()->create();
+
+        $parent = Task::create([
+            'title' => 'Rodzic',
+            'status_id' => Task::getDefaultStatusId(),
+            'priority' => 'normal',
+            'author_id' => $user->id,
+        ]);
+        $parent->forceFill([
+            'created_at' => now()->subDays(2),
+            'updated_at' => now()->subDays(2),
+        ])->saveQuietly();
+
+        $other = Task::create([
+            'title' => 'Inne zadanie',
+            'status_id' => Task::getDefaultStatusId(),
+            'priority' => 'normal',
+            'author_id' => $user->id,
+        ]);
+        $other->forceFill([
+            'created_at' => now()->subDay(),
+            'updated_at' => now()->subDay(),
+        ])->saveQuietly();
+
+        $subtask = Task::create([
+            'title' => 'Podzadanie',
+            'status_id' => Task::getDefaultStatusId(),
+            'priority' => 'normal',
+            'author_id' => $user->id,
+            'parent_id' => $parent->id,
+        ]);
+        $subtask->forceFill([
+            'created_at' => now(),
+            'updated_at' => now(),
+        ])->saveQuietly();
+
+        $ids = TaskQueryFilters::orderByLatestActivityDesc(Task::query())
+            ->pluck('id')
+            ->all();
+
+        $this->assertSame([$subtask->id, $other->id, $parent->id], $ids);
+    }
 }

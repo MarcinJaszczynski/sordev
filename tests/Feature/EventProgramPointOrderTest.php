@@ -348,4 +348,32 @@ class EventProgramPointOrderTest extends TestCase
         $this->assertCount(1, $pilotPoints);
         $this->assertSame('Dzień 3', $pilotPoints->first()->name);
     }
+
+    public function test_program_day_label_uses_template_duration_when_event_duration_is_stale(): void
+    {
+        $template = EventTemplate::factory()->create(['duration_days' => 5]);
+        $event = Event::factory()->create([
+            'event_template_id' => $template->id,
+            'start_date' => '2026-09-10',
+            'end_date' => '2026-09-10',
+            'duration_days' => 1,
+        ]);
+
+        EventProgramPoint::factory()->create([
+            'event_id' => $event->id,
+            'day' => 6,
+            'order' => 1,
+            'name' => 'Opcja',
+            'include_in_program' => true,
+            'active' => true,
+        ]);
+
+        $this->assertSame(5, $event->resolveCoreProgramDaysCount());
+        $this->assertSame(6, $event->resolveProgramDaysCount());
+        $this->assertSame('Dzień 2', $event->programDayLabel(2));
+        $this->assertSame('Dzień 5', $event->programDayLabel(5));
+        $this->assertSame('Opcje fakultatywne', $event->programDayLabel(6));
+        $this->assertFalse($event->isFacultativeProgramDay(5));
+        $this->assertTrue($event->isFacultativeProgramDay(6));
+    }
 }

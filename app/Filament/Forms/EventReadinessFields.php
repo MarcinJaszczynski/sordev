@@ -4,7 +4,9 @@ namespace App\Filament\Forms;
 
 use App\Models\Contractor;
 use App\Models\Event;
+use App\Models\User;
 use App\Services\PilotAdvanceService;
+use App\Support\Tasks\OfficeTaskRecipients;
 use Filament\Forms;
 use Filament\Forms\Get;
 use Illuminate\Support\Facades\Auth;
@@ -22,9 +24,20 @@ class EventReadinessFields
         return [
             Forms\Components\Section::make('Biuro')
                 ->icon('heroicon-o-building-office')
-                ->description('Uwagi wewnętrzne dla pracowników biura. Ubezpieczenie i gotowość polisy: Operacje → Ubezpieczenia. Odprawa pilota: Operacje → Pilot.')
+                ->description('Opiekun imprezy i uwagi wewnętrzne. Ubezpieczenie: Operacje → Ubezpieczenia. Odprawa pilota: Operacje → Pilot.')
                 ->columns(['default' => 1, 'md' => 2])
                 ->schema([
+                    Forms\Components\Select::make('office_caretaker_id')
+                        ->label('Opiekun imprezy')
+                        ->helperText('Opcjonalnie. Zapytania z portalu klienta/pilota trafiają najpierw do opiekuna; po 24h bez odpowiedzi — do całego biura.')
+                        ->options(fn (): array => OfficeTaskRecipients::users()
+                            ->mapWithKeys(fn (User $user): array => [$user->id => $user->name])
+                            ->all())
+                        ->searchable()
+                        ->nullable()
+                        ->preload()
+                        ->visible(fn (): bool => Schema::hasColumn('events', 'office_caretaker_id'))
+                        ->columnSpanFull(),
                     Forms\Components\Placeholder::make('check_in_moved_hint')
                         ->label('Odprawa pilota')
                         ->content(function (?Event $record): \Illuminate\Support\HtmlString {
@@ -300,6 +313,7 @@ class EventReadinessFields
             'insurance_amount' => $event->insurance_amount,
             'insurance_paid_at' => $event->insurance_paid_at,
             'insurance_document_path' => $event->insurance_document_path,
+            'insurance_insured_list_path' => $event->insurance_insured_list_path,
             'insurance_terms' => $event->insurance_terms,
             'substitution_time' => $event->substitution_time,
             'departure_time' => $event->departure_time,
@@ -471,6 +485,7 @@ class EventReadinessFields
             'insurance_amount' => $event->insurance_amount,
             'insurance_paid_at' => $event->insurance_paid_at,
             'insurance_document_path' => $event->insurance_document_path,
+            'insurance_insured_list_path' => $event->insurance_insured_list_path,
             'insurance_terms' => $event->insurance_terms,
         ];
     }
@@ -526,18 +541,41 @@ class EventReadinessFields
                 ->nullable()
                 ->helperText('Kwota operacyjna polisy (może różnić się od wyliczenia NNW w ofercie).'),
 
-            Forms\Components\DateTimePicker::make('insurance_paid_at')
+            Forms\Components\DatePicker::make('insurance_paid_at')
                 ->label('Data płatności')
                 ->native(false)
                 ->nullable(),
 
             Forms\Components\FileUpload::make('insurance_document_path')
-                ->label('Dokument')
+                ->label('Plik polisy')
+                ->helperText('Widoczny dla pilota (panel Dokumenty + pakiet PDF) oraz w Finanse → Koszty / Dok. rozliczenia.')
                 ->disk('public')
                 ->directory('event-insurance')
                 ->downloadable()
                 ->openable()
                 ->acceptedFileTypes(['application/pdf', 'image/png', 'image/jpeg', 'image/webp'])
+                ->columnSpanFull()
+                ->nullable(),
+
+            Forms\Components\FileUpload::make('insurance_insured_list_path')
+                ->label('Oryginalna lista ubezpieczonych')
+                ->helperText('Lista z towarzystwa ubezpieczeniowego. Pilot ma do niej dostęp w panelu Dokumenty i w pakiecie PDF.')
+                ->disk('public')
+                ->directory('event-insurance')
+                ->downloadable()
+                ->openable()
+                ->acceptedFileTypes([
+                    'application/pdf',
+                    'image/png',
+                    'image/jpeg',
+                    'image/webp',
+                    'text/csv',
+                    'application/vnd.ms-excel',
+                    'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+                    'application/msword',
+                    'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+                ])
+                ->visible(fn (): bool => Schema::hasColumn('events', 'insurance_insured_list_path'))
                 ->columnSpanFull()
                 ->nullable(),
 

@@ -67,8 +67,12 @@
                                 <span class="font-semibold text-rose-700 dark:text-rose-400">{{ $finance['remaining'] ?? '—' }}</span>
                             </div>
                             <div>
-                                <span class="text-gray-500">{{ $labels['pilot_cash'] ?? 'Gotówka dla pilota' }}:</span>
-                                <span class="font-semibold text-indigo-800 dark:text-indigo-300" title="Gotówka pilota: składowe PLN + waluty obce z orientacyjnym PLN.">{{ $finance['pilot_cash'] ?? '—' }}</span>
+                                <span class="text-gray-500">{{ $labels['pilot_cash'] ?? 'Gotówka dla pilota (plan)' }}:</span>
+                                <span class="font-semibold text-indigo-800 dark:text-indigo-300" title="Plan gotówki z systemu (koszty / przygotowanie).">{{ $finance['pilot_cash'] ?? '—' }}</span>
+                            </div>
+                            <div>
+                                <span class="text-gray-500">{{ $labels['pilot_cash_paid'] ?? 'Wypłacono pilotowi' }}:</span>
+                                <span class="font-semibold text-indigo-800 dark:text-indigo-300" title="Faktyczna gotówka wypłacona pilotowi z biura.">{{ $finance['pilot_cash_paid'] ?? '—' }}</span>
                             </div>
                         </div>
                         <div class="flex flex-wrap items-center gap-x-4 gap-y-1 border-t border-gray-200/80 pt-2 dark:border-white/10">

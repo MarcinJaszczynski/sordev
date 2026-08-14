@@ -262,8 +262,10 @@ class EditEventProgram extends Page
         for ($day = 1; $day <= $maxDay; $day++) {
             $tabs[] = [
                 'day' => $day,
-                'label' => "Dzień {$day}",
-                'date' => $event->dateForProgramDay($day)?->format('d.m.Y'),
+                'label' => $event->programDayLabel($day),
+                'date' => $event->isFacultativeProgramDay($day)
+                    ? null
+                    : $event->dateForProgramDay($day)?->format('d.m.Y'),
                 'count' => (int) ($counts[$day] ?? 0),
                 'start_time' => $event->programDayStartTimeLabel($day),
                 'route' => $event->programDayRoute($day),

@@ -1070,8 +1070,9 @@
                                 checkAndOpenDropdown() {
                                     this.$nextTick(() => {
                                         const hasItems = this.$el.querySelectorAll('[data-search-item]').length > 0;
-                                        const hasMinLength = this.searchText && this.searchText.length >= 3;
-                                        this.open = hasMinLength && hasItems;
+                                        const text = (this.searchText || '').trim();
+                                        const canBrowse = text === '' || text.length >= 2;
+                                        this.open = canBrowse && hasItems;
                                     });
                                 },
                                 selectNext() {
@@ -1149,7 +1150,7 @@
                                         resetSelection();
                                         $event.target.blur();
                                     "
-                                    placeholder="Wpisz min. 3 znaki. Użyj przecinków dla warunków AND (np. 'kraków, warsztat')..." 
+                                    placeholder="Wpisz min. 2 znaki albo kliknij, by przeglądać listę…"
                                     class="block w-full mb-2 rounded-md border-gray-300 shadow-sm focus:border-primary-500 focus:ring-primary-500" 
                                     autocomplete="off" />
                                 <input type="hidden" wire:model.live.debounce.500ms="modalData.program_point_id" id="program_point_id" />
@@ -1160,9 +1161,14 @@
                                         Search: "{{ $searchProgramPoint }}" | Results: {{ count($availableProgramPoints) }} | Open: <span x-text="open"></span> | Selected: <span x-text="selectedIndex"></span>
                                     </div>
                                 @endif
+
+                                @php
+                                    $searchTrimmed = trim((string) $searchProgramPoint);
+                                    $showSearchResults = $searchTrimmed === '' || strlen($searchTrimmed) >= 2;
+                                @endphp
                                 
-                                {{-- Lista wyników - pokazuj zawsze gdy są 3+ znaki --}}
-                                @if($searchProgramPoint && strlen($searchProgramPoint) >= 3)
+                                {{-- Lista wyników: browse (pusty input) albo filtr od 2 znaków --}}
+                                @if($showSearchResults)
                                     <div x-show="open"
                                          x-transition:enter="transition ease-out duration-100"
                                          x-transition:enter-start="opacity-0 scale-95"
@@ -1189,7 +1195,7 @@
                                                     <div class="flex flex-col">
                                                         <span class="font-medium text-gray-900">{{ $sdkPoint->name }}</span>
                                                         @if($sdkPoint->description)
-                                                            <span class="text-xs text-gray-600 mt-1">{{ Str::limit(strip_tags($sdkPoint->description), 60) }}</span>
+                                                            <span class="text-xs text-gray-600 mt-1">{{ \Illuminate\Support\Str::limit(strip_tags($sdkPoint->description), 60) }}</span>
                                                         @endif
                                                         @if($sdkPoint->tags && $sdkPoint->tags->count() > 0)
                                                             <div class="flex flex-wrap gap-1 mt-2">
@@ -1205,7 +1211,11 @@
                                                 </li>
                                             @empty
                                                 <li class="px-4 py-3 text-gray-500 italic text-center" wire:key="no-results">
-                                                    Brak punktów pasujących do wszystkich warunków: "{{ $searchProgramPoint }}"
+                                                    @if($searchTrimmed === '')
+                                                        Brak punktów programu w bazie.
+                                                    @else
+                                                        Brak punktów pasujących do: "{{ $searchProgramPoint }}"
+                                                    @endif
                                                 </li>
                                             @endforelse
                                             @if($availableProgramPoints->count() >= 50)
@@ -1220,19 +1230,21 @@
                                             @endif
                                         </ul>
                                     </div>
+                                @elseif($searchTrimmed !== '')
+                                    <p class="text-xs text-gray-500 mt-1">Wpisz jeszcze co najmniej {{ max(1, 2 - strlen($searchTrimmed)) }} znak(i), aby filtrować.</p>
                                 @endif
                                 
-                                @if($modalData['program_point_id'])
-                                    <div class="text-xs text-green-700 mt-1">Wybrano: <span class="font-semibold">{{ optional($availableProgramPoints->firstWhere('id', (int) $modalData['program_point_id']))->name }}</span></div>
+                                @if($modalData['program_point_id'] && $selectedProgramPointName)
+                                    <div class="text-xs text-green-700 mt-1">Wybrano: <span class="font-semibold">{{ $selectedProgramPointName }}</span></div>
                                 @endif
                                 @error('modalData.program_point_id') <span class="text-red-500 text-sm">{{ $message }}</span> @enderror
                             </div>
-                            @if($modalData['program_point_id'] && ($selectedPoint = $availableProgramPoints->firstWhere('id', (int) $modalData['program_point_id'])))
+                            @if($modalData['program_point_id'] && $selectedProgramPointName)
                                 <div class="p-3 bg-gray-50 rounded border border-gray-200">
                                     <p class="text-sm"><span class="font-semibold">Wybrany punkt:</span>
-                                        {{ $selectedPoint->name }}</p>
-                                    @if($selectedPoint->description)
-                                        <p class="text-xs text-gray-600 mt-1">{{ $selectedPoint->description }}</p>
+                                        {{ $selectedProgramPointName }}</p>
+                                    @if($selectedProgramPointDescription)
+                                        <p class="text-xs text-gray-600 mt-1">{{ $selectedProgramPointDescription }}</p>
                                     @endif
                                 </div>
                             @endif

@@ -182,4 +182,165 @@ class EventOrderingPartiesTest extends TestCase
                 ->count()
         );
     }
+
+    public function test_contractor_options_search_finds_unlinked_company_when_contact_has_other_links(): void
+    {
+        if (! Schema::hasTable('contacts') || ! Contractor::hasContactPivotTable()) {
+            $this->markTestSkipped('Brak tabel contacts / contractor_contact.');
+        }
+
+        $linked = Contractor::create([
+            'name' => 'Firma Już Powiązana',
+            'status' => 'active',
+            'city' => 'Gdańsk',
+        ]);
+        $target = Contractor::create([
+            'name' => 'Szkoła Docelowa ABC',
+            'status' => 'active',
+            'city' => 'Warszawa',
+            'nip' => '5250000000',
+        ]);
+        $contact = Contact::create([
+            'first_name' => 'Jan',
+            'last_name' => 'Tester',
+            'email' => 'jan@test.pl',
+        ]);
+        $contact->contractors()->attach($linked->id);
+
+        $service = app(EventOrderingPartyService::class);
+
+        $withContact = $service->contractorOptionsForContact((int) $contact->id, 'Docelowa');
+        $withoutContact = $service->contractorOptionsForContact(null, 'Docelowa');
+
+        $this->assertArrayHasKey((string) $target->id, $withContact);
+        $this->assertArrayHasKey((string) $target->id, $withoutContact);
+        $this->assertStringContainsString('Szkoła Docelowa ABC', $withContact[(string) $target->id]);
+    }
+
+    public function test_contractor_options_prioritize_linked_companies(): void
+    {
+        if (! Schema::hasTable('contacts') || ! Contractor::hasContactPivotTable()) {
+            $this->markTestSkipped('Brak tabel contacts / contractor_contact.');
+        }
+
+        $linked = Contractor::create([
+            'name' => 'Zebra Powiązana',
+            'status' => 'active',
+        ]);
+        $other = Contractor::create([
+            'name' => 'Alpha Inna',
+            'status' => 'active',
+        ]);
+        $contact = Contact::create([
+            'first_name' => 'Ewa',
+            'last_name' => 'Priorytet',
+        ]);
+        $contact->contractors()->attach($linked->id);
+
+        $options = app(EventOrderingPartyService::class)
+            ->contractorOptionsForContact((int) $contact->id, 'a');
+
+        $this->assertArrayHasKey((string) $linked->id, $options);
+        $this->assertArrayHasKey((string) $other->id, $options);
+
+        $ids = array_map('strval', array_keys($options));
+        $this->assertSame((string) $linked->id, $ids[0], 'Powiązana firma powinna być pierwsza na liście.');
+    }
+
+    public function test_can_sync_two_ordering_parties_with_same_contractor(): void
+    {
+        if (! Schema::hasTable('event_contractor') || ! Schema::hasTable('contacts')) {
+            $this->markTestSkipped('Brak tabel event_contractor lub contacts.');
+        }
+
+        $user = User::factory()->create();
+        $template = EventTemplate::factory()->create();
+        $company = Contractor::create(['name' => 'SP nr 1', 'status' => 'active']);
+        $teacher = Contact::create(['first_name' => 'Anna', 'last_name' => 'Nauczyciel']);
+        $parent = Contact::create(['first_name' => 'Piotr', 'last_name' => 'Rodzic']);
+
+        $event = Event::create([
+            'event_template_id' => $template->id,
+            'name' => 'Wycieczka z dwoma kontaktami',
+            'client_name' => 'Placeholder',
+            'start_date' => now()->toDateString(),
+            'end_date' => now()->addDay()->toDateString(),
+            'participant_count' => 20,
+            'total_cost' => 1000,
+            'status' => 'confirmed',
+            'created_by' => $user->id,
+        ]);
+
+        app(EventOrderingPartyService::class)->syncForEvent($event, [
+            [
+                'contact_id' => $teacher->id,
+                'contractor_id' => $company->id,
+                'department_label' => null,
+                'notes' => 'Nauczyciel jadący na wycieczkę',
+            ],
+            [
+                'contact_id' => $parent->id,
+                'contractor_id' => $company->id,
+                'department_label' => null,
+                'notes' => 'Rodzic odpowiedzialny za rozliczenie',
+            ],
+        ]);
+
+        $event->refresh()->load('orderingContractors');
+
+        $this->assertCount(2, $event->orderingContractors);
+        $this->assertSame(2, (int) \Illuminate\Support\Facades\DB::table('event_contractor')
+            ->where('event_id', $event->id)
+            ->where('contractor_id', $company->id)
+            ->count());
+
+        $notes = \Illuminate\Support\Facades\DB::table('event_contractor')
+            ->where('event_id', $event->id)
+            ->orderBy('sort_order')
+            ->pluck('notes')
+            ->all();
+
+        $this->assertSame([
+            'Nauczyciel jadący na wycieczkę',
+            'Rodzic odpowiedzialny za rozliczenie',
+        ], $notes);
+
+        $formState = app(EventOrderingPartyService::class)->partiesToFormState($event);
+        $this->assertCount(2, $formState);
+        $this->assertSame('Rodzic odpowiedzialny za rozliczenie', $formState[1]['notes']);
+        $this->assertStringContainsString('Główny:', $event->formattedOrderingPartiesNames());
+        $this->assertStringContainsString('Dodatkowy:', $event->formattedOrderingPartiesNames());
+    }
+
+    public function test_contact_options_for_contractor_preload_company_contacts(): void
+    {
+        if (! Schema::hasTable('contacts') || ! Contractor::hasContactPivotTable()) {
+            $this->markTestSkipped('Brak tabel contacts / contractor_contact.');
+        }
+
+        $company = Contractor::create(['name' => 'Szkoła XYZ', 'status' => 'active']);
+        $linked = Contact::create([
+            'first_name' => 'Linked',
+            'last_name' => 'Person',
+            'phone' => '111222333',
+        ]);
+        $other = Contact::create([
+            'first_name' => 'Other',
+            'last_name' => 'Person',
+            'phone' => '999888777',
+        ]);
+        $linked->contractors()->attach($company->id);
+
+        $service = app(EventOrderingPartyService::class);
+
+        $withoutSearch = $service->contactOptionsForContractor((int) $company->id);
+        $this->assertArrayHasKey((string) $linked->id, $withoutSearch);
+        $this->assertArrayNotHasKey((string) $other->id, $withoutSearch);
+
+        $withSearch = $service->contactOptionsForContractor((int) $company->id, 'Person');
+        $this->assertArrayHasKey((string) $linked->id, $withSearch);
+        $this->assertArrayHasKey((string) $other->id, $withSearch);
+        $ids = array_map('strval', array_keys($withSearch));
+        $this->assertSame((string) $linked->id, $ids[0], 'Kontakt firmy powinien być pierwszy.');
+    }
 }

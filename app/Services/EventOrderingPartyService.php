@@ -10,7 +10,7 @@ use Illuminate\Support\Facades\Schema;
 class EventOrderingPartyService
 {
     /**
-     * @return array<int, array{contact_id: int|null, contractor_id: int|null, department_label: string|null}>
+     * @return array<int, array{contact_id: int|null, contractor_id: int|null, department_label: string|null, notes: string|null}>
      */
     public function partiesToFormState(Event $event): array
     {
@@ -30,6 +30,9 @@ class EventOrderingPartyService
                     'department_label' => Schema::hasColumn('event_contractor', 'department_label')
                         ? ($contractor->pivot->department_label ?: null)
                         : null,
+                    'notes' => Schema::hasColumn('event_contractor', 'notes')
+                        ? ($contractor->pivot->notes ?: null)
+                        : null,
                 ])
                 ->values()
                 ->all();
@@ -40,6 +43,7 @@ class EventOrderingPartyService
                 'contact_id' => null,
                 'contractor_id' => $event->contractor_id ? (int) $event->contractor_id : null,
                 'department_label' => null,
+                'notes' => null,
             ]];
         }
 
@@ -72,6 +76,10 @@ class EventOrderingPartyService
                 $pivot['department_label'] = $party['department_label'];
             }
 
+            if (Schema::hasColumn('event_contractor', 'notes')) {
+                $pivot['notes'] = $party['notes'];
+            }
+
             $event->orderingContractors()->attach($party['contractor_id'], $pivot);
         }
 
@@ -83,11 +91,37 @@ class EventOrderingPartyService
      */
     public function contactOptions(string $search = ''): array
     {
+        return $this->contactOptionsForContractor(null, $search);
+    }
+
+    /**
+     * Opcje Selectu „Osoba kontaktowa”.
+     *
+     * Gdy podano contractorId: najpierw kontakty tej firmy (preload bez szukania),
+     * potem ewentualnie wyniki wyszukiwania w całej bazie (powiązane na górze).
+     *
+     * @return array<string, string>
+     */
+    public function contactOptionsForContractor(?int $contractorId, string $search = ''): array
+    {
         if (! Schema::hasTable('contacts')) {
             return [];
         }
 
-        $query = Contact::query()->orderBy('last_name')->orderBy('first_name');
+        $linkedIds = collect();
+
+        if ($contractorId && Contractor::hasContactPivotTable()) {
+            $contractor = Contractor::query()->whereKey($contractorId)->first();
+
+            if ($contractor) {
+                $linkedIds = $contractor->contacts()
+                    ->pluck('contacts.id')
+                    ->map(fn ($id): int => (int) $id)
+                    ->values();
+            }
+        }
+
+        $query = Contact::query();
 
         if ($search !== '') {
             $query->where(function ($builder) use ($search): void {
@@ -97,35 +131,53 @@ class EventOrderingPartyService
                     ->orWhere('email', 'like', '%'.$search.'%')
                     ->orWhere('phone', 'like', '%'.$search.'%');
             });
+        } elseif ($linkedIds->isNotEmpty()) {
+            // Bez wyszukiwania: tylko kontakty wybranej firmy (ładują się w preload).
+            $query->whereIn('id', $linkedIds->all());
         }
+
+        if ($linkedIds->isNotEmpty() && $search !== '') {
+            $ids = $linkedIds->all();
+            $placeholders = implode(',', array_fill(0, count($ids), '?'));
+            $query->orderByRaw('CASE WHEN id IN ('.$placeholders.') THEN 0 ELSE 1 END', $ids);
+        }
+
+        $query->orderBy('last_name')->orderBy('first_name');
 
         return $query
             ->limit(50)
             ->get()
             ->mapWithKeys(fn (Contact $contact): array => [
-                $contact->id => $this->formatContactLabel($contact),
+                (string) $contact->id => $this->formatContactLabel($contact),
             ])
             ->all();
     }
 
     /**
-     * @return array<int, string>
+     * Opcje Selectu „Firma / instytucja”.
+     *
+     * Zawsze szuka w całej bazie kontrahentów (limit 50) — nie zawężamy do firm
+     * już powiązanych z osobą. Powiązanie i tak powstaje w afterStateUpdated / sync.
+     * Gdy podano contactId, powiązane firmy są tylko na górze listy (priorytet UX).
+     *
+     * @return array<string, string>
      */
     public function contractorOptionsForContact(?int $contactId, string $search = ''): array
     {
-        $query = Contractor::query()->orderBy('name');
+        $linkedIds = collect();
 
         if ($contactId && Contractor::hasContactPivotTable()) {
-            $linkedIds = Contact::query()
-                ->whereKey($contactId)
-                ->first()
-                ?->contractors()
-                ->pluck('contractors.id') ?? collect();
+            $contact = Contact::query()->whereKey($contactId)->first();
 
-            if ($linkedIds->isNotEmpty()) {
-                $query->whereIn('id', $linkedIds);
+            if ($contact) {
+                $linkedIds = $contact->contractors()
+                    ->pluck('contractors.id')
+                    ->map(fn ($id): int => (int) $id)
+                    ->values();
             }
         }
+
+        $query = Contractor::query();
 
         if ($search !== '') {
             $query->where(function ($builder) use ($search): void {
@@ -138,11 +190,19 @@ class EventOrderingPartyService
             });
         }
 
+        if ($linkedIds->isNotEmpty()) {
+            $ids = $linkedIds->all();
+            $placeholders = implode(',', array_fill(0, count($ids), '?'));
+            $query->orderByRaw('CASE WHEN id IN ('.$placeholders.') THEN 0 ELSE 1 END', $ids);
+        }
+
+        $query->orderBy('name');
+
         return $query
             ->limit(50)
             ->get()
             ->mapWithKeys(fn (Contractor $contractor): array => [
-                $contractor->id => $this->formatContractorLabel($contractor),
+                (string) $contractor->id => $this->formatContractorLabel($contractor),
             ])
             ->all();
     }
@@ -210,16 +270,26 @@ class EventOrderingPartyService
         return $contractorId;
     }
 
-    public function formatPartyLabel(?int $contactId, ?int $contractorId, ?string $departmentLabel = null): string
-    {
+    public function formatPartyLabel(
+        ?int $contactId,
+        ?int $contractorId,
+        ?string $departmentLabel = null,
+        ?string $notes = null,
+        bool $isPrimary = true,
+    ): string {
         $contact = $contactId ? Contact::find($contactId) : null;
         $contractor = $contractorId ? Contractor::find($contractorId) : null;
 
-        return $this->formatPartyLabelFromModels($contact, $contractor, $departmentLabel);
+        return $this->formatPartyLabelFromModels($contact, $contractor, $departmentLabel, $notes, $isPrimary);
     }
 
-    public function formatPartyLabelFromModels(?Contact $contact, ?Contractor $contractor, ?string $departmentLabel = null): string
-    {
+    public function formatPartyLabelFromModels(
+        ?Contact $contact,
+        ?Contractor $contractor,
+        ?string $departmentLabel = null,
+        ?string $notes = null,
+        bool $isPrimary = true,
+    ): string {
         $parts = [];
 
         if ($contractor) {
@@ -234,12 +304,51 @@ class EventOrderingPartyService
             $parts[] = $contact->displayName();
         }
 
-        return $parts !== [] ? implode(' · ', $parts) : 'Nowy zamawiający';
+        if (filled($notes)) {
+            $parts[] = \Illuminate\Support\Str::limit(trim((string) $notes), 40);
+        }
+
+        $body = $parts !== [] ? implode(' · ', $parts) : ($isPrimary ? 'Nowy zamawiający' : 'Nowy dodatkowy kontakt');
+
+        return ($isPrimary ? 'Główny: ' : 'Dodatkowy: ').$body;
+    }
+
+    /**
+     * Nagłówek wiersza w repeaterze (bez prefiksu roli — rolę pokazuje badge w wierszu).
+     */
+    public function formatPartyItemHeading(
+        ?int $contactId,
+        ?int $contractorId,
+        ?string $departmentLabel = null,
+        ?string $notes = null,
+    ): string {
+        $contact = $contactId ? Contact::find($contactId) : null;
+        $contractor = $contractorId ? Contractor::find($contractorId) : null;
+
+        $parts = [];
+
+        if ($contractor) {
+            $parts[] = $contractor->name;
+        }
+
+        if (filled($departmentLabel)) {
+            $parts[] = (string) $departmentLabel;
+        }
+
+        if ($contact) {
+            $parts[] = $contact->displayName();
+        }
+
+        if (filled($notes)) {
+            $parts[] = \Illuminate\Support\Str::limit(trim((string) $notes), 40);
+        }
+
+        return $parts !== [] ? implode(' · ', $parts) : 'Nowy kontakt';
     }
 
     /**
      * @param  array<int, array<string, mixed>>|null  $parties
-     * @return array<int, array{contact_id: int|null, contractor_id: int, department_label: string|null}>
+     * @return array<int, array{contact_id: int|null, contractor_id: int, department_label: string|null, notes: string|null}>
      */
     public function normalizeParties(?array $parties): array
     {
@@ -256,6 +365,9 @@ class EventOrderingPartyService
                     'contractor_id' => $contractorId,
                     'department_label' => filled($party['department_label'] ?? null)
                         ? trim((string) $party['department_label'])
+                        : null,
+                    'notes' => filled($party['notes'] ?? null)
+                        ? trim((string) $party['notes'])
                         : null,
                 ];
             })

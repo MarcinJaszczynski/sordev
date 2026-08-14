@@ -2,9 +2,6 @@
 
 namespace App\Filament\Pilot\Resources;
 
-use App\Filament\Pilot\Pages\PilotChecklistPage;
-use App\Filament\Pilot\Pages\PilotProgramPage;
-use App\Filament\Pilot\Pages\PilotSettlementPage;
 use App\Filament\Pilot\Resources\PilotEventResource\Pages;
 use App\Models\Event;
 use App\Services\PilotAccessService;
@@ -18,6 +15,7 @@ use Filament\Tables\Table;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Support\Facades\Auth;
+use Illuminate\Support\Facades\Schema;
 
 class PilotEventResource extends Resource
 {
@@ -113,9 +111,39 @@ class PilotEventResource extends Resource
                                     : (string) $paying;
                             })
                             ->visible($pilotDetailsVisible),
-                        Infolists\Components\TextEntry::make('startPlace.name')
-                            ->label('Miejsce startu')
+                        Infolists\Components\TextEntry::make('pickup_place_details')
+                            ->label('Adres podstawienia autokaru')
+                            ->state(function (Event $record): string {
+                                $details = Schema::hasColumn('events', 'pickup_place_details')
+                                    ? trim(strip_tags((string) ($record->pickup_place_details ?? '')))
+                                    : '';
+
+                                if ($details !== '') {
+                                    return $details;
+                                }
+
+                                $record->loadMissing('startPlace');
+
+                                return (string) ($record->startPlace?->name ?: '—');
+                            })
+                            ->placeholder('—')
+                            ->columnSpanFull()
                             ->visible($pilotDetailsVisible),
+                        Infolists\Components\TextEntry::make('substitution_time')
+                            ->label('Godzina podstawienia')
+                            ->formatStateUsing(fn ($state): string => self::formatClock($state))
+                            ->placeholder('—')
+                            ->visible(fn (Event $record): bool => $pilotDetailsVisible($record) && Schema::hasColumn('events', 'substitution_time')),
+                        Infolists\Components\TextEntry::make('departure_time')
+                            ->label('Godzina wyjazdu')
+                            ->formatStateUsing(fn ($state): string => self::formatClock($state))
+                            ->placeholder('—')
+                            ->visible(fn (Event $record): bool => $pilotDetailsVisible($record) && Schema::hasColumn('events', 'departure_time')),
+                        Infolists\Components\TextEntry::make('return_time')
+                            ->label('Godzina powrotu')
+                            ->formatStateUsing(fn ($state): string => self::formatClock($state))
+                            ->placeholder('—')
+                            ->visible(fn (Event $record): bool => $pilotDetailsVisible($record) && Schema::hasColumn('events', 'return_time')),
                         Infolists\Components\TextEntry::make('assignedUser.name')
                             ->label('Pilot')
                             ->visible($pilotDetailsVisible),
@@ -152,8 +180,6 @@ class PilotEventResource extends Resource
                         Infolists\Components\TextEntry::make('driver_name')->label('Kierowca'),
                         Infolists\Components\TextEntry::make('driver_phone')->label('Telefon kierowcy'),
                         Infolists\Components\TextEntry::make('vehicle_registration')->label('Rejestracja autokaru'),
-                        Infolists\Components\TextEntry::make('transfer_km')->label('Km transferu'),
-                        Infolists\Components\TextEntry::make('program_km')->label('Km programu'),
                     ]),
                 Infolists\Components\Section::make('Diety')
                     ->visible(fn (Event $record): bool => $pilotDetailsVisible($record) && filled($record->diet_info))
@@ -193,5 +219,14 @@ class PilotEventResource extends Resource
             'index' => Pages\ListPilotEvents::route('/'),
             'view' => Pages\ViewPilotEvent::route('/{record}'),
         ];
+    }
+
+    private static function formatClock(mixed $state): string
+    {
+        if (blank($state)) {
+            return '—';
+        }
+
+        return substr((string) $state, 0, 5);
     }
 }

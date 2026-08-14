@@ -223,4 +223,12 @@ class PilotPortalSettingsToolbarTest extends TestCase
 
         $this->assertFalse((bool) $event->fresh()->pilot_portal_show_currency_exchange);
     }
+
+    public function test_new_event_hides_currency_exchange_by_default(): void
+    {
+        $event = Event::factory()->create(['status' => Event::STATUS_CONFIRMED]);
+
+        $this->assertFalse($event->fresh()->showsPilotCurrencyExchange());
+        $this->assertFalse((bool) $event->fresh()->pilot_portal_show_currency_exchange);
+    }
 }

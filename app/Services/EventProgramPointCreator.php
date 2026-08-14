@@ -30,6 +30,7 @@ class EventProgramPointCreator
         'pilot_notes',
         'include_in_program',
         'include_in_calculation',
+        'include_gratis_in_cost',
         'active',
     ];
 
@@ -69,6 +70,7 @@ class EventProgramPointCreator
             'pilot_notes' => $template->pilot_notes,
             'include_in_program' => true,
             'include_in_calculation' => true,
+            'include_gratis_in_cost' => (bool) ($template->include_gratis_in_cost ?? false),
             'active' => true,
         ], $options));
 
@@ -248,6 +250,7 @@ class EventProgramPointCreator
                 'pilot_notes' => $childTemplate->pilot_notes,
                 'include_in_program' => true,
                 'include_in_calculation' => true,
+                'include_gratis_in_cost' => (bool) ($childTemplate->include_gratis_in_cost ?? false),
                 'active' => true,
             ]);
 

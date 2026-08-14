@@ -7,6 +7,7 @@ use App\Models\EventTemplateProgramPoint;
 use App\Support\Tasks\TaskNavigation;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Str;
 use Livewire\Component;
 
 class EventProgramTreeEditor extends Component
@@ -34,6 +35,10 @@ class EventProgramTreeEditor extends Component
     public $searchProgramPoint = '';
 
     public bool $searchDropdownOpen = false;
+
+    public ?string $selectedProgramPointName = null;
+
+    public ?string $selectedProgramPointDescription = null;
 
     // Prevent re-rendering after drag & drop updates
     public $skipRender = false;
@@ -204,23 +209,43 @@ class EventProgramTreeEditor extends Component
 
     public function render()
     {
-        $availablePoints = EventTemplateProgramPoint::with('tags')
-            ->when($this->searchProgramPoint && strlen($this->searchProgramPoint) >= 3, function ($query) {
-                $searchTerm = trim($this->searchProgramPoint);
+        $searchTerm = trim((string) $this->searchProgramPoint);
+        $minSearchLength = 2;
 
+        $availablePoints = EventTemplateProgramPoint::with('tags')
+            ->when($searchTerm !== '' && strlen($searchTerm) >= $minSearchLength, function ($query) use ($searchTerm) {
                 $fragments = collect(preg_split('/[,\s]+/', $searchTerm))
                     ->map(fn ($f) => trim($f))
                     ->filter(fn ($f) => strlen($f) >= 2);
 
-                foreach ($fragments as $frag) {
+                // Pojedynczy fragment / fraza: szukaj w OR po polach.
+                // Wiele fragmentów (przecinki/spacje): każdy musi pasować (AND) — np. "kraków warsztat".
+                if ($fragments->count() <= 1) {
+                    $frag = $fragments->first() ?: $searchTerm;
                     $query->where(function ($q) use ($frag) {
-                        $q->whereRaw('UPPER(name) LIKE UPPER(?)', ["%$frag%"])
-                            ->orWhereRaw('UPPER(description) LIKE UPPER(?)', ["%$frag%"])
-                            ->orWhereRaw('UPPER(office_notes) LIKE UPPER(?)', ["%$frag%"])
+                        $q->whereRaw('UPPER(name) LIKE UPPER(?)', ["%{$frag}%"])
+                            ->orWhereRaw('UPPER(description) LIKE UPPER(?)', ["%{$frag}%"])
+                            ->orWhereRaw('UPPER(office_notes) LIKE UPPER(?)', ["%{$frag}%"])
                             ->orWhereHas('tags', function ($tagQuery) use ($frag) {
-                                $tagQuery->whereRaw('UPPER(name) LIKE UPPER(?)', ["%$frag%"]);
+                                $tagQuery->whereRaw('UPPER(name) LIKE UPPER(?)', ["%{$frag}%"]);
                             });
                     });
+                } else {
+                    foreach ($fragments as $frag) {
+                        $query->where(function ($q) use ($frag) {
+                            $q->whereRaw('UPPER(name) LIKE UPPER(?)', ["%{$frag}%"])
+                                ->orWhereRaw('UPPER(description) LIKE UPPER(?)', ["%{$frag}%"])
+                                ->orWhereRaw('UPPER(office_notes) LIKE UPPER(?)', ["%{$frag}%"])
+                                ->orWhereHas('tags', function ($tagQuery) use ($frag) {
+                                    $tagQuery->whereRaw('UPPER(name) LIKE UPPER(?)', ["%{$frag}%"]);
+                                });
+                        });
+                    }
+                }
+            }, function ($query) use ($searchTerm, $minSearchLength) {
+                // Za krótka fraza: nie filtruj (browse pierwszych 50), chyba że użytkownik coś wpisał
+                if ($searchTerm !== '' && strlen($searchTerm) < $minSearchLength) {
+                    $query->whereRaw('1 = 0');
                 }
             })
             ->orderBy('name')
@@ -242,7 +267,12 @@ class EventProgramTreeEditor extends Component
 
     public function selectProgramPoint($id)
     {
+        $point = EventTemplateProgramPoint::query()->find($id);
         $this->modalData['program_point_id'] = $id;
+        $this->selectedProgramPointName = $point?->name;
+        $this->selectedProgramPointDescription = $point?->description
+            ? Str::limit(strip_tags((string) $point->description), 200)
+            : null;
         $this->searchProgramPoint = '';
         $this->searchDropdownOpen = false;
         $this->dispatch('point-selected', ['id' => $id]);
@@ -251,7 +281,9 @@ class EventProgramTreeEditor extends Component
     public function updateSearch($searchTerm)
     {
         $this->searchProgramPoint = $searchTerm;
-        $this->searchDropdownOpen = strlen(trim($searchTerm)) >= 3;
+        $trimmed = trim((string) $searchTerm);
+        // Pusty input = browse; 2+ znaki = filtr
+        $this->searchDropdownOpen = $trimmed === '' || strlen($trimmed) >= 2;
     }
 
     public function showAddModal()
@@ -278,6 +310,12 @@ class EventProgramTreeEditor extends Component
                 'include_in_calculation' => (bool) $pointPivot->include_in_calculation,
                 'active' => (bool) $pointPivot->active,
             ];
+            $point = EventTemplateProgramPoint::query()->find($pointPivot->event_template_program_point_id);
+            $this->selectedProgramPointName = $point?->name;
+            $this->selectedProgramPointDescription = $point?->description
+                ? Str::limit(strip_tags((string) $point->description), 200)
+                : null;
+            $this->searchProgramPoint = '';
             $this->showModal = true;
         } else {
             $this->dispatch('notify', ['type' => 'error', 'message' => 'Nie znaleziono punktu programu.']);
@@ -303,6 +341,9 @@ class EventProgramTreeEditor extends Component
             'include_in_calculation' => true,
             'active' => true,
         ];
+        $this->searchProgramPoint = '';
+        $this->selectedProgramPointName = null;
+        $this->selectedProgramPointDescription = null;
         $this->searchDropdownOpen = false;
         $this->resetErrorBag();
     }

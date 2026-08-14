@@ -2,6 +2,8 @@
 
 namespace App\Services;
 
+use App\Actions\Events\RecalculateEventTotalsAction;
+use App\Data\RecalculateEventTotalsData;
 use App\Models\Contract;
 use App\Models\Currency;
 use App\Models\Event;
@@ -16,6 +18,7 @@ use App\Models\EventTemplateHotelDay;
 use App\Models\HotelRoom;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Schema;
 use Illuminate\Validation\ValidationException;
 
@@ -920,6 +923,52 @@ class EventHotelPlanService
                 });
             }
         });
+
+        // Struktura/wycena pokoi → baza kalkulacji + koszt planowany (accommodation) w rozliczeniu.
+        // Wzorzec jak po zapisie transportu / usług hotelowych.
+        $this->syncEventFinanceAfterHotelChange($event);
+    }
+
+    /**
+     * Przelicza total_cost imprezy i odświeża aktywne rozliczenie po zmianie planu hotelowego.
+     * Cena/os. z kalkulacji (do umowy/aneksu / bez ręcznej blokady) bierze się z EventCostCalculator.
+     */
+    public function syncEventFinanceAfterHotelChange(Event $event): void
+    {
+        EventCostCalculator::clearRequestCache();
+
+        $fresh = $event->fresh([
+            'bus',
+            'programPoints',
+            'qtyVariants',
+            'hotelStays.roomLines.currency',
+            'eventTemplate.markup',
+            'eventTemplate.taxes',
+            'markup',
+        ]) ?? $event;
+
+        try {
+            app(RecalculateEventTotalsAction::class)(new RecalculateEventTotalsData(
+                event: $fresh,
+                participantCount: max(1, (int) ($fresh->participant_count ?? 1)),
+                startPlaceId: $fresh->start_place_id ? (int) $fresh->start_place_id : null,
+                persist: true,
+            ));
+        } catch (\Throwable $e) {
+            Log::warning('EventHotelPlanService: recalculate totals after hotel plan failed', [
+                'event_id' => $fresh->id,
+                'error' => $e->getMessage(),
+            ]);
+        }
+
+        try {
+            $fresh->refreshActiveSettlementCosts();
+        } catch (\Throwable $e) {
+            Log::warning('EventHotelPlanService: refresh settlement after hotel plan failed', [
+                'event_id' => $fresh->id,
+                'error' => $e->getMessage(),
+            ]);
+        }
     }
 
     public function syncAllRoomUnitsForEvent(Event $event): void
@@ -1093,19 +1142,23 @@ class EventHotelPlanService
 
                 // Własne pokoje (bez powiązania do katalogu `hotel_rooms`) muszą też działać w kalkulacji.
                 // Widok tabeli używa `->name` i `->people_count`, więc zapewniamy obiekt z tymi polami.
+                // Kontrakt UI: cost = cena jednostkowa, room_count = liczba pokoi, line_total = gotowa suma.
+                // Blade nie może mnożyć cost × room_count gdy cost to już suma linii.
                 $room = $line->hotelRoom ?: (object) [
                     'name' => $line->displayLabel(),
                     'people_count' => $line->effectivePeopleCount(),
                 ];
+                $roomQty = max(1, (int) $line->quantity);
                 $rooms[] = [
                     'room' => $room,
                     'label' => $line->displayLabel(),
-                    'alloc' => [$line->role => (int) $line->quantity],
-                    'total_people' => (int) $line->quantity * (int) ($room->people_count ?? 1),
-                    'cost' => $line->lineTotal(),
+                    'alloc' => [$line->role => $roomQty],
+                    'total_people' => $roomQty * (int) ($room->people_count ?? 1),
+                    'cost' => (float) $line->unit_price,
+                    'line_total' => $line->lineTotal(),
                     'currency' => $line->currency?->symbol ?? 'PLN',
                     'group_type' => $line->role,
-                    'room_count' => (int) $line->quantity,
+                    'room_count' => $roomQty,
                     'occupants' => $line->occupants->pluck('name')->all(),
                 ];
             }
@@ -1378,10 +1431,46 @@ class EventHotelPlanService
 
     public function linkStaysToProgramPoints(Event $event): void
     {
-        $pointsByDay = $event->programPoints()
+        $hotelFlagged = $event->programPoints()
             ->where('is_hotel', true)
             ->orderBy('order')
-            ->get()
+            ->get();
+
+        // Self-heal: „Przejazd do hotelu” itd. nie są noclegiem — odznacz i zdejmij hotel z klocka.
+        foreach ($hotelFlagged as $point) {
+            if (! Event::programPointNameLooksLikeHotelTransfer((string) ($point->name ?? ''))) {
+                continue;
+            }
+
+            $pointUpdate = ['is_hotel' => false];
+
+            $linkedToStay = $event->hotelStays->contains(
+                fn (EventHotelStay $stay): bool => (int) $stay->event_program_point_id === (int) $point->id
+            );
+            $contractorFromHotelPlan = filled($point->contractor_id)
+                && $event->hotelStays->contains(
+                    fn (EventHotelStay $stay): bool => (int) $stay->contractor_id === (int) $point->contractor_id
+                );
+
+            if ($linkedToStay || $contractorFromHotelPlan) {
+                $pointUpdate['contractor_id'] = null;
+                if (Schema::hasColumn('event_program_points', 'contractor_location_id')) {
+                    $pointUpdate['contractor_location_id'] = null;
+                }
+            }
+
+            $point->update($pointUpdate);
+
+            foreach ($event->hotelStays as $stay) {
+                if ((int) $stay->event_program_point_id === (int) $point->id) {
+                    $stay->update(['event_program_point_id' => null]);
+                }
+            }
+        }
+
+        $pointsByDay = $hotelFlagged
+            ->reject(fn ($point): bool => Event::programPointNameLooksLikeHotelTransfer((string) ($point->name ?? '')))
+            ->filter(fn ($point): bool => (bool) $point->is_hotel)
             ->groupBy('day');
 
         foreach ($event->hotelStays as $stay) {

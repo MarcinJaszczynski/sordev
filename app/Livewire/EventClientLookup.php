@@ -35,6 +35,16 @@ class EventClientLookup extends Component
     /** @var array<string, mixed>|null */
     public ?array $selected = null;
 
+    /**
+     * @param  array<string, mixed>|null  $selected
+     */
+    public function mount(?array $selected = null): void
+    {
+        if (is_array($selected) && $selected !== []) {
+            $this->selected = $selected;
+        }
+    }
+
     public function updatedSearchQuery(): void
     {
         $this->refreshResults();
@@ -193,8 +203,8 @@ class EventClientLookup extends Component
         $this->results = [];
         $this->showResults = false;
         $this->showQuickCreate = false;
-        $this->dispatch('client-lookup-cleared')
-            ->to(\App\Filament\Resources\EventResource\Pages\CreateEvent::class);
+        // Bez ->to(): CreateEvent i EditEvent nasłuchują #[On] na tej samej stronie.
+        $this->dispatch('client-lookup-cleared');
     }
 
     #[On('client-lookup-reset')]
@@ -228,7 +238,7 @@ class EventClientLookup extends Component
             clientName: (string) ($clientAttributes['client_name'] ?? ''),
             clientEmail: $clientAttributes['client_email'] ?? null,
             clientPhone: $clientAttributes['client_phone'] ?? null,
-        )->to(\App\Filament\Resources\EventResource\Pages\CreateEvent::class);
+        );
     }
 
     public function render()

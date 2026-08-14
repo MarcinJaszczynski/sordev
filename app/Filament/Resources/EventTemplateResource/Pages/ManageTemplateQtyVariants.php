@@ -15,11 +15,21 @@ class ManageTemplateQtyVariants extends SingleRelationManagerPage
 
     protected static string $resource = EventTemplateResource::class;
 
-    protected static ?string $navigationLabel = 'Warianty cen';
+    protected static ?string $navigationLabel = 'Warianty ilości';
 
     protected static ?string $title = 'Warianty ilości uczestników';
 
     protected static ?string $navigationIcon = 'heroicon-o-users';
+
+    public function getHeading(): string|\Illuminate\Contracts\Support\Htmlable
+    {
+        return 'Warianty ilości uczestników';
+    }
+
+    public function getSubheading(): string|\Illuminate\Contracts\Support\Htmlable|null
+    {
+        return 'Kolumny kalkulacji dla różnych wielkości grup (uczestnicy + gratis/kadra/kierowca). Lista pochodzi z globalnego katalogu wariantów ilości.';
+    }
 
     protected static function relationManager(): string
     {

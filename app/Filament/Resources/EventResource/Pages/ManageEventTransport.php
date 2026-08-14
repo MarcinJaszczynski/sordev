@@ -15,7 +15,6 @@ use Filament\Forms;
 use Filament\Forms\Form;
 use Filament\Notifications\Notification;
 use Filament\Resources\Pages\EditRecord;
-use Illuminate\Support\Facades\Blade;
 use Illuminate\Support\Facades\Schema;
 use Illuminate\Support\HtmlString;
 
@@ -39,47 +38,20 @@ class ManageEventTransport extends EditRecord
         return $form->schema([
             Forms\Components\Placeholder::make('transport_empty_state')
                 ->hiddenLabel()
-                ->visible(fn (): bool => blank($this->record->bus_id)
-                    && blank($this->record->transport_contractor_id)
-                    && blank($this->record->transport_company_name))
+                ->visible(function (Forms\Get $get): bool {
+                    return blank($get('bus_id'))
+                        && blank($get('transport_contractor_id'))
+                        && blank($get('transport_company_name'))
+                        && ! (bool) $get('use_manual_transport_cost');
+                })
                 ->content(new HtmlString(
                     '<div class="rounded-lg border border-dashed border-gray-300 bg-gray-50 px-4 py-6 text-center dark:border-gray-600 dark:bg-gray-800/50">'
                     .'<p class="text-sm font-medium text-gray-900 dark:text-gray-100">Brak przypisanego autokaru</p>'
-                    .'<p class="mt-1 text-sm text-gray-500">Wybierz firmę transportową i autokar w sekcji „Przewoźnik i kierowca” poniżej.</p>'
+                    .'<p class="mt-1 text-sm text-gray-500">Wybierz firmę transportową i autokar w sekcji „Przewoźnik i kierowca” poniżej — albo włącz ryczałt.</p>'
                     .'</div>'
                 ))
                 ->columnSpanFull(),
 
-            Forms\Components\Section::make('Koszty transportu')
-                ->description('Planowana, kalkulacja i zapłacona kwota z rozliczenia imprezy.')
-                ->schema([
-                    Forms\Components\Placeholder::make('transport_finance_panel')
-                        ->hiddenLabel()
-                        ->content(fn (): HtmlString => new HtmlString(
-                            Blade::render(
-                                '@livewire(\'settlement-aggregate-finance-panel\', [\'eventId\' => '.$this->record->getKey().', \'aggregateType\' => \'transport\', \'heading\' => \'Finanse transportu\'], key(\'transport-finance-'.$this->record->getKey().'\'))'
-                            )
-                        ))
-                        ->columnSpanFull(),
-
-                    Forms\Components\Placeholder::make('transport_cost_summary')
-                        ->label('')
-                        ->content(function () {
-                            $calculator = new \App\Services\EventTransportCostCalculator($this->record);
-                            $variant = [
-                                'qty' => max(1, (int) ($this->record->participant_count ?? 1)),
-                                'gratis' => 0,
-                                'staff' => 1,
-                                'driver' => 1,
-                            ];
-
-                            return view('partials.event-transport-summary', [
-                                'record' => $this->record,
-                                'transportCost' => $calculator->effectiveTransportCost($variant),
-                                'eventTransportKm' => $calculator->resolveTransportKm(),
-                            ]);
-                        }),
-                ]),
             EventProgramDayRouteFields::section(),
             EventResource::carrierAndDriverSection(),
         ]);

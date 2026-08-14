@@ -58,7 +58,20 @@
                                     @endforeach
                                 </select>
                                 @if (!empty($selectedIds))
-                                    <p class="mt-1 text-xs text-gray-500">Wybrano: {{ count($selectedIds) }}</p>
+                                    @php
+                                        $selectedNames = collect($selectedIds)
+                                            ->map(fn ($id) => $hotelRooms[(int) $id] ?? null)
+                                            ->filter()
+                                            ->values();
+                                    @endphp
+                                    <p class="mt-1 text-xs text-gray-500">Wybrano: {{ $selectedNames->count() }}</p>
+                                    @if ($selectedNames->isNotEmpty())
+                                        <ul class="mt-1 space-y-0.5">
+                                            @foreach ($selectedNames as $roomName)
+                                                <li class="text-xs font-medium text-gray-700">• {{ $roomName }}</li>
+                                            @endforeach
+                                        </ul>
+                                    @endif
                                 @endif
                             </td>
                         @endforeach

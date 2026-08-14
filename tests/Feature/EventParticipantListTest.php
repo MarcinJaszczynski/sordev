@@ -280,4 +280,49 @@ class EventParticipantListTest extends TestCase
         $this->assertSame($documentsContext['title_url'], $paymentsContext['title_url']);
         $this->assertNotNull($paymentsContext['finance'] ?? null);
     }
+
+    public function test_workflow_context_includes_operational_contacts(): void
+    {
+        $pilotUser = User::factory()->create([
+            'status' => 'active',
+            'name' => 'Jan Pilot',
+            'phone' => '500600700',
+        ]);
+
+        $hotelA = \App\Models\Contractor::create(['name' => 'Hotel Alfa', 'status' => 'active']);
+        $hotelB = \App\Models\Contractor::create(['name' => 'Hotel Beta', 'status' => 'active']);
+
+        $event = Event::factory()->create([
+            'code' => 'OPS-1',
+            'name' => 'Impreza kontakty',
+            'client_name' => 'Anna Zamawiająca',
+            'client_phone' => '111222333',
+            'assigned_to' => $pilotUser->id,
+            'driver_name' => 'Piotr Kierowca',
+            'driver_phone' => '444555666',
+        ]);
+
+        $event->hotelStays()->create(['day' => 1, 'contractor_id' => $hotelA->id]);
+        $event->hotelStays()->create(['day' => 2, 'contractor_id' => $hotelB->id]);
+        $event->hotelStays()->create(['day' => 3, 'contractor_id' => $hotelA->id]);
+
+        $admin = User::factory()->create(['status' => 'active']);
+        $admin->assignRole('admin');
+        $this->actingAs($admin);
+
+        $page = new \App\Filament\Resources\EventResource\Pages\ManageEventDocuments;
+        $page->record = $event->fresh();
+
+        $context = $page->getWorkflowContext();
+        $this->assertNotNull($context);
+
+        $metaByLabel = collect($context['meta'])->mapWithKeys(
+            fn (array $item) => [$item['label'] => $item['value']]
+        );
+
+        $this->assertSame('Anna Zamawiająca · 111222333', $metaByLabel->get('Zamawiający'));
+        $this->assertSame('Jan Pilot · 500600700', $metaByLabel->get('Pilot'));
+        $this->assertSame('Piotr Kierowca · 444555666', $metaByLabel->get('Kierowca'));
+        $this->assertSame('Hotel Alfa (+1)', $metaByLabel->get('Hotel'));
+    }
 }

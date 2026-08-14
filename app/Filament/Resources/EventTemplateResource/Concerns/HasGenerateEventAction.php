@@ -20,6 +20,17 @@ trait HasGenerateEventAction
             ->tooltip('Otwiera pełny formularz tworzenia imprezy z programem i danymi ze szablonu');
     }
 
+    protected function makePreviewOfferAction(): Actions\Action
+    {
+        return Actions\Action::make('preview_offer')
+            ->label('Podgląd oferty')
+            ->icon('heroicon-o-globe-alt')
+            ->color('gray')
+            ->url(fn () => $this->getEventTemplateRecord()->prettyUrl())
+            ->openUrlInNewTab()
+            ->tooltip('Otwiera publiczną stronę oferty na WWW');
+    }
+
     protected function getEventTemplateRecord(): EventTemplate
     {
         $record = $this->record;

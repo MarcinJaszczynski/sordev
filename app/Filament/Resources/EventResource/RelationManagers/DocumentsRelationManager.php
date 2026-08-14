@@ -75,12 +75,12 @@ class DocumentsRelationManager extends RelationManager
                     ]),
 
                 Forms\Components\Section::make('Dołącz do pakietów PDF')
-                    ->description('Zaznacz, do których pakietów PDF dokument ma być automatycznie dołączany.')
+                    ->description('Zaznacz „Pakiet pilota”, aby plik był widoczny w panelu pilota i w pakiecie PDF. Kontrola (akceptacja) nie blokuje widoczności — blokuje tylko status „Odrzucony”.')
                     ->schema([
                         Forms\Components\CheckboxList::make('pdf_attachment_targets')
                             ->label('Pakiety PDF')
                             ->options([
-                                'attach_to_pilot_pdf' => 'Pakiet pilota',
+                                'attach_to_pilot_pdf' => 'Pakiet pilota (panel + PDF)',
                                 'attach_to_hotel_pdf' => 'Pakiet hotelu',
                                 'attach_to_driver_pdf' => 'Pakiet kierowcy',
                                 'attach_to_folder_pdf' => 'Pakiet teczki',

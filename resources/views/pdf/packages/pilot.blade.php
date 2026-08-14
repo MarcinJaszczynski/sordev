@@ -70,27 +70,39 @@
                     </td>
                 </tr>
                 <tr>
-                    <td class="lbl">Hotel / nocleg (program)</td>
+                    <td class="lbl">Hotel / nocleg</td>
                     <td class="val">
-                        @php $hp0 = $hotelProgramPoints->first(); @endphp
-                        @if($hp0 && $hp0->contractor)
-                            @php
-                                $hotelMeta = \App\Support\ContractorContactDetails::operationalMeta($hp0->contractor, $hp0->contractorLocation);
-                            @endphp
-                            {{ $hp0->contractor->name }}
-                            @if(! empty($hotelMeta['branch_name']))
-                                , {{ $hotelMeta['branch_name'] }}
-                            @endif
-                            @if(! empty($hotelMeta['phone']))
-                                , {{ $hotelMeta['phone'] }}
-                            @endif
-                            @if(! empty($hotelMeta['address']))
-                                <br><small>{{ $hotelMeta['address'] }}</small>
-                            @endif
-                        @elseif($hp0)
-                            {{ $hp0->name ?: ($hp0->templatePoint?->name ?? '—') }}
+                        @if(isset($hotelPlan) && $hotelPlan->isNotEmpty())
+                            @foreach($hotelPlan as $day)
+                                <div style="margin-bottom:6px;">
+                                    <strong>Noc {{ $day['day'] }}</strong>
+                                    @include('pdf.packages._hotel_night_contact', ['day' => $day])
+                                </div>
+                            @endforeach
                         @else
-                            —
+                            @php $hp0 = $hotelProgramPoints->first(); @endphp
+                            @if($hp0 && $hp0->contractor)
+                                @php
+                                    $hotelMeta = \App\Support\ContractorContactDetails::operationalMeta($hp0->contractor, $hp0->contractorLocation);
+                                @endphp
+                                {{ $hp0->contractor->name }}
+                                @if(! empty($hotelMeta['branch_name']))
+                                    , {{ $hotelMeta['branch_name'] }}
+                                @endif
+                                @if(! empty($hotelMeta['phone']))
+                                    , {{ $hotelMeta['phone'] }}
+                                @endif
+                                @if(! empty($hotelMeta['email']))
+                                    , {{ $hotelMeta['email'] }}
+                                @endif
+                                @if(! empty($hotelMeta['address']))
+                                    <br><small>{{ $hotelMeta['address'] }}</small>
+                                @endif
+                            @elseif($hp0)
+                                {{ $hp0->name ?: ($hp0->templatePoint?->name ?? '—') }}
+                            @else
+                                —
+                            @endif
                         @endif
                     </td>
                 </tr>
@@ -184,7 +196,20 @@
                     <tbody>
                     @foreach($hotelPlan as $day)
                         <tr>
-                            <td colspan="4" style="font-weight: bold; padding-top:8px;">Dzień {{ $day['day'] }}</td>
+                            <td colspan="4" style="font-weight: bold; padding-top:8px;">
+                                Noc {{ $day['day'] }}
+                                @if(!empty($day['hotel_name']))
+                                    — {{ $day['hotel_name'] }}
+                                    @if(!empty($day['hotel_branch']))
+                                        ({{ $day['hotel_branch'] }})
+                                    @endif
+                                @endif
+                            </td>
+                        </tr>
+                        <tr>
+                            <td colspan="4">
+                                @include('pdf.packages._hotel_night_contact', ['day' => $day])
+                            </td>
                         </tr>
                         <tr>
                             <td style="text-align:center; vertical-align:top;">

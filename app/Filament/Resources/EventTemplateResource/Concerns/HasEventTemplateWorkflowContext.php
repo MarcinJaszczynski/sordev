@@ -30,6 +30,12 @@ trait HasEventTemplateWorkflowContext
             ],
             'links' => [
                 [
+                    'label' => 'Podgląd oferty',
+                    'url' => $template->prettyUrl(),
+                    'icon' => 'heroicon-o-globe-alt',
+                    'external' => true,
+                ],
+                [
                     'label' => 'Generuj imprezę',
                     'url' => EventResource::getUrl('create').'?template='.$template->id,
                     'icon' => 'heroicon-o-plus-circle',

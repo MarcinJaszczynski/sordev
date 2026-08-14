@@ -4,6 +4,7 @@ namespace App\Services;
 
 use App\Models\Contact;
 use App\Models\Contractor;
+use App\Models\Event;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\Schema;
 
@@ -295,6 +296,7 @@ class ClientLookupService
             'contact_id' => $contactId ? (string) $contactId : null,
             'contractor_id' => (string) $contractorId,
             'department_label' => $departmentLabel,
+            'notes' => null,
         ];
 
         $selected = $contactId
@@ -474,29 +476,40 @@ class ClientLookupService
     /**
      * @return array<string, mixed>
      */
-    private function makePairRow(Contact $contact, Contractor $contractor, ?string $departmentLabel = null): array
-    {
+    public function makePairRow(
+        Contact $contact,
+        Contractor $contractor,
+        ?string $departmentLabel = null,
+        ?string $notes = null,
+    ): array {
         $service = app(EventOrderingPartyService::class);
 
         return [
             'type' => 'pair',
             'contact_id' => $contact->id,
             'contractor_id' => $contractor->id,
-            'label' => $service->formatPartyLabel($contact->id, $contractor->id, $departmentLabel),
-            'preview' => $this->buildPreview($contact, $contractor, $departmentLabel),
+            'label' => $service->formatPartyItemHeading(
+                $contact->id,
+                $contractor->id,
+                $departmentLabel,
+                $notes,
+            ),
+            'notes' => $notes,
+            'preview' => $this->buildPreview($contact, $contractor, $departmentLabel, $notes),
         ];
     }
 
     /**
      * @return array<string, mixed>
      */
-    private function makeContactRow(Contact $contact): array
+    public function makeContactRow(Contact $contact): array
     {
         return [
             'type' => 'contact',
             'contact_id' => $contact->id,
             'contractor_id' => null,
             'label' => app(EventOrderingPartyService::class)->formatContactLabel($contact),
+            'notes' => null,
             'preview' => $this->buildPreview($contact, null),
         ];
     }
@@ -504,22 +517,32 @@ class ClientLookupService
     /**
      * @return array<string, mixed>
      */
-    private function makeContractorRow(Contractor $contractor): array
+    public function makeContractorRow(Contractor $contractor, ?string $notes = null): array
     {
         return [
             'type' => 'contractor',
             'contact_id' => null,
             'contractor_id' => $contractor->id,
-            'label' => app(EventOrderingPartyService::class)->formatContractorLabel($contractor),
-            'preview' => $this->buildPreview(null, $contractor),
+            'label' => app(EventOrderingPartyService::class)->formatPartyItemHeading(
+                null,
+                $contractor->id,
+                null,
+                $notes,
+            ),
+            'notes' => $notes,
+            'preview' => $this->buildPreview(null, $contractor, null, $notes),
         ];
     }
 
     /**
      * @return array<string, string|null>
      */
-    private function buildPreview(?Contact $contact, ?Contractor $contractor, ?string $departmentLabel = null): array
-    {
+    public function buildPreview(
+        ?Contact $contact,
+        ?Contractor $contractor,
+        ?string $departmentLabel = null,
+        ?string $notes = null,
+    ): array {
         $addressParts = collect([
             $contractor?->street,
             $contractor?->house_number,
@@ -534,6 +557,112 @@ class ClientLookupService
             'phone' => $contact?->phone ?? $contractor?->phone,
             'email' => $contact?->email ?? $contractor?->email,
             'address' => $addressParts !== '' ? $addressParts : null,
+            'notes' => $notes,
+        ];
+    }
+
+    /**
+     * Karty dodatkowych zamawiających na Podsumowaniu (bez głównego).
+     *
+     * @return array<int, array<string, mixed>>
+     */
+    public function additionalSelectedFromEvent(Event $event): array
+    {
+        $parties = app(EventOrderingPartyService::class)->partiesToFormState($event);
+
+        return collect($parties)
+            ->slice(1)
+            ->values()
+            ->map(fn (array $party): ?array => $this->selectedRowFromParty($party))
+            ->filter()
+            ->values()
+            ->all();
+    }
+
+    /**
+     * @param  array<string, mixed>  $party
+     * @return array<string, mixed>|null
+     */
+    public function selectedRowFromParty(array $party): ?array
+    {
+        $contractorId = filled($party['contractor_id'] ?? null) ? (int) $party['contractor_id'] : null;
+
+        if (! $contractorId) {
+            return null;
+        }
+
+        $contractor = Contractor::query()->find($contractorId);
+
+        if (! $contractor) {
+            return null;
+        }
+
+        $department = filled($party['department_label'] ?? null)
+            ? (string) $party['department_label']
+            : null;
+        $notes = filled($party['notes'] ?? null) ? (string) $party['notes'] : null;
+        $contact = filled($party['contact_id'] ?? null)
+            ? Contact::query()->find((int) $party['contact_id'])
+            : null;
+
+        if ($contact) {
+            return $this->makePairRow($contact, $contractor, $department, $notes);
+        }
+
+        $row = $this->makeContractorRow($contractor, $notes);
+
+        if ($department !== null) {
+            $row['preview']['department'] = $department;
+            $row['label'] = app(EventOrderingPartyService::class)->formatPartyItemHeading(
+                null,
+                $contractorId,
+                $department,
+                $notes,
+            );
+        }
+
+        return $row;
+    }
+
+    /**
+     * Kontakty powiązane z firmą — szybki wybór bez globalnego searcha.
+     *
+     * @return array<int, array<string, mixed>>
+     */
+    public function companyContactsForQuickPick(int $contractorId): array
+    {
+        if ($contractorId <= 0 || ! Contractor::hasContactPivotTable()) {
+            return [];
+        }
+
+        $contractor = Contractor::query()->find($contractorId);
+
+        if (! $contractor) {
+            return [];
+        }
+
+        return $contractor->contacts()
+            ->orderBy('last_name')
+            ->orderBy('first_name')
+            ->get()
+            ->map(fn (Contact $contact): array => $this->makePairRow($contact, $contractor))
+            ->values()
+            ->all();
+    }
+
+    /**
+     * @param  array<string, mixed>  $selected
+     * @return array{contact_id: string|null, contractor_id: string, department_label: string|null, notes: string|null}
+     */
+    public function selectedToFormParty(array $selected): array
+    {
+        return [
+            'contact_id' => filled($selected['contact_id'] ?? null) ? (string) $selected['contact_id'] : null,
+            'contractor_id' => (string) ($selected['contractor_id'] ?? ''),
+            'department_label' => filled($selected['preview']['department'] ?? null)
+                ? (string) $selected['preview']['department']
+                : null,
+            'notes' => filled($selected['notes'] ?? null) ? (string) $selected['notes'] : null,
         ];
     }
 
@@ -591,6 +720,7 @@ class ClientLookupService
             'department_label' => filled($result['preview']['department'] ?? null)
                 ? (string) $result['preview']['department']
                 : null,
+            'notes' => null,
         ]];
 
         $contractorId = filled($result['contractor_id'] ?? null) ? (int) $result['contractor_id'] : 0;
@@ -628,5 +758,65 @@ class ClientLookupService
             ->all();
 
         return app(EventOrderingPartyService::class)->primaryClientAttributes($normalized);
+    }
+
+    /**
+     * Karta „Wybrany klient” na Podsumowaniu — z pierwszego zamawiającego lub legacy client_*.
+     *
+     * @return array<string, mixed>|null
+     */
+    public function selectedFromEvent(Event $event): ?array
+    {
+        $parties = app(EventOrderingPartyService::class)->partiesToFormState($event);
+        $first = $parties[0] ?? null;
+
+        if (is_array($first) && filled($first['contractor_id'] ?? null)) {
+            $contractor = Contractor::query()->find((int) $first['contractor_id']);
+            $contact = filled($first['contact_id'] ?? null)
+                ? Contact::query()->find((int) $first['contact_id'])
+                : null;
+            $department = filled($first['department_label'] ?? null)
+                ? (string) $first['department_label']
+                : null;
+
+            if ($contractor && $contact) {
+                return $this->makePairRow($contact, $contractor, $department);
+            }
+
+            if ($contractor) {
+                $row = $this->makeContractorRow($contractor);
+                if ($department !== null) {
+                    $row['preview']['department'] = $department;
+                    $row['label'] = app(EventOrderingPartyService::class)->formatPartyItemHeading(
+                        null,
+                        (int) $contractor->id,
+                        $department,
+                    );
+                }
+
+                return $row;
+            }
+        }
+
+        if (blank($event->client_name)) {
+            return null;
+        }
+
+        return [
+            'type' => 'legacy',
+            'contact_id' => null,
+            'contractor_id' => $event->contractor_id ? (int) $event->contractor_id : null,
+            'label' => (string) $event->client_name,
+            'notes' => null,
+            'preview' => [
+                'person' => null,
+                'company' => (string) $event->client_name,
+                'department' => null,
+                'phone' => $event->client_phone,
+                'email' => $event->client_email,
+                'address' => null,
+                'notes' => null,
+            ],
+        ];
     }
 }

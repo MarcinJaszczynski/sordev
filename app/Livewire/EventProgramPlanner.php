@@ -4,18 +4,14 @@ namespace App\Livewire;
 
 use App\Models\Event;
 use App\Models\EventProgramPoint;
-use App\Models\EventTemplateProgramPoint;
 use App\Models\Reservation;
 use App\Models\VendorInvoice;
-use App\Services\ProgramPointPaymentStatusResolver;
 use App\Services\EventProgramScheduleService;
-use App\Support\ProgramTimeSlots;
+use App\Services\ProgramPointPaymentStatusResolver;
 use Carbon\Carbon;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Schema;
-use Illuminate\Support\Facades\Validator;
-use Illuminate\Validation\Rule;
 use Livewire\Attributes\On;
 use Livewire\Component;
 
@@ -25,48 +21,11 @@ class EventProgramPlanner extends Component
 
     public Event $event;
 
-    public bool $showEditModal = false;
+    public bool $showDeleteModal = false;
 
-    public ?int $editingPointId = null;
+    public ?int $deletingPointId = null;
 
-    public array $editingData = [
-        'name' => '',
-        'is_custom' => false,
-        'custom_name' => '',
-        'description' => '',
-        'parent_id' => null,
-        'day' => 1,
-        'start_time' => '',
-        'end_time' => '',
-        'start_date' => '',
-        'end_date' => '',
-        'hide_times' => false,
-        'office_notes' => '',
-        'pilot_notes' => '',
-    ];
-
-    public bool $showAddModal = false;
-
-    public string $plannerSearch = '';
-
-    public array $templateResults = [];
-
-    public array $newPointData = [
-        'name' => '',
-        'description' => '',
-        'parent_id' => null,
-        'day' => 1,
-        'start_time' => '08:00',
-        'end_time' => '09:00',
-        'start_date' => '',
-        'end_date' => '',
-        'hide_times' => false,
-        'unit_price' => '',
-        'quantity' => 1,
-        'group_size' => '',
-        'include_in_calculation' => false,
-        'template_id' => null,
-    ];
+    public string $deletingPointName = '';
 
     /** @var array<int, array<string, mixed>>|null */
     protected ?array $calendarEventsCache = null;
@@ -88,9 +47,41 @@ class EventProgramPlanner extends Component
                 'durationDays' => $this->resolveDurationDays(),
                 'maxDate' => $this->resolveBaseDate()->copy()->addDays($this->resolveDurationDays())->toDateString(),
             ],
-            'parentPointOptions' => $this->getParentPointOptions(),
-            'timeSlotOptions' => ProgramTimeSlots::options(),
         ]);
+    }
+
+    public function openDeleteModal(int $pointId): void
+    {
+        $point = EventProgramPoint::query()
+            ->where('event_id', $this->event->id)
+            ->with('templatePoint')
+            ->find($pointId);
+
+        if (! $point) {
+            return;
+        }
+
+        $this->deletingPointId = $pointId;
+        $this->deletingPointName = $point->templatePoint?->name ?? $point->name ?? ('Punkt #'.$point->id);
+        $this->showDeleteModal = true;
+    }
+
+    public function confirmRemovePoint(): void
+    {
+        if (! $this->deletingPointId) {
+            return;
+        }
+
+        $pointId = $this->deletingPointId;
+        $this->closeModals();
+        $this->removePointFromProgram($pointId);
+    }
+
+    public function closeModals(): void
+    {
+        $this->showDeleteModal = false;
+        $this->deletingPointId = null;
+        $this->deletingPointName = '';
     }
 
     public function removePointFromProgram(int $pointId): void
@@ -111,320 +102,6 @@ class EventProgramPlanner extends Component
     {
         $this->event->refresh();
         $this->dispatchCalendarUpdate();
-    }
-
-    public function openEditModal(int $pointId): void
-    {
-        $point = EventProgramPoint::query()
-            ->where('event_id', $this->event->id)
-            ->with('templatePoint')
-            ->find($pointId);
-
-        if (! $point) {
-            return;
-        }
-
-        $isCustom = $point->event_template_program_point_id === null;
-        $effectiveTimes = $this->resolveEffectivePlannerTimes($point);
-
-        $this->editingPointId = $pointId;
-        $this->editingData = [
-            'name' => $point->templatePoint?->name ?? $point->name ?? '',
-            'is_custom' => $isCustom,
-            'custom_name' => $point->name ?? '',
-            'description' => $point->description ?? '',
-            'parent_id' => $point->parent_id,
-            'day' => (int) ($point->day ?? 1),
-            'start_time' => $effectiveTimes['start_time'],
-            'end_time' => $effectiveTimes['end_time'],
-            'start_date' => $point->start_date?->toDateString() ?? '',
-            'end_date' => $point->end_date?->toDateString() ?? '',
-            'hide_times' => (bool) $point->hide_times,
-            'office_notes' => $point->office_notes ?? '',
-            'pilot_notes' => $point->pilot_notes ?? '',
-        ];
-        $this->showEditModal = true;
-    }
-
-    public function saveEditingPoint(): void
-    {
-        if (! $this->editingPointId) {
-            return;
-        }
-
-        $point = EventProgramPoint::query()
-            ->where('event_id', $this->event->id)
-            ->find($this->editingPointId);
-
-        if (! $point) {
-            $this->showEditModal = false;
-
-            return;
-        }
-
-        $oldDay = (int) ($point->day ?? 1);
-        $newDay = max(1, min($this->resolveDurationDays(), (int) ($this->editingData['day'] ?? 1)));
-
-        $startDate = filled($this->editingData['start_date'] ?? null) ? $this->editingData['start_date'] : null;
-        $endDate = filled($this->editingData['end_date'] ?? null) ? $this->editingData['end_date'] : null;
-        $startTime = $this->editingData['start_time'] ?: null;
-        $endTime = $this->editingData['end_time'] ?: null;
-
-        if ($startTime && $endTime && (! $startDate || ! $endDate || $startDate === $endDate) && $endTime <= $startTime) {
-            $this->addError('editingData.end_time', 'Godzina końca musi być późniejsza niż start (lub ustaw datę końca na następny dzień).');
-
-            return;
-        }
-
-        $updateData = [
-            'day' => $newDay,
-            'start_time' => $startTime,
-            'end_time' => $endTime,
-            'start_date' => $startDate,
-            'end_date' => $endDate,
-            'hide_times' => (bool) ($this->editingData['hide_times'] ?? false),
-            'description' => $this->editingData['description'] ?: null,
-            'parent_id' => ($this->editingData['parent_id'] ?? null) ?: null,
-            'office_notes' => $this->editingData['office_notes'] ?: null,
-            'pilot_notes' => $this->editingData['pilot_notes'] ?: null,
-            'updated_at' => now(),
-        ];
-
-        if ((int) ($updateData['parent_id'] ?? 0) === (int) $point->id) {
-            $updateData['parent_id'] = null;
-        }
-
-        if ($point->event_template_program_point_id === null) {
-            $updateData['name'] = trim($this->editingData['custom_name'] ?? $this->editingData['name'] ?? '');
-        }
-
-        DB::table('event_program_points')
-            ->where('id', $point->id)
-            ->update($updateData);
-
-        $point = $point->fresh();
-
-        if ($startTime && $endTime && ! (bool) ($updateData['hide_times'] ?? false)) {
-            if ($point->parent_id === null) {
-                app(EventProgramScheduleService::class)->applyManualTimeChange($point, $startTime, $endTime);
-            } else {
-                if (Schema::hasColumn('event_program_points', 'times_manually_locked')) {
-                    $point->update(['times_manually_locked' => true]);
-                }
-
-                $parent = EventProgramPoint::find($point->parent_id);
-                if ($parent) {
-                    app(\App\Services\ProgramPointSetTimePropagator::class)->propagateFromParent($parent->fresh());
-                }
-
-                $this->reorderPlannerSchedule();
-            }
-        } else {
-            $this->reorderPlannerSchedule();
-        }
-
-        $this->event->refresh();
-        $this->showEditModal = false;
-        $this->editingPointId = null;
-
-        $this->dispatchCalendarUpdate();
-    }
-
-    public function removeEditingPoint(): void
-    {
-        if (! $this->editingPointId) {
-            return;
-        }
-
-        $pointId = $this->editingPointId;
-        $this->showEditModal = false;
-        $this->editingPointId = null;
-        $this->removePointFromProgram($pointId);
-    }
-
-    public function openAddModal(string $startIso, string $endIso): void
-    {
-        $start = Carbon::parse($startIso);
-        $end = Carbon::parse($endIso);
-        $baseDate = $this->resolveBaseDate();
-        $day = $baseDate->copy()->startOfDay()->diffInDays($start->copy()->startOfDay()) + 1;
-        $day = max(1, min($this->resolveDurationDays(), $day));
-
-        $this->plannerSearch = '';
-        $this->templateResults = [];
-        $this->newPointData = [
-            'name' => '',
-            'description' => '',
-            'parent_id' => null,
-            'day' => $day,
-            'start_time' => $start->format('H:i'),
-            'end_time' => $end->format('H:i'),
-            'start_date' => $start->toDateString(),
-            'end_date' => $end->toDateString(),
-            'hide_times' => false,
-            'unit_price' => '',
-            'quantity' => 1,
-            'group_size' => '',
-            'include_in_calculation' => false,
-            'template_id' => null,
-        ];
-        $this->showAddModal = true;
-    }
-
-    public function updatedPlannerSearch(): void
-    {
-        if (strlen($this->plannerSearch) < 3) {
-            $this->templateResults = [];
-
-            return;
-        }
-
-        $this->templateResults = EventTemplateProgramPoint::query()
-            ->where('name', 'like', '%'.$this->plannerSearch.'%')
-            ->limit(8)
-            ->get(['id', 'name', 'unit_price', 'group_size'])
-            ->map(fn ($p) => [
-                'id' => $p->id,
-                'name' => $p->name,
-                'unit_price' => $p->unit_price,
-                'group_size' => $p->group_size,
-            ])
-            ->toArray();
-    }
-
-    public function selectPlannerTemplate(int $id): void
-    {
-        $template = EventTemplateProgramPoint::find($id);
-        if (! $template) {
-            return;
-        }
-
-        $this->newPointData['template_id'] = $id;
-        $this->newPointData['name'] = $template->name;
-        $this->newPointData['description'] = $template->description ?? '';
-        $this->newPointData['unit_price'] = $template->unit_price ?? '';
-        $this->newPointData['group_size'] = $template->group_size ?? '';
-        $this->plannerSearch = $template->name;
-        $this->templateResults = [];
-    }
-
-    public function clearPlannerTemplate(): void
-    {
-        $this->newPointData['template_id'] = null;
-        $this->newPointData['unit_price'] = '';
-        $this->newPointData['group_size'] = '';
-        $this->plannerSearch = '';
-        $this->templateResults = [];
-    }
-
-    public function saveNewPoint(): void
-    {
-        $data = $this->newPointData;
-
-        $validator = Validator::make($data, [
-            'name' => ['required', 'string', 'max:255'],
-            'day' => ['required', 'integer', 'min:1'],
-            'parent_id' => [
-                'nullable',
-                'integer',
-                Rule::exists('event_program_points', 'id')->where(fn ($query) => $query
-                    ->where('event_id', $this->event->id)
-                    ->where('day', max(1, (int) ($data['day'] ?? 1)))),
-            ],
-            'start_time' => ['nullable', 'date_format:H:i'],
-            'end_time' => ['nullable', 'date_format:H:i'],
-            'start_date' => ['nullable', 'date'],
-            'end_date' => ['nullable', 'date', 'after_or_equal:start_date'],
-        ], [
-            'name.required' => 'Podaj nazwę punktu programu.',
-            'parent_id.exists' => 'Punkt nadrzędny musi należeć do tej imprezy i tego samego dnia.',
-        ]);
-
-        if ($validator->fails()) {
-            $this->addError('newPointData.name', $validator->errors()->first());
-
-            return;
-        }
-
-        $startDate = $data['start_date'] ?? null;
-        $endDate = $data['end_date'] ?? null;
-        $startTime = $data['start_time'] ?? null;
-        $endTime = $data['end_time'] ?? null;
-
-        if ($startTime && $endTime && (! $startDate || ! $endDate || $startDate === $endDate) && $endTime <= $startTime) {
-            $this->addError('newPointData.end_time', 'Godzina końca musi być późniejsza niż start (lub ustaw datę końca na następny dzień).');
-
-            return;
-        }
-
-        $name = trim($data['name'] ?? '');
-
-        $day = max(1, min($this->resolveDurationDays(), (int) ($this->newPointData['day'] ?? 1)));
-
-        $maxOrder = EventProgramPoint::query()
-            ->where('event_id', $this->event->id)
-            ->where('day', $day)
-            ->max('order') ?? 0;
-
-        $templateId = $this->newPointData['template_id'] ?? null;
-        $unitPrice = filled($this->newPointData['unit_price']) ? (float) $this->newPointData['unit_price'] : 0;
-        $quantity = max(1, (int) ($this->newPointData['quantity'] ?? 1));
-        $groupSize = filled($this->newPointData['group_size']) ? (int) $this->newPointData['group_size'] : null;
-
-        EventProgramPoint::create([
-            'event_id' => $this->event->id,
-            'event_template_program_point_id' => $templateId,
-            'name' => $name,
-            'description' => $this->newPointData['description'] ?: null,
-            'parent_id' => $this->newPointData['parent_id'] ?: null,
-            'day' => $day,
-            'start_time' => $this->newPointData['start_time'] ?: null,
-            'end_time' => $this->newPointData['end_time'] ?: null,
-            'start_date' => $this->newPointData['start_date'] ?: null,
-            'end_date' => $this->newPointData['end_date'] ?: null,
-            'hide_times' => (bool) ($this->newPointData['hide_times'] ?? false),
-            'order' => $maxOrder + 1,
-            'unit_price' => $unitPrice,
-            'quantity' => $quantity,
-            'total_price' => $unitPrice * $quantity,
-            'group_size' => $groupSize,
-            'include_in_program' => true,
-            'include_in_calculation' => (bool) ($this->newPointData['include_in_calculation'] ?? false),
-            'active' => true,
-        ]);
-
-        $this->reorderPlannerSchedule();
-        $this->event->refresh();
-        $this->showAddModal = false;
-        $this->plannerSearch = '';
-        $this->templateResults = [];
-        $this->newPointData = [
-            'name' => '',
-            'description' => '',
-            'parent_id' => null,
-            'day' => 1,
-            'start_time' => '08:00',
-            'end_time' => '09:00',
-            'start_date' => '',
-            'end_date' => '',
-            'hide_times' => false,
-            'unit_price' => '',
-            'quantity' => 1,
-            'group_size' => '',
-            'include_in_calculation' => false,
-            'template_id' => null,
-        ];
-
-        $this->dispatchCalendarUpdate();
-    }
-
-    public function closeModals(): void
-    {
-        $this->showEditModal = false;
-        $this->showAddModal = false;
-        $this->editingPointId = null;
-        $this->plannerSearch = '';
-        $this->templateResults = [];
     }
 
     public function updatePointSchedule(int $pointId, string $startInput, ?string $endInput = null): void
@@ -471,7 +148,6 @@ class EventProgramPlanner extends Component
         }
 
         $baseDate = $this->resolveBaseDate();
-        $oldDay = (int) ($point->day ?? 1);
         $newDay = $baseDate->copy()->startOfDay()->diffInDays($start->copy()->startOfDay()) + 1;
         $newDay = max(1, min($this->resolveDurationDays(), $newDay));
 
@@ -512,29 +188,6 @@ class EventProgramPlanner extends Component
         $this->dispatchCalendarUpdate();
     }
 
-    protected function resolveEffectivePlannerTimes(EventProgramPoint $point): array
-    {
-        if ($point->start_time && $point->end_time) {
-            return [
-                'start_time' => substr((string) $point->start_time, 0, 5),
-                'end_time' => substr((string) $point->end_time, 0, 5),
-            ];
-        }
-
-        $baseDate = $this->resolveBaseDate();
-        $day = max(1, (int) ($point->day ?? 1));
-        $date = $baseDate->copy()->addDays($day - 1);
-        $service = app(\App\Services\EventProgramPointOrderService::class);
-        $visible = $service->visibleProgramPoints($this->event, requireActive: false);
-        $parentsById = $visible->whereNull('parent_id')->keyBy('id');
-        [$start, $end] = $this->resolvePointScheduleWindow($point, $date, $parentsById, $visible);
-
-        return [
-            'start_time' => $start->format('H:i'),
-            'end_time' => $end->format('H:i'),
-        ];
-    }
-
     protected function reorderPlannerSchedule(): void
     {
         app(\App\Services\EventProgramPointOrderService::class)->repairOrderByStartTimes($this->event);
@@ -542,7 +195,7 @@ class EventProgramPlanner extends Component
 
     protected function resolveDurationDays(): int
     {
-        return max(1, (int) ($this->event->eventTemplate?->duration_days ?? $this->event->duration_days ?? 1));
+        return $this->event->resolveCoreProgramDaysCount();
     }
 
     protected function resolveBaseDate(): Carbon
@@ -768,32 +421,32 @@ class EventProgramPlanner extends Component
             'confirmed', 'completed' => [
                 'code' => 'R',
                 'color' => 'green',
-                'tooltip' => "Rezerwacja: {$statusLabel}. {$depositLabel}. {$workflow}",
+                'tooltip' => "{$statusLabel}. {$depositLabel}. {$workflow}",
             ],
             'partially_confirmed' => [
                 'code' => 'R',
                 'color' => 'amber',
-                'tooltip' => "Rezerwacja: {$statusLabel}. {$depositLabel}. {$workflow}",
+                'tooltip' => "{$statusLabel}. {$depositLabel}. {$workflow}",
             ],
             'pending' => [
                 'code' => 'R',
                 'color' => 'orange',
-                'tooltip' => "Rezerwacja: {$statusLabel}. {$depositLabel}. {$workflow}",
+                'tooltip' => "{$statusLabel}. {$depositLabel}. {$workflow}",
             ],
             'not_required' => [
                 'code' => 'R',
                 'color' => 'slate',
-                'tooltip' => "Rezerwacja: {$statusLabel}. {$workflow}",
+                'tooltip' => "{$statusLabel}. {$workflow}",
             ],
             'cancelled' => [
                 'code' => 'R',
                 'color' => 'red',
-                'tooltip' => "Rezerwacja: {$statusLabel}. {$workflow}",
+                'tooltip' => "{$statusLabel}. {$workflow}",
             ],
             default => [
                 'code' => 'R',
                 'color' => 'gray',
-                'tooltip' => "Rezerwacja: {$statusLabel}. {$depositLabel}. {$workflow}",
+                'tooltip' => "{$statusLabel}. {$depositLabel}. {$workflow}",
             ],
         };
     }
@@ -881,27 +534,6 @@ class EventProgramPlanner extends Component
                 ? 'Faktura: '.$labels
                 : sprintf('Faktury (%d): %s', $count, $labels),
         ];
-    }
-
-    protected function getParentPointOptions(): array
-    {
-        return EventProgramPoint::query()
-            ->where('event_id', $this->event->id)
-            ->where('include_in_program', true)
-            ->whereNull('parent_id')
-            ->orderBy('day')
-            ->orderBy('order')
-            ->orderBy('id')
-            ->get()
-            ->mapWithKeys(fn (EventProgramPoint $point) => [
-                $point->id => sprintf(
-                    'Dzień %d • %02d. %s',
-                    (int) ($point->day ?? 1),
-                    (int) ($point->order ?? 1),
-                    $point->templatePoint?->name ?? $point->name ?? ('Punkt #'.$point->id)
-                ),
-            ])
-            ->all();
     }
 
     protected function setPointIncludedInProgram(int $pointId, bool $include): void

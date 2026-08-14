@@ -383,7 +383,8 @@ class TaskResource extends Resource
             ->modifyQueryUsing(function (Builder $query) use ($officeOnly, $additionalQueryModifier): Builder {
                 TaskQueryFilters::applyDefaultListScopes($query, $officeOnly);
 
-                $query = TaskQueryFilters::orderByHierarchyThenLatestActivityDesc($query);
+                // Flat sort: podzadanie jako osobna pozycja wg własnej aktywności (nie pod rodzicem).
+                $query = TaskQueryFilters::orderByLatestActivityDesc($query);
 
                 if ($additionalQueryModifier) {
                     $query = $additionalQueryModifier($query);
@@ -418,7 +419,8 @@ class TaskResource extends Resource
             ->modifyQueryUsing(function (Builder $query) use ($officeOnly, $additionalQueryModifier): Builder {
                 TaskQueryFilters::applyDefaultListScopes($query, $officeOnly);
 
-                $query = TaskQueryFilters::orderByHierarchyThenLatestActivityDesc($query);
+                // Flat sort: podzadanie jako osobna pozycja wg własnej aktywności (nie pod rodzicem).
+                $query = TaskQueryFilters::orderByLatestActivityDesc($query);
 
                 if ($additionalQueryModifier) {
                     $query = $additionalQueryModifier($query);

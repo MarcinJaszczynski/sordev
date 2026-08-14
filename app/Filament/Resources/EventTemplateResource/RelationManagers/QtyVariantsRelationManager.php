@@ -78,6 +78,6 @@ class QtyVariantsRelationManager extends RelationManager
                 Tables\Actions\DeleteBulkAction::make()->label('Usuń zaznaczone'),
             ])
             ->emptyStateHeading('Brak wariantów ilości uczestników')
-            ->emptyStateDescription('Dodaj pierwszy wariant, aby rozpocząć kalkulacje dla różnych grup.');
+            ->emptyStateDescription('Dodaj pierwszy wariant, aby rozpocząć kalkulacje dla różnych wielkości grup. To nie są osobne cenniki — to kolumny ilości w tabeli kalkulacji.');
     }
 }

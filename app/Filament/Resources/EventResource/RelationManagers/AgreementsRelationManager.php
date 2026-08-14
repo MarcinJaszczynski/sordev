@@ -241,7 +241,7 @@ class AgreementsRelationManager extends RelationManager
                         ->label('Data zawarcia')
                         ->nullable(),
 
-                    Forms\Components\DateTimePicker::make('paid_at')
+                    Forms\Components\DatePicker::make('paid_at')
                         ->label('Data płatności')
                         ->nullable(),
                 ]),

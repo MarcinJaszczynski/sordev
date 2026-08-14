@@ -21,10 +21,41 @@
         </div>
     </div>
 
+    <div class="client-portal-section mb-4">
+        <h2 class="text-base font-semibold text-slate-900">Ubezpieczenie</h2>
+        <p class="mt-1 text-sm text-slate-600">
+            Polisa i oryginalna lista ubezpieczonych wgrane przez biuro w Operacje → Ubezpieczenia.
+        </p>
+
+        @php
+            $insuranceDocs = $this->insuranceDocuments;
+        @endphp
+
+        @if($insuranceDocs->isEmpty())
+            <p class="mt-4 text-sm text-slate-500">Brak wgranych plików ubezpieczenia.</p>
+        @else
+            <ul class="mt-4 divide-y divide-slate-100 rounded-lg border border-slate-200">
+                @foreach($insuranceDocs as $document)
+                    <li class="flex flex-wrap items-center justify-between gap-2 px-4 py-3 text-sm">
+                        <div>
+                            <p class="font-medium text-slate-900">{{ $document['label'] }}</p>
+                        </div>
+                        <a
+                            href="{{ $document['url'] }}"
+                            target="_blank"
+                            rel="noopener"
+                            class="text-sm font-semibold text-[#0663fc] hover:underline"
+                        >Otwórz</a>
+                    </li>
+                @endforeach
+            </ul>
+        @endif
+    </div>
+
     <div class="client-portal-section">
         <h2 class="text-base font-semibold text-slate-900">Dokumenty udostępnione pilotowi</h2>
         <p class="mt-1 text-sm text-slate-600">
-            Pliki zaznaczone w biurze jako „Pakiet pilota”.
+            Pliki zaznaczone w biurze jako „Pakiet pilota” (także oczekujące na akceptację — poza odrzuconymi).
         </p>
 
         @php

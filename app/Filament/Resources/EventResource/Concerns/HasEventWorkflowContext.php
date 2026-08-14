@@ -43,7 +43,15 @@ trait HasEventWorkflowContext
 
         /** @var Event $event */
         $event = $this->record;
-        $event->loadMissing(['eventTemplate', 'startPlace']);
+        $event->loadMissing([
+            'eventTemplate',
+            'startPlace',
+            'pilotContractor',
+            'assignedUser',
+            'officeCaretaker',
+            'driverContractor',
+            'hotelStays.contractor',
+        ]);
 
         $start = $event->start_date?->format('d.m.Y') ?? '—';
         $end = $event->end_date?->format('d.m.Y');
@@ -79,6 +87,15 @@ trait HasEventWorkflowContext
 
         $finance = app(EventWorkflowFinanceSummaryService::class)->forEvent($event);
 
+        $meta = [
+            ['label' => 'Kod', 'value' => $event->code ?? '—'],
+            ['label' => 'Uczestnicy', 'value' => $participantsDisplay],
+        ];
+
+        foreach ($this->eventWorkflowContactMeta($event) as $item) {
+            $meta[] = $item;
+        }
+
         return [
             'type' => 'Impreza',
             'title' => $event->name ?? 'Impreza #'.$event->id,
@@ -86,13 +103,99 @@ trait HasEventWorkflowContext
             'subtitle' => $termin.($event->startPlace?->name ? ' · '.$event->startPlace->name : ''),
             'status' => $statusLabel,
             'statusColor' => Event::statusBadgeColor($event->status),
-            'meta' => [
-                ['label' => 'Kod', 'value' => $event->code ?? '—'],
-                ['label' => 'Uczestnicy', 'value' => $participantsDisplay],
-            ],
+            'meta' => $meta,
             'finance' => $finance,
             'links' => $links,
         ];
+    }
+
+    /**
+     * Kontakty operacyjne do boxa „Impreza” (zamawiający, pilot, kierowca, hotel).
+     *
+     * @return list<array{label: string, value: string}>
+     */
+    protected function eventWorkflowContactMeta(Event $event): array
+    {
+        $items = [];
+
+        $client = $this->formatWorkflowPerson(
+            filled($event->client_name) ? (string) $event->client_name : null,
+            filled($event->client_phone) ? (string) $event->client_phone : null,
+        );
+        if ($client !== null) {
+            $items[] = ['label' => 'Zamawiający', 'value' => $client];
+        }
+
+        $caretaker = $this->formatWorkflowPerson(
+            $event->officeCaretaker?->name,
+            filled($event->officeCaretaker?->phone) ? (string) $event->officeCaretaker->phone : null,
+        );
+        if ($caretaker !== null) {
+            $items[] = ['label' => 'Opiekun imprezy', 'value' => $caretaker];
+        }
+
+        $pilotName = $event->pilotContractor?->displayLabel()
+            ?: ($event->assignedUser?->name ?: null);
+        $pilotPhone = filled($event->pilotContractor?->phone)
+            ? (string) $event->pilotContractor->phone
+            : (filled($event->assignedUser?->phone) ? (string) $event->assignedUser->phone : null);
+        $pilot = $this->formatWorkflowPerson($pilotName, $pilotPhone);
+        if ($pilot !== null) {
+            $items[] = ['label' => 'Pilot', 'value' => $pilot];
+        }
+
+        $driverName = filled($event->driver_name)
+            ? (string) $event->driver_name
+            : ($event->driverContractor?->displayLabel() ?: null);
+        $driverPhone = filled($event->driver_phone)
+            ? (string) $event->driver_phone
+            : (filled($event->driverContractor?->phone) ? (string) $event->driverContractor->phone : null);
+        $driver = $this->formatWorkflowPerson($driverName, $driverPhone);
+        if ($driver !== null) {
+            $items[] = ['label' => 'Kierowca', 'value' => $driver];
+        }
+
+        $hotel = $this->formatWorkflowHotelSummary($event);
+        if ($hotel !== null) {
+            $items[] = ['label' => 'Hotel', 'value' => $hotel];
+        }
+
+        return $items;
+    }
+
+    protected function formatWorkflowPerson(?string $name, ?string $phone): ?string
+    {
+        $name = filled($name) ? trim($name) : null;
+        $phone = filled($phone) ? trim($phone) : null;
+
+        if ($name === null && $phone === null) {
+            return null;
+        }
+
+        if ($name !== null && $phone !== null) {
+            return "{$name} · {$phone}";
+        }
+
+        return $name ?? $phone;
+    }
+
+    protected function formatWorkflowHotelSummary(Event $event): ?string
+    {
+        $names = $event->hotelStays
+            ->map(fn ($stay) => $stay->contractor?->displayLabel())
+            ->filter(fn ($name) => filled($name))
+            ->map(fn ($name) => trim((string) $name))
+            ->unique()
+            ->values();
+
+        if ($names->isEmpty()) {
+            return null;
+        }
+
+        $first = (string) $names->first();
+        $extra = $names->count() - 1;
+
+        return $extra > 0 ? "{$first} (+{$extra})" : $first;
     }
 
     /**

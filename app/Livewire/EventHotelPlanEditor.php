@@ -2,17 +2,23 @@
 
 namespace App\Livewire;
 
+use App\Filament\Resources\ContractorResource;
+use App\Filament\Resources\EventResource;
 use App\Models\Contractor;
+use App\Models\ContractorLocation;
 use App\Models\ContractorType;
 use App\Models\Currency;
 use App\Models\Event;
+use App\Models\EventProgramPoint;
 use App\Models\HotelRoom;
 use App\Services\EventHotelOccupantsImporter;
 use App\Services\EventHotelPlanService;
 use App\Services\ContractorLocationService;
 use App\Services\ContractorLookupService;
+use App\Support\ContractorContactDetails;
 use App\Support\EventHotelPlanFormatting;
 use Filament\Notifications\Notification;
+use Illuminate\Support\Str;
 use Livewire\Component;
 use Livewire\Features\SupportFileUploads\TemporaryUploadedFile;
 use Livewire\WithFileUploads;
@@ -343,6 +349,7 @@ class EventHotelPlanEditor extends Component
             app(EventHotelPlanService::class)->savePlan($event, $this->stays);
             app(EventHotelPlanService::class)->linkStaysToProgramPoints($event->fresh());
             $this->loadPlan();
+            $this->dispatch('event-price-table-refresh');
             Notification::make()->title('Plan hoteli zapisany')->success()->send();
 
             return true;
@@ -394,10 +401,13 @@ class EventHotelPlanEditor extends Component
             }
 
             $stay->update($update);
-            app(EventHotelPlanService::class)->linkStaysToProgramPoints($event->fresh());
+            app(EventHotelPlanService::class)->linkStaysToProgramPoints($event->fresh(['hotelStays']));
+
+            $freshStay = $event->fresh(['hotelStays'])->hotelStays->firstWhere('id', (int) $stayPayload['id']);
 
             $this->stays[$stayIndex]['contractor_id'] = $contractorId;
             $this->stays[$stayIndex]['contractor_location_id'] = $locationId;
+            $this->stays[$stayIndex]['event_program_point_id'] = $freshStay?->event_program_point_id;
 
             Notification::make()
                 ->title($contractorId ? 'Hotel zapisany' : 'Hotel usunięty z nocy')
@@ -676,19 +686,60 @@ class EventHotelPlanEditor extends Component
         );
         $showLocationSelect = $locationService->contractorRequiresLocationSelection($activeContractorId);
 
-        foreach (collect($this->stays)->pluck('contractor_id')->filter()->unique() as $contractorId) {
-            $contractorId = (int) $contractorId;
+        $contractorIds = collect($this->stays)->pluck('contractor_id')->filter()->map(fn ($id) => (int) $id)->unique()->values();
+        $locationIds = collect($this->stays)->pluck('contractor_location_id')->filter()->map(fn ($id) => (int) $id)->unique()->values();
+        $contractorsById = Contractor::query()->whereIn('id', $contractorIds)->get()->keyBy('id');
+        $locationsById = ContractorLocation::query()->whereIn('id', $locationIds)->get()->keyBy('id');
 
+        foreach ($contractorIds as $contractorId) {
             if (isset($hotelLabels[$contractorId])) {
                 continue;
             }
 
-            $contractor = Contractor::query()->find($contractorId);
+            $contractor = $contractorsById->get($contractorId);
 
             if ($contractor) {
                 $hotelLabels[$contractorId] = $lookup->formatOptionLabel($contractor);
             }
         }
+
+        $stayContactHints = [];
+        foreach ($this->stays as $index => $stayPayload) {
+            $contractor = filled($stayPayload['contractor_id'] ?? null)
+                ? $contractorsById->get((int) $stayPayload['contractor_id'])
+                : null;
+            $location = filled($stayPayload['contractor_location_id'] ?? null)
+                ? $locationsById->get((int) $stayPayload['contractor_location_id'])
+                : null;
+            $meta = ContractorContactDetails::operationalMeta($contractor, $location);
+            $stayContactHints[$index] = [
+                'phone' => $meta['phone'] ?? null,
+                'city' => $location?->city ?: ($contractor?->city ?: null),
+                'address' => filled($meta['address'] ?? null) ? Str::limit((string) $meta['address'], 48) : null,
+            ];
+        }
+
+        $activeContractor = $activeContractorId ? $contractorsById->get($activeContractorId) : null;
+        if ($activeContractorId && ! $activeContractor) {
+            $activeContractor = Contractor::query()->find($activeContractorId);
+        }
+        $activeLocation = $activeLocationId ? $locationsById->get($activeLocationId) : null;
+        if ($activeLocationId && ! $activeLocation) {
+            $activeLocation = ContractorLocation::query()->find($activeLocationId);
+        }
+
+        $linkedPointId = filled($this->stays[$this->activeStayIndex]['event_program_point_id'] ?? null)
+            ? (int) $this->stays[$this->activeStayIndex]['event_program_point_id']
+            : null;
+        $linkedProgramPoint = $linkedPointId
+            ? EventProgramPoint::query()->with('templatePoint')->find($linkedPointId)
+            : null;
+
+        $contractorEditUrl = $activeContractor
+            ? ContractorResource::getUrl('edit', ['record' => $activeContractor])
+            : null;
+        $programDay = (int) ($this->stays[$this->activeStayIndex]['day'] ?? 1);
+        $programUrl = EventResource::getUrl('edit-program', ['record' => $event]).'?day='.$programDay;
 
         return view('livewire.event-hotel-plan-editor', [
             'event' => $event,
@@ -703,6 +754,12 @@ class EventHotelPlanEditor extends Component
             'priceBasisOptions' => \App\Models\EventHotelRoomLine::priceBasisOptions(),
             'participants' => app(EventHotelPlanService::class)->availableParticipants($event),
             'formatting' => EventHotelPlanFormatting::class,
+            'activeContractor' => $activeContractor,
+            'activeLocation' => $activeLocation,
+            'linkedProgramPoint' => $linkedProgramPoint,
+            'contractorEditUrl' => $contractorEditUrl,
+            'programUrl' => $programUrl,
+            'stayContactHints' => $stayContactHints,
         ]);
     }
 }

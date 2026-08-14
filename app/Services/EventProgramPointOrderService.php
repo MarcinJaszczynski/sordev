@@ -95,28 +95,15 @@ class EventProgramPointOrderService
     /**
      * Program widoczny w portalu pilota — bez dnia fakultatywnego (day > horyzontu trwania).
      *
-     * Horyzont bierze max(event.duration_days, szablon, span dat), żeby błędne duration_days=1
-     * nie obcinało całego programu (szablon zwykle ma prawidłową długość).
+     * Horyzont = Event::resolveCoreProgramDaysCount() (duration / szablon / span dat),
+     * żeby błędne duration_days=1 nie obcinało całego programu.
      * Świadomie bez maxPointDay — dzień fakultatywny (po horyzoncie) zostaje ukryty.
      *
      * @return EloquentCollection<int, EventProgramPoint>
      */
     public function pilotProgramPoints(Event $event, bool $requireActive = true): EloquentCollection
     {
-        $event->loadMissing('eventTemplate');
-
-        $fromDates = 1;
-        if ($event->start_date && $event->end_date) {
-            $fromDates = max(1, (int) $event->start_date->copy()->startOfDay()
-                ->diffInDays($event->end_date->copy()->startOfDay()) + 1);
-        }
-
-        $durationDays = max(
-            1,
-            (int) ($event->duration_days ?? 0),
-            (int) ($event->eventTemplate?->duration_days ?? 0),
-            $fromDates,
-        );
+        $durationDays = $event->resolveCoreProgramDaysCount();
 
         return new EloquentCollection(
             $this->visibleProgramPoints($event, $requireActive)
@@ -167,7 +154,7 @@ class EventProgramPointOrderService
     {
         return EventProgramPoint::query()
             ->where('event_id', $event->id)
-            ->with(['templatePoint', 'contractor', 'reservations.contractor', 'children', 'parent'])
+            ->with(['templatePoint', 'contractor', 'contractorLocation', 'reservations.contractor', 'children', 'parent'])
             ->withCount('children')
             ->get();
     }

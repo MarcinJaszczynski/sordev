@@ -88,6 +88,22 @@ class ReservationsRelationManager extends RelationManager
                     ->sortable()
                     ->alignEnd(),
 
+                Tables\Columns\TextColumn::make('office_notes')
+                    ->label('Notatki biura')
+                    ->formatStateUsing(function (?string $state): string {
+                        $plain = trim(strip_tags((string) $state));
+
+                        return $plain !== '' ? \Illuminate\Support\Str::limit($plain, 80) : '—';
+                    })
+                    ->tooltip(function (Reservation $record): ?string {
+                        $plain = trim(strip_tags((string) ($record->office_notes ?? '')));
+
+                        return $plain !== '' ? $plain : null;
+                    })
+                    ->wrap()
+                    ->toggleable()
+                    ->searchable(),
+
                 Tables\Columns\BadgeColumn::make('status')
                     ->label('Status')
                     ->sortable()

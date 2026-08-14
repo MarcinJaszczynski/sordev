@@ -7,6 +7,7 @@ use App\Models\Event;
 use App\Models\EventTemplate;
 use App\Models\User;
 use App\Services\PilotContractorAssignmentService;
+use App\Support\EventBusSeatCapacity;
 use App\Support\PilotIdentityValidation;
 use Filament\Forms;
 use Filament\Forms\Get;
@@ -175,6 +176,12 @@ class EventKeyInfoFields
                     }
                 })
                 ->helperText('Osoby jadące w grupie bez opłaty za siebie. Uwzględniane w kalkulacji kosztów i zapisywane w wariancie ilościowym grupy.'),
+
+            Forms\Components\Placeholder::make('bus_seat_capacity_warning')
+                ->hiddenLabel()
+                ->visible(fn (callable $get, ?Event $record): bool => EventBusSeatCapacity::resolveMessage($get, $record) !== null)
+                ->content(fn (callable $get, ?Event $record) => EventBusSeatCapacity::warningHtml($get, $record) ?? '')
+                ->columnSpanFull(),
         ];
     }
 
@@ -339,25 +346,11 @@ class EventKeyInfoFields
 
                     ...\App\Filament\Forms\EventPricePerPersonFields::manualPriceFields(),
 
-                    Forms\Components\Fieldset::make('Zamawiający')
-                        ->columns(['default' => 1, 'md' => 2])
+                    Forms\Components\Section::make('Zamawiający')
+                        ->icon('heroicon-o-user-circle')
+                        ->description('Ten sam układ co przy zakładaniu imprezy — karta wybranego klienta.')
                         ->columnSpanFull()
-                        ->schema([
-                            EventOrderingPartyFields::orderingPartiesRepeater(),
-                            Forms\Components\TextInput::make('client_name')
-                                ->label('Główny zamawiający (nazwa)')
-                                ->required()
-                                ->maxLength(255)
-                                ->helperText('Uzupełniane z pierwszego zamawiającego. Można edytować ręcznie.'),
-                            Forms\Components\TextInput::make('client_email')
-                                ->label('Email głównego zamawiającego')
-                                ->email()
-                                ->maxLength(255),
-                            Forms\Components\TextInput::make('client_phone')
-                                ->label('Telefon głównego zamawiającego')
-                                ->maxLength(\App\Support\PhoneValidation::MAX_LENGTH)
-                                ->rules(\App\Support\PhoneValidation::optionalRules()),
-                        ]),
+                        ->schema(EventOrderingPartyFields::clientLookupFields()),
 
                     EventNotesFields::generalNotes()
                         ->columnSpanFull(),

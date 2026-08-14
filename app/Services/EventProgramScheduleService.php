@@ -86,7 +86,8 @@ class EventProgramScheduleService
             return;
         }
 
-        if ($this->timeToMinutes($endTime) <= $this->timeToMinutes($startTime)) {
+        // Overnight / multi-day points (e.g. 18:00 → 16:00 next day) are valid when end_date > start_date.
+        if (! $this->spansNextDay($point) && $this->timeToMinutes($endTime) <= $this->timeToMinutes($startTime)) {
             throw new InvalidArgumentException('Godzina końca musi być późniejsza niż godzina startu.');
         }
 
@@ -122,6 +123,11 @@ class EventProgramScheduleService
         $anchor = $anchor->fresh();
 
         if (! $anchor?->end_time) {
+            return 0;
+        }
+
+        // End time belongs to a later calendar day — do not shift same-day followers from it.
+        if ($this->spansNextDay($anchor)) {
             return 0;
         }
 
@@ -312,6 +318,18 @@ class EventProgramScheduleService
         }
 
         return (bool) ($point->times_manually_locked ?? false);
+    }
+
+    /**
+     * Point ends on a later calendar day than it starts (overnight / multi-day travel).
+     */
+    protected function spansNextDay(EventProgramPoint $point): bool
+    {
+        if (! filled($point->start_date) || ! filled($point->end_date)) {
+            return false;
+        }
+
+        return $point->end_date->toDateString() > $point->start_date->toDateString();
     }
 
     protected function supportsManualLockColumn(): bool

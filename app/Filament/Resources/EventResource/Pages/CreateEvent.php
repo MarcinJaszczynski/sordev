@@ -88,23 +88,7 @@ class CreateEvent extends CreateRecord
             Forms\Components\Section::make('Zamawiający')
                 ->icon('heroicon-o-user-circle')
                 ->description('Wymagane: wyszukaj osobę w bazie albo — gdy jej nie ma — wprowadź ręcznie z telefonem lub e-mailem.')
-                ->schema([
-                    Forms\Components\View::make('filament.components.event-client-lookup-wrapper')
-                        ->columnSpanFull(),
-                    Forms\Components\Hidden::make('client_name')
-                        ->dehydrated(),
-                    Forms\Components\Hidden::make('client_email')
-                        ->dehydrated(),
-                    Forms\Components\Hidden::make('client_phone')
-                        ->dehydrated(),
-                    EventOrderingPartyFields::orderingPartiesRepeater()
-                        ->label('Zaawansowane / ręczna korekta')
-                        ->minItems(0)
-                        ->defaultItems(0)
-                        ->collapsible()
-                        ->collapsed()
-                        ->columnSpanFull(),
-                ]),
+                ->schema(EventOrderingPartyFields::clientLookupFields()),
 
             Forms\Components\Section::make('Szablon')
                 ->icon('heroicon-o-rectangle-stack')
@@ -338,7 +322,15 @@ class CreateEvent extends CreateRecord
         ?string $clientEmail = null,
         ?string $clientPhone = null,
     ): void {
-        $this->data['ordering_parties'] = $orderingParties;
+        $additional = array_values(array_slice(
+            is_array($this->data['ordering_parties'] ?? null) ? $this->data['ordering_parties'] : [],
+            1,
+        ));
+        $primary = $orderingParties[0] ?? null;
+
+        $this->data['ordering_parties'] = $primary
+            ? array_values(array_merge([$primary], $additional))
+            : $additional;
         $this->data['client_name'] = $clientName;
         $this->data['client_email'] = $clientEmail;
         $this->data['client_phone'] = $clientPhone;
@@ -347,10 +339,31 @@ class CreateEvent extends CreateRecord
     #[On('client-lookup-cleared')]
     public function clearClientLookup(): void
     {
-        $this->data['ordering_parties'] = [];
+        $additional = array_values(array_slice(
+            is_array($this->data['ordering_parties'] ?? null) ? $this->data['ordering_parties'] : [],
+            1,
+        ));
+
+        $this->data['ordering_parties'] = $additional;
         $this->data['client_name'] = null;
         $this->data['client_email'] = null;
         $this->data['client_phone'] = null;
+    }
+
+    /**
+     * @param  array<int, array<string, mixed>>  $additionalParties
+     */
+    #[On('additional-ordering-parties-updated')]
+    public function applyAdditionalOrderingParties(array $additionalParties): void
+    {
+        $current = is_array($this->data['ordering_parties'] ?? null)
+            ? $this->data['ordering_parties']
+            : [];
+        $primary = $current[0] ?? null;
+
+        $this->data['ordering_parties'] = $primary
+            ? array_values(array_merge([$primary], array_values($additionalParties)))
+            : array_values($additionalParties);
     }
 
     protected function handleRecordCreation(array $data): \Illuminate\Database\Eloquent\Model

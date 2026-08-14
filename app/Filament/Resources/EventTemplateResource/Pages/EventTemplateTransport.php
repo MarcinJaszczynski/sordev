@@ -268,6 +268,7 @@ class EventTemplateTransport extends Page implements HasForms
     protected function getHeaderActions(): array
     {
         return [
+            $this->makePreviewOfferAction(),
             $this->makeGenerateEventAction(),
             Actions\Action::make('calculate-distances')
                 ->label('Przelicz odległości')

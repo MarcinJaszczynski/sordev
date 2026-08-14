@@ -32,6 +32,7 @@ class EditEventTemplate extends EditRecord
     protected function getHeaderActions(): array
     {
         return [
+            $this->makePreviewOfferAction(),
             $this->makeGenerateEventAction(),
             Actions\Action::make('clone')
                 ->label('Klonuj')

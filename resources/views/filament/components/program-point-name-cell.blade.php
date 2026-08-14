@@ -95,8 +95,8 @@
             $descPlain = trim(preg_replace('/\s+/u', ' ', strip_tags($descHtml)) ?? '');
         @endphp
         @if ($descPlain !== '')
-            <div class="epp-program-desc mt-1 text-xs leading-snug text-gray-600 dark:text-gray-400" title="{{ $descPlain }}">
-                {{ \Illuminate\Support\Str::limit($descPlain, 160) }}
+            <div class="epp-program-desc" title="{{ $descPlain }}">
+                {{ \Illuminate\Support\Str::limit($descPlain, 90) }}
             </div>
         @endif
 

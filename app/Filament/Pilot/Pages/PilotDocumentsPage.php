@@ -13,6 +13,7 @@ use Filament\Pages\Page;
 use Illuminate\Contracts\Support\Htmlable;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\Schema;
+use Illuminate\Support\Facades\Storage;
 
 /**
  * Hub dokumentów pilota — pakiet PDF + dokumenty udostępnione w pakiecie pilota.
@@ -73,9 +74,10 @@ class PilotDocumentsPage extends Page
             ->where('attach_to_pilot_pdf', true)
             ->when(
                 Schema::hasColumn('event_documents', 'approval_status'),
+                // „Pakiet pilota” = udostępnienie; kontrola biurowa blokuje tylko odrzucone.
                 fn ($q) => $q->where(function ($inner) {
                     $inner->whereNull('approval_status')
-                        ->orWhere('approval_status', 'approved');
+                        ->orWhere('approval_status', '!=', 'rejected');
                 }),
             )
             ->orderBy('sort_order')
@@ -111,6 +113,31 @@ class PilotDocumentsPage extends Page
             ->where('attach_to_pilot_pdf', true)
             ->orderByDesc('id')
             ->get();
+    }
+
+    /**
+     * Polisa + oryginalna lista ubezpieczonych z Operacje → Ubezpieczenia.
+     *
+     * @return Collection<int, array{key: string, label: string, path: string, url: string}>
+     */
+    public function getInsuranceDocumentsProperty(): Collection
+    {
+        return collect($this->event->insuranceFilesForPilot())
+            ->map(function (array $file): ?array {
+                $path = $file['path'] ?? null;
+                if (! filled($path) || ! Storage::disk('public')->exists((string) $path)) {
+                    return null;
+                }
+
+                return [
+                    'key' => (string) $file['key'],
+                    'label' => (string) $file['label'],
+                    'path' => (string) $path,
+                    'url' => Storage::disk('public')->url((string) $path),
+                ];
+            })
+            ->filter()
+            ->values();
     }
 
     protected function getHeaderActions(): array
