@@ -87,6 +87,23 @@
                         {{ $item->subtitle }}
                     </div>
                     @php
+                        $canEditTemplate = auth()->check()
+                            && (
+                                auth()->user()->can('edit event_template')
+                                || auth()->user()->can('view event_template')
+                                || auth()->user()->hasRole(['super_admin', 'admin', 'biuro'])
+                            );
+                    @endphp
+                    @if($canEditTemplate)
+                        <div class="mt-2 mb-2">
+                            <a href="{{ route('filament.admin.resources.event-templates.edit', ['record' => $item->id]) }}"
+                               style="display:inline-flex;align-items:center;gap:6px;font-size:13px;font-weight:600;color:#1d4ed8;text-decoration:underline;"
+                               target="_blank" rel="noopener">
+                                Przejdź do szablonu
+                            </a>
+                        </div>
+                    @endif
+                    @php
                         // Ensure tags relation is loaded so we can render badges consistently
                         if (!method_exists($item, 'tags')) {
                             $loadedTags = collect();

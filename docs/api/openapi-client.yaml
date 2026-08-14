@@ -1,0 +1,105 @@
+openapi: 3.0.3
+info:
+  title: TourERP Client Portal API
+  version: 1.1.0
+  description: API aplikacji klienta / opiekuna grupy.
+servers:
+  - url: /api/v1/client
+security:
+  - bearerAuth: []
+paths:
+  /trips:
+    get:
+      summary: Lista wycieczek
+      responses: { '200': { description: OK } }
+  /trips/{event}:
+    get:
+      summary: Szczegóły + readiness
+      parameters:
+        - { in: path, name: event, required: true, schema: { type: integer } }
+      responses: { '200': { description: OK } }
+  /trips/{event}/program:
+    get:
+      summary: Program
+      responses: { '200': { description: OK } }
+  /trips/{event}/agreement:
+    get:
+      summary: Meta umowy
+      responses: { '200': { description: OK } }
+  /trips/{event}/agreement/pdf:
+    get:
+      summary: Stream PDF umowy
+      responses: { '200': { description: PDF } }
+  /trips/{event}/payments:
+    get:
+      summary: Saldo / checkout / rata
+      responses: { '200': { description: OK } }
+  /trips/{event}/payments/installments/{schedule}/pay-link:
+    post:
+      summary: Generuj signed URL płatności
+      parameters:
+        - { in: path, name: event, required: true, schema: { type: integer } }
+        - { in: path, name: schedule, required: true, schema: { type: integer } }
+      responses: { '200': { description: OK } }
+  /trips/{event}/group-payments:
+    get:
+      summary: Wpłaty grupy (guardian)
+      responses: { '200': { description: OK } }
+  /trips/{event}/participants:
+    get:
+      summary: Lista uczestników (guardian)
+      responses: { '200': { description: OK } }
+    post:
+      summary: Dodaj uczestnika
+      responses: { '201': { description: Created } }
+  /trips/{event}/participants/{participant}:
+    put:
+      summary: Edytuj uczestnika
+      responses: { '200': { description: OK } }
+    delete:
+      summary: Usuń uczestnika
+      responses: { '200': { description: OK } }
+  /trips/{event}/participants/{participant}/parent-link:
+    post:
+      summary: Link portalu rodzica
+      responses: { '200': { description: OK } }
+  /trips/{event}/extras:
+    get:
+      summary: Katalog świadczeń + selekcje
+      responses: { '200': { description: OK } }
+    put:
+      summary: Zapisz świadczenia
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [selections]
+              properties:
+                selections:
+                  type: object
+                  additionalProperties:
+                    type: object
+                    additionalProperties: { type: string }
+      responses: { '200': { description: OK } }
+  /trips/{event}/invoice-requests:
+    get:
+      summary: Historia wniosków o fakturę
+      responses: { '200': { description: OK } }
+    post:
+      summary: Nowy wniosek
+      responses: { '201': { description: Created } }
+  /trips/{event}/inquiries:
+    get:
+      summary: Historia kontaktu
+      responses: { '200': { description: OK } }
+    post:
+      summary: Zapytanie do biura
+      responses: { '201': { description: Created } }
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: Sanctum
+      description: PAT z ability client:read (+ client:write do mutacji)

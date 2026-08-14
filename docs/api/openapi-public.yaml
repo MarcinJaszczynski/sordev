@@ -1,0 +1,64 @@
+openapi: 3.0.3
+info:
+  title: TourERP Public Catalog API
+  version: 1.1.0
+  description: Publiczny katalog ofert + lead z WWW.
+servers:
+  - url: /api/v1/public
+paths:
+  /packages:
+    get:
+      summary: Lista aktywnych ofert
+      parameters:
+        - in: query
+          name: search
+          schema: { type: string }
+        - in: query
+          name: duration_days
+          schema: { type: integer }
+        - in: query
+          name: start_place_id
+          schema: { type: integer }
+        - in: query
+          name: per_page
+          schema: { type: integer }
+      responses:
+        '200': { description: OK }
+  /packages/{package}:
+    get:
+      summary: Szczegóły oferty (id lub slug)
+      parameters:
+        - in: path
+          name: package
+          required: true
+          schema: { type: string }
+      responses:
+        '200': { description: OK }
+        '404': { description: Nie znaleziono }
+  /regions:
+    get:
+      summary: Miejsca startowe
+      responses:
+        '200': { description: OK }
+  /inquiries:
+    post:
+      summary: Lead / zapytanie z oferty
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [email, telephone]
+              properties:
+                name: { type: string }
+                email: { type: string, format: email }
+                telephone: { type: string }
+                message: { type: string }
+                package_id: { type: integer }
+                package_slug: { type: string }
+                start_place_id: { type: integer }
+                website: { type: string, description: Honeypot — zostaw puste }
+      responses:
+        '201': { description: Przyjęto }
+        '200': { description: Honeypot (ciche OK) }

@@ -17,6 +17,13 @@ Dokumentacja pełni rolę "Konstytucji Projektu" dla programistów oraz agentów
 ├── 07_PERFORMANCE.md
 ├── 08_SECURITY_AND_GDPR.md
 ├── 09_AI_RULES.md
+├── 10_API.md
+│
+├── api/
+│   ├── README.md
+│   ├── openapi-public.yaml
+│   ├── openapi-pilot.yaml
+│   └── openapi-client.yaml
 │
 ├── modules/
 │   ├── dashboard.md

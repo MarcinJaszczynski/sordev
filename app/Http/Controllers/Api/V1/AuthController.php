@@ -2,9 +2,11 @@
 
 namespace App\Http\Controllers\Api\V1;
 
+use App\Support\Api\ApiAbilities;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
+use Illuminate\Validation\Rule;
 use Illuminate\Validation\ValidationException;
 
 class AuthController extends BaseApiController
@@ -61,16 +63,16 @@ class AuthController extends BaseApiController
         $validated = $request->validate([
             'name' => ['required', 'string', 'max:255'],
             'abilities' => ['nullable', 'array'],
-            'abilities.*' => ['string', 'max:255', 'in:events:read,events:write,tasks:read,tasks:write,notifications:read'],
+            'abilities.*' => ['string', 'max:255', Rule::in(ApiAbilities::all())],
         ]);
 
-        $defaultAbilities = ['events:read', 'tasks:read', 'notifications:read'];
+        $defaultAbilities = ApiAbilities::defaultsFor($request->user());
         $abilities = $validated['abilities'] ?? $defaultAbilities;
 
         // Nie pozwalaj na wildcard — nawet jeśli klient go prześle.
         $abilities = array_values(array_filter(
             $abilities,
-            fn (string $ability): bool => $ability !== '*'
+            fn (string $ability): bool => $ability !== '*' && in_array($ability, ApiAbilities::all(), true)
         ));
 
         if ($abilities === []) {

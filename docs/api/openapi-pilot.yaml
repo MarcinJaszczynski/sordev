@@ -1,0 +1,176 @@
+openapi: 3.0.3
+info:
+  title: TourERP Pilot API
+  version: 1.1.0
+  description: API aplikacji pilota — odczyt i mutacje terenowe.
+servers:
+  - url: /api/v1/pilot
+security:
+  - bearerAuth: []
+paths:
+  /trips:
+    get:
+      summary: Lista wycieczek
+      responses: { '200': { description: OK } }
+  /trips/{event}:
+    get:
+      summary: Szczegóły wycieczki
+      parameters:
+        - { in: path, name: event, required: true, schema: { type: integer } }
+      responses: { '200': { description: OK } }
+  /trips/{event}/program:
+    get:
+      summary: Program
+      parameters:
+        - { in: path, name: event, required: true, schema: { type: integer } }
+      responses: { '200': { description: OK } }
+  /trips/{event}/attendance:
+    get:
+      summary: Obecność (dzień)
+      parameters:
+        - { in: path, name: event, required: true, schema: { type: integer } }
+        - { in: query, name: day, schema: { type: integer } }
+      responses: { '200': { description: OK } }
+    put:
+      summary: Zapisz obecność
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - { in: path, name: event, required: true, schema: { type: integer } }
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [day, statuses]
+              properties:
+                day: { type: integer }
+                statuses:
+                  type: object
+                  additionalProperties: { type: string, enum: [present, absent, unknown] }
+      responses: { '200': { description: OK } }
+  /trips/{event}/checklist:
+    get:
+      summary: Checklista
+      parameters:
+        - { in: path, name: event, required: true, schema: { type: integer } }
+      responses: { '200': { description: OK } }
+  /trips/{event}/checklist/{task}/toggle:
+    post:
+      summary: Przełącz punkt checklisty
+      parameters:
+        - { in: path, name: event, required: true, schema: { type: integer } }
+        - { in: path, name: task, required: true, schema: { type: integer } }
+      responses: { '200': { description: OK } }
+  /trips/{event}/documents:
+    get:
+      summary: Dokumenty + URL PDF
+      parameters:
+        - { in: path, name: event, required: true, schema: { type: integer } }
+      responses: { '200': { description: OK } }
+  /trips/{event}/pdf/{audience}:
+    get:
+      summary: Stream PDF (pilot|folder)
+      parameters:
+        - { in: path, name: event, required: true, schema: { type: integer } }
+        - { in: path, name: audience, required: true, schema: { type: string, enum: [pilot, folder] } }
+      responses: { '200': { description: PDF } }
+  /trips/{event}/hotel-plan:
+    get:
+      summary: Plan hoteli
+      parameters:
+        - { in: path, name: event, required: true, schema: { type: integer } }
+      responses: { '200': { description: OK } }
+  /trips/{event}/hotel-plan/room-numbers:
+    put:
+      summary: Numery pokoi
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [room_numbers]
+              properties:
+                room_numbers:
+                  type: object
+                  additionalProperties: { type: string }
+      responses: { '200': { description: OK } }
+  /trips/{event}/inquiries:
+    get:
+      summary: Historia zapytań
+      responses: { '200': { description: OK } }
+    post:
+      summary: Nowe zapytanie do biura
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [subject, body]
+              properties:
+                subject: { type: string }
+                body: { type: string }
+      responses: { '201': { description: Created } }
+  /trips/{event}/settlement:
+    get:
+      summary: Rozliczenie (zaliczka, cash, wydatki, wymiany)
+      responses: { '200': { description: OK } }
+  /trips/{event}/settlement/report:
+    put:
+      summary: Raport pilota / submit do biura
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                pilot_report_notes: { type: string }
+                reported_participant_count: { type: integer }
+                odometer_start: { type: integer }
+                odometer_end: { type: integer }
+                submit_to_office: { type: boolean }
+      responses: { '200': { description: OK } }
+  /trips/{event}/settlement/expenses:
+    post:
+      summary: Dodaj wydatek gotówkowy
+      responses: { '201': { description: Created } }
+  /trips/{event}/settlement/expenses/{cost}:
+    put:
+      summary: Aktualizuj wydatek
+      responses: { '200': { description: OK } }
+    delete:
+      summary: Usuń wydatek (manual)
+      responses: { '200': { description: OK } }
+  /trips/{event}/settlement/exchanges:
+    post:
+      summary: Wymiana walut
+      responses: { '201': { description: Created } }
+  /trips/{event}/settlement/exchanges/{exchange}:
+    put:
+      summary: Aktualizuj wymianę
+      responses: { '200': { description: OK } }
+    delete:
+      summary: Usuń wymianę
+      responses: { '200': { description: OK } }
+  /trips/{event}/settlement/cash-return:
+    put:
+      summary: Zwrot gotówki
+      responses: { '200': { description: OK } }
+  /trips/{event}/settlement/documents:
+    post:
+      summary: Upload dokumentu (multipart)
+      responses: { '201': { description: Created } }
+  /trips/{event}/settlement/documents/{document}:
+    delete:
+      summary: Usuń dokument
+      responses: { '200': { description: OK } }
+  /trips/{event}/settlement/expenses/sync:
+    post:
+      summary: Synchronizuj plan wydatków
+      responses: { '200': { description: OK } }
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: Sanctum
+      description: PAT z ability pilot:read (+ pilot:write do mutacji)
