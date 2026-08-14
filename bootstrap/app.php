@@ -25,6 +25,9 @@ return Application::configure(basePath: dirname(__DIR__))
 
         $middleware->alias([
             'office' => \App\Http\Middleware\EnsureOfficeStaff::class,
+            'api.pilot' => \App\Http\Middleware\EnsurePilotApiAudience::class,
+            'api.client' => \App\Http\Middleware\EnsureClientApiAudience::class,
+            'api.ability' => \App\Http\Middleware\EnsureApiTokenAbility::class,
         ]);
     })
     ->withSchedule(function (Schedule $schedule): void {
@@ -65,6 +68,11 @@ return Application::configure(basePath: dirname(__DIR__))
         $schedule->command('tfg:notify-correction-deadlines')
             ->dailyAt('08:00')
             ->withoutOverlapping();
+
+        $schedule->command('inquiries:escalate-portal')
+            ->everyFifteenMinutes()
+            ->withoutOverlapping()
+            ->appendOutputTo(storage_path('logs/portal-inquiry-escalation.log'));
     })
     ->withExceptions(function (Exceptions $exceptions) {
         //

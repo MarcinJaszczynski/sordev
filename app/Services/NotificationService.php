@@ -256,19 +256,31 @@ class NotificationService
     private static function taskNotificationsFor(User $user, int $queryLimit = 30): array
     {
         return static::visibleTasksQueryFor($user)
-            ->with('status')
+            ->with(['status', 'parent:id,title'])
             ->orderByDesc('updated_at')
             ->limit($queryLimit)
             ->get()
             ->map(function (Task $task): array {
                 $due = $task->due_date ? $task->due_date->format('d.m.Y H:i') : 'brak terminu';
+                $metaParts = [];
+
+                if ($task->parent_id) {
+                    $task->loadMissing('parent');
+                    $parentTitle = $task->parent?->title;
+                    $metaParts[] = $parentTitle
+                        ? 'Podzadanie → '.Str::limit($parentTitle, 40)
+                        : 'Podzadanie';
+                }
+
+                $metaParts[] = 'Termin: '.$due;
+                $metaParts[] = 'Status: '.($task->status->name ?? 'brak');
 
                 return [
                     'type' => 'task',
                     'id' => (int) $task->id,
                     'revision' => (string) ($task->updated_at?->timestamp ?? 0),
                     'title' => Str::limit($task->title, 60),
-                    'meta' => 'Termin: '.$due.' | Status: '.($task->status->name ?? 'brak'),
+                    'meta' => implode(' | ', $metaParts),
                     'time' => optional($task->updated_at)->diffForHumans() ?? 'teraz',
                     'url' => TaskNavigation::fullViewUrl($task),
                     'at' => optional($task->updated_at)?->timestamp ?? now()->timestamp,

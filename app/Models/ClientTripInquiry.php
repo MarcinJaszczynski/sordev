@@ -4,8 +4,10 @@ declare(strict_types=1);
 
 namespace App\Models;
 
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Support\Facades\Schema;
 
 class ClientTripInquiry extends Model
 {
@@ -42,13 +44,34 @@ class ClientTripInquiry extends Model
         'office_reply',
         'answered_by',
         'answered_at',
+        'escalated_at',
     ];
 
     protected function casts(): array
     {
         return [
             'answered_at' => 'datetime',
+            'escalated_at' => 'datetime',
         ];
+    }
+
+    /**
+     * Widoczność w inboxie biura:
+     * - bez opiekuna / po eskalacji → całe biuro
+     * - przed eskalacją → tylko aktualny office_caretaker_id
+     */
+    public function scopeVisibleToOfficeUser(Builder $query, User $user): Builder
+    {
+        if (! Schema::hasColumn('client_trip_inquiries', 'escalated_at')
+            || ! Schema::hasColumn('events', 'office_caretaker_id')) {
+            return $query;
+        }
+
+        return $query->where(function (Builder $q) use ($user): void {
+            $q->whereNotNull('escalated_at')
+                ->orWhereHas('event', fn (Builder $e) => $e->whereNull('office_caretaker_id'))
+                ->orWhereHas('event', fn (Builder $e) => $e->where('office_caretaker_id', $user->id));
+        });
     }
 
     public function event(): BelongsTo

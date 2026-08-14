@@ -19,6 +19,8 @@ class EventObserver
         'transfer_km',
         'program_km',
         'bus_id',
+        'use_manual_transport_cost',
+        'manual_transport_cost',
         'markup_id',
         'duration_days',
         'event_template_id',

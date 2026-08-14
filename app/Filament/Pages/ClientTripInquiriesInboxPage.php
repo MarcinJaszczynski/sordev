@@ -56,7 +56,13 @@ class ClientTripInquiriesInboxPage extends Page implements HasTable
             return null;
         }
 
+        $user = auth()->user();
+        if (! $user) {
+            return null;
+        }
+
         $count = ClientTripInquiry::query()
+            ->visibleToOfficeUser($user)
             ->where('status', ClientTripInquiry::STATUS_OPEN)
             ->count();
 
@@ -70,10 +76,18 @@ class ClientTripInquiriesInboxPage extends Page implements HasTable
 
     public function table(Table $table): Table
     {
+        $user = auth()->user();
+
         return OperationalListSort::applyToTable($table)
             ->query(
                 ClientTripInquiry::query()
-                    ->with(['event:id,code,name', 'user:id,name,email', 'answeredByUser:id,name'])
+                    ->with([
+                        'event:id,code,name,office_caretaker_id',
+                        'event.officeCaretaker:id,name',
+                        'user:id,name,email',
+                        'answeredByUser:id,name',
+                    ])
+                    ->when($user, fn ($q) => $q->visibleToOfficeUser($user))
             )
             ->columns([
                 Tables\Columns\TextColumn::make('created_at')
@@ -109,6 +123,23 @@ class ClientTripInquiriesInboxPage extends Page implements HasTable
                     ->url(fn (ClientTripInquiry $record): ?string => $record->event_id
                         ? EventResource::getUrl('edit', ['record' => $record->event_id])
                         : null),
+                Tables\Columns\TextColumn::make('event.officeCaretaker.name')
+                    ->label('Opiekun')
+                    ->placeholder('—')
+                    ->toggleable()
+                    ->visible(fn (): bool => Schema::hasColumn('events', 'office_caretaker_id')),
+                Tables\Columns\IconColumn::make('escalated_at')
+                    ->label('Eskalacja')
+                    ->boolean()
+                    ->getStateUsing(fn (ClientTripInquiry $record): bool => $record->escalated_at !== null)
+                    ->trueIcon('heroicon-o-users')
+                    ->falseIcon('heroicon-o-user')
+                    ->trueColor('warning')
+                    ->falseColor('gray')
+                    ->tooltip(fn (ClientTripInquiry $record): string => $record->escalated_at
+                        ? 'Widoczne dla całego biura'
+                        : 'Tylko opiekun imprezy')
+                    ->visible(fn (): bool => Schema::hasColumn('client_trip_inquiries', 'escalated_at')),
             ])
             ->filters([
                 Tables\Filters\SelectFilter::make('source')
@@ -118,6 +149,17 @@ class ClientTripInquiriesInboxPage extends Page implements HasTable
                 Tables\Filters\SelectFilter::make('status')
                     ->label('Status')
                     ->options(ClientTripInquiry::$statuses),
+                Tables\Filters\TernaryFilter::make('mine_as_caretaker')
+                    ->label('Moje jako opiekun')
+                    ->queries(
+                        true: fn ($query) => $query->whereHas(
+                            'event',
+                            fn ($q) => $q->where('office_caretaker_id', auth()->id())
+                        ),
+                        false: fn ($query) => $query,
+                        blank: fn ($query) => $query,
+                    )
+                    ->visible(fn (): bool => Schema::hasColumn('events', 'office_caretaker_id')),
             ])
             ->defaultSort('created_at', 'desc')
             ->actions([

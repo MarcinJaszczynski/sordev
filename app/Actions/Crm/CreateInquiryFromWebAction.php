@@ -8,7 +8,9 @@ use App\Data\CreateInquiryFromWebData;
 use App\Models\Contact;
 use App\Models\Event;
 use App\Models\Task;
+use App\Models\User;
 use App\Services\EventInquiryNotificationService;
+use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
 
@@ -65,6 +67,8 @@ final class CreateInquiryFromWebAction
                 'duration_days' => 1,
                 'office_notes' => $notes,
                 'notes' => $notes,
+                // Guest WWW / Public API — brak sesji; NOT NULL FK created_by.
+                'created_by' => Auth::id() ?: $this->fallbackCreatedByUserId(),
             ]);
 
             // Ten sam write-path powiadomień co CreateEvent (notify office).
@@ -82,5 +86,30 @@ final class CreateInquiryFromWebAction
                 'task' => $task,
             ];
         });
+    }
+
+    private function fallbackCreatedByUserId(): int
+    {
+        $officeId = User::query()
+            ->whereHas('roles', fn ($q) => $q->whereIn('name', ['super_admin', 'admin', 'biuro']))
+            ->orderBy('id')
+            ->value('id');
+
+        if ($officeId) {
+            return (int) $officeId;
+        }
+
+        $anyId = User::query()->orderBy('id')->value('id');
+        if ($anyId) {
+            return (int) $anyId;
+        }
+
+        // Ostateczny fallback: konto systemowe WWW (gdy baza bez użytkowników — np. świeży test).
+        return (int) User::query()->create([
+            'name' => 'System WWW',
+            'email' => 'www-inquiry@system.local',
+            'password' => bcrypt(Str::random(32)),
+            'status' => 'active',
+        ])->id;
     }
 }

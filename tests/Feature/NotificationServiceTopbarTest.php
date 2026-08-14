@@ -334,15 +334,20 @@ class NotificationServiceTopbarTest extends TestCase
             'title' => 'Podzadanie X',
             'parent_id' => $parent->id,
         ]);
-        $parent->touch();
         NotificationService::clearCacheForTaskStakeholders($subtask);
 
         $after = NotificationService::getTopbarDataForUser($assignee->id, limitPerType: 15, combinedLimit: 15, taskQueryLimit: 30, fresh: true);
 
-        $this->assertSame(2, $after['counts']['tasks']);
-        $titles = collect($after['items_by_type']['task'])->pluck('title')->all();
-        $this->assertContains('Podzadanie X', $titles);
-        $this->assertContains('Rodzic', $titles);
+        // Rodzic był już przeczytany i nie jest touchowany — w topbarze tylko nowe podzadanie.
+        $this->assertSame(1, $after['counts']['tasks']);
+        $taskItems = collect($after['items_by_type']['task']);
+        $this->assertTrue($taskItems->contains(fn (array $row): bool => ($row['title'] ?? '') === 'Podzadanie X'));
+        $this->assertFalse($taskItems->contains(fn (array $row): bool => ($row['title'] ?? '') === 'Rodzic'));
+
+        $subtaskItem = $taskItems->first(fn (array $row): bool => ($row['title'] ?? '') === 'Podzadanie X');
+        $this->assertNotNull($subtaskItem);
+        $this->assertStringContainsString('editTask='.$subtask->id, (string) ($subtaskItem['url'] ?? ''));
+        $this->assertStringContainsString('Podzadanie → Rodzic', (string) ($subtaskItem['meta'] ?? ''));
     }
 
     public function test_mark_task_as_read_clears_topbar_counter(): void
