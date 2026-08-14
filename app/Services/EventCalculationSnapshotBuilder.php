@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Services;
 
 use App\Models\Event;
+use App\Models\EventTemplateQty;
 use Illuminate\Support\Collection;
 
 /**
@@ -125,6 +126,121 @@ final class EventCalculationSnapshotBuilder
     }
 
     /**
+     * Podsumowania wariantów z katalogu EventTemplateQty (SSoT: EventCostCalculator).
+     * Gratis/staff/driver: dokładny EventQty imprezy, inaczej wartości z katalogu.
+     *
+     * @return list<array{
+     *     qty: int,
+     *     gratis: int,
+     *     staff: int,
+     *     driver: int,
+     *     price_per_person: float,
+     *     price_per_person_rounded: float,
+     *     total_pln: float,
+     *     base_pln: float,
+     *     markup_pln: float,
+     *     tax_pln: float,
+     *     from_event_qty: bool
+     * }>
+     */
+    public function buildCatalogVariantSummaries(Event $event): array
+    {
+        $event->loadMissing(['qtyVariants']);
+
+        $eventVariants = $event->relationLoaded('qtyVariants')
+            ? $event->qtyVariants
+            : $event->qtyVariants()->get(['qty', 'gratis', 'staff', 'driver']);
+
+        $catalog = EventTemplateQty::query()
+            ->orderBy('qty')
+            ->orderBy('id')
+            ->get(['id', 'qty', 'gratis', 'staff', 'driver'])
+            ->unique('qty')
+            ->values();
+
+        if ($catalog->isEmpty()) {
+            return [];
+        }
+
+        $calculator = EventCostCalculator::for($event);
+        $rows = [];
+
+        foreach ($catalog as $catalogQty) {
+            $qty = max(1, (int) $catalogQty->qty);
+            $exactEvent = $eventVariants->firstWhere('qty', $qty);
+            $fromEvent = $exactEvent !== null;
+
+            $gratis = max(0, (int) ($exactEvent->gratis ?? $catalogQty->gratis ?? 0));
+            $staff = max(0, (int) ($exactEvent->staff ?? $catalogQty->staff ?? 1));
+            $driver = max(0, (int) ($exactEvent->driver ?? $catalogQty->driver ?? 1));
+
+            try {
+                $calc = $calculator->calculate($qty, $gratis, $staff, $driver);
+            } catch (\Throwable $e) {
+                report($e);
+
+                continue;
+            }
+
+            $rows[] = [
+                'qty' => $qty,
+                'gratis' => $gratis,
+                'staff' => $staff,
+                'driver' => $driver,
+                'price_per_person' => (float) ($calc['price_per_person'] ?? 0),
+                'price_per_person_rounded' => (float) ($calc['price_per_person_rounded'] ?? $calc['price_per_person'] ?? 0),
+                'total_pln' => (float) ($calc['total_pln'] ?? 0),
+                'base_pln' => (float) ($calc['base_pln'] ?? 0),
+                'markup_pln' => (float) ($calc['markup_pln'] ?? 0),
+                'tax_pln' => (float) ($calc['tax_pln'] ?? 0),
+                'from_event_qty' => $fromEvent,
+            ];
+        }
+
+        return $rows;
+    }
+
+    /**
+     * Pełna (poglądowa) kalkulacja dla jednego wariantu qty — lazy load z UI.
+     *
+     * @param  array{qty: int, gratis?: int, staff?: int, driver?: int}  $variant
+     * @return array{
+     *     detailed_calculations: array<int|string, mixed>,
+     *     qty_variants: array<int|string, mixed>,
+     *     event_only_points_for_details: array<string, mixed>,
+     *     transport_cost: float|int|null
+     * }
+     */
+    public function buildDetailedForVariant(Event $event, array $variant): array
+    {
+        $event->loadMissing(['eventTemplate', 'bus', 'startPlace']);
+
+        $programPoints = $event->programPoints()
+            ->with(['templatePoint', 'currency'])
+            ->where('active', true)
+            ->orderBy('day')
+            ->orderBy('order')
+            ->get();
+
+        $normalized = [
+            'qty' => max(1, (int) ($variant['qty'] ?? 1)),
+            'gratis' => max(0, (int) ($variant['gratis'] ?? 0)),
+            'staff' => max(0, (int) ($variant['staff'] ?? 1)),
+            'driver' => max(0, (int) ($variant['driver'] ?? 1)),
+        ];
+
+        $transportCalculator = new EventTransportCostCalculator($event);
+
+        return $this->computeDetailedForVariants(
+            $event,
+            $programPoints,
+            $transportCalculator,
+            [$normalized],
+            $normalized,
+        );
+    }
+
+    /**
      * @param  Collection<int, mixed>  $programPoints
      * @return array{
      *     detailed_calculations: array<int|string, mixed>,
@@ -149,8 +265,7 @@ final class EventCalculationSnapshotBuilder
             'transport_cost' => null,
         ];
 
-        $template = $event->eventTemplate;
-        if (! $template) {
+        if (! $event->eventTemplate) {
             return $result;
         }
 
@@ -171,16 +286,59 @@ final class EventCalculationSnapshotBuilder
 
         $result['current_variant'] = $customVariant;
 
+        $computed = $this->computeDetailedForVariants(
+            $event,
+            $programPoints,
+            $transportCalculator,
+            [$customVariant],
+            $customVariant,
+        );
+
+        return array_merge($result, $computed);
+    }
+
+    /**
+     * @param  Collection<int, mixed>  $programPoints
+     * @param  list<array{qty: int, gratis: int, staff: int, driver: int}>  $variants
+     * @param  array{qty: int, gratis: int, staff: int, driver: int}  $transportReferenceVariant
+     * @return array{
+     *     detailed_calculations: array<int|string, mixed>,
+     *     qty_variants: array<int|string, mixed>,
+     *     event_only_points_for_details: array<string, mixed>,
+     *     transport_cost: float|int|null
+     * }
+     */
+    private function computeDetailedForVariants(
+        Event $event,
+        Collection $programPoints,
+        EventTransportCostCalculator $transportCalculator,
+        array $variants,
+        array $transportReferenceVariant,
+    ): array {
+        $empty = [
+            'detailed_calculations' => [],
+            'qty_variants' => [],
+            'event_only_points_for_details' => [],
+            'transport_cost' => null,
+        ];
+
+        $template = $event->eventTemplate;
+        if (! $template || $variants === []) {
+            return $empty;
+        }
+
         try {
             $resolvedKm = $transportCalculator->resolveTransportKm();
-            $qtyVariants = [
-                $customVariant['qty'] => $customVariant,
-            ];
+            $qtyVariants = [];
+            foreach ($variants as $variant) {
+                $qtyVariants[(int) $variant['qty']] = $variant;
+            }
+
             $detailedCalculations = app(EventTemplateUiCalculationService::class)->calculate(
                 template: $template,
                 startPlaceId: $event->start_place_id,
                 transportKm: $resolvedKm > 0 ? $resolvedKm : null,
-                variantOverrides: [$customVariant],
+                variantOverrides: array_values($qtyVariants),
                 busOverride: $event->bus ?? $template->bus,
             );
 
@@ -192,7 +350,7 @@ final class EventCalculationSnapshotBuilder
             $transportCalculator->syncTransportInDetailedCalculations(
                 $detailedCalculations,
                 $qtyVariants,
-                $customVariant,
+                $transportReferenceVariant,
                 function (int|string $qty, float $delta) use (&$detailedCalculations): void {
                     $this->applyPlnDeltaToDetailedTotals($detailedCalculations, $qty, $delta);
                 },
@@ -208,15 +366,17 @@ final class EventCalculationSnapshotBuilder
 
             $this->recomputePerPersonInDetailedCalculations($detailedCalculations);
 
-            $result['qty_variants'] = $qtyVariants;
-            $result['detailed_calculations'] = $detailedCalculations;
-            $result['event_only_points_for_details'] = $eventOnlyPoints;
-            $result['transport_cost'] = $transportCalculator->effectiveTransportCost($customVariant);
+            return [
+                'qty_variants' => $qtyVariants,
+                'detailed_calculations' => $detailedCalculations,
+                'event_only_points_for_details' => $eventOnlyPoints,
+                'transport_cost' => $transportCalculator->effectiveTransportCost($transportReferenceVariant),
+            ];
         } catch (\Throwable $e) {
             report($e);
-        }
 
-        return $result;
+            return $empty;
+        }
     }
 
     /**

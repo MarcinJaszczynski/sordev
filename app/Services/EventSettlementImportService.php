@@ -66,8 +66,8 @@ final class EventSettlementImportService
                 ->where('source_id', $pp->id)
                 ->first();
 
-            // Plan (ustalenia) seedujemy tylko przy tworzeniu pozycji.
-            // Zmiana ceny punktu programu przelicza wyłącznie Kalkulację (live) — nie nadpisuje Planu.
+            // Plan (ustalenia): seed przy tworzeniu; przy update sync tylko z jawnego planned_price.
+            // Zmiana unit_price przelicza wyłącznie Kalkulację (live) — nie nadpisuje Planu przez fallback.
             $attributes = [
                 'name' => $pp->name,
                 'contractor_id' => $this->resolveContractorIdForProgramPoint($pp),
@@ -77,6 +77,7 @@ final class EventSettlementImportService
                 'order' => $pp->order ?? 0,
             ];
 
+            $explicitPlan = round((float) ($pp->planned_price ?? 0), 2);
             if (! $existing) {
                 $attributes = array_merge($attributes, [
                     'planned_amount' => $plannedAmount,
@@ -84,6 +85,20 @@ final class EventSettlementImportService
                     'planned_convert_to_pln' => $convertToPln,
                     'planned_rate' => $currency?->exchange_rate ?? 1,
                     'planned_amount_pln' => $pln,
+                ]);
+            } elseif ($explicitPlan > 0.009) {
+                $attributes = array_merge($attributes, [
+                    'planned_amount' => $explicitPlan,
+                    'planned_currency_id' => $currencyId,
+                    'planned_convert_to_pln' => $convertToPln,
+                    'planned_rate' => $currency?->exchange_rate ?? 1,
+                    'planned_amount_pln' => $this->plannedAmountToPln(
+                        $explicitPlan,
+                        $currencyId,
+                        $currencyCode,
+                        $convertToPln,
+                        (float) ($currency?->exchange_rate ?? 1),
+                    ),
                 ]);
             }
 
@@ -623,7 +638,8 @@ final class EventSettlementImportService
             'notes' => $point->notes,
         ];
 
-        // Plan zamrażamy po pierwszym utworzeniu — sync z punktu nie nadpisuje ustaleń.
+        // Plan: seed przy tworzeniu; przy update sync z jawnego planned_price (nie z fallbacku kalkulacji).
+        $explicitPlan = round((float) ($point->planned_price ?? 0), 2);
         if (! $existingCost) {
             $costPayload = array_merge($costPayload, [
                 'planned_amount' => $plannedAmount,
@@ -631,6 +647,14 @@ final class EventSettlementImportService
                 'planned_convert_to_pln' => $convertToPln,
                 'planned_rate' => $rate,
                 'planned_amount_pln' => $plannedAmountPln,
+            ]);
+        } elseif ($explicitPlan > 0.009) {
+            $costPayload = array_merge($costPayload, [
+                'planned_amount' => $explicitPlan,
+                'planned_currency_id' => $currencyId,
+                'planned_convert_to_pln' => $convertToPln,
+                'planned_rate' => $rate,
+                'planned_amount_pln' => $this->plannedAmountToPln($explicitPlan, $currencyId, $currencyCode, $convertToPln, $rate),
             ]);
         }
 
@@ -698,7 +722,7 @@ final class EventSettlementImportService
         }
 
         $paying = max(1, (int) ($event->participant_count ?? 1));
-        $headcount = ProgramPointCostPricing::costHeadcount($event, $paying);
+        $headcount = ProgramPointCostPricing::costHeadcountForPoint($point, $event, $paying);
 
         return round($point->resolveEffectiveTotalPrice($headcount), 2);
     }

@@ -39,7 +39,7 @@ class ManageEventDayInsurances extends EditRecord
     {
         return $form->schema([
             Forms\Components\Section::make('Polisa imprezy / gotowość')
-                ->description('Status „Gotowe” oznacza gotowość imprezy po stronie ubezpieczeń. Plan / wpłaty / plik dla NNW i KL: klik w wiersz tabeli (ten sam panel co w Finansach → Koszty).')
+                ->description('Status „Gotowe” oznacza gotowość imprezy po stronie ubezpieczeń. Wgraj plik polisy i oryginalną listę ubezpieczonych — pilot zobaczy je w panelu Dokumenty i w pakiecie PDF. Plan / wpłaty / dokumenty NNW i KL: klik w wiersz tabeli (ten sam panel co w Finansach → Koszty).')
                 ->icon('heroicon-o-shield-check')
                 ->columns(['default' => 1, 'md' => 2])
                 ->schema([

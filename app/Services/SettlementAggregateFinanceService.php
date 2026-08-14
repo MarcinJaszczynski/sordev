@@ -30,19 +30,17 @@ final class SettlementAggregateFinanceService
             ->first();
     }
 
+    /**
+     * Live kosztorys (kalkulacja) — nigdy planned_amount z rozliczenia.
+     * Plan żyje osobno w event_settlement_costs.planned_*.
+     */
     public function resolveReferenceTotalPln(Event $event, string $baseSourceType): float
     {
-        $cost = $this->ensureBaseCost($event, $baseSourceType);
-
-        if ($cost && $cost->planned_amount_pln !== null) {
-            return (float) $cost->planned_amount_pln;
-        }
-
-        if ($baseSourceType === 'transport') {
-            return (float) (new EventTransportCostCalculator($event))->effectiveTransportCost();
-        }
-
-        return 0.0;
+        return match ($baseSourceType) {
+            'transport' => round((float) (new EventTransportCostCalculator($event))->effectiveTransportCost(), 2),
+            'accommodation' => round((float) app(EventHotelPlanService::class)->totalPlnForEvent($event), 2),
+            default => 0.0,
+        };
     }
 
     /**

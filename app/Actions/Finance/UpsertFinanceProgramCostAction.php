@@ -148,7 +148,7 @@ final class UpsertFinanceProgramCostAction
     private function unitPriceForDesiredTotal(EventProgramPoint $point, Event $event, float $desiredTotal): float
     {
         $paying = max(1, (int) ($event->participant_count ?? 1));
-        $headcount = ProgramPointCostPricing::costHeadcount($event, $paying);
+        $headcount = ProgramPointCostPricing::costHeadcountForPoint($point, $event, $paying);
         $billable = ProgramPointPricingCalculator::billableUnits(
             $headcount,
             $point->group_size,

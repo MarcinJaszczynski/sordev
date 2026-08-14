@@ -15,6 +15,7 @@ final class EventWorkflowFinanceSummaryService
         private EventFinanceOverviewService $financeOverview,
         private EventClientPriceComparisonService $clientPriceComparison,
         private ParticipantPaymentBalanceService $participantPaymentBalance,
+        private PilotAdvanceService $pilotAdvance,
     ) {}
 
     /**
@@ -28,6 +29,7 @@ final class EventWorkflowFinanceSummaryService
      *     client_due: string,
      *     client_paid: string,
      *     pilot_cash: string,
+     *     pilot_cash_paid: string,
      *     pilot_cash_lines: list<array{label: string, value: string}>,
      *     calc_plan_hint: ?string,
      *     labels: array<string, string>,
@@ -51,7 +53,8 @@ final class EventWorkflowFinanceSummaryService
             'remaining' => 'Do zapłaty dostawcom',
             'client_due' => 'Należne od klientów',
             'client_paid' => 'Wpłacono od klientów',
-            'pilot_cash' => 'Gotówka dla pilota',
+            'pilot_cash' => 'Gotówka dla pilota (plan)',
+            'pilot_cash_paid' => 'Wypłacono pilotowi',
         ];
 
         $priceComparison = $this->clientPriceComparison->forEvent($event);
@@ -63,6 +66,7 @@ final class EventWorkflowFinanceSummaryService
         };
 
         $clientForeign = $this->clientForeignBuckets($event);
+        $pilotCashPaid = $this->pilotAdvance->formatOfficePayoutLabel($event);
 
         if (! $settlement) {
             return [
@@ -75,6 +79,7 @@ final class EventWorkflowFinanceSummaryService
                 'client_due' => CurrencyAmountDisplay::formatMixedTotal(0, $clientForeign['due'], 2),
                 'client_paid' => CurrencyAmountDisplay::formatMixedTotal(0, $clientForeign['paid'], 2),
                 'pilot_cash' => $zero,
+                'pilot_cash_paid' => $pilotCashPaid,
                 'pilot_cash_lines' => [],
                 'calc_plan_hint' => null,
                 'labels' => $labels,
@@ -100,6 +105,7 @@ final class EventWorkflowFinanceSummaryService
             'client_paid' => CurrencyAmountDisplay::formatMixedTotal($clientPaidPln, $clientForeign['paid'], 2),
             // Już złożone: „1 200,00 PLN + 693,00 EUR (≈ 3 014,55 PLN)”
             'pilot_cash' => (string) ($pilot['needed_label'] ?? $zero),
+            'pilot_cash_paid' => $pilotCashPaid,
             'pilot_cash_lines' => [],
             'calc_plan_hint' => $totals['calc_plan_hint'] ?? null,
             'labels' => $labels,

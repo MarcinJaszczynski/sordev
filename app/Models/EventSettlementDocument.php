@@ -64,6 +64,7 @@ class EventSettlementDocument extends Model
         'payment_proof' => 'Dowód zapłaty',
         'wz' => 'WZ (wydanie zewnętrzne)',
         'receipt' => 'Paragon',
+        'insurance_policy' => 'Polisa',
         'other' => 'Inny dokument',
     ];
 

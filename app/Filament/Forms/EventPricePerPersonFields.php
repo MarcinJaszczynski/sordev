@@ -241,7 +241,12 @@ class EventPricePerPersonFields
 
         $lines = [
             'Za osobę: '.$summary['price_per_person_label'],
-            'Suma grupy: '.MoneyFormatter::format((float) $summary['total_pln'], 'PLN'),
+            'Suma grupy: '.MoneyFormatter::format(
+                (float) ($summary['payable_total_pln'] ?? (
+                    ((float) ($summary['price_per_person_rounded'] ?? 0)) * max(1, (int) ($summary['paying'] ?? 1))
+                )),
+                'PLN'
+            ),
         ];
 
         if (self::canViewCostBreakdown()) {
@@ -257,7 +262,7 @@ class EventPricePerPersonFields
             $near = collect($summary['nearest'])
                 ->map(fn (array $n): string => $n['qty'].'+'.$n['gratis'].' → '.$n['label'])
                 ->implode('; ');
-            $lines[] = 'Cennik szablonu (2 najbliższe grupy): '.$near;
+            $lines[] = 'Cennik szablonu (grupa niższa / wyższa): '.$near;
         }
 
         return implode("\n", $lines);

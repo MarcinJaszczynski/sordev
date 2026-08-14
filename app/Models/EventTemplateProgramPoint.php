@@ -122,6 +122,7 @@ class EventTemplateProgramPoint extends Model
         'group_size',
         'currency_id',
         'convert_to_pln',
+        'include_gratis_in_cost',
     ];
 
     /**
@@ -133,6 +134,7 @@ class EventTemplateProgramPoint extends Model
         'featured_image' => 'string',
         'gallery_images' => 'array',
         'convert_to_pln' => 'boolean',
+        'include_gratis_in_cost' => 'boolean',
     ];
 
     /**

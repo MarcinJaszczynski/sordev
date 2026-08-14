@@ -8,6 +8,7 @@ use App\Models\EventSettlementCost;
 use App\Models\EventSettlementDocument;
 use Illuminate\Database\Eloquent\Collection as EloquentCollection;
 use Illuminate\Support\Collection;
+use Illuminate\Support\Facades\Storage;
 
 /**
  * Jednorazowy preload kosztów rozliczenia dla punktów programu (lista / RM).
@@ -20,7 +21,7 @@ class ProgramPointSettlementCostCache
     /** @var array<int, EloquentCollection<int, EventSettlementCost>> */
     private array $paymentRowsByPointId = [];
 
-    /** @var array<int, array{files_count: int, has_uploaded_file: bool, hint: string, status_label: string}> */
+    /** @var array<int, array{files_count: int, has_uploaded_file: bool, hint: string, status_label: string, first_file_url: string|null}> */
     private array $documentMetaByPointId = [];
 
     private bool $warmed = false;
@@ -94,7 +95,7 @@ class ProgramPointSettlementCostCache
     }
 
     /**
-     * @return array{files_count: int, has_uploaded_file: bool, hint: string, status_label: string}
+     * @return array{files_count: int, has_uploaded_file: bool, hint: string, status_label: string, first_file_url: string|null}
      */
     public function documentMeta(int $pointId): array
     {
@@ -103,13 +104,14 @@ class ProgramPointSettlementCostCache
             'has_uploaded_file' => false,
             'hint' => 'Brak pliku',
             'status_label' => 'Brak wgranego pliku faktury / dowodu',
+            'first_file_url' => null,
         ];
     }
 
     /**
      * @param  Collection<int, EventSettlementDocument>|EloquentCollection<int, EventSettlementDocument>  $documents
      * @param  Collection<int, EventSettlementCost>|EloquentCollection<int, EventSettlementCost>  $payments
-     * @return array{files_count: int, has_uploaded_file: bool, hint: string, status_label: string}
+     * @return array{files_count: int, has_uploaded_file: bool, hint: string, status_label: string, first_file_url: string|null}
      */
     private function buildDocumentMeta(
         ?EventSettlementCost $base,
@@ -127,14 +129,17 @@ class ProgramPointSettlementCostCache
             return count(array_intersect($ids, $linked)) > 0;
         });
 
-        $fileNames = $linkedDocs
+        $filePaths = $linkedDocs
             ->flatMap(fn ($doc): array => collect($doc->files ?? [])
                 ->filter(fn ($path) => is_string($path) && $path !== '')
-                ->map(fn (string $path): string => basename($path))
+                ->values()
                 ->all())
             ->values();
 
-        $filesCount = $fileNames->count();
+        $filesCount = $filePaths->count();
+        $firstFileUrl = $filesCount > 0
+            ? Storage::disk('public')->url((string) $filePaths->first())
+            : null;
         $numbers = $payments
             ->map(fn (EventSettlementCost $p): ?string => $p->document_number ?: $p->invoice_number)
             ->filter(fn (?string $n): bool => filled($n))
@@ -142,12 +147,12 @@ class ProgramPointSettlementCostCache
             ->values();
 
         if ($filesCount > 0) {
-            $first = (string) $fileNames->first();
+            $first = basename((string) $filePaths->first());
             $type = EventSettlementDocument::$documentTypes[$linkedDocs->first()?->document_type ?? '']
                 ?? ((string) ($linkedDocs->first()?->document_type ?: 'Plik'));
             $number = (string) ($linkedDocs->first()?->document_number ?: ($numbers->first() ?? ''));
             $hint = $number !== ''
-                ? trim($type.' '.$number)
+                ? $type.': nr '.$number
                 : ($filesCount === 1
                     ? $type
                     : $type.' ('.$filesCount.' pl.)');
@@ -158,6 +163,7 @@ class ProgramPointSettlementCostCache
                 'hint' => $hint,
                 'status_label' => 'Faktura / dokument wgrany: '.$hint
                     .($number === '' && $filesCount > 0 ? ' · '.$first : ''),
+                'first_file_url' => $firstFileUrl,
             ];
         }
 
@@ -169,6 +175,7 @@ class ProgramPointSettlementCostCache
                 'has_uploaded_file' => false,
                 'hint' => 'Nr '.$joined.' (bez pliku)',
                 'status_label' => 'Brak wgranego pliku — jest numer: '.$joined,
+                'first_file_url' => null,
             ];
         }
 
@@ -177,6 +184,7 @@ class ProgramPointSettlementCostCache
             'has_uploaded_file' => false,
             'hint' => 'Brak pliku',
             'status_label' => 'Brak wgranego pliku faktury / dowodu',
+            'first_file_url' => null,
         ];
     }
 }

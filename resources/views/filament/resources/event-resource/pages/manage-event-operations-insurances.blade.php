@@ -10,6 +10,8 @@
     <div class="mb-4 text-sm text-gray-600 dark:text-gray-300">
         Przypisanie dnia = pozycja planu w kosztorysie (NNW / KL), domyślnie status „Planowane”.
         Klik w wiersz lub „Płatności” otwiera ten sam boczny panel co w Impreza → Finanse → Koszty (wpłaty, plan, dokumenty).
+        Plik polisy i oryginalna lista ubezpieczonych z bloku powyżej są widoczne dla pilota
+        (panel Dokumenty + pakiet PDF). Polisa synchronizuje się też do Finansów (kolumna Dok. / dokumenty pozycji ubezpieczenia).
         Gotowość imprezy ustawiasz w bloku polisy powyżej (status „Gotowe” lub przełącznik).
     </div>
 

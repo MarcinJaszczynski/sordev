@@ -3,26 +3,34 @@
 namespace App\Services;
 
 use App\Models\Currency;
+use App\Models\Event;
 use App\Models\EventProgramPoint;
 use App\Models\EventSettlementCost;
 use App\Support\CurrencyAmountDisplay;
 use App\Support\EventProgramPointPricesSummary;
+use App\Support\ProgramPointCostPricing;
+use App\Services\ProgramPointPricingCalculator;
 
 final class ProgramPointListFinanceDisplay
 {
     /**
      * @return array{
      *     calc: string,
+     *     calcSub: string|null,
      *     planned: string,
+     *     plannedSub: string|null,
      *     paid: string,
+     *     paidSub: string|null,
      *     paidStatus: string,
      *     advanceHtml: string|null,
      *     paymentHint: string|null,
      *     pilotDueHint: string|null,
      *     remainingHint: string|null,
      *     remaining: string,
+     *     remainingSub: string|null,
      *     documentHint: string|null,
      *     documentStatusLabel: string|null,
+     *     documentFirstUrl: string|null,
      *     hasUploadedFile: bool,
      *     isSetRollup: bool,
      *     statusLabel: string|null,
@@ -35,12 +43,14 @@ final class ProgramPointListFinanceDisplay
         ProgramPointSettlementCostCache $costCache,
         ?int $participantCount = null,
     ): array {
-        $participantCount = max(1, (int) ($participantCount ?? $record->event?->participant_count ?? 1));
+        $record->loadMissing(['event', 'currency', 'templatePoint']);
+        $event = $record->event;
+        $participantCount = max(1, (int) ($participantCount ?? $event?->participant_count ?? 1));
         $baseCost = $costCache->baseCost((int) $record->id);
         $paymentRows = $costCache->paymentRows((int) $record->id);
         $docMeta = $costCache->documentMeta((int) $record->id);
         $plannedCurrency = $baseCost?->plannedCurrency ?? $record->currency;
-        $convertToPln = (bool) ($baseCost?->planned_convert_to_pln ?? $record->convert_to_pln ?? true);
+        $planConvertToPln = (bool) ($baseCost?->planned_convert_to_pln ?? $record->convert_to_pln ?? false);
         $planRate = (float) ($baseCost?->planned_rate ?? ($plannedCurrency?->exchange_rate ?? 1));
         if ($planRate <= 0) {
             $planRate = 1.0;
@@ -49,7 +59,13 @@ final class ProgramPointListFinanceDisplay
         $symbol = CurrencyAmountDisplay::symbol($plannedCurrency);
         $isForeign = $symbol !== 'PLN';
 
-        $calcAmountRaw = (float) $record->resolveCalculationTotal($participantCount);
+        // Kolumna „Szablon” — informacyjnie z ceny szablonu (nie z unit_price punktu / planu).
+        [$calcAmountRaw, $calcCurrency, $calcConvertToPln, $calcRate] = $this->resolveTemplateAmount(
+            $record,
+            $event,
+            $participantCount,
+        );
+
         $plannedAmountRaw = $this->resolvePlannedAmountRaw($baseCost, $record);
 
         [$paidPln, $paidForeign] = $this->resolvePaidTotals($baseCost, $paymentRows, $record, $isForeign, $planRate);
@@ -58,9 +74,9 @@ final class ProgramPointListFinanceDisplay
             ? ($paidForeign > 0.009 ? $paidForeign : ($planRate > 0 ? round($paidPln / $planRate, 2) : 0.0))
             : ($paidPln > 0.009 ? $paidPln : $paidForeign);
 
-        $calcFormatted = $this->formatMoney($calcAmountRaw, $plannedCurrency, $convertToPln, $planRate);
-        $plannedFormatted = $this->formatMoney($plannedAmountRaw, $plannedCurrency, $convertToPln, $planRate);
-        $paidFormatted = $this->formatMoney($paidAmountRaw, $plannedCurrency, $convertToPln, $planRate);
+        [$calcFormatted, $calcSub] = $this->formatMoneyPair($calcAmountRaw, $calcCurrency, $calcConvertToPln, $calcRate);
+        [$plannedFormatted, $plannedSub] = $this->formatMoneyPair($plannedAmountRaw, $plannedCurrency, $planConvertToPln, $planRate);
+        [$paidFormatted, $paidSub] = $this->formatMoneyPair($paidAmountRaw, $plannedCurrency, $planConvertToPln, $planRate);
 
         $advanceRows = $paymentRows->filter(fn (EventSettlementCost $row): bool => ($row->advance_type ?? '') === 'advance'
             || in_array((string) $row->payment_status, ['advance_paid', 'advance_required'], true)
@@ -81,17 +97,17 @@ final class ProgramPointListFinanceDisplay
             $paymentRows,
             $advanceRows,
             $plannedCurrency,
-            $convertToPln,
+            $planConvertToPln,
             $planRate,
             $isForeign,
         );
 
         $remainingRaw = max(0, round($plannedAmountRaw - $paidAmountRaw, 2));
-        $remainingFormatted = $remainingRaw > 0.009
-            ? $this->formatMoney($remainingRaw, $plannedCurrency, $convertToPln, $planRate)
-            : '—';
+        [$remainingFormatted, $remainingSub] = $remainingRaw > 0.009
+            ? $this->formatMoneyPair($remainingRaw, $plannedCurrency, $planConvertToPln, $planRate)
+            : ['—', null];
         $remainingHint = $remainingRaw > 0.009
-            ? 'Do dopłaty '.$remainingFormatted
+            ? 'Do dopłaty '.$this->joinMoneyPair($remainingFormatted, $remainingSub)
             : null;
 
         $planPaidBy = (string) ($baseCost?->paid_by ?? 'office');
@@ -102,7 +118,7 @@ final class ProgramPointListFinanceDisplay
             $officePaidRaw,
             $pilotPaidRaw,
             $plannedCurrency,
-            $convertToPln,
+            $planConvertToPln,
             $planRate,
         );
 
@@ -130,17 +146,22 @@ final class ProgramPointListFinanceDisplay
 
         return [
             'calc' => $calcFormatted,
+            'calcSub' => $calcSub,
             'planned' => $plannedFormatted,
+            'plannedSub' => $plannedSub,
             'paid' => $paidFormatted,
+            'paidSub' => $paidSub,
             'paidStatus' => EventProgramPointPricesSummary::resolvePaidStatus($paidAmountRaw, $plannedAmountRaw),
             'advanceHtml' => $paymentHint,
             'paymentHint' => $paymentHint,
             'pilotDueHint' => $pilotDueHint,
             'remainingHint' => $remainingHint,
             'remaining' => $remainingFormatted,
+            'remainingSub' => $remainingSub,
             'dueDateLabel' => $dueDateLabel,
             'documentHint' => $docMeta['hint'] ?? null,
             'documentStatusLabel' => $docMeta['status_label'] ?? null,
+            'documentFirstUrl' => $docMeta['first_file_url'] ?? null,
             'hasUploadedFile' => (bool) ($docMeta['has_uploaded_file'] ?? false),
             'isSetRollup' => false,
             'statusLabel' => $statusLabel,
@@ -148,6 +169,51 @@ final class ProgramPointListFinanceDisplay
             'planDiffersFromCalc' => $planDiffersFromCalc,
             'paidBy' => $planPaidBy,
         ];
+    }
+
+    /**
+     * @return array{0: float, 1: ?Currency, 2: bool, 3: float}
+     */
+    private function resolveTemplateAmount(
+        EventProgramPoint $record,
+        ?Event $event,
+        int $participantCount,
+    ): array {
+        $template = $record->templatePoint;
+        $currency = $template?->currency ?? $record->currency;
+        $convertToPln = (bool) ($template?->convert_to_pln ?? $record->convert_to_pln ?? false);
+        $rate = (float) ($currency?->exchange_rate ?? 1);
+        if ($rate <= 0) {
+            $rate = 1.0;
+        }
+
+        if (! $event) {
+            return [0.0, $currency, $convertToPln, $rate];
+        }
+
+        $unit = (float) ($template?->unit_price ?? 0);
+        // Bez szablonu / ceny szablonu: fallback informacyjny z unit_price punktu (nie z planu).
+        if ($unit <= 0.009) {
+            $unit = (float) ($record->unit_price ?? 0);
+            $currency = $record->currency;
+            $convertToPln = (bool) ($record->convert_to_pln ?? false);
+            $rate = (float) ($currency?->exchange_rate ?? 1);
+            if ($rate <= 0) {
+                $rate = 1.0;
+            }
+        }
+
+        if ($unit <= 0.009) {
+            return [0.0, $currency, $convertToPln, $rate];
+        }
+
+        $includeGratis = (bool) ($template?->include_gratis_in_cost ?? $record->include_gratis_in_cost ?? false);
+        $headcount = ProgramPointCostPricing::costHeadcount($event, $participantCount, $includeGratis);
+        $groupSize = $template?->group_size ?? $record->group_size;
+        $fixedQty = max(1, (int) ($record->quantity ?? 1));
+        $total = ProgramPointPricingCalculator::totalPrice($unit, $headcount, $groupSize, $fixedQty);
+
+        return [(float) $total, $currency, $convertToPln, $rate];
     }
 
     private function resolvePlannedAmountRaw(?EventSettlementCost $baseCost, EventProgramPoint $record): float
@@ -333,14 +399,36 @@ final class ProgramPointListFinanceDisplay
 
     private function formatMoney(float $amount, ?Currency $currency, bool $convertToPln, float $rate): string
     {
-        unset($convertToPln);
+        [$main, $sub] = $this->formatMoneyPair($amount, $currency, $convertToPln, $rate);
 
-        $symbol = CurrencyAmountDisplay::symbol($currency);
-        if ($symbol !== 'PLN') {
-            return CurrencyAmountDisplay::formatIndicative($amount, $currency, $rate);
+        return $this->joinMoneyPair($main, $sub);
+    }
+
+    /**
+     * @return array{0: string, 1: string|null}
+     */
+    private function formatMoneyPair(float $amount, ?Currency $currency, bool $convertToPln, float $rate): array
+    {
+        if ($amount <= 0.009) {
+            return ['—', null];
         }
 
-        return CurrencyAmountDisplay::format($amount, $currency, convertToPln: false);
+        $symbol = CurrencyAmountDisplay::symbol($currency);
+        $main = number_format($amount, 2, ',', ' ').' '.$symbol;
+
+        if ($symbol === 'PLN' || ! $convertToPln) {
+            return [$main, null];
+        }
+
+        $effectiveRate = $rate > 0 ? $rate : CurrencyAmountDisplay::rate($currency);
+        $pln = round($amount * $effectiveRate, 2);
+
+        return [$main, '≈ '.number_format($pln, 2, ',', ' ').' PLN'];
+    }
+
+    private function joinMoneyPair(string $main, ?string $sub): string
+    {
+        return $sub ? $main.' ('.$sub.')' : $main;
     }
 
     /**

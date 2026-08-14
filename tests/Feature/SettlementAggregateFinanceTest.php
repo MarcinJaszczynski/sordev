@@ -2,11 +2,16 @@
 
 namespace Tests\Feature;
 
+use App\Actions\Finance\UpdateSettlementCostPlanAction;
+use App\Data\UpdateSettlementCostPlanData;
+use App\Livewire\SettlementAggregateFinancePanel;
 use App\Models\Event;
 use App\Models\EventSettlement;
 use App\Models\User;
+use App\Services\EventFinanceOverviewService;
 use App\Services\SettlementAggregateFinanceService;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Livewire\Livewire;
 use Spatie\Permission\Models\Role;
 use Tests\TestCase;
 
@@ -77,5 +82,71 @@ class SettlementAggregateFinanceTest extends TestCase
         $summary = $service->persist($event->fresh(), 'transport', $form, true);
 
         $this->assertGreaterThan(0, $summary['paid_pln']);
+    }
+
+    public function test_transport_reference_total_is_kosztorys_not_plan(): void
+    {
+        $event = Event::factory()->create([
+            'transfer_km' => 100,
+            'program_km' => 50,
+            'participant_count' => 30,
+            'use_manual_transport_cost' => true,
+            'manual_transport_cost' => 5000,
+        ]);
+
+        $service = app(SettlementAggregateFinanceService::class);
+        $base = $service->ensureBaseCost($event, 'transport');
+        $this->assertNotNull($base);
+
+        app(UpdateSettlementCostPlanAction::class)(new UpdateSettlementCostPlanData(
+            planCost: $base->fresh(),
+            plannedAmountPln: 4000,
+            paidBy: 'office',
+            plannedAmount: 4000,
+        ));
+
+        $this->assertEqualsWithDelta(
+            5000.0,
+            $service->resolveReferenceTotalPln($event->fresh(), 'transport'),
+            0.01,
+        );
+
+        EventFinanceOverviewService::forgetOverviewCacheForEvent((int) $event->id);
+        $overview = app(EventFinanceOverviewService::class)->forEvent($event->fresh(), hideZero: false);
+        $row = collect($overview['rows'])->firstWhere('source_type', 'transport');
+
+        $this->assertNotNull($row);
+        $this->assertEqualsWithDelta(5000.0, (float) $row['calculation_pln'], 0.01);
+        $this->assertEqualsWithDelta(4000.0, (float) $row['planned_pln'], 0.01);
+
+        // buildFormData woła ensureBaseCost (sync może nadpisać plan) — kosztorys musi zostać 5000.
+        $form = $service->buildFormData($event->fresh(), 'transport');
+        $this->assertEqualsWithDelta(5000.0, (float) $form['event_point_total'], 0.01);
+    }
+
+    public function test_transport_finance_panel_renders_and_exposes_plan_action(): void
+    {
+        $event = Event::factory()->create([
+            'transfer_km' => 100,
+            'program_km' => 50,
+            'participant_count' => 30,
+            'use_manual_transport_cost' => true,
+            'manual_transport_cost' => 5000,
+        ]);
+
+        app(SettlementAggregateFinanceService::class)->ensureBaseCost($event, 'transport');
+
+        Livewire::test(SettlementAggregateFinancePanel::class, [
+            'eventId' => $event->getKey(),
+            'aggregateType' => 'transport',
+            'heading' => 'Finanse transportu',
+        ])
+            ->assertSee('Finanse transportu')
+            ->assertSee('Plan')
+            ->assertSee('Zaliczka')
+            ->assertSee('Wpłaty')
+            ->assertActionExists('plan')
+            ->assertActionExists('advance')
+            ->assertActionExists('payments');
     }
 }

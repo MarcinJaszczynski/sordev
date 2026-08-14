@@ -1,14 +1,20 @@
 @php
     /** @var string $calc */
+    /** @var string|null $calcSub */
     /** @var string $planned */
+    /** @var string|null $plannedSub */
     /** @var string $paid */
+    /** @var string|null $paidSub */
     /** @var string $paidStatus */
     /** @var string|null $advanceHtml */
     /** @var string|null $paymentHint */
     /** @var string|null $pilotDueHint */
     /** @var string|null $remainingHint */
     /** @var string|null $remaining */
+    /** @var string|null $remainingSub */
     /** @var string|null $documentHint */
+    /** @var string|null $documentStatusLabel */
+    /** @var string|null $documentFirstUrl */
     /** @var string|null $statusLabel */
     /** @var string|null $statusColor */
     /** @var bool $hasUploadedFile */
@@ -19,6 +25,21 @@
     $statusLabel = $statusLabel ?? null;
     $statusColor = $statusColor ?? 'gray';
     $planDiffersFromCalc = $planDiffersFromCalc ?? false;
+    $documentFirstUrl = $documentFirstUrl ?? null;
+    $calcSub = $calcSub ?? null;
+    $plannedSub = $plannedSub ?? null;
+    $paidSub = $paidSub ?? null;
+    $remainingSub = $remainingSub ?? null;
+
+    $money = static function (string $main, ?string $sub = null): string {
+        $html = '<span class="epp-money"><span class="epp-money__main">'.e($main).'</span>';
+        if (filled($sub)) {
+            $html .= '<span class="epp-money__sub">'.e($sub).'</span>';
+        }
+        $html .= '</span>';
+
+        return $html;
+    };
 @endphp
 
 <div class="epp-prices-cell">
@@ -30,7 +51,7 @@
         @endif
         <div class="epp-prices-row">
             <span class="epp-prices-label">Kalkulacja</span>
-            <span class="epp-prices-value">{{ $calc }}</span>
+            <span class="epp-prices-value">{!! $money($calc, $calcSub) !!}</span>
         </div>
 
         <div @class([
@@ -38,7 +59,9 @@
             'epp-prices-row--plan-differs' => $planDiffersFromCalc,
         ])>
             <span class="epp-prices-label">Plan</span>
-            <span class="epp-prices-value" @if($planDiffersFromCalc) title="Różni się od kalkulacji" @endif>{{ $planned }}</span>
+            <span class="epp-prices-value" @if($planDiffersFromCalc) title="Różni się od kalkulacji: {{ $calc }}{{ $calcSub ? ' '.$calcSub : '' }}" @endif>
+                {!! $money($planned, $plannedSub) !!}
+            </span>
         </div>
 
         <div @class([
@@ -53,14 +76,14 @@
                 @if ($paidStatus === 'full')
                     <span class="epp-prices-paid-icon" aria-hidden="true">✓</span>
                 @endif
-                {{ $paid }}
+                {!! $money($paid, $paidSub) !!}
             </span>
         </div>
 
         @if ($paidStatus !== 'full' && $remaining !== '—')
             <div class="epp-prices-row epp-prices-row--remaining">
                 <span class="epp-prices-label">Pozostało</span>
-                <span class="epp-prices-value epp-prices-remaining-inline">{{ $remaining }}</span>
+                <span class="epp-prices-value epp-prices-remaining-inline">{!! $money($remaining, $remainingSub) !!}</span>
             </div>
         @endif
 
@@ -87,16 +110,27 @@
         @endif
 
         @if (! empty($documentHint) && $documentHint !== 'Brak pliku')
-            <div
-                @class([
-                    'epp-prices-doc',
-                    'epp-prices-doc--ok' => $hasUploadedFile,
-                    'epp-prices-doc--missing' => ! $hasUploadedFile,
-                ])
-                title="{{ $documentStatusLabel ?? $documentHint }}"
-            >
-                {{ $hasUploadedFile ? '✓' : '⚠' }} {{ $documentHint }}
-            </div>
+            @if ($hasUploadedFile && filled($documentFirstUrl))
+                <a
+                    href="{{ $documentFirstUrl }}"
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    class="epp-prices-doc epp-prices-doc--chip"
+                    title="{{ $documentStatusLabel ?? $documentHint }}"
+                    onclick="event.stopPropagation()"
+                >{{ $documentHint }}</a>
+            @else
+                <div
+                    @class([
+                        'epp-prices-doc',
+                        'epp-prices-doc--chip-warn' => ! $hasUploadedFile,
+                        'epp-prices-doc--ok' => $hasUploadedFile,
+                    ])
+                    title="{{ $documentStatusLabel ?? $documentHint }}"
+                >
+                    {{ $documentHint }}
+                </div>
+            @endif
         @endif
     @endif
 </div>

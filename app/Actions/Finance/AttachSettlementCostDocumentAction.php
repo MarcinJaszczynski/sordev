@@ -25,6 +25,10 @@ final class AttachSettlementCostDocumentAction
         string $documentType = 'invoice',
         ?string $documentNumber = null,
         ?string $notes = null,
+        bool $attachToPilotPdf = false,
+        bool $attachToHotelPdf = false,
+        bool $attachToDriverPdf = false,
+        bool $attachToFolderPdf = false,
     ): EventSettlementDocument {
         if ($files === []) {
             throw new InvalidArgumentException('Dodaj co najmniej jeden plik.');
@@ -34,7 +38,17 @@ final class AttachSettlementCostDocumentAction
             ? $documentType
             : 'invoice';
 
-        return DB::transaction(function () use ($planCost, $files, $type, $documentNumber, $notes): EventSettlementDocument {
+        return DB::transaction(function () use (
+            $planCost,
+            $files,
+            $type,
+            $documentNumber,
+            $notes,
+            $attachToPilotPdf,
+            $attachToHotelPdf,
+            $attachToDriverPdf,
+            $attachToFolderPdf,
+        ): EventSettlementDocument {
             $settlement = $planCost->settlement()->firstOrFail();
             \Illuminate\Support\Facades\Gate::authorize('attachCostDocument', $settlement);
             $stored = [];
@@ -71,6 +85,10 @@ final class AttachSettlementCostDocumentAction
                 'linked_cost_ids' => [(int) $planCost->id],
                 'files' => $stored,
                 'notes' => $notes,
+                'attach_to_pilot_pdf' => $attachToPilotPdf,
+                'attach_to_hotel_pdf' => $attachToHotelPdf,
+                'attach_to_driver_pdf' => $attachToDriverPdf,
+                'attach_to_folder_pdf' => $attachToFolderPdf,
                 'approval_status' => 'pending',
                 'created_by' => Auth::id(),
             ])->fresh();

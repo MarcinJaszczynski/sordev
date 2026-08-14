@@ -441,6 +441,9 @@
                                                 'hover:bg-amber-50/60 dark:hover:bg-amber-950/20',
                                                 'bg-amber-50/80 dark:bg-amber-950/30' => $selected && (int) $selected['cost_id'] === (int) $row['cost_id'],
                                                 'bg-red-50 dark:bg-red-950/40 ring-1 ring-inset ring-red-300' => ($row['ui_status'] ?? '') === 'review',
+                                                'bg-amber-50/40 dark:bg-amber-950/15' => ($row['source_type'] ?? '') === 'manual'
+                                                    && ! ($selected && (int) $selected['cost_id'] === (int) $row['cost_id'])
+                                                    && ($row['ui_status'] ?? '') !== 'review',
                                             ])
                                         >
                                             <td class="px-2 py-2 text-gray-400 cursor-grab" data-drag-handle title="Przeciągnij do innej grupy">⋮⋮</td>
@@ -453,7 +456,14 @@
                                                 />
                                             </td>
                                             <td class="px-3 py-2 cursor-pointer" wire:click="openCost({{ (int) $row['cost_id'] }})">
-                                                <div class="font-medium text-gray-900 dark:text-gray-100">{{ $row['name'] }}</div>
+                                                <div class="flex flex-wrap items-center gap-2">
+                                                    <div class="font-medium text-gray-900 dark:text-gray-100">{{ $row['name'] }}</div>
+                                                    @if (($row['source_type'] ?? '') === 'manual')
+                                                        <span class="inline-flex items-center rounded-full bg-amber-200 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-amber-950 dark:bg-amber-800 dark:text-amber-50">
+                                                            Nieplanowany
+                                                        </span>
+                                                    @endif
+                                                </div>
                                                 <div class="text-xs text-gray-500">{{ $row['source_label'] }}</div>
                                             </td>
                                             <td class="px-3 py-2 cursor-pointer" wire:click="openCost({{ (int) $row['cost_id'] }})">
@@ -542,15 +552,29 @@
                                             </td>
                                             <td class="px-3 py-2 text-center text-xs cursor-pointer" wire:click="openCost({{ (int) $row['cost_id'] }})" title="{{ $row['document_status_label'] ?? '' }}">
                                                 @if (! empty($row['has_uploaded_file']))
-                                                    <span class="inline-flex items-center justify-center gap-1 rounded-md bg-emerald-50 px-1.5 py-0.5 font-medium text-emerald-800 dark:bg-emerald-950/40 dark:text-emerald-200">
-                                                        Plik {{ (int) ($row['files_count'] ?? $row['documents_count'] ?? 0) }}
-                                                    </span>
-                                                    <div class="mt-0.5 max-w-[9rem] truncate text-[10px] text-gray-500" title="{{ $row['document_hint'] ?? '' }}">
-                                                        {{ $row['document_hint'] ?? '' }}
-                                                    </div>
+                                                    @php
+                                                        $docUrl = (string) ($row['document_first_url'] ?? '');
+                                                        $docHint = (string) ($row['document_hint'] ?? 'Plik');
+                                                    @endphp
+                                                    @if ($docUrl !== '')
+                                                        <a
+                                                            href="{{ $docUrl }}"
+                                                            target="_blank"
+                                                            rel="noopener noreferrer"
+                                                            class="inline-flex max-w-[10rem] items-center justify-center truncate rounded-md bg-emerald-50 px-1.5 py-0.5 font-medium text-emerald-800 hover:bg-emerald-100 dark:bg-emerald-950/40 dark:text-emerald-200"
+                                                            title="{{ $row['document_status_label'] ?? $docHint }}"
+                                                            onclick="event.stopPropagation()"
+                                                        >
+                                                            {{ $docHint }}
+                                                        </a>
+                                                    @else
+                                                        <span class="inline-flex max-w-[10rem] truncate rounded-md bg-emerald-50 px-1.5 py-0.5 font-medium text-emerald-800 dark:bg-emerald-950/40 dark:text-emerald-200">
+                                                            {{ $docHint }}
+                                                        </span>
+                                                    @endif
                                                 @else
                                                     <span @class([
-                                                        'inline-flex rounded-md px-1.5 py-0.5 font-medium',
+                                                        'inline-flex max-w-[10rem] truncate rounded-md px-1.5 py-0.5 font-medium',
                                                         'bg-amber-50 text-amber-800 dark:bg-amber-950/40 dark:text-amber-200' => str_contains((string) ($row['document_hint'] ?? ''), 'bez pliku'),
                                                         'bg-gray-50 text-gray-500 dark:bg-gray-800 dark:text-gray-400' => ! str_contains((string) ($row['document_hint'] ?? ''), 'bez pliku'),
                                                     ])>

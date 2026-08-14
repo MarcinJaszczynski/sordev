@@ -79,10 +79,11 @@ final class CurrencyAmountDisplay
         return $base.' (≈ '.number_format($pln, $decimals, ',', ' ').' PLN)';
     }
 
-    /**
-     * Kwota w walucie źródłowej; dla obcej zawsze dopisuje orientacyjne PLN (kurs).
-     * Używane na Finanse — także gdy convert_to_pln = false (kwota nie wchodzi do sum PLN).
-     */
+/**
+ * Kwota w walucie źródłowej; dla obcej zawsze dopisuje orientacyjne PLN (kurs).
+ * Używane gdy trzeba pokazać ekwiwalent niezależnie od convert_to_pln
+ * (np. porównania wewnętrzne). Etykiety UI z flagą: {@see format()}.
+ */
     public static function formatIndicative(
         float $amount,
         ?Currency $currency,

@@ -330,6 +330,7 @@ final class EventFinanceOverviewService
                 'has_uploaded_file' => $documentMeta['has_uploaded_file'],
                 'document_hint' => $documentMeta['hint'],
                 'document_status_label' => $documentMeta['status_label'],
+                'document_first_url' => $documentMeta['first_file_url'] ?? null,
                 'documents' => $documents,
                 'payments_count' => $paymentMeta['payments_count'],
                 'advance_count' => $paymentMeta['advance_count'],
@@ -396,10 +397,8 @@ final class EventFinanceOverviewService
 
         $rows = $this->sortRows($rows, $sortBy, $sortDir);
 
-        // Suma z wierszy; lifecycle (ciężki kalkulator) tylko gdy brak lokalnych kwot.
-        $headerCalc = $sumCalc > 0.009
-            ? $sumCalc
-            : (float) ($settlement->planned_cost_pln ?? 0);
+        // Suma kalkulacji z wierszy — bez fallbacku do planu (planned_cost_pln).
+        $headerCalc = round($sumCalc, 2);
         $clientDue = round((float) ($settlement->participant_due_pln ?? 0), 2);
         $clientPaid = round((float) ($settlement->participant_paid_pln ?? 0), 2);
 
@@ -827,11 +826,14 @@ final class EventFinanceOverviewService
                 // Zawsze na żywo: 1za1 / XzaY + headcount (płacący + gratis).
                 // Nie używamy stale calculated_price (często w walucie źródłowej / bez gratisów).
                 $breakdown = ProgramPointCostPricing::breakdown($point, $event);
-                $label = CurrencyAmountDisplay::formatIndicative(
-                    (float) $breakdown['total'],
-                    $point->currency,
-                    (float) ($point->currency?->exchange_rate ?? 1),
-                );
+                $rate = (float) ($point->currency?->exchange_rate ?? 1);
+                $convert = (bool) ($breakdown['convert_to_pln'] ?? false);
+                $total = (float) $breakdown['total'];
+                // Etykieta respektuje convert_to_pln; total_pln_finance zostaje
+                // ekwiwalentem do porównań plan ↔ kosztorys (także bez przeliczenia).
+                $label = $convert
+                    ? CurrencyAmountDisplay::formatIndicative($total, $point->currency, $rate)
+                    : CurrencyAmountDisplay::format($total, $point->currency, convertToPln: false);
 
                 return [$breakdown['total_pln_finance'], $breakdown['hint'], $label];
             }
@@ -851,13 +853,19 @@ final class EventFinanceOverviewService
 
         $symbol = CurrencyAmountDisplay::symbol($currency instanceof Currency ? $currency : null);
         $rate = (float) ($planCost->planned_rate ?? ($currency?->exchange_rate ?? 1));
+        $convertToPln = (bool) ($planCost->planned_convert_to_pln ?? true);
 
-        if ($amount > 0 && $symbol !== 'PLN') {
-            return CurrencyAmountDisplay::formatIndicative($amount, $currency, $rate);
-        }
+        if ($amount > 0) {
+            // convert_to_pln steruje widokiem ≈ PLN; suma PLN i tak pomija pozycje bez przeliczenia.
+            if ($symbol !== 'PLN' && ! $convertToPln) {
+                return CurrencyAmountDisplay::format($amount, $currency instanceof Currency ? $currency : null, false);
+            }
 
-        if ($amount > 0 && $symbol === 'PLN') {
-            return CurrencyAmountDisplay::formatIndicative($amount, $currency, $rate);
+            if ($symbol !== 'PLN') {
+                return CurrencyAmountDisplay::formatIndicative($amount, $currency, $rate);
+            }
+
+            return CurrencyAmountDisplay::format($amount, $currency instanceof Currency ? $currency : null, false);
         }
 
         if ($plannedPlnFallback > 0) {
@@ -881,12 +889,15 @@ final class EventFinanceOverviewService
             $rate = 1.0;
         }
 
-        // Obca waluta planu: zawsze pokaż resztę w walucie źródłowej (nie samą kwotę PLN).
+        // Obca waluta planu: reszta w walucie źródłowej; ≈ PLN tylko gdy przeliczamy.
         if ($amount > 0 && $symbol !== 'PLN') {
             $paidForeign = $rate > 0 ? round($paidPln / $rate, 2) : 0.0;
             $remainingForeign = max(0, round($amount - $paidForeign, 2));
+            $convertToPln = (bool) ($planCost->planned_convert_to_pln ?? true);
 
-            return CurrencyAmountDisplay::formatIndicative($remainingForeign, $currency, $rate);
+            return $convertToPln
+                ? CurrencyAmountDisplay::formatIndicative($remainingForeign, $currency, $rate)
+                : CurrencyAmountDisplay::format($remainingForeign, $currency, false);
         }
 
         if ($remainingPln <= 0 && $plannedPln <= 0) {
@@ -955,6 +966,10 @@ final class EventFinanceOverviewService
                     'type_label' => EventSettlementDocument::$documentTypes[$doc->document_type] ?? (string) $doc->document_type,
                     'number' => $doc->document_number,
                     'notes' => $doc->notes,
+                    'attach_to_pilot_pdf' => (bool) ($doc->attach_to_pilot_pdf ?? false),
+                    'attach_to_hotel_pdf' => (bool) ($doc->attach_to_hotel_pdf ?? false),
+                    'attach_to_driver_pdf' => (bool) ($doc->attach_to_driver_pdf ?? false),
+                    'attach_to_folder_pdf' => (bool) ($doc->attach_to_folder_pdf ?? false),
                     'files' => $files,
                 ];
             })
@@ -969,7 +984,8 @@ final class EventFinanceOverviewService
      *   files_count: int,
      *   has_uploaded_file: bool,
      *   hint: string,
-     *   status_label: string
+     *   status_label: string,
+     *   first_file_url: string|null
      * }
      */
     private function documentMetaForPlanCost(
@@ -978,14 +994,24 @@ final class EventFinanceOverviewService
         Collection $payments,
         array $documents,
     ): array {
-        $fileNames = collect($documents)
-            ->flatMap(fn (array $doc): array => collect($doc['files'] ?? [])
-                ->pluck('name')
-                ->filter()
-                ->all())
-            ->values();
+        $fileEntries = collect();
+        foreach ($documents as $doc) {
+            if (! is_array($doc)) {
+                continue;
+            }
 
-        $filesCount = $fileNames->count();
+            foreach (($doc['files'] ?? []) as $file) {
+                if (! is_array($file) || blank($file['url'] ?? null)) {
+                    continue;
+                }
+
+                $fileEntries->push($file);
+            }
+        }
+
+        $filesCount = $fileEntries->count();
+        $firstFileUrl = $filesCount > 0 ? (string) ($fileEntries->first()['url'] ?? '') : null;
+        $firstFileUrl = $firstFileUrl !== '' ? $firstFileUrl : null;
         $numbers = $payments
             ->map(fn (EventSettlementCost $p): ?string => $p->document_number ?: $p->invoice_number)
             ->filter(fn (?string $n): bool => filled($n))
@@ -993,11 +1019,11 @@ final class EventFinanceOverviewService
             ->values();
 
         if ($filesCount > 0) {
-            $first = (string) $fileNames->first();
+            $first = (string) ($fileEntries->first()['name'] ?? 'plik');
             $type = (string) (($documents[0]['type_label'] ?? null) ?: 'Plik');
             $number = (string) (($documents[0]['number'] ?? null) ?: ($numbers->first() ?? ''));
             $hint = $number !== ''
-                ? trim($type.' '.$number)
+                ? $type.': nr '.$number
                 : ($filesCount === 1
                     ? $type
                     : $type.' ('.$filesCount.' pl.)');
@@ -1009,6 +1035,7 @@ final class EventFinanceOverviewService
                 'has_uploaded_file' => true,
                 'hint' => $hint,
                 'status_label' => $status,
+                'first_file_url' => $firstFileUrl,
             ];
         }
 
@@ -1020,6 +1047,7 @@ final class EventFinanceOverviewService
                 'has_uploaded_file' => false,
                 'hint' => 'Nr '.$joined.' (bez pliku)',
                 'status_label' => 'Brak wgranego pliku — jest numer: '.$joined,
+                'first_file_url' => null,
             ];
         }
 
@@ -1028,6 +1056,7 @@ final class EventFinanceOverviewService
             'has_uploaded_file' => false,
             'hint' => 'Brak pliku',
             'status_label' => 'Brak wgranego pliku faktury / dowodu',
+            'first_file_url' => null,
         ];
     }
 
@@ -1050,15 +1079,18 @@ final class EventFinanceOverviewService
         $planSymbol = CurrencyAmountDisplay::symbol($planCurrency);
         $planIsForeign = $planSymbol !== 'PLN';
 
-        $mapped = $payments->map(function (EventSettlementCost $p) use ($planCurrency, $planRate, $planIsForeign): array {
+        $mapped = $payments->map(function (EventSettlementCost $p) use ($planCurrency, $planRate, $planIsForeign, $planCost): array {
             $amountPln = (float) ($p->actual_amount_pln ?? 0);
             $amountRaw = (float) ($p->actual_amount ?? $amountPln);
             $currency = $p->relationLoaded('actualCurrency') ? $p->actualCurrency : ($p->actualCurrency ?: $planCurrency);
             $rate = (float) ($p->actual_rate ?? $planRate);
             $symbol = CurrencyAmountDisplay::symbol($currency instanceof Currency ? $currency : $planCurrency);
+            $convertToPln = (bool) ($planCost->planned_convert_to_pln ?? true);
 
             $amountLabel = ($symbol !== 'PLN' && $amountRaw > 0 && ($planIsForeign || abs($amountRaw - $amountPln) > 0.009))
-                ? CurrencyAmountDisplay::formatIndicative($amountRaw, $currency instanceof Currency ? $currency : $planCurrency, $rate)
+                ? ($convertToPln
+                    ? CurrencyAmountDisplay::formatIndicative($amountRaw, $currency instanceof Currency ? $currency : $planCurrency, $rate)
+                    : CurrencyAmountDisplay::format($amountRaw, $currency instanceof Currency ? $currency : $planCurrency, false))
                 : MoneyFormatter::format($amountPln, 'PLN');
 
             return [
@@ -1094,7 +1126,10 @@ final class EventFinanceOverviewService
         $paidLabel = MoneyFormatter::format($paidSum, 'PLN');
         if ($planIsForeign && $paidForeignSum > 0) {
             $avgRate = $paidForeignSum > 0 ? ($paidSum / $paidForeignSum) : $planRate;
-            $paidLabel = CurrencyAmountDisplay::formatIndicative($paidForeignSum, $planCurrency, $avgRate);
+            $convertToPln = (bool) ($planCost->planned_convert_to_pln ?? true);
+            $paidLabel = $convertToPln
+                ? CurrencyAmountDisplay::formatIndicative($paidForeignSum, $planCurrency, $avgRate)
+                : CurrencyAmountDisplay::format($paidForeignSum, $planCurrency, false);
         }
 
         $hint = null;

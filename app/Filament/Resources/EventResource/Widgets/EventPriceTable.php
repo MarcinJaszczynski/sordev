@@ -41,6 +41,17 @@ class EventPriceTable extends Widget
 
     public array $nearestVariants = [];
 
+    /** @var list<array<string, mixed>> */
+    public array $catalogVariantSummaries = [];
+
+    public ?int $expandedCatalogQty = null;
+
+    /** @var array<int, array<string, mixed>> cache lazy-loaded szczegółów */
+    public array $catalogVariantDetails = [];
+
+    /** @var array<int, array{qty: int, gratis: int, staff: int, driver: int}> */
+    public array $catalogQtyVariants = [];
+
     public $editingPrice = null; // holds EventPricePerPerson model data for inline editing
 
     public bool $useManualPricePerPerson = false;
@@ -59,7 +70,8 @@ class EventPriceTable extends Widget
 
     public function loadCalculations()
     {
-        $snapshot = app(\App\Services\EventCalculationSnapshotBuilder::class)->build($this->record);
+        $snapshotBuilder = app(\App\Services\EventCalculationSnapshotBuilder::class);
+        $snapshot = $snapshotBuilder->build($this->record);
 
         $this->programPoints = $snapshot['program_points'];
         $this->costsByDay = $snapshot['costs_by_day'];
@@ -73,9 +85,62 @@ class EventPriceTable extends Widget
         $this->nearestVariants = $snapshot['nearest_variants'];
         $this->eventOnlyPointsForDetails = $snapshot['event_only_points_for_details'];
 
+        $this->catalogVariantSummaries = $snapshotBuilder->buildCatalogVariantSummaries($this->record);
+        $this->catalogQtyVariants = [];
+        foreach ($this->catalogVariantSummaries as $row) {
+            $qty = (int) $row['qty'];
+            $this->catalogQtyVariants[$qty] = [
+                'qty' => $qty,
+                'gratis' => (int) $row['gratis'],
+                'staff' => (int) $row['staff'],
+                'driver' => (int) $row['driver'],
+            ];
+        }
+
+        // Po odświeżeniu kasujemy cache szczegółów (mogły się zmienić koszty).
+        $this->catalogVariantDetails = [];
+        if ($this->expandedCatalogQty !== null) {
+            $this->ensureCatalogVariantDetailLoaded($this->expandedCatalogQty);
+        }
+
         $this->syncManualPricePerPersonState();
 
         $this->loadAuthoritativeCalc();
+    }
+
+    public function toggleCatalogVariant(int $qty): void
+    {
+        if ($this->expandedCatalogQty === $qty) {
+            $this->expandedCatalogQty = null;
+
+            return;
+        }
+
+        $this->expandedCatalogQty = $qty;
+        $this->ensureCatalogVariantDetailLoaded($qty);
+    }
+
+    protected function ensureCatalogVariantDetailLoaded(int $qty): void
+    {
+        if ($qty <= 0 || isset($this->catalogVariantDetails[$qty])) {
+            return;
+        }
+
+        if (! $this->record) {
+            return;
+        }
+
+        $variant = $this->catalogQtyVariants[$qty] ?? null;
+        if ($variant === null) {
+            return;
+        }
+
+        $detail = app(\App\Services\EventCalculationSnapshotBuilder::class)
+            ->buildDetailedForVariant($this->record, $variant);
+
+        $this->catalogVariantDetails[$qty] = $detail['detailed_calculations'][$qty]
+            ?? $detail['detailed_calculations'][(string) $qty]
+            ?? [];
     }
 
     /**

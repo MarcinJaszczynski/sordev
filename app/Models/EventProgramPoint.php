@@ -7,6 +7,7 @@ use App\Models\Concerns\HasTasks;
 use App\Services\ProgramPointPricingCalculator;
 use App\Services\ProgramPointContractorSync;
 use App\Support\CurrencyAmountDisplay;
+use App\Support\ProgramPointCostPricing;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
@@ -68,6 +69,7 @@ class EventProgramPoint extends Model
         'notes',
         'include_in_program',
         'include_in_calculation',
+        'include_gratis_in_cost',
         'active',
         'show_title_style',
         'show_description',
@@ -90,6 +92,7 @@ class EventProgramPoint extends Model
         'paid_price' => 'decimal:2',
         'include_in_program' => 'boolean',
         'include_in_calculation' => 'boolean',
+        'include_gratis_in_cost' => 'boolean',
         'active' => 'boolean',
         'show_title_style' => 'boolean',
         'show_description' => 'boolean',
@@ -350,11 +353,17 @@ class EventProgramPoint extends Model
 
     public function resolveCalculationTotal(?int $participantCount = null): float
     {
-        $count = max(1, (int) ($participantCount ?? $this->event?->participant_count ?? 1));
-        $templateUnitPrice = (float) ($this->templatePoint?->unit_price ?? $this->unit_price ?? 0);
+        $this->loadMissing(['event', 'currency', 'templatePoint']);
+
+        if ($this->event) {
+            return (float) ProgramPointCostPricing::breakdown($this, $this->event, $participantCount)['total'];
+        }
+
+        $count = max(1, (int) ($participantCount ?? 1));
+        $unitPrice = (float) ($this->unit_price ?? $this->templatePoint?->unit_price ?? 0);
 
         return ProgramPointPricingCalculator::totalPrice(
-            $templateUnitPrice,
+            $unitPrice,
             $count,
             $this->group_size,
             max(1, (int) ($this->quantity ?? 1)),
@@ -432,6 +441,7 @@ class EventProgramPoint extends Model
             'notes' => $this->notes,
             'include_in_program' => $this->include_in_program,
             'include_in_calculation' => $this->include_in_calculation,
+            'include_gratis_in_cost' => $this->include_gratis_in_cost,
             'active' => $this->active,
             'show_title_style' => $this->show_title_style,
             'show_description' => $this->show_description,

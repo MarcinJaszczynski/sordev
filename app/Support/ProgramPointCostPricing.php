@@ -15,20 +15,42 @@ use App\Services\ProgramPointPricingCalculator;
  * - group_size = 1  → cena × liczba osób koszowych
  * - group_size > 1  → cena × ceil(osoby / group_size)  (np. 15 za 10 zł → 45 os. = 30 zł)
  * - group_size = 0  → cena × sztuki (quantity)
- * - osoby koszowe = uczestnicy płacący + gratisy/opiekunowie (jedzą, śpią, bilety),
- *   mimo że gratisy nie wchodzą w cenę/os. dla klienta.
+ * - osoby koszowe = domyślnie tylko płacący; opiekunowie/gratisy tylko gdy
+ *   include_gratis_in_cost na punkcie jest włączone.
  */
 final class ProgramPointCostPricing
 {
     /**
-     * Liczba osób, za które realnie płacimy podwykonawcy.
+     * Liczba osób, za które liczymy koszt punktu.
      */
-    public static function costHeadcount(Event $event, ?int $payingParticipants = null): int
-    {
+    public static function costHeadcount(
+        Event $event,
+        ?int $payingParticipants = null,
+        bool $includeGratis = false,
+    ): int {
         $paying = max(1, (int) ($payingParticipants ?? $event->participant_count ?? 1));
+        if (! $includeGratis) {
+            return $paying;
+        }
+
         $gratis = max(0, $event->resolveGratisCountForParticipantCount($paying));
 
         return max(1, $paying + $gratis);
+    }
+
+    /**
+     * Headcount dla konkretnego punktu (respektuje include_gratis_in_cost).
+     */
+    public static function costHeadcountForPoint(
+        EventProgramPoint $point,
+        Event $event,
+        ?int $payingParticipants = null,
+    ): int {
+        return self::costHeadcount(
+            $event,
+            $payingParticipants,
+            (bool) ($point->include_gratis_in_cost ?? false),
+        );
     }
 
     /**
@@ -36,6 +58,7 @@ final class ProgramPointCostPricing
      *   paying: int,
      *   gratis: int,
      *   headcount: int,
+     *   include_gratis: bool,
      *   group_size: int|null,
      *   billable_units: int,
      *   unit_price: float,
@@ -54,8 +77,10 @@ final class ProgramPointCostPricing
         $point->loadMissing(['currency', 'templatePoint']);
 
         $paying = max(1, (int) ($payingParticipants ?? $event->participant_count ?? 1));
-        $gratis = max(0, $event->resolveGratisCountForParticipantCount($paying));
-        $headcount = max(1, $paying + $gratis);
+        $gratisAvailable = max(0, $event->resolveGratisCountForParticipantCount($paying));
+        $includeGratis = (bool) ($point->include_gratis_in_cost ?? false);
+        $gratis = $includeGratis ? $gratisAvailable : 0;
+        $headcount = self::costHeadcount($event, $paying, $includeGratis);
 
         $groupSize = $point->group_size;
         $unitPrice = (float) ($point->unit_price ?? 0);
@@ -90,21 +115,31 @@ final class ProgramPointCostPricing
         };
 
         $unitFmt = number_format($unitPrice, 2, ',', ' ');
-        $hint = sprintf(
-            '%s · %d os. (%d+%d gratis) · %d jedn. × %s %s',
-            $pricingMode,
-            $headcount,
-            $paying,
-            $gratis,
-            $billable,
-            $unitFmt,
-            $code,
-        );
+        $hint = $includeGratis
+            ? sprintf(
+                '%s · %d os. (%d+%d gratis) · %d jedn. × %s %s',
+                $pricingMode,
+                $headcount,
+                $paying,
+                $gratis,
+                $billable,
+                $unitFmt,
+                $code,
+            )
+            : sprintf(
+                '%s · %d os. (bez opiekunów) · %d jedn. × %s %s',
+                $pricingMode,
+                $headcount,
+                $billable,
+                $unitFmt,
+                $code,
+            );
 
         return [
             'paying' => $paying,
             'gratis' => $gratis,
             'headcount' => $headcount,
+            'include_gratis' => $includeGratis,
             'group_size' => $groupSize === null ? null : (int) $groupSize,
             'billable_units' => $billable,
             'unit_price' => round($unitPrice, 2),

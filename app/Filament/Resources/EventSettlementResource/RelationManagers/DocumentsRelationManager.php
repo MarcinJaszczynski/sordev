@@ -54,7 +54,7 @@ class DocumentsRelationManager extends RelationManager
                         ->options(EventSettlementDocument::$paymentMethods)
                         ->nullable(),
 
-                    Forms\Components\DateTimePicker::make('payment_date')
+                    Forms\Components\DatePicker::make('payment_date')
                         ->label('Data płatności')
                         ->nullable(),
 

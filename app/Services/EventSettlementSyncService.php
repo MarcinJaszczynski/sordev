@@ -42,5 +42,17 @@ final class EventSettlementSyncService
                 'error' => $e->getMessage(),
             ]);
         }
+
+        // Po pojawieniu się / zmianie pozycji insurance_day — podepnij lustro polisy.
+        if (filled($event->insurance_document_path)) {
+            try {
+                app(EventInsurancePolicySettlementSync::class)->sync($event, ensureCosts: false);
+            } catch (\Throwable $e) {
+                Log::warning('EventSettlementSyncService: insurance policy sync failed', [
+                    'event_id' => $event->id,
+                    'error' => $e->getMessage(),
+                ]);
+            }
+        }
     }
 }

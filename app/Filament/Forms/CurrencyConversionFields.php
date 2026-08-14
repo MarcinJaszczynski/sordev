@@ -28,8 +28,9 @@ final class CurrencyConversionFields
             ->label('Przelicz na PLN w kalkulacji')
             ->default(true)
             ->inline(false)
+            ->live()
             ->helperText(fn (Get $get): string => self::isForeignCurrency($get($currencyField))
-                ? 'Włączone: kwota obca × kurs NBP trafia do sumy PLN.'
+                ? 'Włączone: kwota obca × kurs NBP trafia do sumy PLN i pokazuje ≈ PLN.'
                 : 'Dla PLN przełącznik nie zmienia kwoty.')
             ->visible(fn (Get $get): bool => self::isForeignCurrency($get($currencyField)));
     }

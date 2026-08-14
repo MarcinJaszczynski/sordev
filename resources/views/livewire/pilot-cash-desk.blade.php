@@ -254,6 +254,27 @@
         <h3 class="mb-1 text-base font-semibold text-gray-900 dark:text-gray-100">Wydatki pilota</h3>
         <p class="mb-3 text-xs text-gray-500">Tylko pozycje z płatnikiem Pilot — jak na zakładce Koszty.</p>
 
+        @if ($this->officePayouts->isNotEmpty())
+            <div class="mb-3 rounded-lg border border-indigo-100 bg-indigo-50/70 px-3 py-2 text-sm text-indigo-950 dark:border-indigo-900/40 dark:bg-indigo-950/30 dark:text-indigo-100">
+                <div class="font-medium">Gotówka od biura</div>
+                <div class="mt-0.5 flex flex-wrap gap-x-3 gap-y-1">
+                    @foreach ($this->officePayouts as $cash)
+                        <span>
+                            {{ number_format((float) $cash->provided_amount, 2, ',', ' ') }}
+                            {{ $cash->currency?->code ?: $cash->currency?->symbol ?: '—' }}
+                            @if ($cash->provided_at)
+                                <span class="text-xs text-indigo-800/80 dark:text-indigo-200/80">({{ $cash->provided_at->format('d.m.Y') }})</span>
+                            @endif
+                        </span>
+                    @endforeach
+                </div>
+            </div>
+        @else
+            <p class="mb-3 text-xs text-amber-800 dark:text-amber-200">
+                Brak zarejestrowanej gotówki od biura — wydatki rozliczaj względem wypłaty powyżej.
+            </p>
+        @endif
+
         @include('pilot.partials.expense-ledger', [
             'editable' => $this->editable,
             'compact' => $compact,
@@ -274,9 +295,13 @@
                 </div>
                 <div class="mt-2">
                     @if ($compact)
-                        <button type="button" wire:click="addExpense" class="pilot-touch-btn bg-gray-800 text-white">Dodaj wydatek</button>
+                        <button type="button" wire:click="addExpense" class="pilot-touch-btn sor-lw-btn--accent w-full sm:w-auto">
+                            Dodaj wydatek
+                        </button>
                     @else
-                        <x-filament::button wire:click="addExpense" size="sm">Dodaj wydatek</x-filament::button>
+                        <x-filament::button wire:click="addExpense" size="sm" color="primary">
+                            Dodaj wydatek
+                        </x-filament::button>
                     @endif
                 </div>
             </div>

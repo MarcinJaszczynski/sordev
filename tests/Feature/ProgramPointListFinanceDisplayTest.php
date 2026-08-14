@@ -75,9 +75,94 @@ class ProgramPointListFinanceDisplayTest extends TestCase
 
         $this->assertStringContainsString('66', $summary['planned']);
         $this->assertStringContainsString('EUR', $summary['planned']);
+        $this->assertNotNull($summary['plannedSub']);
+        $this->assertStringContainsString('≈', (string) $summary['plannedSub']);
         $this->assertStringContainsString('30', $summary['paid']);
         $this->assertSame('partial', $summary['paidStatus']);
         $this->assertSame('Zaliczka wpłacona', $summary['statusLabel']);
+    }
+
+    public function test_foreign_labels_omit_pln_when_convert_disabled(): void
+    {
+        $eur = Currency::factory()->eur()->create(['exchange_rate' => 4.35]);
+        $event = Event::factory()->create(['participant_count' => 10]);
+        $settlement = EventSettlement::findOrCreateActiveForEvent($event);
+
+        $point = EventProgramPoint::factory()->create([
+            'event_id' => $event->id,
+            'event_template_program_point_id' => null,
+            'unit_price' => 50,
+            'group_size' => 1,
+            'planned_price' => 500,
+            'currency_id' => $eur->id,
+            'convert_to_pln' => false,
+            'include_in_calculation' => true,
+            'active' => true,
+        ]);
+
+        $this->seedProgramPointCost($settlement, $point, [
+            'planned_amount' => 500,
+            'planned_amount_pln' => null,
+            'planned_currency_id' => $eur->id,
+            'planned_convert_to_pln' => false,
+            'planned_rate' => 4.35,
+            'payment_status' => 'planned',
+            'paid_by' => 'office',
+        ]);
+
+        $cache = new ProgramPointSettlementCostCache;
+        $cache->warm(collect([$point->fresh(['currency', 'event'])]), $event);
+
+        $summary = app(ProgramPointListFinanceDisplay::class)->summarizePoint(
+            $point->fresh(['currency', 'event']),
+            $cache,
+        );
+
+        $this->assertSame('500,00 EUR', $summary['planned']);
+        $this->assertStringNotContainsString('≈', $summary['planned']);
+        $this->assertStringNotContainsString('≈', $summary['calc']);
+    }
+
+    public function test_foreign_labels_include_pln_when_convert_enabled(): void
+    {
+        $eur = Currency::factory()->eur()->create(['exchange_rate' => 4.35]);
+        $event = Event::factory()->create(['participant_count' => 10]);
+        $settlement = EventSettlement::findOrCreateActiveForEvent($event);
+
+        $point = EventProgramPoint::factory()->create([
+            'event_id' => $event->id,
+            'event_template_program_point_id' => null,
+            'unit_price' => 50,
+            'group_size' => 1,
+            'planned_price' => 500,
+            'currency_id' => $eur->id,
+            'convert_to_pln' => true,
+            'include_in_calculation' => true,
+            'active' => true,
+        ]);
+
+        $this->seedProgramPointCost($settlement, $point, [
+            'planned_amount' => 500,
+            'planned_amount_pln' => 2175,
+            'planned_currency_id' => $eur->id,
+            'planned_convert_to_pln' => true,
+            'planned_rate' => 4.35,
+            'payment_status' => 'planned',
+            'paid_by' => 'office',
+        ]);
+
+        $cache = new ProgramPointSettlementCostCache;
+        $cache->warm(collect([$point->fresh(['currency', 'event'])]), $event);
+
+        $summary = app(ProgramPointListFinanceDisplay::class)->summarizePoint(
+            $point->fresh(['currency', 'event']),
+            $cache,
+        );
+
+        $this->assertSame('500,00 EUR', $summary['planned']);
+        $this->assertSame('≈ 2 175,00 PLN', $summary['plannedSub']);
+        $this->assertSame('500,00 EUR', $summary['calc']);
+        $this->assertSame('≈ 2 175,00 PLN', $summary['calcSub']);
     }
 
     public function test_planned_label_uses_settlement_planned_amount_when_point_planned_price_differs(): void

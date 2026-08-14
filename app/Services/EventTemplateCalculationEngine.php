@@ -296,6 +296,7 @@ class EventTemplateCalculationEngine
                                     'alloc' => $alloc,
                                     'total_people' => $toAssign,
                                     'cost' => $room->price,
+                                    'line_total' => (float) $room->price,
                                     'currency' => $room->currency,
                                     'group_type' => $groupType,
                                     'room_count' => 1,

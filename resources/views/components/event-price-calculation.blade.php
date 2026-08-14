@@ -18,6 +18,7 @@
         'message' => 'Wybierz szablon i miejsce wyjazdu.',
         'price_per_person_label' => '—',
         'total_pln' => 0,
+        'payable_total_pln' => 0,
         'base_pln' => 0,
         'markup_pln' => 0,
         'tax_pln' => 0,
@@ -51,7 +52,7 @@
                 {{ $summary['price_per_person_label'] }}
             </div>
             <div class="mt-2 grid gap-1 text-sm text-gray-700 dark:text-gray-300 sm:grid-cols-2">
-                <div>Suma grupy: <strong class="tabular-nums">{{ MoneyFormatter::format((float) $summary['total_pln'], 'PLN') }}</strong></div>
+                <div>Suma grupy: <strong class="tabular-nums">{{ MoneyFormatter::format((float) ($summary['payable_total_pln'] ?? $summary['total_pln']), 'PLN') }}</strong></div>
                 <div>Płacących: <strong>{{ (int) $summary['paying'] }}</strong> · opiekunów: <strong>{{ (int) $summary['gratis'] }}</strong></div>
                 <div>Baza: <span class="tabular-nums">{{ MoneyFormatter::format((float) $summary['base_pln'], 'PLN') }}</span></div>
                 <div>Marża: <span class="tabular-nums">{{ MoneyFormatter::format((float) $summary['markup_pln'], 'PLN') }}</span>
@@ -59,13 +60,13 @@
             </div>
             <p class="mt-2 text-xs text-gray-500">
                 Pełna kalkulacja szablonu: program + noclegi + transport + ubezpieczenie + marża + podatki.
-                Koszty dzielone przez uczestników płacących (bez opiekunów).
+                Koszty dzielone przez uczestników płacących (bez opiekunów). Suma grupy = cena zaokrąglona × płacący.
             </p>
         </div>
 
         @if(! empty($summary['nearest']))
             <div class="rounded border border-gray-200 bg-white p-3 text-sm dark:border-gray-700 dark:bg-gray-900">
-                <div class="mb-2 text-xs font-semibold uppercase tracking-wide text-gray-500">Porównanie cennika szablonu (2 najbliższe grupy)</div>
+                <div class="mb-2 text-xs font-semibold uppercase tracking-wide text-gray-500">Porównanie cennika szablonu (grupa niższa / wyższa)</div>
                 <ul class="space-y-1">
                     @foreach($summary['nearest'] as $near)
                         <li class="flex flex-wrap items-baseline justify-between gap-2">

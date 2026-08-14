@@ -175,7 +175,7 @@ final class ProgramPointSettlementFinanceFields
                 ->searchable()
                 ->nullable(),
 
-            Forms\Components\DateTimePicker::make('paid_at')
+            Forms\Components\DatePicker::make('paid_at')
                 ->label('Zapłacone dnia')
                 ->nullable(),
 
@@ -306,16 +306,16 @@ final class ProgramPointSettlementFinanceFields
         ];
     }
 
-    public static function payableUntilField(string $name): Forms\Components\DateTimePicker
+    public static function payableUntilField(string $name): Forms\Components\DatePicker
     {
-        return Forms\Components\DateTimePicker::make($name)
+        return Forms\Components\DatePicker::make($name)
             ->label('Płatne do')
             ->nullable();
     }
 
-    public static function paymentDateField(string $name): Forms\Components\DateTimePicker
+    public static function paymentDateField(string $name): Forms\Components\DatePicker
     {
-        return Forms\Components\DateTimePicker::make($name)
+        return Forms\Components\DatePicker::make($name)
             ->label('Termin płatności')
             ->nullable();
     }

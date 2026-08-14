@@ -1,6 +1,7 @@
 @php
     $editable = $editable ?? true;
     $compact = $compact ?? false;
+    $isPilotContext = ($this->context ?? 'admin') === 'pilot';
 @endphp
 
 <div class="space-y-3">
@@ -9,17 +10,25 @@
             Brak pozycji gotówki — pojawią się tu waluty z punktów programu (płatnik Pilot) oraz wypłat z biura.
         </p>
     @else
-        <p class="text-xs text-gray-500">
-            <strong>Do przygotowania</strong> = dopłata pilota gotówką: plan − zaliczki biura na kosztach
-            (np. hotel 800 − zaliczka 300 = 500). Potem: wypłacono → wymiana → wydane → zwrot.
-        </p>
+        @unless ($isPilotContext)
+            <p class="text-xs text-gray-500">
+                <strong>Do przygotowania</strong> = dopłata pilota gotówką: plan − zaliczki biura na kosztach
+                (np. hotel 800 − zaliczka 300 = 500). Potem: wypłacono → wymiana → wydane → zwrot.
+            </p>
+        @else
+            <p class="text-xs text-gray-500">
+                Kwota od biura → ewentualna wymiana → wydatki → zwrot. Saldo per waluta.
+            </p>
+        @endunless
 
         <div class="overflow-x-auto rounded-xl border border-gray-200 dark:border-gray-700">
             <table class="min-w-full text-sm">
                 <thead class="bg-gray-50 text-left text-[10px] uppercase tracking-wide text-gray-500 dark:bg-gray-900">
                     <tr>
                         <th class="px-3 py-2 font-medium">Waluta</th>
-                        <th class="px-3 py-2 font-medium text-right">Do przygotowania</th>
+                        @unless ($isPilotContext)
+                            <th class="px-3 py-2 font-medium text-right">Do przygotowania</th>
+                        @endunless
                         <th class="px-3 py-2 font-medium text-right">Od biura</th>
                         <th class="px-3 py-2 font-medium text-right">Po wymianie</th>
                         <th class="px-3 py-2 font-medium text-right">Wydane gotówką</th>
@@ -50,25 +59,29 @@
                         @endphp
                         <tr wire:key="pilot-cash-row-{{ $row->currency_id }}">
                             <td class="px-3 py-2.5 font-semibold text-gray-900 dark:text-gray-100">{{ $code }}</td>
-                            <td class="px-3 py-2.5 text-right tabular-nums">
-                                <div class="font-semibold text-sky-800 dark:text-sky-200">
-                                    {{ number_format($needed, 2, ',', ' ') }}
-                                </div>
-                                @if ($isTopUp)
-                                    <div class="text-[11px] font-medium text-amber-800 dark:text-amber-200">dopłata do kosztów</div>
-                                @endif
-                                @if ($planTotal > 0.009)
-                                    <div class="text-[11px] text-gray-500">
-                                        plan {{ number_format($planTotal, 2, ',', ' ') }}
-                                        @if ($officeOnCosts > 0.009)
-                                            − zal. {{ number_format($officeOnCosts, 2, ',', ' ') }}
-                                        @endif
+                            @unless ($isPilotContext)
+                                <td class="px-3 py-2.5 text-right tabular-nums">
+                                    <div class="font-semibold text-sky-800 dark:text-sky-200">
+                                        {{ number_format($needed, 2, ',', ' ') }}
                                     </div>
-                                @endif
-                            </td>
+                                    @if ($isTopUp)
+                                        <div class="text-[11px] font-medium text-amber-800 dark:text-amber-200">dopłata do kosztów</div>
+                                    @endif
+                                    @if ($planTotal > 0.009)
+                                        <div class="text-[11px] text-gray-500">
+                                            plan {{ number_format($planTotal, 2, ',', ' ') }}
+                                            @if ($officeOnCosts > 0.009)
+                                                − zal. {{ number_format($officeOnCosts, 2, ',', ' ') }}
+                                            @endif
+                                        </div>
+                                    @endif
+                                </td>
+                            @endunless
                             <td class="px-3 py-2.5 text-right tabular-nums">
-                                {{ number_format($fromOffice, 2, ',', ' ') }}
-                                @if ($missingPayout)
+                                <div class="font-semibold text-indigo-800 dark:text-indigo-200">
+                                    {{ number_format($fromOffice, 2, ',', ' ') }}
+                                </div>
+                                @if (! $isPilotContext && $missingPayout)
                                     <div class="text-[11px] text-amber-800 dark:text-amber-200">wypłać z wyliczenia</div>
                                 @endif
                             </td>

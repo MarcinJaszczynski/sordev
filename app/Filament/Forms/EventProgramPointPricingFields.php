@@ -152,8 +152,15 @@ class EventProgramPointPricingFields
 
         $pricingFields = array_merge($pricingFields, [
             CurrencyConversionFields::currencySelect(),
-            CurrencyConversionFields::convertToggle()->live(),
+            CurrencyConversionFields::convertToggle(),
             CurrencyConversionFields::plnPreview('unit_price'),
+
+            Forms\Components\Toggle::make('include_gratis_in_cost')
+                ->label('Liczyć z opiekunami / gratisami')
+                ->helperText('Domyślnie tylko uczestnicy płacący. Włącz, gdy koszt punktu dotyczy też opiekunów.')
+                ->default(false)
+                ->inline(false)
+                ->columnSpanFull(),
 
             Forms\Components\Placeholder::make('pricing_breakdown_preview')
                 ->label('Podgląd wyliczenia')
@@ -243,6 +250,7 @@ class EventProgramPointPricingFields
 
         $set('planned_price', $total);
         $set('calculated_price', $total);
+        $set('include_gratis_in_cost', (bool) ($template->include_gratis_in_cost ?? false));
     }
 
     public static function applyEventPointDefaults(Set $set, EventProgramPoint $point): void
@@ -255,6 +263,7 @@ class EventProgramPointPricingFields
         $set('planned_price', $point->planned_price ?? $point->total_price);
         $set('paid_price', $point->paid_price ?? 0);
         $set('calculated_price', $point->calculated_price ?? $point->total_price);
+        $set('include_gratis_in_cost', (bool) ($point->include_gratis_in_cost ?? false));
     }
 
     public static function syncTotals(Set $set, Get $get, int $participantCount = 1, bool $forcePlanned = false): void

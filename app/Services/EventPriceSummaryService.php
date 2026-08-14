@@ -12,8 +12,9 @@ use App\Support\MoneyFormatter;
 /**
  * Szybkie podsumowanie ceny/os. na Create/Edit imprezy.
  *
- * - Create (szablon): pełna kalkulacja grupy bieżącej + porównanie PPP z 2 najbliższymi qty.
+ * - Create (szablon): pełna kalkulacja grupy bieżącej + porównanie PPP z grupą ↓ i ↑.
  * - Edit (impreza): EventCostCalculator (transport, hotel, ubezpieczenie, marża, podatki, waluty).
+ * - Suma grupy (do zapłaty) = cena/os. zaokrąglona × płacący; total_pln = surowa kalkulacja.
  */
 final class EventPriceSummaryService
 {
@@ -24,6 +25,7 @@ final class EventPriceSummaryService
      *   paying: int,
      *   gratis: int,
      *   total_pln: float,
+     *   payable_total_pln: float,
      *   base_pln: float,
      *   markup_pln: float,
      *   tax_pln: float,
@@ -82,6 +84,7 @@ final class EventPriceSummaryService
             'paying' => $paying,
             'gratis' => $gratis,
             'total_pln' => round($total, 2),
+            'payable_total_pln' => $this->payableTotalPln($pppRounded, $paying),
             'base_pln' => round((float) ($pln['price_base'] ?? ($exact['price_base'] ?? 0)), 2),
             'markup_pln' => round((float) ($pln['markup_amount'] ?? ($exact['markup_amount'] ?? 0)), 2),
             'tax_pln' => round((float) ($pln['tax_amount'] ?? ($exact['tax_amount'] ?? 0)), 2),
@@ -128,6 +131,7 @@ final class EventPriceSummaryService
 
         $pppRounded = (float) ($calc['price_per_person_rounded'] ?? 0);
         $totalPln = round((float) ($calc['total_pln'] ?? 0), 2);
+        $payingResolved = (int) ($calc['paying'] ?? $paying);
         $basePln = round((float) ($calc['base_pln'] ?? 0), 2);
         $hasMeaningful = $totalPln > 0 || $basePln > 0 || $pppRounded > 0 || $foreign !== [];
 
@@ -152,9 +156,10 @@ final class EventPriceSummaryService
         return [
             'ready' => true,
             'message' => null,
-            'paying' => (int) ($calc['paying'] ?? $paying),
+            'paying' => $payingResolved,
             'gratis' => (int) ($calc['gratis'] ?? $gratisResolved),
             'total_pln' => $totalPln,
+            'payable_total_pln' => $this->payableTotalPln($pppRounded, $payingResolved),
             'base_pln' => $basePln,
             'markup_pln' => round((float) ($calc['markup_pln'] ?? 0), 2),
             'tax_pln' => round((float) ($calc['tax_pln'] ?? 0), 2),
@@ -169,7 +174,8 @@ final class EventPriceSummaryService
     }
 
     /**
-     * Dwa najbliższe warianty qty z szablonu — tylko ogólna cena/os. do porównania.
+     * Jedna grupa niższa i jedna wyższa (qty) względem bieżącej — porównanie cennika szablonu.
+     * Przy braku jednej strony: uzupełnienie drugą najbliższą z dostępnej strony.
      *
      * @return list<array{qty: int, gratis: int, price_per_person: float, label: string, currencies: list<string>}>
      */
@@ -197,11 +203,15 @@ final class EventPriceSummaryService
             ])
             ->filter(fn (array $v): bool => $v['qty'] > 0)
             ->reject(fn (array $v): bool => $v['qty'] === $paying && $v['gratis'] === $gratis)
-            ->sortBy(fn (array $v): int => abs($v['qty'] - $paying) + abs($v['gratis'] - $gratis))
-            ->take(2)
             ->values();
 
         if ($variants->isEmpty()) {
+            return [];
+        }
+
+        $selected = $this->pickBracketVariants($variants->all(), $paying, $gratis);
+
+        if ($selected === []) {
             return [];
         }
 
@@ -213,7 +223,7 @@ final class EventPriceSummaryService
             })
             ->get();
 
-        return $variants->map(function (array $variant) use ($rows, $plnIds, $startPlaceId): array {
+        return collect($selected)->map(function (array $variant) use ($rows, $plnIds, $startPlaceId): array {
             $matches = $rows->filter(function ($row) use ($variant) {
                 $qtyId = (int) ($row->event_template_qty_id ?? 0);
                 $qty = (int) (optional($row->eventTemplateQty)->qty ?? 0);
@@ -268,6 +278,72 @@ final class EventPriceSummaryService
                 'currencies' => $currencyLabels,
             ];
         })->all();
+    }
+
+    /**
+     * @param  list<array{id: int, qty: int, gratis: int}>  $variants
+     * @return list<array{id: int, qty: int, gratis: int}>
+     */
+    private function pickBracketVariants(array $variants, int $paying, int $gratis): array
+    {
+        $distance = static fn (array $v): int => abs($v['qty'] - $paying) + abs($v['gratis'] - $gratis);
+
+        $lowerPool = collect($variants)
+            ->filter(fn (array $v): bool => $v['qty'] < $paying)
+            ->sort(function (array $a, array $b) use ($gratis): int {
+                // Największe qty poniżej, przy remisie najbliższy gratis.
+                return [-$a['qty'], abs($a['gratis'] - $gratis), $a['id']]
+                    <=> [-$b['qty'], abs($b['gratis'] - $gratis), $b['id']];
+            })
+            ->values();
+
+        $upperPool = collect($variants)
+            ->filter(fn (array $v): bool => $v['qty'] > $paying)
+            ->sort(function (array $a, array $b) use ($gratis): int {
+                // Najmniejsze qty powyżej, przy remisie najbliższy gratis.
+                return [$a['qty'], abs($a['gratis'] - $gratis), $a['id']]
+                    <=> [$b['qty'], abs($b['gratis'] - $gratis), $b['id']];
+            })
+            ->values();
+
+        $selected = [];
+        if ($lowerPool->isNotEmpty()) {
+            $selected[] = $lowerPool->first();
+        }
+        if ($upperPool->isNotEmpty()) {
+            $selected[] = $upperPool->first();
+        }
+
+        if (count($selected) >= 2) {
+            return array_values($selected);
+        }
+
+        // Brak jednej strony (np. 42 przy progach 35/40): dopisz kolejną najbliższą.
+        $usedIds = collect($selected)->pluck('id')->all();
+        $fallback = collect($variants)
+            ->reject(fn (array $v): bool => in_array($v['id'], $usedIds, true))
+            ->sort(function (array $a, array $b) use ($distance): int {
+                return [$distance($a), $a['qty'], $a['id']] <=> [$distance($b), $b['qty'], $b['id']];
+            })
+            ->take(2 - count($selected))
+            ->all();
+
+        $merged = array_merge($selected, $fallback);
+
+        usort($merged, static function (array $a, array $b): int {
+            return [$a['qty'], $a['gratis'], $a['id']] <=> [$b['qty'], $b['gratis'], $b['id']];
+        });
+
+        return array_values($merged);
+    }
+
+    private function payableTotalPln(float $pricePerPersonRounded, int $paying): float
+    {
+        if ($pricePerPersonRounded <= 0 || $paying <= 0) {
+            return 0.0;
+        }
+
+        return round($pricePerPersonRounded * $paying, 2);
     }
 
     /**
@@ -349,6 +425,7 @@ final class EventPriceSummaryService
             'paying' => 0,
             'gratis' => 0,
             'total_pln' => 0.0,
+            'payable_total_pln' => 0.0,
             'base_pln' => 0.0,
             'markup_pln' => 0.0,
             'tax_pln' => 0.0,

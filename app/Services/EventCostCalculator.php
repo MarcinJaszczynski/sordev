@@ -16,7 +16,8 @@ use App\Models\EventProgramPoint;
  *  - transport liczony raz przez EventTransportCostCalculator (nie z punktów programu),
  *  - ubezpieczenie liczone raz (InsuranceCostCalculator / Event::insuranceCostPln — z gratisami),
  *  - baza → marża → podatki → SUMA KOŃCOWA,
- *  - punkty programu liczone od osób koszowych (płacący + gratis — jedzą/śpią/bilety),
+ *  - punkty programu: domyślnie od płacących; opiekunowie/gratisy tylko gdy
+ *    include_gratis_in_cost na punkcie,
  *  - cena za osobę = SUMA KOŃCOWA ÷ liczba osób PŁACĄCYCH (bez gratisów/obsługi/kierowcy).
  */
 class EventCostCalculator
@@ -42,12 +43,16 @@ class EventCostCalculator
     /**
      * @return array<string, mixed>
      */
-    public function calculate(?int $participantCount = null, ?int $gratisOverride = null): array
-    {
+    public function calculate(
+        ?int $participantCount = null,
+        ?int $gratisOverride = null,
+        ?int $staffOverride = null,
+        ?int $driverOverride = null,
+    ): array {
         $event = $this->event;
         $payingCount = max(1, (int) ($participantCount ?? $event->participant_count ?? 1));
 
-        $cacheKey = $this->requestCacheKey($payingCount, $gratisOverride);
+        $cacheKey = $this->requestCacheKey($payingCount, $gratisOverride, $staffOverride, $driverOverride);
         if (isset(self::$requestCache[$cacheKey])) {
             return self::$requestCache[$cacheKey];
         }
@@ -76,8 +81,12 @@ class EventCostCalculator
         $gratis = $gratisOverride !== null
             ? max(0, $gratisOverride)
             : max(0, (int) ($variant->gratis ?? 0));
-        $staff = max(0, (int) ($variant->staff ?? 1));
-        $driver = max(0, (int) ($variant->driver ?? 1));
+        $staff = $staffOverride !== null
+            ? max(0, $staffOverride)
+            : max(0, (int) ($variant->staff ?? 1));
+        $driver = $driverOverride !== null
+            ? max(0, $driverOverride)
+            : max(0, (int) ($variant->driver ?? 1));
 
         $hotelPlanTotal = $this->hotelPlanTotal();
         $hasHotelPlan = $hotelPlanTotal !== null;
@@ -194,8 +203,12 @@ class EventCostCalculator
         return $result;
     }
 
-    private function requestCacheKey(int $payingCount, ?int $gratisOverride): string
-    {
+    private function requestCacheKey(
+        int $payingCount,
+        ?int $gratisOverride,
+        ?int $staffOverride = null,
+        ?int $driverOverride = null,
+    ): string {
         $e = $this->event;
 
         return implode(':', [
@@ -203,6 +216,8 @@ class EventCostCalculator
             (string) ($e->updated_at?->timestamp ?? 0),
             (string) $payingCount,
             (string) ($gratisOverride ?? 'auto'),
+            (string) ($staffOverride ?? 'auto'),
+            (string) ($driverOverride ?? 'auto'),
             (string) round((float) ($e->transfer_km ?? 0), 2),
             (string) round((float) ($e->program_km ?? 0), 2),
             (string) (int) ($e->start_place_id ?? 0),
@@ -256,7 +271,10 @@ class EventCostCalculator
         int $gratis = 0,
         bool $forceConvertForeign = false,
     ): array {
-        $costHeadcount = max(1, $payingCount + max(0, $gratis));
+        $costHeadcount = max(
+            1,
+            $payingCount + ((bool) ($point->include_gratis_in_cost ?? false) ? max(0, $gratis) : 0)
+        );
         $cost = (float) $point->resolveEffectiveTotalPrice($costHeadcount);
         if ($cost <= 0) {
             return ['pln' => 0.0, 'foreign' => []];

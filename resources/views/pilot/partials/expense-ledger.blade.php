@@ -51,13 +51,21 @@
             }
             $payee = $cost->contractor?->displayLabel() ?? '—';
             $isEditing = (int) $this->editingCostId === (int) $cost->id;
+            $isUnplanned = $cost->source_type === 'manual';
           @endphp
 
           @if($isEditing)
             <tr class="bg-sky-50/60 dark:bg-sky-950/20" wire:key="pilot-cost-edit-{{ $cost->id }}">
               <td colspan="{{ $editable ? 6 : 5 }}" class="px-3 py-3">
                 <div class="space-y-3">
-                  <div class="font-medium text-gray-900 dark:text-gray-100">{{ $cost->name }}</div>
+                  <div class="flex flex-wrap items-center gap-2">
+                    <div class="font-medium text-gray-900 dark:text-gray-100">{{ $cost->name }}</div>
+                    @if($isUnplanned)
+                      <span class="inline-flex items-center rounded-full bg-amber-100 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-amber-900 dark:bg-amber-900/40 dark:text-amber-100">
+                        Nieplanowany
+                      </span>
+                    @endif
+                  </div>
                   @if($planned > 0)
                     <p class="text-xs text-gray-600">
                       Plan: {{ number_format($planned, 2, ',', ' ') }} {{ $symbol }}
@@ -103,15 +111,28 @@
               </td>
             </tr>
           @else
-            <tr wire:key="pilot-cost-{{ $cost->id }}">
+            <tr @class([
+              'bg-amber-50/70 dark:bg-amber-950/20' => $isUnplanned,
+            ]) wire:key="pilot-cost-{{ $cost->id }}">
               <td class="px-3 py-2 align-top">
-                <div class="font-medium text-gray-900 dark:text-gray-100">{{ $cost->name }}</div>
+                <div class="flex flex-wrap items-center gap-2">
+                  <div class="font-medium text-gray-900 dark:text-gray-100">{{ $cost->name }}</div>
+                  @if($isUnplanned)
+                    <span class="inline-flex items-center rounded-full bg-amber-200 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-amber-950 dark:bg-amber-800 dark:text-amber-50">
+                      Nieplanowany
+                    </span>
+                  @endif
+                </div>
                 @if($planned > 0.009)
                   <div class="mt-0.5 text-[11px] text-gray-500">
                     plan {{ number_format($planned, 2, ',', ' ') }} {{ $symbol }}
                     @if($pilotDue > 0.009 && ($actual === null || abs($actual - $pilotDue) > 0.009))
                       · do zapłaty {{ number_format($pilotDue, 2, ',', ' ') }}
                     @endif
+                  </div>
+                @elseif($isUnplanned)
+                  <div class="mt-0.5 text-[11px] font-medium text-amber-800 dark:text-amber-200">
+                    dodany przez pilota — poza planem
                   </div>
                 @endif
               </td>

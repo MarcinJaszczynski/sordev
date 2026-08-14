@@ -36,7 +36,7 @@ class ProgramPointCostPricingTest extends TestCase
         $this->assertSame(30.0, ProgramPointPricingCalculator::totalPrice(10.0, 45, 15));
     }
 
-    public function test_cost_headcount_includes_gratis(): void
+    public function test_cost_headcount_defaults_to_paying_only(): void
     {
         $event = Event::factory()->create(['participant_count' => 44]);
         EventQty::create([
@@ -47,7 +47,58 @@ class ProgramPointCostPricingTest extends TestCase
             'driver' => 1,
         ]);
 
-        $this->assertSame(48, ProgramPointCostPricing::costHeadcount($event));
+        $this->assertSame(44, ProgramPointCostPricing::costHeadcount($event));
+        $this->assertSame(44, ProgramPointCostPricing::costHeadcount($event, null, false));
+        $this->assertSame(48, ProgramPointCostPricing::costHeadcount($event, null, true));
+    }
+
+    public function test_breakdown_respects_include_gratis_in_cost_flag(): void
+    {
+        $user = User::factory()->create();
+        $pln = Currency::create([
+            'name' => 'Złoty',
+            'symbol' => 'PLN',
+            'code' => 'PLN',
+            'exchange_rate' => 1,
+        ]);
+
+        $event = Event::factory()->create([
+            'participant_count' => 44,
+            'assigned_to' => $user->id,
+        ]);
+        EventQty::create([
+            'event_id' => $event->id,
+            'qty' => 44,
+            'gratis' => 4,
+            'staff' => 1,
+            'driver' => 1,
+        ]);
+
+        $point = EventProgramPoint::create([
+            'event_id' => $event->id,
+            'day' => 1,
+            'order' => 1,
+            'name' => 'Bilet',
+            'unit_price' => 1,
+            'quantity' => 1,
+            'group_size' => 1,
+            'currency_id' => $pln->id,
+            'convert_to_pln' => true,
+            'include_in_program' => true,
+            'include_gratis_in_cost' => false,
+            'active' => true,
+        ]);
+
+        $without = ProgramPointCostPricing::breakdown($point, $event);
+        $this->assertSame(44, $without['headcount']);
+        $this->assertSame(44.0, $without['total']);
+        $this->assertFalse($without['include_gratis']);
+
+        $point->update(['include_gratis_in_cost' => true]);
+        $with = ProgramPointCostPricing::breakdown($point->fresh(), $event);
+        $this->assertSame(48, $with['headcount']);
+        $this->assertSame(48.0, $with['total']);
+        $this->assertTrue($with['include_gratis']);
     }
 
     public function test_finance_calculation_ignores_stale_calculated_price(): void
@@ -72,7 +123,7 @@ class ProgramPointCostPricingTest extends TestCase
             'driver' => 1,
         ]);
 
-        // Parking: 40 os. za 1305 EUR → ceil(48/40)=2 × 1305 = 2610 EUR × 4.35
+        // Parking: 40 os. za 1305 EUR → ceil(44/40)=2 × 1305 (domyślnie bez gratisów)
         $point = EventProgramPoint::create([
             'event_id' => $event->id,
             'day' => 1,
@@ -85,6 +136,7 @@ class ProgramPointCostPricingTest extends TestCase
             'convert_to_pln' => true,
             'calculated_price' => 600, // stale / błędne
             'include_in_program' => true,
+            'include_gratis_in_cost' => true, // z gratisami: ceil(48/40)=2 — ta sama liczba jednostek
             'active' => true,
         ]);
 
@@ -115,7 +167,7 @@ class ProgramPointCostPricingTest extends TestCase
         $this->assertNotEquals(600.0, $calc);
     }
 
-    public function test_upsert_seeds_plan_from_calculation_with_gratis_when_planned_empty(): void
+    public function test_upsert_seeds_plan_from_paying_only_by_default(): void
     {
         $user = User::factory()->create();
         $pln = Currency::create([
@@ -137,7 +189,6 @@ class ProgramPointCostPricingTest extends TestCase
             'driver' => 1,
         ]);
 
-        // Bez planned_price — seed planu z kalkulacji (45 osób koszowych).
         $point = new EventProgramPoint([
             'event_id' => $event->id,
             'day' => 1,
@@ -150,6 +201,58 @@ class ProgramPointCostPricingTest extends TestCase
             'currency_id' => $pln->id,
             'convert_to_pln' => true,
             'include_in_program' => true,
+            'include_gratis_in_cost' => false,
+            'active' => true,
+        ]);
+        $point->saveQuietly();
+
+        $settlement = EventSettlement::create([
+            'event_id' => $event->id,
+            'status' => 'active',
+            'created_by' => $user->id,
+        ]);
+
+        $cost = $settlement->upsertCostFromProgramPoint($point->fresh(['currency', 'event']));
+
+        $this->assertSame(40.0, (float) $cost->planned_amount);
+        $this->assertSame(40.0, (float) $cost->planned_amount_pln);
+    }
+
+    public function test_upsert_seeds_plan_with_gratis_when_flag_enabled(): void
+    {
+        $user = User::factory()->create();
+        $pln = Currency::create([
+            'name' => 'Złoty',
+            'symbol' => 'PLN',
+            'code' => 'PLN',
+            'exchange_rate' => 1,
+        ]);
+
+        $event = Event::factory()->create([
+            'participant_count' => 40,
+            'assigned_to' => $user->id,
+        ]);
+        EventQty::create([
+            'event_id' => $event->id,
+            'qty' => 40,
+            'gratis' => 5,
+            'staff' => 1,
+            'driver' => 1,
+        ]);
+
+        $point = new EventProgramPoint([
+            'event_id' => $event->id,
+            'day' => 1,
+            'order' => 1,
+            'name' => 'Obiad',
+            'unit_price' => 1,
+            'quantity' => 1,
+            'group_size' => 1,
+            'planned_price' => 0,
+            'currency_id' => $pln->id,
+            'convert_to_pln' => true,
+            'include_in_program' => true,
+            'include_gratis_in_cost' => true,
             'active' => true,
         ]);
         $point->saveQuietly();
@@ -164,6 +267,69 @@ class ProgramPointCostPricingTest extends TestCase
 
         $this->assertSame(45.0, (float) $cost->planned_amount);
         $this->assertSame(45.0, (float) $cost->planned_amount_pln);
+    }
+
+    public function test_finance_overview_calculation_without_gratis_by_default(): void
+    {
+        $user = User::factory()->create();
+        $pln = Currency::create([
+            'name' => 'Złoty',
+            'symbol' => 'PLN',
+            'code' => 'PLN',
+            'exchange_rate' => 1,
+        ]);
+
+        $event = Event::factory()->create([
+            'participant_count' => 40,
+            'assigned_to' => $user->id,
+        ]);
+        EventQty::create([
+            'event_id' => $event->id,
+            'qty' => 40,
+            'gratis' => 5,
+            'staff' => 1,
+            'driver' => 1,
+        ]);
+
+        $point = EventProgramPoint::create([
+            'event_id' => $event->id,
+            'day' => 1,
+            'order' => 1,
+            'name' => 'Muzeum',
+            'unit_price' => 10,
+            'quantity' => 1,
+            'group_size' => 1,
+            'currency_id' => $pln->id,
+            'convert_to_pln' => true,
+            'include_in_program' => true,
+            'include_gratis_in_cost' => false,
+            'active' => true,
+        ]);
+
+        $settlement = EventSettlement::create([
+            'event_id' => $event->id,
+            'status' => 'active',
+            'created_by' => $user->id,
+        ]);
+
+        $cost = EventSettlementCost::create([
+            'settlement_id' => $settlement->id,
+            'name' => 'Muzeum',
+            'source_type' => 'program_point',
+            'source_id' => $point->id,
+            'planned_amount' => 400,
+            'planned_amount_pln' => 400,
+            'planned_currency_id' => $pln->id,
+            'planned_convert_to_pln' => true,
+            'paid_by' => 'office',
+            'payment_status' => 'planned',
+        ]);
+
+        $service = app(EventFinanceOverviewService::class);
+        $this->assertEqualsWithDelta(400.0, $service->calculationPlnForPlanCost($cost, $event->fresh()), 0.01);
+
+        $point->update(['include_gratis_in_cost' => true]);
+        $this->assertEqualsWithDelta(450.0, $service->calculationPlnForPlanCost($cost, $event->fresh()), 0.01);
     }
 
     public function test_upsert_prefers_planned_price_over_unit_calculation(): void
@@ -212,10 +378,13 @@ class ProgramPointCostPricingTest extends TestCase
         $cost = $settlement->upsertCostFromProgramPoint($point->fresh(['currency', 'event']));
 
         $this->assertSame(50.0, (float) $cost->planned_amount);
+        $this->assertSame(40.0, (float) ProgramPointCostPricing::breakdown($point->fresh(['currency']), $event)['total']);
+
+        $point->update(['include_gratis_in_cost' => true]);
         $this->assertSame(45.0, (float) ProgramPointCostPricing::breakdown($point->fresh(['currency']), $event)['total']);
     }
 
-    public function test_offer_cost_calculator_includes_gratis_in_program_points(): void
+    public function test_offer_cost_calculator_excludes_gratis_by_default_and_includes_when_flagged(): void
     {
         $pln = Currency::create([
             'name' => 'Złoty',
@@ -233,7 +402,7 @@ class ProgramPointCostPricingTest extends TestCase
             'driver' => 1,
         ]);
 
-        EventProgramPoint::create([
+        $point = EventProgramPoint::create([
             'event_id' => $event->id,
             'day' => 1,
             'order' => 1,
@@ -245,6 +414,7 @@ class ProgramPointCostPricingTest extends TestCase
             'convert_to_pln' => true,
             'include_in_calculation' => true,
             'include_in_program' => true,
+            'include_gratis_in_cost' => false,
             'active' => true,
         ]);
 
@@ -252,7 +422,14 @@ class ProgramPointCostPricingTest extends TestCase
         $programLine = collect($result['lines'])->firstWhere('name', 'Obiad');
 
         $this->assertNotNull($programLine);
-        // 45 os. × 10 zł (nie 40 × 10)
-        $this->assertSame(450.0, (float) $programLine['cost_pln']);
+        $this->assertSame(400.0, (float) $programLine['cost_pln']);
+
+        EventCostCalculator::clearRequestCache();
+        $point->update(['include_gratis_in_cost' => true]);
+        $resultOn = EventCostCalculator::for($event->fresh())->calculate(40);
+        $programLineOn = collect($resultOn['lines'])->firstWhere('name', 'Obiad');
+
+        $this->assertNotNull($programLineOn);
+        $this->assertSame(450.0, (float) $programLineOn['cost_pln']);
     }
 }

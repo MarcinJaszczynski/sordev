@@ -80,6 +80,7 @@ class PilotAdvanceMultiCurrencyTest extends TestCase
             'shared_with_pilot' => true,
             'status' => Event::STATUS_CONFIRMED,
             'pilot_funds_paid' => true,
+            'pilot_portal_show_currency_exchange' => true,
         ]);
 
         app(PilotAdvanceService::class)->approvePayment($event, paidLines: [
@@ -120,6 +121,7 @@ class PilotAdvanceMultiCurrencyTest extends TestCase
             'shared_with_pilot' => true,
             'status' => Event::STATUS_CONFIRMED,
             'pilot_funds_paid' => true,
+            'pilot_portal_show_currency_exchange' => true,
         ]);
 
         app(PilotAdvanceService::class)->approvePayment($event, paidLines: [
@@ -185,6 +187,7 @@ class PilotAdvanceMultiCurrencyTest extends TestCase
             'shared_with_pilot' => true,
             'status' => Event::STATUS_CONFIRMED,
             'pilot_funds_paid' => true,
+            'pilot_portal_show_currency_exchange' => true,
         ]);
 
         app(PilotAdvanceService::class)->approvePayment($event, paidLines: [
@@ -447,6 +450,9 @@ class PilotAdvanceMultiCurrencyTest extends TestCase
 
         Livewire::actingAs($admin)
             ->test(PilotCashDesk::class, ['event' => $event->fresh(), 'context' => 'admin'])
+            ->assertSee('Wydatki pilota')
+            ->assertSee('Gotówka od biura')
+            ->assertSee('2 500,00')
             ->call('editOfficePayout', $plnId)
             ->assertSet('editingPayoutCurrencyId', $plnId)
             ->assertSet('payoutAmount', '2500.00')

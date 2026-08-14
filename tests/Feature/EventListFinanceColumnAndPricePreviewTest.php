@@ -188,7 +188,9 @@ class EventListFinanceColumnAndPricePreviewTest extends TestCase
         $html = EventPricePerPersonFields::formatSummaryContent([
             'ready' => true,
             'price_per_person_label' => '2 860,00 PLN + 128,47 EUR',
+            'price_per_person_rounded' => 2860.0,
             'total_pln' => 94227.17,
+            'payable_total_pln' => 94380.0,
             'base_pln' => 77203.75,
             'markup_pln' => 11580.56,
             'tax_pln' => 5442.86,
@@ -199,6 +201,7 @@ class EventListFinanceColumnAndPricePreviewTest extends TestCase
 
         $this->assertStringContainsString('Za osobę: 2 860,00 PLN + 128,47 EUR', $html);
         $this->assertStringContainsString('Suma grupy:', $html);
+        $this->assertStringContainsString('94 380,00 PLN', $html);
         $this->assertStringContainsString('Płacących: 33', $html);
         $this->assertStringNotContainsString('Baza / marża / podatki', $html);
     }
@@ -213,7 +216,9 @@ class EventListFinanceColumnAndPricePreviewTest extends TestCase
         $html = EventPricePerPersonFields::formatSummaryContent([
             'ready' => true,
             'price_per_person_label' => '2 860,00 PLN',
+            'price_per_person_rounded' => 2860.0,
             'total_pln' => 94227.17,
+            'payable_total_pln' => 94380.0,
             'base_pln' => 77203.75,
             'markup_pln' => 11580.56,
             'tax_pln' => 5442.86,
@@ -224,6 +229,7 @@ class EventListFinanceColumnAndPricePreviewTest extends TestCase
 
         $this->assertStringContainsString('Baza / marża / podatki', $html);
         $this->assertStringContainsString('77 203,75 PLN', $html);
+        $this->assertStringContainsString('94 380,00 PLN', $html);
     }
 
     public function test_resolved_price_matches_cost_calculator_not_stale_price_table(): void

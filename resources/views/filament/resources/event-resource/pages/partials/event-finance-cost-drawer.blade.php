@@ -276,14 +276,41 @@
                                     $currencyOptions = $this->currencyOptions;
                                     $groupSize = (int) ($planForm['group_size'] ?? 1);
                                     $unitPriceLabel = \App\Services\ProgramPointPricingCalculator::unitPriceLabel($groupSize);
+                                    $planCurrencyId = $planForm['currency_id'] ?? null;
+                                    $planCurrency = $planCurrencyId
+                                        ? \App\Models\Currency::query()->find($planCurrencyId)
+                                        : null;
+                                    $planIsForeign = \App\Support\CurrencyAmountDisplay::isForeignCurrency($planCurrencyId);
+                                    $planConvert = (bool) ($planForm['convert_to_pln'] ?? true);
+                                    // Plan = planned_price (edytowalny); calculated_price to podpowiedź z formuły.
+                                    $planAmount = (float) ($planForm['planned_price'] ?? $planForm['calculated_price'] ?? 0);
+                                    $planAmountPreview = $planAmount > 0
+                                        ? \App\Support\CurrencyAmountDisplay::format(
+                                            $planAmount,
+                                            $planCurrency,
+                                            $planIsForeign && $planConvert,
+                                        )
+                                        : null;
                                 @endphp
                                 <p class="text-[11px] text-primary-900/80 dark:text-primary-100/80">
-                                    <strong>Kalkulacja</strong> (z kosztorysu) liczy się z ceny i wielkości grupy.
-                                    <strong>Plan</strong> to ustalona kwota do zapłaty — może różnić się od kalkulacji.
+                                    Tu ustawiasz <strong>kwotę planowaną</strong> (to, ile faktycznie planujecie zapłacić).
+                                    Parametry poniżej tylko wyliczają podpowiedź — <strong>nie zmieniają ceny szablonu</strong> w tabeli.
                                 </p>
                                 <div class="grid gap-2 sm:grid-cols-2">
+                                    <div class="sm:col-span-2">
+                                        <label class="text-xs text-gray-600">Kwota planowana (suma)</label>
+                                        <input
+                                            type="number"
+                                            step="0.01"
+                                            wire:model="planForm.planned_price"
+                                            class="fi-input w-full rounded-lg border-gray-300 text-sm font-semibold dark:border-gray-600 dark:bg-gray-900"
+                                        />
+                                        @if ($planAmountPreview)
+                                            <p class="mt-0.5 text-[11px] text-gray-600">Podgląd: <span class="font-medium tabular-nums">{{ $planAmountPreview }}</span></p>
+                                        @endif
+                                    </div>
                                     <div>
-                                        <label class="text-xs text-gray-600">{{ $unitPriceLabel }}</label>
+                                        <label class="text-xs text-gray-600">{{ $unitPriceLabel }} (podpowiedź)</label>
                                         <input
                                             type="number"
                                             step="0.01"
@@ -320,24 +347,41 @@
                                     @endif
                                     <div>
                                         <label class="text-xs text-gray-600">Waluta</label>
-                                        <select wire:model="planForm.currency_id" class="fi-select-input w-full rounded-lg border-gray-300 text-sm dark:border-gray-600 dark:bg-gray-900">
+                                        <select wire:model.live="planForm.currency_id" class="fi-select-input w-full rounded-lg border-gray-300 text-sm dark:border-gray-600 dark:bg-gray-900">
                                             @foreach ($currencyOptions as $id => $label)
                                                 <option value="{{ $id }}">{{ $label }}</option>
                                             @endforeach
                                         </select>
                                     </div>
-                                    <div class="sm:col-span-2 flex items-center gap-2 pt-1">
-                                        <input id="plan-convert-to-pln" type="checkbox" wire:model="planForm.convert_to_pln" class="rounded border-gray-300" />
-                                        <label for="plan-convert-to-pln" class="text-xs text-gray-700 dark:text-gray-200">Przelicz plan na PLN</label>
-                                    </div>
-                                    <div>
-                                        <label class="text-xs text-gray-600">Kalkulacja (kosztorys)</label>
-                                        <input type="number" step="0.01" wire:model="planForm.calculated_price" readonly class="fi-input w-full rounded-lg border-gray-200 bg-gray-100 text-sm dark:border-gray-600 dark:bg-gray-800" />
-                                    </div>
-                                    <div>
-                                        <label class="text-xs font-medium text-gray-700 dark:text-gray-200">Kwota planowana</label>
-                                        <input type="number" step="0.01" wire:model="planForm.planned_price" class="fi-input w-full rounded-lg border-gray-300 text-sm dark:border-gray-600 dark:bg-gray-900" />
-                                        @error('planForm.planned_price') <p class="text-xs text-rose-600">{{ $message }}</p> @enderror
+                                    @if ($planIsForeign)
+                                        <div class="sm:col-span-2 space-y-1 pt-1">
+                                            <div class="flex items-center gap-2">
+                                                <input id="plan-convert-to-pln" type="checkbox" wire:model.live="planForm.convert_to_pln" class="rounded border-gray-300" />
+                                                <label for="plan-convert-to-pln" class="text-xs text-gray-700 dark:text-gray-200">Przelicz plan na PLN</label>
+                                            </div>
+                                            @if ($planAmountPreview)
+                                                <p class="text-[11px] text-gray-600 dark:text-gray-300">
+                                                    Podgląd planu: <span class="font-medium tabular-nums">{{ $planAmountPreview }}</span>
+                                                    @if ($planConvert)
+                                                        <span class="text-gray-500">· wchodzi do sum PLN</span>
+                                                    @else
+                                                        <span class="text-gray-500">· poza sumą PLN (tylko {{ \App\Support\CurrencyAmountDisplay::symbol($planCurrency) }})</span>
+                                                    @endif
+                                                </p>
+                                            @endif
+                                        </div>
+                                    @endif
+                                    <div class="sm:col-span-2 flex items-center gap-2">
+                                        <input
+                                            id="plan-include-gratis"
+                                            type="checkbox"
+                                            wire:model.live="planForm.include_gratis_in_cost"
+                                            wire:change="recalculateProgramPointPlanTotals"
+                                            class="rounded border-gray-300"
+                                        />
+                                        <label for="plan-include-gratis" class="text-xs text-gray-700 dark:text-gray-200">
+                                            Liczyć z opiekunami / gratisami
+                                        </label>
                                     </div>
                                     <div>
                                         <label class="text-xs text-gray-600">Płatnik planu</label>
@@ -441,8 +485,12 @@
                                         <span class="text-gray-500">Waluta</span>
                                         <div class="font-medium text-gray-800 dark:text-gray-100">
                                             {{ $selected['planned_currency_symbol'] ?? 'PLN' }}
-                                            @if (! empty($selected['planned_convert_to_pln']) && ($selected['planned_currency_symbol'] ?? 'PLN') !== 'PLN')
-                                                · przeliczanie PLN
+                                            @if (($selected['planned_currency_symbol'] ?? 'PLN') !== 'PLN')
+                                                @if (! empty($selected['planned_convert_to_pln']))
+                                                    · przeliczanie PLN
+                                                @else
+                                                    · bez przeliczenia PLN
+                                                @endif
                                             @endif
                                         </div>
                                     </div>
@@ -562,7 +610,7 @@
                                         <input type="date" wire:model="reservationForm.deposit_paid_at" class="fi-input w-full rounded-lg border-gray-300 text-sm dark:border-gray-600 dark:bg-gray-900" />
                                     </div>
                                     <div class="sm:col-span-2">
-                                        <label class="text-xs text-gray-600">Uwagi</label>
+                                        <label class="text-xs text-gray-600">Notatki biura</label>
                                         <textarea wire:model="reservationForm.office_notes" rows="3" class="fi-input w-full rounded-lg border-gray-300 text-sm dark:border-gray-600 dark:bg-gray-900"></textarea>
                                     </div>
                                     <div class="sm:col-span-2">
@@ -583,6 +631,9 @@
                         @else
                             <ul class="space-y-2">
                                 @foreach ($drawerReservations as $reservation)
+                                    @php
+                                        $reservationOfficeNotes = trim(strip_tags((string) ($reservation->office_notes ?? '')));
+                                    @endphp
                                     <li class="rounded-lg border border-gray-100 px-3 py-2 text-sm dark:border-gray-800">
                                         <div class="font-medium">
                                             {{ $reservation->booking_reference ?: ('#'.$reservation->id) }}
@@ -593,6 +644,12 @@
                                                 <div>{{ $line }}</div>
                                             @endforeach
                                         </div>
+                                        @if ($reservationOfficeNotes !== '')
+                                            <div class="mt-1.5 text-xs text-gray-700 dark:text-gray-300">
+                                                <span class="font-medium text-gray-500">Notatki biura:</span>
+                                                {{ \Illuminate\Support\Str::limit($reservationOfficeNotes, 160) }}
+                                            </div>
+                                        @endif
                                     </li>
                                 @endforeach
                             </ul>
@@ -632,6 +689,25 @@
                                 <label class="text-xs text-gray-600">Notatka</label>
                                 <textarea wire:model="documentForm.notes" rows="2" class="fi-input w-full rounded-lg border-gray-300 text-sm dark:border-gray-600 dark:bg-gray-800"></textarea>
                             </div>
+                            <div class="space-y-1.5 rounded-md border border-sky-100 bg-white/70 p-2 dark:border-sky-900/40 dark:bg-gray-900/40">
+                                <div class="text-[11px] font-semibold uppercase tracking-wide text-sky-800 dark:text-sky-200">Udostępnij w pakietach</div>
+                                <label class="flex items-center gap-2 text-xs text-gray-700 dark:text-gray-200">
+                                    <input type="checkbox" wire:model="documentForm.attach_to_pilot_pdf" class="rounded border-gray-300 text-primary-600" />
+                                    Pakiet pilota (panel + PDF)
+                                </label>
+                                <label class="flex items-center gap-2 text-xs text-gray-700 dark:text-gray-200">
+                                    <input type="checkbox" wire:model="documentForm.attach_to_hotel_pdf" class="rounded border-gray-300 text-primary-600" />
+                                    Pakiet hotelu
+                                </label>
+                                <label class="flex items-center gap-2 text-xs text-gray-700 dark:text-gray-200">
+                                    <input type="checkbox" wire:model="documentForm.attach_to_driver_pdf" class="rounded border-gray-300 text-primary-600" />
+                                    Pakiet kierowcy
+                                </label>
+                                <label class="flex items-center gap-2 text-xs text-gray-700 dark:text-gray-200">
+                                    <input type="checkbox" wire:model="documentForm.attach_to_folder_pdf" class="rounded border-gray-300 text-primary-600" />
+                                    Pakiet teczki
+                                </label>
+                            </div>
                             <div class="flex gap-2">
                                 <x-filament::button size="sm" wire:click="saveDocument" wire:loading.attr="disabled">Zapisz dokument</x-filament::button>
                                 <x-filament::button size="sm" color="gray" wire:click="$set('showDocumentForm', false)">Anuluj</x-filament::button>
@@ -651,6 +727,21 @@
                                             @if ($doc['number'])
                                                 <div class="text-xs text-gray-500">Nr: {{ $doc['number'] }}</div>
                                             @endif
+                                            @php
+                                                $shareBadges = collect([
+                                                    ! empty($doc['attach_to_pilot_pdf']) ? 'pilot' : null,
+                                                    ! empty($doc['attach_to_hotel_pdf']) ? 'hotel' : null,
+                                                    ! empty($doc['attach_to_driver_pdf']) ? 'kierowca' : null,
+                                                    ! empty($doc['attach_to_folder_pdf']) ? 'teczka' : null,
+                                                ])->filter()->values();
+                                            @endphp
+                                            @if ($shareBadges->isNotEmpty())
+                                                <div class="mt-1 flex flex-wrap gap-1">
+                                                    @foreach ($shareBadges as $badge)
+                                                        <span class="inline-flex rounded bg-emerald-50 px-1.5 py-0.5 text-[10px] font-medium text-emerald-800 dark:bg-emerald-950/40 dark:text-emerald-200">{{ $badge }}</span>
+                                                    @endforeach
+                                                </div>
+                                            @endif
                                         </div>
                                         <button
                                             type="button"
@@ -663,7 +754,7 @@
                                         <ul class="mt-1 space-y-0.5">
                                             @foreach ($doc['files'] as $file)
                                                 <li>
-                                                    <a href="{{ $file['url'] }}" target="_blank" class="inline-flex items-center gap-1 text-xs font-medium text-primary-600 underline">
+                                                    <a href="{{ $file['url'] }}" target="_blank" class="inline-flex items-center gap-1 rounded-md bg-emerald-50 px-1.5 py-0.5 text-xs font-medium text-emerald-800 underline-offset-2 hover:bg-emerald-100 hover:underline dark:bg-emerald-950/40 dark:text-emerald-200">
                                                         {{ $file['name'] }}
                                                     </a>
                                                 </li>

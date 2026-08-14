@@ -448,6 +448,10 @@ trait InteractsWithSettlementCostDrawer
                 documentType: (string) ($this->documentForm['document_type'] ?? 'invoice'),
                 documentNumber: $this->documentForm['document_number'] ?? null,
                 notes: $this->documentForm['notes'] ?? null,
+                attachToPilotPdf: (bool) ($this->documentForm['attach_to_pilot_pdf'] ?? false),
+                attachToHotelPdf: (bool) ($this->documentForm['attach_to_hotel_pdf'] ?? false),
+                attachToDriverPdf: (bool) ($this->documentForm['attach_to_driver_pdf'] ?? false),
+                attachToFolderPdf: (bool) ($this->documentForm['attach_to_folder_pdf'] ?? false),
             );
         } catch (\Throwable $e) {
             Notification::make()->title('Nie udało się dodać dokumentu')->body($e->getMessage())->danger()->send();
@@ -719,13 +723,12 @@ trait InteractsWithSettlementCostDrawer
         }
 
         $event = $this->settlementCostEvent();
-        $headcount = ProgramPointCostPricing::costHeadcount($event);
+        $includeGratis = (bool) ($this->planForm['include_gratis_in_cost'] ?? false);
+        $headcount = ProgramPointCostPricing::costHeadcount($event, null, $includeGratis);
         $groupSizeInt = (int) ($this->planForm['group_size'] ?? 1);
         $fixedQty = max(1, (int) ($this->planForm['quantity'] ?? 1));
         $unit = (float) ($this->planForm['unit_price'] ?? 0);
 
-        $previousCalculated = (float) ($this->planForm['calculated_price'] ?? 0);
-        $previousPlanned = (float) ($this->planForm['planned_price'] ?? 0);
         $calculated = ProgramPointPricingCalculator::totalPrice(
             $unit,
             $headcount,
@@ -733,12 +736,9 @@ trait InteractsWithSettlementCostDrawer
             $fixedQty,
         );
 
+        // Plan = wynik formuły (bez osobnego nadpisu w drawerze).
         $this->planForm['calculated_price'] = $calculated;
-
-        // Gdy plan nie był ręcznie rozjechany względem kalkulacji — trzymaj je razem.
-        if ($previousPlanned <= 0.01 || abs($previousPlanned - $previousCalculated) < 0.015) {
-            $this->planForm['planned_price'] = $calculated;
-        }
+        $this->planForm['planned_price'] = $calculated;
     }
 
     public function savePlan(): void
@@ -787,7 +787,6 @@ trait InteractsWithSettlementCostDrawer
             'planForm.unit_price' => ['required', 'numeric', 'min:0'],
             'planForm.group_size' => ['required', 'integer', 'min:0'],
             'planForm.quantity' => ['nullable', 'integer', 'min:1'],
-            'planForm.planned_price' => ['required', 'numeric', 'min:0'],
             'planForm.currency_id' => ['nullable', 'integer', 'exists:currencies,id'],
             'planForm.convert_to_pln' => ['nullable', 'boolean'],
             'planForm.paid_by' => ['required', 'in:office,pilot'],
@@ -796,7 +795,6 @@ trait InteractsWithSettlementCostDrawer
             'planForm.unit_price' => 'cena jednostkowa',
             'planForm.group_size' => 'wielkość grupy',
             'planForm.quantity' => 'ilość',
-            'planForm.planned_price' => 'kwota planowana',
             'planForm.currency_id' => 'waluta',
             'planForm.paid_by' => 'płatnik',
             'planForm.contractor_id' => 'kontrahent',
@@ -817,27 +815,21 @@ trait InteractsWithSettlementCostDrawer
             ->where('event_id', $this->settlementCostEvent()->id)
             ->findOrFail((int) $cost->source_id);
 
-        $event = $this->settlementCostEvent();
-        $headcount = ProgramPointCostPricing::costHeadcount($event);
-        $pricing = EventProgramPointPricingFields::mergePricingIntoPayload(
-            $this->planForm,
-            (float) $this->planForm['unit_price'],
-            $headcount,
-        );
+        $this->recalculateProgramPointPlanTotals();
 
+        $event = $this->settlementCostEvent();
+        $plannedAmount = (float) ($this->planForm['planned_price'] ?? $this->planForm['calculated_price'] ?? 0);
+        $currencyId = filled($this->planForm['currency_id'] ?? null) ? (int) $this->planForm['currency_id'] : null;
+        $convertToPln = (bool) ($this->planForm['convert_to_pln'] ?? false);
+
+        // Plan żyje osobno od ceny szablonu / unit_price punktu — nie nadpisujemy kosztu jednostkowego.
         $point->update([
-            'unit_price' => $pricing['unit_price'],
-            'group_size' => $pricing['group_size'],
-            'quantity' => $pricing['quantity'],
-            'planned_price' => $pricing['planned_price'],
-            'calculated_price' => $pricing['calculated_price'],
-            'currency_id' => $pricing['currency_id'],
-            'convert_to_pln' => $pricing['convert_to_pln'],
+            'planned_price' => $plannedAmount,
+            'currency_id' => $currencyId,
+            'convert_to_pln' => $convertToPln,
+            'include_gratis_in_cost' => (bool) ($this->planForm['include_gratis_in_cost'] ?? false),
         ]);
 
-        $plannedAmount = (float) $pricing['planned_price'];
-        $currencyId = filled($pricing['currency_id'] ?? null) ? (int) $pricing['currency_id'] : null;
-        $convertToPln = (bool) ($pricing['convert_to_pln'] ?? true);
         $currency = $currencyId ? Currency::query()->find($currencyId) : null;
         $rate = (float) ($currency?->exchange_rate ?? 1);
         $plannedAmountPln = ProgramPointSettlementFinanceFields::isForeignCurrency($currencyId)
@@ -960,6 +952,7 @@ trait InteractsWithSettlementCostDrawer
             'quantity' => 1,
             'currency_id' => $this->defaultCurrencyId(),
             'convert_to_pln' => true,
+            'include_gratis_in_cost' => false,
             'calculated_price' => null,
             'planned_price' => null,
             'paid_by' => 'office',
@@ -1013,6 +1006,10 @@ trait InteractsWithSettlementCostDrawer
             'document_type' => 'invoice',
             'document_number' => null,
             'notes' => null,
+            'attach_to_pilot_pdf' => false,
+            'attach_to_hotel_pdf' => false,
+            'attach_to_driver_pdf' => false,
+            'attach_to_folder_pdf' => false,
         ];
         $this->documentFiles = [];
     }
@@ -1058,7 +1055,8 @@ trait InteractsWithSettlementCostDrawer
         }
 
         $event = $this->settlementCostEvent();
-        $headcount = ProgramPointCostPricing::costHeadcount($event);
+        $includeGratis = (bool) ($point?->include_gratis_in_cost ?? false);
+        $headcount = ProgramPointCostPricing::costHeadcount($event, null, $includeGratis);
         $groupSize = (int) ($point?->group_size ?? 1);
         $quantity = max(1, (int) ($point?->quantity ?? 1));
         $unitPrice = (float) ($point?->unit_price ?? 0);
@@ -1076,8 +1074,9 @@ trait InteractsWithSettlementCostDrawer
             'quantity' => $quantity,
             'currency_id' => $row['planned_currency_id'] ?? $point?->currency_id ?? $this->defaultCurrencyId(),
             'convert_to_pln' => (bool) ($row['planned_convert_to_pln'] ?? $point?->convert_to_pln ?? true),
-            'calculated_price' => (float) ($point?->calculated_price ?? $calculated),
-            'planned_price' => (float) ($row['planned_amount'] ?? $point?->planned_price ?? $calculated),
+            'include_gratis_in_cost' => $includeGratis,
+            'calculated_price' => $calculated,
+            'planned_price' => (float) ($point?->planned_price ?? $row['planned_amount'] ?? $calculated),
             'paid_by' => $row['paid_by'] ?? 'office',
             'due_date' => $row['next_due_label'] ?? null,
             'notes' => $row['notes'] ?? null,

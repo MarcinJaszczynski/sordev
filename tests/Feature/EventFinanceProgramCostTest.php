@@ -36,7 +36,7 @@ class EventFinanceProgramCostTest extends TestCase
         $this->actingAs($this->admin);
     }
 
-    public function test_overview_shows_foreign_amount_with_indicative_pln_when_not_converted(): void
+    public function test_overview_shows_foreign_amount_without_pln_when_not_converted(): void
     {
         if (! Schema::hasTable('event_settlement_costs')) {
             $this->markTestSkipped('Brak tabeli event_settlement_costs.');
@@ -54,6 +54,37 @@ class EventFinanceProgramCostTest extends TestCase
             'planned_convert_to_pln' => false,
             'planned_rate' => 4.30,
             'planned_amount_pln' => null,
+            'paid_by' => 'office',
+            'payment_status' => 'planned',
+            'order' => 1,
+        ]);
+
+        $overview = app(EventFinanceOverviewService::class)->forEvent($event->fresh(), hideZero: false);
+        $row = collect($overview['rows'])->firstWhere('name', 'Wstęp EUR');
+
+        $this->assertNotNull($row);
+        $this->assertSame('100,00 EUR', $row['planned_label']);
+        $this->assertStringNotContainsString('≈', $row['planned_label']);
+    }
+
+    public function test_overview_shows_indicative_pln_when_converted(): void
+    {
+        if (! Schema::hasTable('event_settlement_costs')) {
+            $this->markTestSkipped('Brak tabeli event_settlement_costs.');
+        }
+
+        $eur = Currency::factory()->eur()->create(['exchange_rate' => 4.30]);
+        $event = Event::factory()->create(['duration_days' => 3, 'participant_count' => 10]);
+        $settlement = EventSettlement::findOrCreateActiveForEvent($event);
+
+        $settlement->costs()->create([
+            'source_type' => 'manual',
+            'name' => 'Wstęp EUR',
+            'planned_amount' => 100,
+            'planned_currency_id' => $eur->id,
+            'planned_convert_to_pln' => true,
+            'planned_rate' => 4.30,
+            'planned_amount_pln' => 430,
             'paid_by' => 'office',
             'payment_status' => 'planned',
             'order' => 1,
@@ -132,8 +163,8 @@ class EventFinanceProgramCostTest extends TestCase
             ->call('openCost', $cost->id)
             ->call('startEditPlan')
             ->assertSet('showPlanForm', true)
-            ->set('planForm.planned_price', 150)
             ->set('planForm.unit_price', 150)
+            ->call('recalculateProgramPointPlanTotals')
             ->set('planForm.paid_by', 'pilot')
             ->call('savePlan')
             ->assertNotified();

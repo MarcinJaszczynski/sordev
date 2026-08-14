@@ -368,6 +368,69 @@ class PilotAdvanceService
     }
 
     /**
+     * Linie wypłaty z biura do wyświetlenia (box / gotowość).
+     *
+     * Źródło prawdy: `pilot_cash_preparations.provided_amount` (jak w Gotówka dla pilota).
+     * Fallback: linie `paid` / legacy na events — bo starsze dane lub sync jeszcze nie zapisał preparations.
+     *
+     * @return Collection<int, array{amount: float, currency_id: int, currency?: Currency|null}>
+     */
+    public function officeProvidedLines(Event $event): Collection
+    {
+        if (Schema::hasTable('pilot_cash_preparations')) {
+            $settlement = EventSettlement::findActiveForEvent($event);
+
+            if ($settlement) {
+                $rows = $settlement->pilotCashPreparations()
+                    ->with('currency')
+                    ->whereNotNull('provided_amount')
+                    ->where('provided_amount', '>', 0)
+                    ->orderBy('currency_id')
+                    ->get();
+
+                if ($rows->isNotEmpty()) {
+                    return $rows->map(fn (PilotCashPreparation $cash) => [
+                        'amount' => (float) $cash->provided_amount,
+                        'currency_id' => (int) $cash->currency_id,
+                        'currency' => $cash->currency,
+                    ]);
+                }
+            }
+        }
+
+        return $this->paidLines($event);
+    }
+
+    /**
+     * Etykieta „Wypłacono pilotowi”: „2 500,00 PLN + 800,00 EUR (≈ 3 480,00 PLN)”.
+     */
+    public function formatOfficePayoutLabel(Event $event): string
+    {
+        $lines = $this->officeProvidedLines($event);
+
+        if ($lines->isEmpty()) {
+            return '—';
+        }
+
+        $parts = [];
+        foreach ($lines as $line) {
+            $amount = (float) ($line['amount'] ?? 0);
+            if ($amount <= 0.009) {
+                continue;
+            }
+
+            $parts[] = \App\Support\CurrencyAmountDisplay::formatIndicative(
+                $amount,
+                $line['currency'] ?? null,
+            );
+        }
+
+        return $parts !== [] ? implode(' + ', $parts) : '—';
+    }
+
+    /**
+     * Linie fazy paid (advance_lines / legacy) — używane przy zapisie i syncu.
+     *
      * @return Collection<int, array{amount: float, currency_id: int, currency?: Currency|null}>
      */
     public function paidLines(Event $event): Collection

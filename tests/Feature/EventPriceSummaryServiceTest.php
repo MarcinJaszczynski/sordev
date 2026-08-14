@@ -120,7 +120,7 @@ class EventPriceSummaryServiceTest extends TestCase
         $this->assertGreaterThan(0, (float) $calc['foreign']['EUR']['price_per_person']);
     }
 
-    public function test_nearest_template_prices_returns_two_closest_qty(): void
+    public function test_nearest_template_prices_returns_lower_and_upper_qty(): void
     {
         $place = Place::factory()->starting()->create();
         $template = EventTemplate::factory()->create(['start_place_id' => $place->id]);
@@ -170,9 +170,105 @@ class EventPriceSummaryServiceTest extends TestCase
 
         $this->assertCount(2, $nearest);
         $qtys = collect($nearest)->pluck('qty')->all();
-        $this->assertContains(30, $qtys);
-        $this->assertContains(40, $qtys);
+        $this->assertSame([30, 40], $qtys);
         $this->assertTrue(collect($nearest)->every(fn ($row) => $row['price_per_person'] > 0));
+    }
+
+    public function test_nearest_template_prices_prefers_bracket_not_two_closest_below(): void
+    {
+        $place = Place::factory()->starting()->create();
+        $template = EventTemplate::factory()->create(['start_place_id' => $place->id]);
+        $pln = Currency::query()->create([
+            'name' => 'Złoty',
+            'symbol' => 'PLN',
+            'code' => 'PLN',
+            'exchange_rate' => 1,
+        ]);
+
+        $variants = [
+            [35, 3, 285],
+            [40, 3, 260],
+            [45, 3, 245],
+        ];
+        foreach ($variants as [$qty, $gratis, $price]) {
+            $qtyModel = EventTemplateQty::create([
+                'qty' => $qty,
+                'gratis' => $gratis,
+                'staff' => 1,
+                'driver' => 1,
+            ]);
+            EventTemplatePricePerPerson::create([
+                'event_template_id' => $template->id,
+                'event_template_qty_id' => $qtyModel->id,
+                'start_place_id' => $place->id,
+                'currency_id' => $pln->id,
+                'price_per_person' => $price,
+                'price_with_tax' => $price * $qty,
+            ]);
+        }
+
+        // 42: abs-distance wybrałoby 40 i 35; bracketing → 40 (↓) i 45 (↑).
+        $nearest = app(EventPriceSummaryService::class)->nearestTemplatePrices(
+            $template->fresh(),
+            $place->id,
+            42,
+            3,
+        );
+
+        $this->assertSame([40, 45], collect($nearest)->pluck('qty')->all());
+    }
+
+    public function test_payable_total_uses_rounded_price_times_paying(): void
+    {
+        $user = User::factory()->create();
+        $pln = Currency::query()->create([
+            'name' => 'Złoty',
+            'symbol' => 'PLN',
+            'code' => 'PLN',
+            'exchange_rate' => 1,
+        ]);
+
+        $event = Event::factory()->create([
+            'assigned_to' => $user->id,
+            'participant_count' => 42,
+            'use_manual_transport_cost' => true,
+            'manual_transport_cost' => 0,
+        ]);
+        EventQty::create([
+            'event_id' => $event->id,
+            'qty' => 42,
+            'gratis' => 3,
+            'staff' => 1,
+            'driver' => 1,
+        ]);
+
+        // 42 × 100 = 4200 baza → przy 0% marży/podatków PPP = 100 (już wielokrotność 5).
+        EventProgramPoint::create([
+            'event_id' => $event->id,
+            'day' => 1,
+            'order' => 1,
+            'name' => 'Bilet',
+            'unit_price' => 100,
+            'quantity' => 1,
+            'group_size' => 1,
+            'currency_id' => $pln->id,
+            'convert_to_pln' => true,
+            'include_in_calculation' => true,
+            'include_in_program' => true,
+            'active' => true,
+        ]);
+
+        // Koszt z gratisami: (42+3)×100 = 4500; PPP raw = 4500/42 ≈ 107.14 → ceil 5 = 110.
+        $summary = app(EventPriceSummaryService::class)->forEvent($event->fresh(), 42, 3, includeNearest: false);
+
+        $this->assertTrue($summary['ready']);
+        $this->assertSame(110.0, (float) $summary['price_per_person_rounded']);
+        $this->assertSame(4620.0, (float) $summary['payable_total_pln']); // 110 × 42
+        $this->assertNotSame(
+            (float) $summary['payable_total_pln'],
+            (float) $summary['total_pln'],
+            'Suma do zapłaty (zaokr.) różni się od surowej kalkulacji'
+        );
     }
 
     public function test_cost_calculator_recovers_from_partial_bus_select(): void
