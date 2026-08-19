@@ -204,6 +204,7 @@ class NotificationServiceTopbarTest extends TestCase
 
         $task = Task::factory()->create([
             'title' => 'Impreza potwierdzona — lista kontrolna',
+            'description' => "Umowy i zaliczki.\n\nevent-status:1:confirmed",
             'assignee_id' => $assignee->id,
             'author_id' => $assignee->id,
             'status_id' => $statusId,
@@ -483,7 +484,7 @@ class NotificationServiceTopbarTest extends TestCase
         NotificationService::clearCacheForUser($user->id);
         $data = NotificationService::getTopbarDataForUser($user->id, fresh: true);
 
-        $this->assertStringContainsString('skomentował zadanie', $data['items_by_type']['comment'][0]['title']);
+        $this->assertStringContainsString('dodał komentarz do zadania', $data['items_by_type']['comment'][0]['title']);
         $this->assertStringContainsString($other->name, $data['items_by_type']['comment'][0]['title']);
         $this->assertStringContainsString('Treść komentarza', $data['items_by_type']['comment'][0]['meta']);
         $this->assertStringNotContainsString('<p>', $data['items_by_type']['comment'][0]['meta']);
@@ -532,7 +533,9 @@ class NotificationServiceTopbarTest extends TestCase
         $updatedBefore = $task->fresh()->updated_at?->timestamp ?? 0;
 
         NotificationService::clearCacheForUser($owner->id);
-        NotificationService::getTopbarDataForUser($owner->id, fresh: true);
+        $before = NotificationService::getTopbarDataForUser($owner->id, fresh: true);
+        $beforeWork = (int) ($before['counts']['work'] ?? 0);
+        $this->assertSame(0, $before['counts']['comments']);
 
         TaskComment::query()->create([
             'task_id' => $task->id,
@@ -549,13 +552,18 @@ class NotificationServiceTopbarTest extends TestCase
         $this->assertGreaterThan($updatedBefore, $task->updated_at?->timestamp ?? 0);
 
         $after = NotificationService::getTopbarDataForUser($owner->id, fresh: true);
-        $taskItem = collect($after['items_by_type']['task'] ?? [])->firstWhere('id', $task->id)
-            ?? collect($after['items'] ?? [])->first(fn (array $item): bool => ($item['type'] ?? '') === 'task' && (int) ($item['id'] ?? 0) === (int) $task->id);
+        $commentItem = collect($after['items_by_type']['comment'] ?? [])
+            ->first(fn (array $item): bool => (int) ($item['task_id'] ?? 0) === (int) $task->id);
 
-        $this->assertNotNull($taskItem, 'Zadanie powinno wrócić do aktywności topbara po własnym komentarzu.');
-        $this->assertGreaterThan($updatedBefore, (int) ($taskItem['revision'] ?? 0));
-        // Własny komentarz nie wchodzi do counts.comments — bump idzie przez aktywność zadania.
-        $this->assertSame(0, $after['counts']['comments']);
+        $this->assertNotNull($commentItem, 'Własny komentarz powinien wejść do kafelka Zadania.');
+        $this->assertStringContainsString('dodał komentarz do zadania', $commentItem['title'] ?? '');
+        $this->assertStringContainsString('Moje zadanie', $commentItem['title'] ?? '');
+        $this->assertSame(1, $after['counts']['comments']);
+        $this->assertGreaterThan(
+            $beforeWork,
+            (int) ($after['counts']['work'] ?? 0),
+            'Licznik Zadania (work) ma wzrosnąć po dodaniu komentarza.',
+        );
     }
 
     public function test_closing_task_modal_marks_comment_notifications_as_read(): void

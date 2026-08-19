@@ -16,7 +16,7 @@
     </div>
   @endif
 
-  <div class="overflow-x-auto rounded-lg border border-gray-200 dark:border-gray-700">
+  <div class="overflow-x-auto overflow-y-visible rounded-lg border border-gray-200 dark:border-gray-700">
     <table class="min-w-full divide-y divide-gray-200 text-sm dark:divide-gray-700">
       <thead class="bg-gray-50 text-left text-[11px] font-semibold uppercase tracking-wide text-gray-500 dark:bg-gray-800/80">
         <tr>
@@ -66,19 +66,39 @@
                       </span>
                     @endif
                   </div>
-                  @if($planned > 0)
+
+                  @if($officePaid > 0.009)
+                    <div class="rounded-lg border border-teal-300 bg-teal-50 px-3 py-2 text-sm text-teal-950 dark:border-teal-700 dark:bg-teal-950/40 dark:text-teal-100">
+                      <p class="font-semibold">
+                        Biuro wpłaciło zaliczkę: {{ number_format($officePaid, 2, ',', ' ') }} {{ $symbol }}
+                      </p>
+                      @if($planned > 0.009)
+                        <p class="mt-0.5 text-xs text-teal-800 dark:text-teal-200">
+                          Plan {{ number_format($planned, 2, ',', ' ') }} {{ $symbol }}
+                          → dopłata pilota: <strong>{{ number_format($pilotDue, 2, ',', ' ') }} {{ $symbol }}</strong>
+                        </p>
+                      @endif
+                      <p class="mt-1 text-[11px] font-medium text-teal-900/80 dark:text-teal-100/80">
+                        Nie płacisz pełnej kwoty planu — tylko dopłatę (albo 0, jeśli już pokryte).
+                      </p>
+                    </div>
+                  @elseif($planned > 0)
                     <p class="text-xs text-gray-600">
                       Plan: {{ number_format($planned, 2, ',', ' ') }} {{ $symbol }}
-                      @if($officePaid > 0.009)
-                        · zaliczka biura: {{ number_format($officePaid, 2, ',', ' ') }}
-                        · dopłata: {{ number_format($pilotDue, 2, ',', ' ') }}
+                      @if($pilotDue > 0.009)
+                        · do zapłaty: {{ number_format($pilotDue, 2, ',', ' ') }} {{ $symbol }}
                       @endif
                     </p>
                   @endif
 
                   <div class="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
                     <div>
-                      <label class="mb-1 block text-xs font-medium text-gray-600">Kwota faktyczna *</label>
+                      <label class="mb-1 block text-xs font-medium text-gray-600">
+                        Kwota faktyczna (gotówka pilota) *
+                        @if($officePaid > 0.009 && $pilotDue > 0.009)
+                          <span class="font-normal text-teal-700">— domyślnie dopłata</span>
+                        @endif
+                      </label>
                       <input type="text" inputmode="decimal" autocomplete="off" wire:model.live.debounce.500ms="editCostActualAmount" class="{{ $compact ? 'pilot-field' : 'fi-input w-full rounded-lg border px-3 py-2 text-sm' }}" />
                       @error('editCostActualAmount') <p class="mt-1 text-xs text-red-600">{{ $message }}</p> @enderror
                     </div>
@@ -101,11 +121,11 @@
                     </div>
                   </div>
 
-                  <div class="flex flex-wrap gap-2">
-                    <button type="button" wire:click="saveCost" wire:loading.attr="disabled" wire:target="saveCost" class="{{ $compact ? 'pilot-touch-btn bg-gray-800 text-white text-sm' : 'rounded-lg bg-gray-900 px-3 py-1.5 text-sm text-white' }}">
+                  <div class="flex flex-wrap items-center gap-2 pt-1">
+                    <button type="button" wire:click="saveCost" wire:loading.attr="disabled" wire:target="saveCost" class="{{ $compact ? 'pilot-touch-btn bg-primary-600 text-white text-sm' : 'inline-flex items-center rounded-lg bg-primary-600 px-3 py-1.5 text-sm font-semibold text-white shadow-sm hover:bg-primary-700' }}">
                       Zapisz
                     </button>
-                    <button type="button" wire:click="cancelEditCost" class="text-sm text-gray-600">Anuluj</button>
+                    <button type="button" wire:click="cancelEditCost" class="inline-flex items-center rounded-lg border border-gray-300 bg-white px-3 py-1.5 text-sm font-medium text-gray-800 hover:bg-gray-50 dark:border-gray-600 dark:bg-gray-800 dark:text-gray-100">Anuluj</button>
                   </div>
                 </div>
               </td>
@@ -113,6 +133,7 @@
           @else
             <tr @class([
               'bg-amber-50/70 dark:bg-amber-950/20' => $isUnplanned,
+              'bg-teal-50/50 dark:bg-teal-950/20' => ! $isUnplanned && $officePaid > 0.009,
             ]) wire:key="pilot-cost-{{ $cost->id }}">
               <td class="px-3 py-2 align-top">
                 <div class="flex flex-wrap items-center gap-2">
@@ -122,8 +143,26 @@
                       Nieplanowany
                     </span>
                   @endif
+                  @if($officePaid > 0.009)
+                    <span class="inline-flex items-center rounded-full bg-teal-200 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-teal-950 dark:bg-teal-800 dark:text-teal-50">
+                      Zaliczka biura
+                    </span>
+                  @endif
                 </div>
-                @if($planned > 0.009)
+                @if($officePaid > 0.009)
+                  <div class="mt-1 rounded-md border border-teal-200 bg-teal-50/80 px-2 py-1.5 text-[11px] leading-snug text-teal-950 dark:border-teal-800 dark:bg-teal-950/40 dark:text-teal-100">
+                    <div>
+                      <span class="font-semibold">Biuro wpłaciło:</span>
+                      {{ number_format($officePaid, 2, ',', ' ') }} {{ $symbol }}
+                    </div>
+                    @if($planned > 0.009)
+                      <div class="text-teal-800 dark:text-teal-200">
+                        plan {{ number_format($planned, 2, ',', ' ') }} {{ $symbol }}
+                        · <span class="font-semibold">dopłata {{ number_format($pilotDue, 2, ',', ' ') }} {{ $symbol }}</span>
+                      </div>
+                    @endif
+                  </div>
+                @elseif($planned > 0.009)
                   <div class="mt-0.5 text-[11px] text-gray-500">
                     plan {{ number_format($planned, 2, ',', ' ') }} {{ $symbol }}
                     @if($pilotDue > 0.009 && ($actual === null || abs($actual - $pilotDue) > 0.009))
@@ -198,6 +237,32 @@
           </tr>
         @endforelse
       </tbody>
+      @if ($this->expenseLines->isNotEmpty())
+        <tfoot class="bg-gray-50 text-xs dark:bg-gray-800/80">
+          @foreach ($this->expenseLedgerTotals as $total)
+            <tr class="border-t border-gray-200 dark:border-gray-700" wire:key="expense-total-{{ $total['currency'] }}">
+              <td class="px-3 py-2 font-semibold text-gray-800 dark:text-gray-100">
+                Suma ({{ $total['currency'] }})
+              </td>
+              <td class="px-3 py-2 align-top whitespace-nowrap">
+                <div class="font-semibold text-gray-900 dark:text-gray-100">
+                  {{ number_format($total['pilot_paid'], 2, ',', ' ') }} {{ $total['currency'] }}
+                </div>
+                <div class="mt-0.5 space-y-0.5 text-[11px] font-normal text-gray-500">
+                  <div>plan {{ number_format($total['planned'], 2, ',', ' ') }}</div>
+                  @if ($total['office_paid'] > 0.009)
+                    <div>zaliczka biura {{ number_format($total['office_paid'], 2, ',', ' ') }}</div>
+                  @endif
+                  @if ($total['pilot_due'] > 0.009)
+                    <div>do pilota {{ number_format($total['pilot_due'], 2, ',', ' ') }}</div>
+                  @endif
+                </div>
+              </td>
+              <td class="px-3 py-2" colspan="{{ $editable ? 4 : 3 }}"></td>
+            </tr>
+          @endforeach
+        </tfoot>
+      @endif
     </table>
   </div>
 </div>

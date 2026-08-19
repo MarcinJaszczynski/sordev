@@ -5,6 +5,7 @@ namespace App\Services;
 use App\Models\Bus;
 use App\Models\Event;
 use App\Models\EventProgramPoint;
+use App\Support\ProgramPointCostPricing;
 
 /**
  * Jeden autorytatywny kalkulator kosztów imprezy.
@@ -16,8 +17,8 @@ use App\Models\EventProgramPoint;
  *  - transport liczony raz przez EventTransportCostCalculator (nie z punktów programu),
  *  - ubezpieczenie liczone raz (InsuranceCostCalculator / Event::insuranceCostPln — z gratisami),
  *  - baza → marża → podatki → SUMA KOŃCOWA,
- *  - punkty programu: domyślnie od płacących; opiekunowie/gratisy tylko gdy
- *    include_gratis_in_cost na punkcie,
+ *  - punkty programu: domyślnie od płacących; opiekunowie / pilot / kierowca
+ *    tylko gdy odpowiednie flagi na punkcie są włączone,
  *  - cena za osobę = SUMA KOŃCOWA ÷ liczba osób PŁACĄCYCH (bez gratisów/obsługi/kierowcy).
  */
 class EventCostCalculator
@@ -108,7 +109,7 @@ class EventCostCalculator
                 continue;
             }
 
-            $priced = $this->pointCostBreakdown($point, $payingCount, $gratis, $forceConvertForeign);
+            $priced = $this->pointCostBreakdown($point, $payingCount, $gratis, $driver, $forceConvertForeign);
             if ($priced['pln'] > 0) {
                 $category = 'program';
                 if ($isHotelService) {
@@ -269,11 +270,17 @@ class EventCostCalculator
         EventProgramPoint $point,
         int $payingCount,
         int $gratis = 0,
+        int $driver = 0,
         bool $forceConvertForeign = false,
     ): array {
-        $costHeadcount = max(
-            1,
-            $payingCount + ((bool) ($point->include_gratis_in_cost ?? false) ? max(0, $gratis) : 0)
+        $costHeadcount = ProgramPointCostPricing::applyIncludedExtras(
+            $payingCount,
+            $gratis,
+            ProgramPointCostPricing::pilotCount($this->event),
+            $driver,
+            (bool) ($point->include_gratis_in_cost ?? false),
+            (bool) ($point->include_pilot_in_cost ?? false),
+            (bool) ($point->include_driver_in_cost ?? false),
         );
         $cost = (float) $point->resolveEffectiveTotalPrice($costHeadcount);
         if ($cost <= 0) {

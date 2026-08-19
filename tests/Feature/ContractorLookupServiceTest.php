@@ -110,6 +110,78 @@ class ContractorLookupServiceTest extends TestCase
         $this->assertArrayNotHasKey($otherHotel->id, $results);
     }
 
+    public function test_full_name_search_finds_driver_by_name_tokens(): void
+    {
+        $driver = $this->createContractor('Michał Chruściel', 'kierowca');
+        $this->createContractor('Tomek Chruściel', 'kierowca');
+
+        $results = $this->lookup->searchOptions(
+            search: 'Michał Chruściel',
+            typeNames: ['kierowca'],
+        );
+
+        $this->assertArrayHasKey($driver->id, $results);
+        $this->assertCount(1, $results);
+    }
+
+    public function test_search_matches_firstname_and_surname_when_company_name_differs(): void
+    {
+        $driver = Contractor::create([
+            'name' => 'Kol Travel',
+            'firstname' => 'Henryk',
+            'surname' => 'Chruściel',
+            'status' => 'active',
+        ]);
+        $type = ContractorType::query()->firstOrCreate(['name' => 'kierowca']);
+        $driver->types()->sync([$type->id]);
+
+        $bySurname = $this->lookup->searchOptions(
+            search: 'Chruściel',
+            typeNames: ['kierowca'],
+        );
+        $byFullPerson = $this->lookup->searchOptions(
+            search: 'Henryk Chruściel',
+            typeNames: ['kierowca'],
+        );
+
+        $this->assertArrayHasKey($driver->id, $bySurname);
+        $this->assertArrayHasKey($driver->id, $byFullPerson);
+    }
+
+    public function test_search_by_firstname_finds_driver_when_name_is_surname_only(): void
+    {
+        $driver = Contractor::create([
+            'name' => 'Chruściel',
+            'firstname' => 'Michał',
+            'surname' => 'Chruściel',
+            'status' => 'active',
+        ]);
+        $type = ContractorType::query()->firstOrCreate(['name' => 'kierowca']);
+        $driver->types()->sync([$type->id]);
+
+        $results = $this->lookup->searchOptions(
+            search: 'Michał',
+            typeNames: ['kierowca'],
+        );
+
+        $this->assertArrayHasKey($driver->id, $results);
+        $this->assertStringContainsString('Michał', $results[$driver->id]);
+    }
+
+    public function test_multi_token_search_requires_all_tokens(): void
+    {
+        $match = $this->createContractor('Michał Chruściel', 'kierowca');
+        $this->createContractor('Michał Kowalski', 'kierowca');
+
+        $results = $this->lookup->searchOptions(
+            search: 'Michał Chruściel',
+            typeNames: ['kierowca'],
+        );
+
+        $this->assertArrayHasKey($match->id, $results);
+        $this->assertCount(1, $results);
+    }
+
     private function createContractor(string $name, string $typeName): Contractor
     {
         $contractor = Contractor::create([

@@ -1,83 +1,95 @@
 @php
-    /** @var string $calc */
-    /** @var string $planned */
-    /** @var string $paid */
-    /** @var string $paidStatus */
-    /** @var string|null $paymentHint */
-    /** @var string|null $pilotDueHint */
-    /** @var string|null $remainingHint */
-    /** @var string|null $documentHint */
-    /** @var bool $hasUploadedFile */
-    /** @var string|null $statusLabel */
-    /** @var string|null $statusColor */
-    $paymentHint = $paymentHint ?? null;
-    $hasUploadedFile = $hasUploadedFile ?? false;
-    $statusLabel = $statusLabel ?? null;
+    /** @var \App\Models\EventProgramPoint|null $record */
+    $record = $getRecord();
 @endphp
 
-<div class="epp-finance-cell text-right text-xs leading-snug">
-    @if (! empty($hideSetParentFinance))
-        <span class="text-gray-400">—</span>
-    @else
-        <div class="tabular-nums text-gray-600 dark:text-gray-300">
-            <span class="text-[10px] uppercase tracking-wide text-gray-400">Kalk.</span>
-            {{ $calc }}
-        </div>
-        <div class="mt-0.5 font-medium tabular-nums text-gray-900 dark:text-gray-100">
-            <span class="text-[10px] font-normal uppercase tracking-wide text-gray-400">Plan</span>
-            {{ $planned }}
-        </div>
-        <div @class([
-            'mt-0.5 tabular-nums font-semibold',
-            'text-emerald-700 dark:text-emerald-300' => $paidStatus === 'full',
-            'text-amber-700 dark:text-amber-300' => $paidStatus === 'partial',
-            'text-gray-700 dark:text-gray-200' => $paidStatus === 'none',
-        ])>
-            @if ($paidStatus === 'full')
-                <span aria-hidden="true">✓</span>
-            @endif
-            {{ $paid }}
-        </div>
-        @if ($paymentHint)
-            <div class="mt-0.5 text-[11px] font-normal text-sky-700 dark:text-sky-300" title="{{ $paymentHint }}">
-                {{ $paymentHint }}
-            </div>
-        @endif
-        @if (! empty($pilotDueHint))
-            <div class="mt-0.5 text-[11px] font-medium text-blue-700 dark:text-blue-300" title="{{ $pilotDueHint }}">
-                {{ $pilotDueHint }}
-            </div>
-        @elseif (! empty($remainingHint) && $paidStatus !== 'full')
-            <div class="mt-0.5 text-[11px] font-normal text-rose-700 dark:text-rose-300">
-                {{ $remainingHint }}
-            </div>
-        @endif
-        @if ($statusLabel)
-            <div class="mt-1 flex justify-end">
-                <span @class([
-                    'inline-flex rounded-full px-2 py-0.5 text-[10px] font-semibold',
-                    match ($statusColor ?? 'gray') {
-                        'success' => 'bg-emerald-100 text-emerald-800',
-                        'warning' => 'bg-amber-100 text-amber-800',
-                        'danger' => 'bg-rose-100 text-rose-800',
-                        default => 'bg-gray-100 text-gray-700',
-                    },
+@if (! $record)
+    <span class="text-gray-400">—</span>
+@else
+    @php
+        $finance = method_exists($this, 'programPointFinanceViewData')
+            ? $this->programPointFinanceViewData($record)
+            : [];
+        $hide = ! empty($finance['hideSetParentFinance']);
+        $reservation = $record->relationLoaded('reservations')
+            ? $record->reservations->sortByDesc('id')->first()
+            : $record->reservations()->withTrashed()->orderByDesc('id')->first();
+        $reservation ??= $record->latestVisibleReservation();
+        $reservationIsTrashed = $reservation?->trashed() ?? false;
+        $reservationLine = $reservation
+            ? \App\Support\Reservations\ReservationWorkflowDisplay::reservationLine($reservation)
+            : null;
+        $advanceLine = $finance['advanceLine'] ?? null;
+        $remainingLine = $finance['remainingLine'] ?? null;
+        $calc = (string) ($finance['calc'] ?? '—');
+        $planned = (string) ($finance['planned'] ?? '—');
+        $planDiffers = ! empty($finance['planDiffersFromCalc']);
+    @endphp
+
+    <div class="epp-finance-cell">
+        @if ($hide)
+            <span class="text-gray-400">—</span>
+        @else
+            <div class="epp-ops epp-ops--finance">
+                <div class="epp-ops__row">
+                    <span class="epp-ops__label">Szablon</span>
+                    <span class="tabular-nums">{{ $calc }}</span>
+                </div>
+                <div @class([
+                    'epp-ops__row',
+                    'epp-ops__row--total',
+                    'epp-ops__row--warn' => $planDiffers,
                 ])>
-                    {{ $statusLabel }}
-                </span>
+                    <span class="epp-ops__label">Plan</span>
+                    <span class="tabular-nums" @if ($planDiffers) title="Plan różni się od szablonu: {{ $calc }}" @endif>{{ $planned }}</span>
+                </div>
+                @if ($reservationLine)
+                    <div @class([
+                        'epp-ops__row',
+                        'epp-ops__row--rez',
+                        'epp-ops__row--muted' => $reservationIsTrashed,
+                    ])>
+                        <span class="epp-ops__label">Rezerwacja</span>
+                        <span>{{ $reservationLine['text'] }}{{ $reservationIsTrashed ? ' · usunięta' : '' }}</span>
+                    </div>
+                @endif
+                @if ($advanceLine)
+                    <div @class([
+                        'epp-ops__row',
+                        'epp-ops__row--ok' => ($advanceLine['status'] ?? '') === 'paid',
+                        'epp-ops__row--warn' => in_array($advanceLine['status'] ?? '', ['pending', 'overdue'], true),
+                    ])>
+                        <span class="epp-ops__label">Zaliczka</span>
+                        <span>{{ $advanceLine['text'] }}</span>
+                    </div>
+                @endif
+                @php
+                    $paidLabel = trim((string) ($finance['paid'] ?? ''));
+                    $paidStatus = (string) ($finance['paidStatus'] ?? 'none');
+                    $showPaid = $paidLabel !== '' && $paidLabel !== '—' && $paidStatus !== 'none';
+                @endphp
+                @if ($showPaid)
+                    <div class="epp-ops__row epp-ops__row--ok">
+                        <span class="epp-ops__label">Zapłacono</span>
+                        <span class="tabular-nums">{{ $paidLabel }}</span>
+                    </div>
+                @endif
+                @if ($remainingLine)
+                    <div @class([
+                        'epp-ops__row',
+                        'epp-ops__row--warn' => ($remainingLine['tone'] ?? '') === 'warn',
+                        'epp-ops__row--due' => ($remainingLine['tone'] ?? '') === 'due',
+                    ])>
+                        <span class="epp-ops__label">Do zapłaty</span>
+                        <span>{{ $remainingLine['text'] }}</span>
+                    </div>
+                @elseif ($paidStatus === 'full')
+                    <div class="epp-ops__row epp-ops__row--ok">
+                        <span class="epp-ops__label">Do zapłaty</span>
+                        <span>opłacone</span>
+                    </div>
+                @endif
             </div>
         @endif
-        @if (! empty($documentHint))
-            <div
-                @class([
-                    'mt-1 truncate text-[10px] font-medium',
-                    'text-emerald-700' => $hasUploadedFile,
-                    'text-amber-700' => ! $hasUploadedFile,
-                ])
-                title="{{ $documentHint }}"
-            >
-                {{ $hasUploadedFile ? 'Plik' : 'Dok.' }}: {{ $documentHint }}
-            </div>
-        @endif
-    @endif
-</div>
+    </div>
+@endif

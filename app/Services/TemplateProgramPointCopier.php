@@ -306,6 +306,8 @@ class TemplateProgramPointCopier
             'include_in_program' => $childPivot?->include_in_program ?? $rootPivot?->include_in_program ?? true,
             'include_in_calculation' => $childPivot?->include_in_calculation ?? $rootPivot?->include_in_calculation ?? true,
             'include_gratis_in_cost' => (bool) ($templatePoint->include_gratis_in_cost ?? false),
+            'include_pilot_in_cost' => (bool) ($templatePoint->include_pilot_in_cost ?? false),
+            'include_driver_in_cost' => (bool) ($templatePoint->include_driver_in_cost ?? false),
             'active' => $childPivot?->active ?? $rootPivot?->active ?? true,
             'show_title_style' => $childPivot?->show_title_style ?? $rootPivot?->show_title_style ?? true,
             'show_description' => $childPivot?->show_description ?? $rootPivot?->show_description ?? true,

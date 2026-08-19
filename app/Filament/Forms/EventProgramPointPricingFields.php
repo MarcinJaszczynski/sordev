@@ -6,6 +6,7 @@ use App\Models\Currency;
 use App\Models\EventProgramPoint;
 use App\Models\EventTemplateProgramPoint;
 use App\Services\ProgramPointPricingCalculator;
+use App\Support\ProgramPointCostPricing;
 use Filament\Forms;
 use Filament\Forms\Get;
 use Filament\Forms\Set;
@@ -16,15 +17,21 @@ class EventProgramPointPricingFields
     /**
      * @param  array{
      *     default_participant_count?: int,
+     *     gratis_count?: int,
+     *     pilot_count?: int,
+     *     driver_count?: int,
      *     pricing_basis_selector?: bool,
      *     for_template?: bool,
      * }  $options
      */
     public static function section(array $options = []): Forms\Components\Section
     {
-        $defaultParticipants = max(1, (int) ($options['default_participant_count'] ?? 1));
-        $showBasisSelector = (bool) ($options['pricing_basis_selector'] ?? false);
         $forTemplate = (bool) ($options['for_template'] ?? false);
+        $defaultParticipants = max(1, (int) ($options['default_participant_count'] ?? 1));
+        $gratisCount = max(0, (int) ($options['gratis_count'] ?? 0));
+        $pilotCount = max(0, (int) ($options['pilot_count'] ?? ($forTemplate ? 1 : 0)));
+        $driverCount = max(0, (int) ($options['driver_count'] ?? ($forTemplate ? 1 : 0)));
+        $showBasisSelector = (bool) ($options['pricing_basis_selector'] ?? false);
 
         $schema = [];
 
@@ -46,8 +53,8 @@ class EventProgramPointPricingFields
                         $component->state(ProgramPointPricingCalculator::pricingBasisFromGroupSize($record->group_size));
                     }
                 })
-                ->afterStateUpdated(function ($state, Set $set, Get $get) use ($defaultParticipants): void {
-                    self::applyPricingBasis((string) $state, $set, $get, $defaultParticipants);
+                ->afterStateUpdated(function ($state, Set $set, Get $get) use ($defaultParticipants, $gratisCount, $pilotCount, $driverCount): void {
+                    self::applyPricingBasis((string) $state, $set, $get, $defaultParticipants, true, $gratisCount, $pilotCount, $driverCount);
                 });
 
             $schema[] = Forms\Components\Hidden::make('group_size')
@@ -72,9 +79,9 @@ class EventProgramPointPricingFields
                 ->afterStateHydrated(function (Forms\Components\TextInput $component, $state, $record, Get $get): void {
                     $component->state(max(2, (int) ($get('group_size') ?: ($record?->group_size ?? 20))));
                 })
-                ->afterStateUpdated(function ($state, Set $set, Get $get) use ($defaultParticipants): void {
+                ->afterStateUpdated(function ($state, Set $set, Get $get) use ($defaultParticipants, $gratisCount, $pilotCount, $driverCount): void {
                     $set('group_size', max(2, (int) ($state ?: 20)));
-                    self::syncTotals($set, $get, $defaultParticipants);
+                    self::syncTotals($set, $get, $defaultParticipants, false, $gratisCount, $pilotCount, $driverCount);
                 });
         }
 
@@ -88,7 +95,7 @@ class EventProgramPointPricingFields
                 ->helperText('1 = cena za osobę. >1 = cena za grupę (np. 20). 0 = liczba sztuk poniżej.')
                 ->visible(true)
                 ->live(onBlur: true)
-                ->afterStateUpdated(fn ($state, Set $set, Get $get) => self::syncTotals($set, $get, $defaultParticipants));
+                ->afterStateUpdated(fn ($state, Set $set, Get $get) => self::syncTotals($set, $get, $defaultParticipants, false, $gratisCount, $pilotCount, $driverCount));
 
         $pricingFields = [
             Forms\Components\TextInput::make('unit_price')
@@ -109,7 +116,7 @@ class EventProgramPointPricingFields
                 ->default(0)
                 ->required($forTemplate)
                 ->live(onBlur: true)
-                ->afterStateUpdated(fn ($state, Set $set, Get $get) => self::syncTotals($set, $get, $defaultParticipants)),
+                ->afterStateUpdated(fn ($state, Set $set, Get $get) => self::syncTotals($set, $get, $defaultParticipants, false, $gratisCount, $pilotCount, $driverCount)),
 
             ...($groupSizeField ? [$groupSizeField] : []),
         ];
@@ -133,7 +140,7 @@ class EventProgramPointPricingFields
                     return (int) ($get('group_size') ?? 1) <= 0;
                 })
                 ->live(onBlur: true)
-                ->afterStateUpdated(fn ($state, Set $set, Get $get) => self::syncTotals($set, $get, $defaultParticipants));
+                ->afterStateUpdated(fn ($state, Set $set, Get $get) => self::syncTotals($set, $get, $defaultParticipants, false, $gratisCount, $pilotCount, $driverCount));
 
             $pricingFields[] = Forms\Components\Select::make('unit')
                 ->label('Jednostka')
@@ -155,16 +162,11 @@ class EventProgramPointPricingFields
             CurrencyConversionFields::convertToggle(),
             CurrencyConversionFields::plnPreview('unit_price'),
 
-            Forms\Components\Toggle::make('include_gratis_in_cost')
-                ->label('Liczyć z opiekunami / gratisami')
-                ->helperText('Domyślnie tylko uczestnicy płacący. Włącz, gdy koszt punktu dotyczy też opiekunów.')
-                ->default(false)
-                ->inline(false)
-                ->columnSpanFull(),
+            ...self::costHeadcountToggles($defaultParticipants, $gratisCount, $pilotCount, $driverCount, $forTemplate),
 
             Forms\Components\Placeholder::make('pricing_breakdown_preview')
                 ->label('Podgląd wyliczenia')
-                ->content(fn (Get $get): string => self::previewText($get, $defaultParticipants))
+                ->content(fn (Get $get): string => self::previewText($get, $defaultParticipants, $gratisCount, $pilotCount, $driverCount))
                 ->extraAttributes(['class' => 'epp-pricing-preview whitespace-pre-line'])
                 ->columnSpanFull(),
         ]);
@@ -207,12 +209,90 @@ class EventProgramPointPricingFields
             ->schema($schema);
     }
 
+    /**
+     * @return array<int, Forms\Components\Component>
+     */
+    public static function costHeadcountToggles(
+        int $participantCount = 1,
+        int $gratisCount = 0,
+        int $pilotCount = 0,
+        int $driverCount = 0,
+        bool $forTemplate = false,
+    ): array {
+        $sync = fn (Set $set, Get $get) => self::syncTotals(
+            $set,
+            $get,
+            $participantCount,
+            false,
+            $gratisCount,
+            $pilotCount,
+            $driverCount,
+        );
+
+        $pilotHelper = $forTemplate
+            ? 'Domyślnie odznaczone. Zaznacz, aby na imprezie doliczyć pilota (gdy będzie przypisany).'
+            : ($pilotCount > 0
+                ? 'Domyślnie odznaczone. Zaznacz, aby doliczyć pilota (1 os.).'
+                : 'Domyślnie odznaczone. Zaznaczysz, gdy impreza będzie miała pilota.');
+
+        $driverHelper = $forTemplate
+            ? 'Domyślnie odznaczone. Zaznacz, aby na imprezie doliczyć kierowców z wariantu ilości.'
+            : ($driverCount > 0
+                ? 'Domyślnie odznaczone. Zaznacz, aby doliczyć kierowcę ('.$driverCount.' os.).'
+                : 'Domyślnie odznaczone. W wariancie ilości nie ma kierowcy.');
+
+        return [
+            Forms\Components\Fieldset::make('Kogo doliczyć do kosztu')
+                ->schema([
+                    Forms\Components\Toggle::make('include_gratis_in_cost')
+                        ->label('Liczyć z opiekunami / gratisami')
+                        ->helperText($forTemplate
+                            ? 'Domyślnie odznaczone. Zaznacz, gdy koszt dotyczy też opiekunów.'
+                            : 'Domyślnie odznaczone. Zaznacz, aby doliczyć opiekunów ('.$gratisCount.' os.).')
+                        ->default(false)
+                        ->afterStateHydrated(function (Forms\Components\Toggle $component, $state): void {
+                            $component->state((bool) $state);
+                        })
+                        ->live()
+                        ->afterStateUpdated(fn ($state, Set $set, Get $get) => $sync($set, $get))
+                        ->inline(false),
+
+                    Forms\Components\Toggle::make('include_pilot_in_cost')
+                        ->label('Liczyć z pilotem')
+                        ->helperText($pilotHelper)
+                        ->default(false)
+                        ->afterStateHydrated(function (Forms\Components\Toggle $component, $state): void {
+                            $component->state((bool) $state);
+                        })
+                        ->live()
+                        ->afterStateUpdated(fn ($state, Set $set, Get $get) => $sync($set, $get))
+                        ->inline(false),
+
+                    Forms\Components\Toggle::make('include_driver_in_cost')
+                        ->label('Liczyć z kierowcą')
+                        ->helperText($driverHelper)
+                        ->default(false)
+                        ->afterStateHydrated(function (Forms\Components\Toggle $component, $state): void {
+                            $component->state((bool) $state);
+                        })
+                        ->live()
+                        ->afterStateUpdated(fn ($state, Set $set, Get $get) => $sync($set, $get))
+                        ->inline(false),
+                ])
+                ->columns(3)
+                ->columnSpanFull(),
+        ];
+    }
+
     public static function applyPricingBasis(
         string $basis,
         Set $set,
         Get $get,
         int $participantCount = 1,
         bool $syncTotals = true,
+        int $gratisCount = 0,
+        int $pilotCount = 0,
+        int $driverCount = 0,
     ): void {
         match ($basis) {
             ProgramPointPricingCalculator::BASIS_PER_PIECE => $set('group_size', 0),
@@ -228,7 +308,7 @@ class EventProgramPointPricingFields
         }
 
         if ($syncTotals) {
-            self::syncTotals($set, $get, $participantCount);
+            self::syncTotals($set, $get, $participantCount, false, $gratisCount, $pilotCount, $driverCount);
         }
     }
 
@@ -251,6 +331,8 @@ class EventProgramPointPricingFields
         $set('planned_price', $total);
         $set('calculated_price', $total);
         $set('include_gratis_in_cost', (bool) ($template->include_gratis_in_cost ?? false));
+        $set('include_pilot_in_cost', (bool) ($template->include_pilot_in_cost ?? false));
+        $set('include_driver_in_cost', (bool) ($template->include_driver_in_cost ?? false));
     }
 
     public static function applyEventPointDefaults(Set $set, EventProgramPoint $point): void
@@ -264,18 +346,36 @@ class EventProgramPointPricingFields
         $set('paid_price', $point->paid_price ?? 0);
         $set('calculated_price', $point->calculated_price ?? $point->total_price);
         $set('include_gratis_in_cost', (bool) ($point->include_gratis_in_cost ?? false));
+        $set('include_pilot_in_cost', (bool) ($point->include_pilot_in_cost ?? false));
+        $set('include_driver_in_cost', (bool) ($point->include_driver_in_cost ?? false));
     }
 
-    public static function syncTotals(Set $set, Get $get, int $participantCount = 1, bool $forcePlanned = false): void
-    {
+    public static function syncTotals(
+        Set $set,
+        Get $get,
+        int $participantCount = 1,
+        bool $forcePlanned = false,
+        int $gratisCount = 0,
+        int $pilotCount = 0,
+        int $driverCount = 0,
+    ): void {
         $unit = (float) ($get('unit_price') ?: 0);
         $groupSize = $get('group_size');
         $groupSizeInt = $groupSize === null || $groupSize === '' ? 1 : (int) $groupSize;
         $fixedQty = max(1, (int) ($get('quantity') ?: 1));
+        $headcount = ProgramPointCostPricing::applyIncludedExtras(
+            max(1, $participantCount),
+            $gratisCount,
+            $pilotCount,
+            $driverCount,
+            (bool) ($get('include_gratis_in_cost') ?? false),
+            (bool) ($get('include_pilot_in_cost') ?? false),
+            (bool) ($get('include_driver_in_cost') ?? false),
+        );
 
         $total = ProgramPointPricingCalculator::totalPrice(
             $unit,
-            max(1, $participantCount),
+            $headcount,
             $groupSizeInt <= 0 ? 0 : $groupSizeInt,
             $fixedQty,
         );
@@ -292,21 +392,36 @@ class EventProgramPointPricingFields
      * @param  array<string, mixed>  $data
      * @return array<string, mixed>
      */
-    public static function mergePricingIntoPayload(array $data, float $unitPrice, int $participantCount): array
-    {
+    public static function mergePricingIntoPayload(
+        array $data,
+        float $unitPrice,
+        int $participantCount,
+        int $gratisCount = 0,
+        int $pilotCount = 0,
+        int $driverCount = 0,
+    ): array {
         $groupSizeRaw = $data['group_size'] ?? 1;
         $groupSizeInt = $groupSizeRaw === null || $groupSizeRaw === '' ? 1 : (int) $groupSizeRaw;
         $fixedQty = max(1, (int) ($data['quantity'] ?? 1));
+        $headcount = ProgramPointCostPricing::applyIncludedExtras(
+            max(1, $participantCount),
+            $gratisCount,
+            $pilotCount,
+            $driverCount,
+            (bool) ($data['include_gratis_in_cost'] ?? false),
+            (bool) ($data['include_pilot_in_cost'] ?? false),
+            (bool) ($data['include_driver_in_cost'] ?? false),
+        );
 
         $quantity = ProgramPointPricingCalculator::billableUnits(
-            max(1, $participantCount),
+            $headcount,
             $groupSizeInt <= 0 ? 0 : $groupSizeInt,
             $fixedQty,
         );
 
         $total = ProgramPointPricingCalculator::totalPrice(
             $unitPrice,
-            max(1, $participantCount),
+            $headcount,
             $groupSizeInt <= 0 ? 0 : $groupSizeInt,
             $fixedQty,
         );
@@ -328,8 +443,13 @@ class EventProgramPointPricingFields
         ]);
     }
 
-    protected static function previewText(Get $get, int $participantCount): string
-    {
+    protected static function previewText(
+        Get $get,
+        int $participantCount,
+        int $gratisCount = 0,
+        int $pilotCount = 0,
+        int $driverCount = 0,
+    ): string {
         $unit = (float) ($get('unit_price') ?: 0);
         if ($unit <= 0) {
             return 'Podaj cenę jednostkową.';
@@ -338,10 +458,19 @@ class EventProgramPointPricingFields
         $groupSizeRaw = $get('group_size');
         $groupSizeInt = $groupSizeRaw === null || $groupSizeRaw === '' ? 1 : (int) $groupSizeRaw;
         $currency = $get('currency_id') ? Currency::find($get('currency_id')) : null;
+        $headcount = ProgramPointCostPricing::applyIncludedExtras(
+            max(1, $participantCount),
+            $gratisCount,
+            $pilotCount,
+            $driverCount,
+            (bool) ($get('include_gratis_in_cost') ?? false),
+            (bool) ($get('include_pilot_in_cost') ?? false),
+            (bool) ($get('include_driver_in_cost') ?? false),
+        );
 
         $breakdown = ProgramPointPricingCalculator::breakdown(
             $unit,
-            max(1, $participantCount),
+            $headcount,
             $groupSizeInt <= 0 ? 0 : $groupSizeInt,
             max(1, (int) ($get('quantity') ?: 1)),
             $currency,

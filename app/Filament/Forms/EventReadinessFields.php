@@ -8,7 +8,7 @@ use App\Models\User;
 use App\Services\PilotAdvanceService;
 use App\Support\Tasks\OfficeTaskRecipients;
 use Filament\Forms;
-use Filament\Forms\Get;
+use Filament\Notifications\Notification;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Schema;
 
@@ -151,7 +151,7 @@ class EventReadinessFields
                 ->schema(EventKeyInfoFields::pilotFields()),
 
             Forms\Components\Section::make('Gotówka — Planowana / Wypłacona')
-                ->description('Planowana zaliczka (krok 1) vs rzeczywista wypłata (krok 2). Sumy gotówki pilota poniżej w sekcji Rozliczenie.')
+                ->description('Planowana zaliczka (krok 1) vs rzeczywista wypłata (krok 2). Po wypłacie korektę kwot, dopłaty i nowe waluty robisz w sekcji „Rozliczenie — gotówka…” poniżej.')
                 ->columns(['default' => 1, 'md' => 2])
                 ->visible(fn (): bool => Schema::hasColumn('events', 'pilot_funds_paid'))
                 ->schema(self::pilotAdvanceFields()),
@@ -682,7 +682,7 @@ class EventReadinessFields
 
             Forms\Components\Toggle::make('pilot_funds_paid')
                 ->label('Wypłacona — zatwierdź rzeczywistą wypłatę')
-                ->helperText('Oznacza fizyczną wypłatę (Wypłacona) i zasila saldo gotówki pilota we wszystkich zaplanowanych walutach.')
+                ->helperText('Oznacza fizyczną wypłatę (Wypłacona) i zasila saldo gotówki pilota we wszystkich zaplanowanych walutach. Po zatwierdzeniu cofasz osobną akcją „Cofnij wypłatę”.')
                 ->columnSpanFull()
                 ->disabled(fn (Forms\Get $get, ?Event $record): bool => (
                     $hasAdvanceLines
@@ -692,24 +692,79 @@ class EventReadinessFields
 
             Forms\Components\Placeholder::make('pilot_funds_paid_info')
                 ->label('Wypłacona')
-                ->content(function (?Event $record): string {
+                ->content(function (?Event $record): \Illuminate\Support\HtmlString|string {
                     if (! $record?->pilot_funds_paid) {
                         return '—';
                     }
 
                     $at = $record->pilot_funds_paid_at?->format('d.m.Y H:i') ?? '—';
-                    $by = $record->pilotFundsPaidByUser?->name ?? '—';
-                    $currency = $record->pilotAdvancePaidCurrency?->symbol ?? $record->pilotAdvancePaidCurrency?->code ?? 'PLN';
-                    $amountValue = (float) ($record->pilot_advance_paid_amount ?? $record->pilot_advance_planned_amount ?? 0);
-                    $amount = $amountValue > 0
-                        ? \App\Support\MoneyFormatter::format($amountValue, $currency)
-                        : '';
+                    $by = e($record->pilotFundsPaidByUser?->name ?? '—');
+                    $payoutLabel = e(app(PilotAdvanceService::class)->formatOfficePayoutLabel($record));
                     $comment = filled($record->pilot_advance_paid_comment)
-                        ? ' · '.$record->pilot_advance_paid_comment
+                        ? ' · '.e($record->pilot_advance_paid_comment)
                         : '';
 
-                    return trim($at.' · '.$by.($amount !== '' ? ' · '.$amount : '').$comment);
+                    return new \Illuminate\Support\HtmlString(
+                        '<div class="space-y-1 text-sm">'
+                        .'<p><span class="font-medium text-gray-950 dark:text-white">'.$payoutLabel.'</span></p>'
+                        .'<p class="text-gray-500 dark:text-gray-400">'.$at.' · '.$by.$comment.'</p>'
+                        .'<p class="text-xs text-gray-500 dark:text-gray-400">'
+                        .'Korekty kwoty, dopłaty i nowe waluty — w sekcji „Rozliczenie — gotówka i wymiana walut” poniżej (albo przyciskiem obok).'
+                        .'</p>'
+                        .'</div>'
+                    );
                 })
+                ->columnSpanFull()
+                ->visible(fn (?Event $record): bool => (bool) ($record?->pilot_funds_paid)),
+
+            Forms\Components\Actions::make([
+                Forms\Components\Actions\Action::make('goto_pilot_cash_desk')
+                    ->label('Zmień / dopłać / dodaj walutę')
+                    ->icon('heroicon-o-banknotes')
+                    ->color('primary')
+                    ->url('#pilot-cash-desk')
+                    ->visible(fn (?Event $record, $livewire): bool => (bool) ($record?->pilot_funds_paid)
+                        && is_a($livewire, \App\Filament\Resources\EventResource\Pages\ManageEventPilot::class)),
+
+                Forms\Components\Actions\Action::make('revoke_pilot_funds_paid')
+                    ->label('Cofnij wypłatę')
+                    ->icon('heroicon-o-arrow-uturn-left')
+                    ->color('danger')
+                    ->requiresConfirmation()
+                    ->modalHeading('Cofnąć wypłatę gotówki?')
+                    ->modalDescription('Usunie oznaczenie „Wypłacona” i zeruje kwoty „Od biura”. Planowana zaliczka zostanie. Jeśli są wymiany walut, najpierw je usuń lub popraw.')
+                    ->modalSubmitActionLabel('Cofnij wypłatę')
+                    ->visible(fn (?Event $record): bool => (bool) ($record?->pilot_funds_paid))
+                    ->action(function (?Event $record, $livewire): void {
+                        if (method_exists($livewire, 'revokePilotOfficePayout')) {
+                            $livewire->revokePilotOfficePayout();
+
+                            return;
+                        }
+
+                        if (! $record) {
+                            return;
+                        }
+
+                        try {
+                            app(PilotAdvanceService::class)->clearAllOfficeCashPayouts($record);
+                        } catch (\InvalidArgumentException $e) {
+                            Notification::make()
+                                ->title('Nie można cofnąć wypłaty')
+                                ->body($e->getMessage())
+                                ->danger()
+                                ->send();
+
+                            return;
+                        }
+
+                        Notification::make()
+                            ->title('Cofnięto wypłatę gotówki')
+                            ->success()
+                            ->send();
+                    }),
+            ])
+                ->columnSpanFull()
                 ->visible(fn (?Event $record): bool => (bool) ($record?->pilot_funds_paid)),
         ];
     }

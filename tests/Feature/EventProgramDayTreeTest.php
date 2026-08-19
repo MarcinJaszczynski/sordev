@@ -86,6 +86,8 @@ class EventProgramDayTreeTest extends TestCase
             'name' => 'Własny blok',
             'day' => 2,
             'parent_id' => null,
+            'include_in_program' => 1,
+            'include_in_calculation' => 1,
         ]);
     }
 
@@ -226,6 +228,8 @@ class EventProgramDayTreeTest extends TestCase
 
         Livewire::actingAs($user)
             ->test(EventProgramDayTree::class, ['eventId' => $event->id])
+            ->assertSee('Prog')
+            ->assertSee('Kalk')
             ->call('togglePointProperty', $point->id, 'include_in_calculation');
 
         $point->refresh();

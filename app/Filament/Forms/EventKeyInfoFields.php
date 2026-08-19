@@ -39,12 +39,24 @@ class EventKeyInfoFields
 
                     Forms\Components\TextInput::make('code')
                         ->label('Kod imprezy')
-                        ->readOnly()
-                        ->disabled()
-                        ->dehydrated(false)
-                        ->hiddenOn('create')
-                        ->columnSpanFull()
-                        ->helperText('Unikalny kod identyfikacyjny — generowany automatycznie.'),
+                        ->maxLength(Event::CODE_MAX_LENGTH)
+                        ->live(onBlur: true)
+                        ->afterStateUpdated(function ($state, callable $set): void {
+                            $set('code', Event::normalizeCode(is_string($state) ? $state : null));
+                        })
+                        ->dehydrateStateUsing(fn ($state): ?string => Event::normalizeCode(is_string($state) ? $state : null))
+                        ->nullable(fn (string $operation): bool => $operation === 'create')
+                        ->required(fn (string $operation): bool => $operation === 'edit')
+                        ->unique(ignoreRecord: true)
+                        ->regex('/^[A-Za-z0-9.\/-]+$/')
+                        ->validationMessages([
+                            'unique' => 'Ten kod imprezy jest już używany.',
+                            'regex' => 'Kod może zawierać litery, cyfry oraz znaki . / - (bez spacji).',
+                        ])
+                        ->helperText(fn (string $operation): string => $operation === 'create'
+                            ? 'Puste = kod zostanie nadany automatycznie. Możesz wpisać własny (np. numer umowy narzucony przez gminę).'
+                            : 'Kod na dokumentach i we wniosku o fakturę. Musi być unikalny. Zmiana nie aktualizuje już wystawionych numerów umów.')
+                        ->columnSpanFull(),
 
                     Forms\Components\Group::make([
                         Forms\Components\TextInput::make('duration_days')

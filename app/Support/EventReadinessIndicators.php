@@ -12,12 +12,13 @@ final class EventReadinessIndicators
      */
     public static function forEvent(Event $event): array
     {
-        // Kanoniczne 4 karty: odprawa, zaliczka pilota, ubezpieczenie, kierowca.
+        // Kanoniczne karty: odprawa, zaliczka pilota, ubezpieczenie, kierowca, hotel.
         return [
             self::checkInItem($event),
             self::pilotFundsItem($event),
             self::insuranceItem($event),
             self::driverItem($event),
+            self::hotelItem($event),
         ];
     }
 
@@ -139,6 +140,7 @@ final class EventReadinessIndicators
                 // Polisa / status „Gotowe”: Operacje → Ubezpieczenia.
                 'insurance' => \App\Filament\Resources\EventResource::getUrl('day-insurances', ['record' => $event]),
                 'driver' => \App\Filament\Resources\EventResource::getUrl('transport', ['record' => $event]),
+                'hotel' => \App\Filament\Resources\EventResource::getUrl('hotel-planning', ['record' => $event]),
                 default => null,
             };
         } catch (\Throwable) {
@@ -153,6 +155,7 @@ final class EventReadinessIndicators
             'pilot_funds' => 'heroicon-o-banknotes',
             'insurance' => 'heroicon-o-shield-check',
             'driver' => 'heroicon-o-truck',
+            'hotel' => 'heroicon-o-building-office-2',
             default => 'heroicon-o-flag',
         };
     }
@@ -327,5 +330,72 @@ final class EventReadinessIndicators
         ];
     }
 
-}
+    /**
+     * @return array{key: string, label: string, short: string, tone: string, title: string}
+     */
+    protected static function hotelItem(Event $event): array
+    {
+        if (! Schema::hasTable('event_hotel_stays')) {
+            return [
+                'key' => 'hotel',
+                'label' => 'Hotel',
+                'short' => '—',
+                'tone' => 'muted',
+                'title' => 'Brak planu noclegów',
+            ];
+        }
 
+        $groups = app(\App\Services\HotelStayReservationSync::class)->hotelGroups($event);
+
+        if ($groups === []) {
+            $hasStays = $event->relationLoaded('hotelStays')
+                ? $event->hotelStays->isNotEmpty()
+                : $event->hotelStays()->exists();
+
+            return [
+                'key' => 'hotel',
+                'label' => 'Hotel',
+                'short' => $hasStays ? 'brak' : '—',
+                'tone' => $hasStays ? 'danger' : 'muted',
+                'title' => $hasStays
+                    ? 'Wybierz hotel w Operacje → Hotel'
+                    : 'Brak nocy hotelowych',
+            ];
+        }
+
+        $total = count($groups);
+        $confirmed = count(array_filter($groups, fn (array $g): bool => (bool) ($g['is_confirmed'] ?? false)));
+
+        if ($confirmed === $total) {
+            $names = implode(', ', array_map(fn (array $g): string => $g['contractor_name'], $groups));
+
+            return [
+                'key' => 'hotel',
+                'label' => 'Hotel',
+                'short' => 'OK',
+                'tone' => 'ok',
+                'title' => $total === 1
+                    ? 'Rezerwacja hotelu potwierdzona ('.$names.')'
+                    : "Wszystkie hotele potwierdzone ({$confirmed}/{$total})",
+            ];
+        }
+
+        $pending = array_values(array_filter(
+            $groups,
+            fn (array $g): bool => ! ($g['is_confirmed'] ?? false),
+        ));
+        $pendingLabels = array_map(function (array $g): string {
+            $days = $g['days'] !== [] ? ' D'.implode('/', $g['days']) : '';
+
+            return $g['contractor_name'].$days;
+        }, $pending);
+
+        return [
+            'key' => 'hotel',
+            'label' => 'Hotel',
+            'short' => $confirmed > 0 ? 'w toku' : 'brak',
+            'tone' => $confirmed > 0 ? 'warn' : 'danger',
+            'title' => 'Do potwierdzenia: '.implode(' · ', $pendingLabels),
+        ];
+    }
+}

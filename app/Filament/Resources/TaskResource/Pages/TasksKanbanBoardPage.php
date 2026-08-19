@@ -3,6 +3,7 @@
 namespace App\Filament\Resources\TaskResource\Pages;
 
 use App\Enums\TaskPriority;
+use App\Enums\TaskSource;
 use App\Filament\Concerns\InteractsWithTaskEditModal;
 use App\Filament\Concerns\InteractsWithTaskOwnershipScope;
 use App\Filament\Concerns\MarksTaskInboxAsSeen;
@@ -65,6 +66,9 @@ class TasksKanbanBoardPage extends Page implements HasForms
     public $searchTerm = '';
 
     public $dueFilter = '';
+
+    /** office | system | '' (wszystkie) — domyślnie biuro. */
+    public string $sourceFilter = 'office';
 
     public bool $showFinishedTasks = false;
 
@@ -221,6 +225,10 @@ class TasksKanbanBoardPage extends Page implements HasForms
 
         if ($this->dueFilter === 'has_due_date') {
             $query->whereNotNull('due_date');
+        }
+
+        if ($this->sourceFilter === TaskSource::Office->value || $this->sourceFilter === TaskSource::System->value) {
+            $query->where('source', $this->sourceFilter);
         }
 
         $tasks = $query->get();
@@ -394,6 +402,7 @@ class TasksKanbanBoardPage extends Page implements HasForms
     {
         $this->tasksScope = 'assigned';
         $this->showFinishedTasks = false;
+        $this->sourceFilter = 'office';
         $this->reset(['priorityFilter', 'contextFilter', 'searchTerm', 'dueFilter', 'columnSorts']);
 
         // Clear computed properties
@@ -410,6 +419,7 @@ class TasksKanbanBoardPage extends Page implements HasForms
     public function applyQuickFilter(string $filter): void
     {
         $this->reset(['priorityFilter', 'contextFilter', 'searchTerm', 'dueFilter']);
+        $this->sourceFilter = 'office';
 
         match ($filter) {
             'high_priority' => $this->priorityFilter = TaskPriority::Urgent->value,

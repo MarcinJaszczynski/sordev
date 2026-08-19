@@ -12,6 +12,7 @@ use Carbon\Carbon;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Schema;
+use InvalidArgumentException;
 use Livewire\Attributes\On;
 use Livewire\Component;
 
@@ -20,6 +21,18 @@ class EventProgramPlanner extends Component
     public int $eventId;
 
     public Event $event;
+
+    public bool $showEditModal = false;
+
+    public ?int $editingPointId = null;
+
+    /** @var array<string, mixed> */
+    public array $editingData = [
+        'name' => '',
+        'start_time' => '',
+        'end_time' => '',
+        'hide_times' => false,
+    ];
 
     public bool $showDeleteModal = false;
 
@@ -48,6 +61,101 @@ class EventProgramPlanner extends Component
                 'maxDate' => $this->resolveBaseDate()->copy()->addDays($this->resolveDurationDays())->toDateString(),
             ],
         ]);
+    }
+
+    public function openEditModal(int $pointId): void
+    {
+        $point = EventProgramPoint::query()
+            ->where('event_id', $this->event->id)
+            ->with('templatePoint')
+            ->find($pointId);
+
+        if (! $point) {
+            return;
+        }
+
+        $effectiveTimes = $this->resolveEffectivePlannerTimes($point);
+
+        $this->editingPointId = $pointId;
+        $this->editingData = [
+            'name' => $point->templatePoint?->name ?? $point->name ?? ('Punkt #'.$point->id),
+            'start_time' => $effectiveTimes['start_time'],
+            'end_time' => $effectiveTimes['end_time'],
+            'hide_times' => (bool) $point->hide_times,
+        ];
+        $this->showEditModal = true;
+        $this->showDeleteModal = false;
+        $this->resetErrorBag();
+    }
+
+    public function saveEditingPoint(): void
+    {
+        if (! $this->editingPointId) {
+            return;
+        }
+
+        $point = EventProgramPoint::query()
+            ->where('event_id', $this->event->id)
+            ->find($this->editingPointId);
+
+        if (! $point) {
+            $this->showEditModal = false;
+
+            return;
+        }
+
+        $startTime = filled($this->editingData['start_time'] ?? null)
+            ? substr((string) $this->editingData['start_time'], 0, 5)
+            : null;
+        $endTime = filled($this->editingData['end_time'] ?? null)
+            ? substr((string) $this->editingData['end_time'], 0, 5)
+            : null;
+        $hideTimes = (bool) ($this->editingData['hide_times'] ?? false);
+
+        if (! $hideTimes && (! $startTime || ! $endTime)) {
+            $this->addError('editingData.end_time', 'Podaj godzinę startu i końca, albo ukryj godziny w programie.');
+
+            return;
+        }
+
+        DB::table('event_program_points')
+            ->where('id', $point->id)
+            ->update([
+                'hide_times' => $hideTimes,
+                'updated_at' => now(),
+            ]);
+
+        $point = $point->fresh();
+
+        if ($startTime && $endTime && ! $hideTimes) {
+            try {
+                $this->applyTypedTimes($point, $startTime, $endTime);
+            } catch (InvalidArgumentException $e) {
+                $this->addError('editingData.end_time', $e->getMessage());
+
+                return;
+            }
+        } else {
+            $this->reorderPlannerSchedule();
+        }
+
+        $this->event->refresh();
+        $this->showEditModal = false;
+        $this->editingPointId = null;
+
+        $this->dispatchCalendarUpdate();
+    }
+
+    public function requestRemoveEditingPoint(): void
+    {
+        if (! $this->editingPointId) {
+            return;
+        }
+
+        $pointId = $this->editingPointId;
+        $this->showEditModal = false;
+        $this->editingPointId = null;
+        $this->openDeleteModal($pointId);
     }
 
     public function openDeleteModal(int $pointId): void
@@ -79,9 +187,12 @@ class EventProgramPlanner extends Component
 
     public function closeModals(): void
     {
+        $this->showEditModal = false;
+        $this->editingPointId = null;
         $this->showDeleteModal = false;
         $this->deletingPointId = null;
         $this->deletingPointName = '';
+        $this->resetErrorBag();
     }
 
     public function removePointFromProgram(int $pointId): void
@@ -186,6 +297,54 @@ class EventProgramPlanner extends Component
         $this->event->refresh();
 
         $this->dispatchCalendarUpdate();
+    }
+
+    protected function applyTypedTimes(EventProgramPoint $point, string $startTime, string $endTime): void
+    {
+        if ($point->parent_id === null) {
+            app(EventProgramScheduleService::class)->applyManualTimeChange($point, $startTime, $endTime);
+
+            return;
+        }
+
+        $payload = [
+            'start_time' => $startTime,
+            'end_time' => $endTime,
+            'updated_at' => now(),
+        ];
+
+        if (Schema::hasColumn('event_program_points', 'times_manually_locked')) {
+            $payload['times_manually_locked'] = true;
+        }
+
+        $point->update($payload);
+        $this->reorderPlannerSchedule();
+    }
+
+    /**
+     * @return array{start_time: string, end_time: string}
+     */
+    protected function resolveEffectivePlannerTimes(EventProgramPoint $point): array
+    {
+        if ($point->start_time && $point->end_time) {
+            return [
+                'start_time' => substr((string) $point->start_time, 0, 5),
+                'end_time' => substr((string) $point->end_time, 0, 5),
+            ];
+        }
+
+        $baseDate = $this->resolveBaseDate();
+        $day = max(1, (int) ($point->day ?? 1));
+        $date = $baseDate->copy()->addDays($day - 1);
+        $service = app(\App\Services\EventProgramPointOrderService::class);
+        $visible = $service->visibleProgramPoints($this->event, requireActive: false);
+        $parentsById = $visible->whereNull('parent_id')->keyBy('id');
+        [$start, $end] = $this->resolvePointScheduleWindow($point, $date, $parentsById, $visible);
+
+        return [
+            'start_time' => $start->format('H:i'),
+            'end_time' => $end->format('H:i'),
+        ];
     }
 
     protected function reorderPlannerSchedule(): void
@@ -401,9 +560,7 @@ class EventProgramPlanner extends Component
 
     protected function resolveReservationBadge(EventProgramPoint $point): array
     {
-        $latestReservation = $point->reservations
-            ->sortByDesc('id')
-            ->first();
+        $latestReservation = $point->latestVisibleReservation();
 
         if (! $latestReservation) {
             return [
@@ -453,7 +610,7 @@ class EventProgramPlanner extends Component
 
     protected function resolveNotesPreview(EventProgramPoint $point): ?string
     {
-        $latestReservation = $point->reservations->sortByDesc('id')->first();
+        $latestReservation = $point->latestVisibleReservation();
 
         $notes = collect([
             $point->notes,

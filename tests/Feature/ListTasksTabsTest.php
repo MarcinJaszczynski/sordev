@@ -35,14 +35,16 @@ class ListTasksTabsTest extends TestCase
             'title' => 'Przypisane do mnie',
             'status_id' => Task::getDefaultStatusId(),
             'priority' => 'normal',
+            'source' => 'office',
             'author_id' => $other->id,
             'assignee_id' => $user->id,
         ]);
 
-        $authored = Task::create([
+        Task::create([
             'title' => 'Zlecone przeze mnie',
             'status_id' => Task::getDefaultStatusId(),
             'priority' => 'normal',
+            'source' => 'office',
             'author_id' => $user->id,
             'assignee_id' => $other->id,
         ]);
@@ -51,6 +53,7 @@ class ListTasksTabsTest extends TestCase
             'title' => 'Obce zadanie',
             'status_id' => Task::getDefaultStatusId(),
             'priority' => 'normal',
+            'source' => 'office',
             'author_id' => $other->id,
             'assignee_id' => $other->id,
         ]);
@@ -59,8 +62,8 @@ class ListTasksTabsTest extends TestCase
             ->test(ListTasks::class)
             ->assertSet('activeTab', 'active')
             ->assertSet('tasksScope', 'assigned')
-            ->assertCanSeeTableRecords([$assigned, $authored])
-            ->assertCountTableRecords(2);
+            ->assertCanSeeTableRecords([$assigned])
+            ->assertCountTableRecords(1);
     }
 
     public function test_list_can_show_all_tasks_when_scope_is_all(): void
@@ -186,5 +189,52 @@ class ListTasksTabsTest extends TestCase
             ->all();
 
         $this->assertSame([$subtask->id, $parent->id], array_slice($ids, 0, 2));
+    }
+
+    public function test_list_column_sorts_override_default_activity_order(): void
+    {
+        $user = User::factory()->create();
+        $user->assignRole('admin');
+        $statusId = Task::getDefaultStatusId();
+
+        $beta = Task::create([
+            'title' => 'Beta zadanie',
+            'status_id' => $statusId,
+            'priority' => 'normal',
+            'source' => 'office',
+            'author_id' => $user->id,
+            'assignee_id' => $user->id,
+            'due_date' => now()->addDays(3),
+        ]);
+        $beta->forceFill([
+            'created_at' => now()->subHour(),
+            'updated_at' => now()->subHour(),
+        ])->saveQuietly();
+
+        $alpha = Task::create([
+            'title' => 'Alpha zadanie',
+            'status_id' => $statusId,
+            'priority' => 'normal',
+            'source' => 'office',
+            'author_id' => $user->id,
+            'assignee_id' => $user->id,
+            'due_date' => now()->addDay(),
+        ]);
+        $alpha->forceFill([
+            'created_at' => now(),
+            'updated_at' => now(),
+        ])->saveQuietly();
+
+        Livewire::actingAs($user)
+            ->test(ListTasks::class)
+            ->call('setTasksScope', 'all')
+            ->sortTable('task_summary', 'asc')
+            ->assertCanSeeTableRecords([$alpha, $beta], inOrder: true)
+            ->sortTable('due_date', 'asc')
+            ->assertCanSeeTableRecords([$alpha, $beta], inOrder: true)
+            ->sortTable('due_date', 'desc')
+            ->assertCanSeeTableRecords([$beta, $alpha], inOrder: true)
+            ->sortTable('modified_at', 'desc')
+            ->assertCanSeeTableRecords([$alpha, $beta], inOrder: true);
     }
 }

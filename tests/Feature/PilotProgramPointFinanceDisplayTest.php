@@ -48,7 +48,7 @@ class PilotProgramPointFinanceDisplayTest extends TestCase
         $this->assertSame('15.08.2026', $hints[$point->id]['due_date_label']);
     }
 
-    public function test_hides_hint_when_office_pays(): void
+    public function test_shows_office_pays_hint_when_office_pays(): void
     {
         $event = Event::factory()->create();
         $point = EventProgramPoint::factory()->create([
@@ -73,7 +73,10 @@ class PilotProgramPointFinanceDisplayTest extends TestCase
 
         $hints = app(PilotProgramPointFinanceDisplay::class)->hintsForPoints($event->fresh(), collect([$point]));
 
-        $this->assertSame([], $hints);
+        $this->assertArrayHasKey($point->id, $hints);
+        $this->assertFalse($hints[$point->id]['has_pilot_obligation']);
+        $this->assertTrue($hints[$point->id]['has_office_obligation']);
+        $this->assertSame('Płaci biuro', $hints[$point->id]['payer_label']);
     }
 
     public function test_set_parent_shows_rollup_hint_without_child_hint(): void

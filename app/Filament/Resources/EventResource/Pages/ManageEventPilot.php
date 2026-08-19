@@ -278,6 +278,34 @@ class ManageEventPilot extends EditRecord
         $this->record->refresh();
     }
 
+    /**
+     * Cofa omyłkowo zatwierdzoną wypłatę gotówki (flaga + saldo „Od biura”).
+     */
+    public function revokePilotOfficePayout(): void
+    {
+        abort_unless((bool) $this->record->pilot_funds_paid, 403);
+
+        try {
+            app(PilotAdvanceService::class)->clearAllOfficeCashPayouts($this->record);
+        } catch (\InvalidArgumentException $e) {
+            Notification::make()
+                ->title('Nie można cofnąć wypłaty')
+                ->body($e->getMessage())
+                ->danger()
+                ->send();
+
+            return;
+        }
+
+        $this->record->refresh();
+        $this->fillForm();
+
+        Notification::make()
+            ->title('Cofnięto wypłatę gotówki')
+            ->success()
+            ->send();
+    }
+
     protected function getHeaderActions(): array
     {
         return [

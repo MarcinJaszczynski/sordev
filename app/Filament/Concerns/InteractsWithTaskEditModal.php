@@ -50,6 +50,12 @@ trait InteractsWithTaskEditModal
         $this->ensureMountedActionModalVisible();
     }
 
+    #[On('open-edit-task-modal')]
+    public function handleOpenEditTaskModalFromChild(int $taskId): void
+    {
+        $this->openEditTaskModal($taskId);
+    }
+
     public function openCreateTaskModal(array $defaultFormData = [], ?string $defaultDueDate = null): void
     {
         $this->pendingCreateFormData = $defaultFormData;

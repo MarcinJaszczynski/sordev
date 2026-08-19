@@ -4,6 +4,7 @@ namespace App\Filament\Resources\EventResource\Concerns;
 
 use App\Filament\Concerns\HasWorkflowRecordContext;
 use App\Filament\Concerns\InteractsWithTaskEditModal;
+use App\Filament\Resources\ContractorResource;
 use App\Filament\Resources\EventResource;
 use App\Filament\Resources\EventTemplateResource;
 use App\Models\Event;
@@ -112,7 +113,7 @@ trait HasEventWorkflowContext
     /**
      * Kontakty operacyjne do boxa „Impreza” (zamawiający, pilot, kierowca, hotel).
      *
-     * @return list<array{label: string, value: string}>
+     * @return list<array{label: string, value: string, url?: string}>
      */
     protected function eventWorkflowContactMeta(Event $event): array
     {
@@ -141,7 +142,15 @@ trait HasEventWorkflowContext
             : (filled($event->assignedUser?->phone) ? (string) $event->assignedUser->phone : null);
         $pilot = $this->formatWorkflowPerson($pilotName, $pilotPhone);
         if ($pilot !== null) {
-            $items[] = ['label' => 'Pilot', 'value' => $pilot];
+            $pilotUrl = null;
+            if (filled($event->pilot_contractor_id)) {
+                $pilotUrl = ContractorResource::getUrl('edit', ['record' => $event->pilot_contractor_id]);
+            }
+            $items[] = array_filter([
+                'label' => 'Pilot',
+                'value' => $pilot,
+                'url' => $pilotUrl,
+            ], fn ($value): bool => $value !== null && $value !== '');
         }
 
         $driverName = filled($event->driver_name)

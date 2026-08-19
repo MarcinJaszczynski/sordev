@@ -9,6 +9,7 @@ use App\Models\PilotAdvanceLine;
 use App\Models\PilotCashPreparation;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\Auth;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Schema;
 
 class PilotAdvanceService
@@ -348,6 +349,58 @@ class PilotAdvanceService
         app(PilotSettlementService::class)->syncPilotCashSpentFromCosts($settlement->fresh() ?? $settlement);
 
         return $event->fresh(['pilotAdvanceLines.currency', 'pilotAdvancePaidCurrency', 'pilotFundsPaidByUser']);
+    }
+
+    /**
+     * Cofa całą wypłatę z biura (omyłka na zakładce Pilot) — wszystkie waluty.
+     * Reużywa clearOfficeCashPayout (w tym blokadę przy wymianach).
+     */
+    public function clearAllOfficeCashPayouts(Event $event): Event
+    {
+        if (! Schema::hasColumn('events', 'pilot_funds_paid')) {
+            return $event;
+        }
+
+        return DB::transaction(function () use ($event): Event {
+            $event = $event->fresh() ?? $event;
+
+            $currencyIds = $this->officeProvidedLines($event)
+                ->pluck('currency_id')
+                ->map(fn ($id): int => (int) $id)
+                ->filter(fn (int $id): bool => $id > 0)
+                ->unique()
+                ->values();
+
+            if ($currencyIds->isEmpty()) {
+                $currencyIds = $this->paidLines($event)
+                    ->pluck('currency_id')
+                    ->map(fn ($id): int => (int) $id)
+                    ->filter(fn (int $id): bool => $id > 0)
+                    ->unique()
+                    ->values();
+            }
+
+            if ($currencyIds->isEmpty()) {
+                if ($event->pilot_funds_paid) {
+                    $event->update([
+                        'pilot_funds_paid' => false,
+                        'pilot_funds_paid_at' => null,
+                        'pilot_funds_paid_by' => null,
+                        'pilot_advance_paid_amount' => null,
+                        'pilot_advance_paid_currency_id' => null,
+                        'pilot_advance_paid_comment' => null,
+                    ]);
+                }
+
+                return $event->fresh(['pilotAdvanceLines.currency', 'pilotAdvancePaidCurrency', 'pilotFundsPaidByUser']) ?? $event;
+            }
+
+            foreach ($currencyIds as $currencyId) {
+                $event = $this->clearOfficeCashPayout($event->fresh() ?? $event, (int) $currencyId);
+            }
+
+            return $event->fresh(['pilotAdvanceLines.currency', 'pilotAdvancePaidCurrency', 'pilotFundsPaidByUser']) ?? $event;
+        });
     }
 
     /**

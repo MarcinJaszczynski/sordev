@@ -152,15 +152,12 @@ final class TaskListColumn
         $created = $record->created_at?->format('d.m.Y H:i') ?? '—';
         $modified = self::effectiveModifiedAt($record)?->format('d.m.Y H:i') ?? '—';
 
-        $row = fn (string $label, string $value): string => '<tr>'
-            .'<td style="padding:1px 8px 1px 0;color:#9ca3af;font-size:0.72rem;white-space:nowrap">'.$label.'</td>'
-            .'<td style="color:#111827;font-size:0.78rem;font-weight:500;white-space:nowrap">'.e($value).'</td>'
-            .'</tr>';
-
-        return '<table style="border-collapse:collapse">'
-            .$row('Zmieniono:', $modified)
-            .$row('Utworzono:', $created)
-            .'</table>';
+        return '<div style="font-size:0.78rem;line-height:1.35;white-space:nowrap">'
+            .'<div><span style="color:#9ca3af;font-size:0.72rem">Zmieniono </span>'
+            .'<span style="color:#111827;font-weight:500">'.e($modified).'</span></div>'
+            .'<div style="margin-top:2px"><span style="color:#9ca3af;font-size:0.72rem">Utworzono </span>'
+            .'<span style="color:#111827;font-weight:500">'.e($created).'</span></div>'
+            .'</div>';
     }
 
     public static function isDueOverdue(Task $record): bool
@@ -197,8 +194,11 @@ final class TaskListColumn
         $date = e($comment->created_at?->format('d.m.Y H:i') ?? '—');
         $content = e(self::sanitizeTaskText($comment->content, 512));
 
+        $count = (int) ($record->comments_count ?? $record->comments?->count() ?? 0);
+        $countLabel = $count > 1 ? ' · '.$count : '';
+
         return '<div style="margin-top:6px;padding:6px 8px;border-radius:8px;background:#f8fafc;border:1px solid #e5e7eb">'
-            .'<div style="color:#6b7280;font-size:0.68rem;line-height:1.2">Ostatni komentarz · '.$author.' · '.$date.'</div>'
+            .'<div style="color:#6b7280;font-size:0.68rem;line-height:1.2">Ostatni komentarz'.$countLabel.' · '.$author.' · '.$date.'</div>'
             .'<div style="margin-top:3px;color:#374151;font-size:0.72rem;line-height:1.35;white-space:pre-wrap">'.$content.'</div>'
             .'</div>';
     }

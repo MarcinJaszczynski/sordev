@@ -11,6 +11,7 @@ use App\Filament\Forms\EventNotesFields;
 use App\Filament\Forms\EventReadinessFields;
 use App\Filament\Forms\EventTransportCostSummaryFields;
 use App\Filament\Forms\EventTransportFields;
+use App\Filament\Forms\TransportContractorContactsFields;
 use App\Filament\Forms\TypedContractorSelect;
 use App\Filament\Resources\EventResource\Pages;
 use App\Filament\Resources\EventResource\Traits\SearchContractorTrait;
@@ -24,7 +25,6 @@ use App\Models\EventTemplate;
 use App\Models\Place;
 use App\Models\PlaceDistance;
 use App\Models\TransportType;
-use App\Filament\Forms\TransportContractorContactsFields;
 use App\Services\PilotContractorAssignmentService;
 use App\Support\ContractorContactDetails;
 use App\Support\EventBusSeatCapacity;
@@ -1244,7 +1244,7 @@ class EventResource extends Resource
 
     public static function getRecordSubNavigation(Page $page): array
     {
-        // IA: max 6 primary — Operacje / Finanse / Dokumenty / Uczestnicy mają nested module nav.
+        // IA: primary — Zadania osobno; Operacje / Finanse / Dokumenty / Uczestnicy mają nested module nav.
         $items = [
             Pages\EditEvent::class,
             Pages\EditEventProgram::class,
@@ -1255,6 +1255,7 @@ class EventResource extends Resource
         }
 
         $items[] = Pages\ManageEventTasks::class;
+        $items[] = Pages\ManageEventReservations::class;
         $items[] = Pages\EventFinance::class;
 
         if (Schema::hasTable('contracts') || Schema::hasTable('event_agreements')) {

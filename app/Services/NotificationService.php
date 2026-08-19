@@ -11,6 +11,7 @@ use App\Models\User;
 use App\Models\UserNotificationRead;
 use App\Support\AdminPanelUrls;
 use App\Support\Tasks\OfficeTaskRecipients;
+use App\Support\Tasks\SystemTaskPolicy;
 use App\Support\Tasks\TaskListColumn;
 use App\Support\Tasks\TaskNavigation;
 use App\Support\Tasks\TaskQueryFilters;
@@ -210,7 +211,10 @@ class NotificationService
                 ->orWhere('assignee_id', $user->id);
 
             if ($user->hasRole(['super_admin', 'admin', 'biuro'])) {
-                $inner->orWhere('source', TaskSource::System->value);
+                $inner->orWhere(function ($system) {
+                    $system->where('source', TaskSource::System->value);
+                    SystemTaskPolicy::constrainAllowedSystem($system);
+                });
             }
         });
     }
@@ -317,40 +321,87 @@ class NotificationService
      */
     private static function commentNotificationsFor(User $user, int $queryLimit = 50): array
     {
-        return TaskComment::query()
-            ->where('user_id', '!=', $user->id)
-            ->whereHas('task', function ($query) use ($user) {
-                TaskQueryFilters::officeOnly($query);
-                TaskQueryFilters::excludeArchived($query);
-                $query->where(function ($inner) use ($user) {
-                    $inner->where('assignee_id', $user->id)
-                        ->orWhere('author_id', $user->id);
-                });
-            })
+        return static::commentsQueryFor($user)
             ->with(['author:id,name', 'task:id,title,source,taskable_type,taskable_id'])
             ->orderByDesc('created_at')
             ->limit($queryLimit)
             ->get()
-            ->map(function (TaskComment $comment): array {
-                $authorName = $comment->author?->name ?? 'Użytkownik';
-                $taskTitle = Str::limit($comment->task?->title ?? ('Zadanie #'.$comment->task_id), 40);
-
-                return [
-                    'type' => 'comment',
-                    'id' => (int) $comment->id,
-                    'task_id' => (int) $comment->task_id,
-                    'revision' => (string) ($comment->created_at?->timestamp ?? 0),
-                    'title' => $authorName.' skomentował zadanie '.$taskTitle,
-                    'meta' => TaskListColumn::sanitizeTaskText($comment->content ?? '', 70),
-                    'time' => optional($comment->created_at)->diffForHumans() ?? 'teraz',
-                    'url' => $comment->task
-                        ? TaskNavigation::fullViewUrl($comment->task)
-                        : AdminPanelUrls::taskBoard(),
-                    'at' => optional($comment->created_at)?->timestamp ?? now()->timestamp,
-                    'color' => 'sky',
-                ];
-            })
+            ->map(fn (TaskComment $comment): array => static::formatCommentNotification($comment))
             ->all();
+    }
+
+    /**
+     * Komentarze w topbarze: do zadań widocznych jak w liczniku zadań.
+     * Własne komentarze z ostatniej doby też wchodzą — inaczej autor nie widzi
+     * wzrostu licznika (zadanie było już nieprzeczytane, a touch() nic nie dodaje).
+     */
+    private static function commentsQueryFor(User $user)
+    {
+        return TaskComment::query()
+            ->where(function ($query) use ($user): void {
+                $query->where('user_id', '!=', $user->id)
+                    ->orWhere('created_at', '>=', now()->subDay());
+            })
+            ->whereIn('task_id', static::visibleTasksQueryFor($user)->select('id'));
+    }
+
+    /**
+     * @return array<string, mixed>
+     */
+    private static function formatCommentNotification(TaskComment $comment): array
+    {
+        $authorName = $comment->author?->name ?? 'Użytkownik';
+        $taskTitle = Str::limit($comment->task?->title ?? ('Zadanie #'.$comment->task_id), 40);
+
+        return [
+            'type' => 'comment',
+            'id' => (int) $comment->id,
+            'task_id' => (int) $comment->task_id,
+            'revision' => (string) ($comment->created_at?->timestamp ?? 0),
+            'title' => $authorName.' dodał komentarz do zadania '.$taskTitle,
+            'meta' => TaskListColumn::sanitizeTaskText($comment->content ?? '', 70),
+            'time' => optional($comment->created_at)->diffForHumans() ?? 'teraz',
+            'url' => $comment->task
+                ? TaskNavigation::fullViewUrl($comment->task)
+                : AdminPanelUrls::taskBoard(),
+            'at' => optional($comment->created_at)?->timestamp ?? now()->timestamp,
+            'color' => 'sky',
+        ];
+    }
+
+    /**
+     * Pełna liczba nieprzeczytanych komentarzy (bez limitu listy topbara).
+     */
+    private static function unreadCommentCountFor(User $user): int
+    {
+        $comments = static::commentsQueryFor($user)->get(['id', 'created_at']);
+
+        if ($comments->isEmpty()) {
+            return 0;
+        }
+
+        if (! Schema::hasTable('user_notification_reads')) {
+            return $comments->count();
+        }
+
+        $fingerprints = $comments
+            ->map(fn (TaskComment $comment): string => UserNotificationRead::fingerprintFor([
+                'type' => 'comment',
+                'id' => (int) $comment->id,
+                'revision' => (string) ($comment->created_at?->timestamp ?? 0),
+            ]))
+            ->all();
+
+        $readSet = UserNotificationRead::query()
+            ->where('user_id', $user->id)
+            ->whereIn('fingerprint', $fingerprints)
+            ->pluck('fingerprint')
+            ->flip()
+            ->all();
+
+        return collect($fingerprints)
+            ->reject(fn (string $fingerprint): bool => isset($readSet[$fingerprint]))
+            ->count();
     }
 
     /**
@@ -518,7 +569,7 @@ class NotificationService
 
                 // Licznik niezależny od limitu listy (podzadanie / 31. zadanie musi podbić badge).
                 $tasksCount = static::unreadTaskCountFor($user);
-                $commentsCount = static::unreadCount($commentItems);
+                $commentsCount = static::unreadCommentCountFor($user);
                 $newEventsCount = static::unreadCount($newEventItems);
                 $confirmedEventsCount = static::unreadCount($eventItems);
                 $pendingCancellationEventsCount = static::unreadCount($pendingCancellationItems);
@@ -619,7 +670,6 @@ class NotificationService
 
         TaskComment::query()
             ->where('task_id', $taskId)
-            ->where('user_id', '!=', $userId)
             ->orderBy('id')
             ->get(['id', 'created_at'])
             ->each(function (TaskComment $comment) use ($userId, $now, &$marked): void {
@@ -655,8 +705,7 @@ class NotificationService
             return;
         }
 
-        // Touch → revision w topbarze (Aktywność/Zadania) rośnie także gdy
-        // autor komentarza = owner/assignee (własny komentarz nie jest w counts.comments).
+        // Touch → kolumna „Modyfikacja” i revision zadania też się ruszają.
         $task->touch();
 
         // Czyść cache wszystkich stakeholderów, w tym autora komentarza —

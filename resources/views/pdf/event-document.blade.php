@@ -163,7 +163,7 @@
                 <thead>
                     <tr>
                         <th colspan="5">
-                            Dzień {{ $day }}
+                            {{ $event->programDayLabel((int) $day) }}
                             @if(filled($dayRoute))
                                 — Trasa: {{ $dayRoute }}
                             @endif

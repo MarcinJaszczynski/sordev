@@ -6,7 +6,6 @@ use App\Models\Currency;
 use App\Models\Event;
 use App\Models\EventProgramPoint;
 use App\Models\EventSettlementCost;
-use App\Support\CurrencyAmountDisplay;
 use App\Support\EventProgramPointPricesSummary;
 use App\Support\ProgramPointSetFinanceSummary;
 use App\Support\SetFinanceCurrencyBuckets;
@@ -316,14 +315,7 @@ final class ProgramPointSetFinanceAggregator
         return $scheduleRows
             ->sortBy(fn (array $row) => $row['due_date'] ?? '')
             ->take(5)
-            ->map(function (array $row): string {
-                $date = isset($row['due_date']) ? \Carbon\Carbon::parse($row['due_date'])->format('d.m.Y') : '—';
-                $kind = $row['kind_label'] ?? 'Płatność';
-                $title = $row['title'] ?? '';
-                $amount = $row['amount_label'] ?? '';
-
-                return trim("{$date} · {$kind} · {$title} · {$amount}");
-            })
+            ->map(fn (array $row): string => \App\Support\EventProgramPointPaymentDueColumn::plainLine($row))
             ->values()
             ->all();
     }

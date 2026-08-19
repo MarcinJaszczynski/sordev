@@ -36,4 +36,28 @@ class EventUniqueCodeTest extends TestCase
 
         $this->assertNotSame('26ABCDEF', $code);
     }
+
+    public function test_normalize_code_uppercases_and_strips_spaces(): void
+    {
+        $this->assertSame('ZP.271.12.2026', Event::normalizeCode(' zp.271.12.2026 '));
+        $this->assertSame('UM/GMINA-1', Event::normalizeCode('um/gmina-1'));
+        $this->assertNull(Event::normalizeCode('   '));
+        $this->assertNull(Event::normalizeCode(null));
+    }
+
+    public function test_create_keeps_manually_provided_code(): void
+    {
+        $event = Event::factory()->create(['code' => 'zp.271.12.2026']);
+
+        $this->assertSame('ZP.271.12.2026', $event->code);
+    }
+
+    public function test_update_does_not_clear_existing_code(): void
+    {
+        $event = Event::factory()->create(['code' => '26ABCDEF']);
+
+        $event->update(['code' => '']);
+
+        $this->assertSame('26ABCDEF', $event->fresh()->code);
+    }
 }

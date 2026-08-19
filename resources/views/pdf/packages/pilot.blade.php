@@ -268,18 +268,11 @@
                 <div class="notes-field">
                     @php
                         $pn = trim(strip_tags((string) ($event->pilot_notes ?? '')));
-                        $on = trim(strip_tags((string) ($event->office_notes ?? '')));
                     @endphp
-                    @if($pn === '' && $on === '')
+                    @if($pn === '')
                         —
                     @else
-                        @if($pn !== '')
-                            <strong>Pilot:</strong> {!! nl2br(e($pn)) !!}
-                        @endif
-                        @if($on !== '')
-                            @if($pn !== '')<br><br>@endif
-                            <strong>Biuro:</strong> {!! nl2br(e($on)) !!}
-                        @endif
+                        {!! nl2br(e($pn)) !!}
                     @endif
                 </div>
             </div>

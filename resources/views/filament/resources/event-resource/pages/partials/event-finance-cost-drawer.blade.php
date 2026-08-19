@@ -245,6 +245,21 @@
                                 <label class="text-xs text-gray-600">Notatka</label>
                                 <textarea wire:model="paymentForm.notes" rows="2" class="fi-input w-full rounded-lg border-gray-300 text-sm dark:border-gray-600 dark:bg-gray-800"></textarea>
                             </div>
+                            @if ($this->drawerReservations->isNotEmpty())
+                                <div class="sm:col-span-2">
+                                    <label class="text-xs text-gray-600">Podczep pod rezerwację</label>
+                                    <select wire:model="paymentForm.reservation_id" class="fi-select-input w-full rounded-lg border-gray-300 text-sm dark:border-gray-600 dark:bg-gray-800">
+                                        <option value="">— bez rezerwacji —</option>
+                                        @foreach ($this->drawerReservations as $drawerReservation)
+                                            <option value="{{ $drawerReservation->id }}">
+                                                {{ $drawerReservation->booking_reference ?: ('#'.$drawerReservation->id) }}
+                                                · {{ \App\Models\Reservation::$statuses[$drawerReservation->status] ?? $drawerReservation->status }}
+                                            </option>
+                                        @endforeach
+                                    </select>
+                                    <p class="mt-0.5 text-[11px] text-gray-500">Kolejna zaliczka albo dopłata to osobny wiersz — suma schodzi z pozostałej kwoty.</p>
+                                </div>
+                            @endif
                         </div>
                         <div class="flex gap-2 pt-1">
                             <x-filament::button size="sm" wire:click="savePayment" wire:loading.attr="disabled">
@@ -381,6 +396,30 @@
                                         />
                                         <label for="plan-include-gratis" class="text-xs text-gray-700 dark:text-gray-200">
                                             Liczyć z opiekunami / gratisami
+                                        </label>
+                                    </div>
+                                    <div class="sm:col-span-2 flex items-center gap-2">
+                                        <input
+                                            id="plan-include-pilot"
+                                            type="checkbox"
+                                            wire:model.live="planForm.include_pilot_in_cost"
+                                            wire:change="recalculateProgramPointPlanTotals"
+                                            class="rounded border-gray-300"
+                                        />
+                                        <label for="plan-include-pilot" class="text-xs text-gray-700 dark:text-gray-200">
+                                            Liczyć z pilotem
+                                        </label>
+                                    </div>
+                                    <div class="sm:col-span-2 flex items-center gap-2">
+                                        <input
+                                            id="plan-include-driver"
+                                            type="checkbox"
+                                            wire:model.live="planForm.include_driver_in_cost"
+                                            wire:change="recalculateProgramPointPlanTotals"
+                                            class="rounded border-gray-300"
+                                        />
+                                        <label for="plan-include-driver" class="text-xs text-gray-700 dark:text-gray-200">
+                                            Liczyć z kierowcą
                                         </label>
                                     </div>
                                     <div>
@@ -552,6 +591,9 @@
                                         @if (! empty($payment['document_number']))
                                             · FV {{ $payment['document_number'] }}
                                         @endif
+                                        @if (! empty($payment['reservation_label']))
+                                            · rez. {{ $payment['reservation_label'] }}
+                                        @endif
                                     </div>
                                     <div class="mt-1.5 flex gap-3 text-xs">
                                         <button type="button" class="text-primary-600 hover:underline" wire:click="startEditPayment({{ (int) $payment['id'] }})">Edytuj</button>
@@ -576,13 +618,85 @@
                                 {{ $drawerReservations->isNotEmpty() ? 'Edytuj' : '+ Dodaj' }}
                             </button>
                         </div>
+                        <p class="mb-2 text-[11px] text-gray-500">Ta sama rezerwacja co w Operacje → Rezerwacje i na liście globalnej.</p>
+                        @if (! empty($reservationForm['coverage_label']))
+                            <p class="mb-2 text-[11px] font-medium text-gray-600 dark:text-gray-300">{{ $reservationForm['coverage_label'] }}</p>
+                        @endif
 
                         @if ($showReservationForm)
                             <div class="mb-3 space-y-2 rounded-lg border border-emerald-200 bg-emerald-50/40 p-3 dark:border-emerald-900/40 dark:bg-emerald-950/20">
                                 <div class="text-xs font-semibold uppercase text-emerald-800 dark:text-emerald-200">Rezerwacja u kontrahenta</div>
                                 <div class="grid gap-2 sm:grid-cols-2">
                                     <div class="sm:col-span-2">
-                                        <label class="text-xs text-gray-600">Nr potwierdzenia</label>
+                                        <label class="text-xs text-gray-600">Kontrahent</label>
+                                        @if (filled($reservationForm['contractor_id']) && filled($this->reservationContractorLabel))
+                                            <div class="mt-0.5 flex items-center justify-between gap-2 rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm dark:border-gray-600 dark:bg-gray-900">
+                                                <span class="min-w-0 truncate">{{ $this->reservationContractorLabel }}</span>
+                                                <button type="button" class="shrink-0 text-xs font-medium text-primary-600 hover:underline" wire:click="clearReservationContractor">
+                                                    Zmień
+                                                </button>
+                                            </div>
+                                        @else
+                                            <div
+                                                class="relative mt-0.5"
+                                                x-data="{ open: @entangle('showReservationContractorSearchResults') }"
+                                                @click.outside="open = false"
+                                            >
+                                                <div class="relative">
+                                                    <input
+                                                        type="search"
+                                                        wire:model.live.debounce.300ms="reservationContractorSearch"
+                                                        @focus="if (Object.keys($wire.reservationContractorSearchResults).length) { open = true }"
+                                                        placeholder="Wyszukaj po nazwie, mieście, NIP…"
+                                                        autocomplete="off"
+                                                        class="fi-input w-full rounded-lg border-gray-300 py-2 pl-8 pr-3 text-sm dark:border-gray-600 dark:bg-gray-900"
+                                                    />
+                                                    <x-heroicon-m-magnifying-glass class="pointer-events-none absolute left-2.5 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400" />
+                                                </div>
+                                                <p class="mt-0.5 text-[11px] text-gray-500">Wpisz min. 2 znaki — wyniki pojawią się automatycznie.</p>
+                                                @if ($this->reservationContractorHasTypeFilter())
+                                                    <label class="mt-1 inline-flex items-center gap-2 text-[11px] text-gray-600 dark:text-gray-300">
+                                                        <input
+                                                            type="checkbox"
+                                                            wire:model.live="reservationContractorSearchAll"
+                                                            class="rounded border-gray-400 text-primary-600 shadow-sm focus:ring-primary-500"
+                                                        />
+                                                        Szukaj we wszystkich kontrahentach
+                                                    </label>
+                                                @endif
+                                                @if ($showReservationContractorSearchResults ?? $this->showReservationContractorSearchResults)
+                                                    <div
+                                                        x-show="open"
+                                                        x-cloak
+                                                        class="absolute z-40 mt-1 w-full overflow-hidden rounded-lg border border-gray-200 bg-white shadow-lg dark:border-gray-700 dark:bg-gray-900"
+                                                    >
+                                                        @if ($this->reservationContractorSearchResults !== [])
+                                                            <ul class="max-h-56 divide-y divide-gray-100 overflow-y-auto dark:divide-gray-800" role="listbox">
+                                                                @foreach ($this->reservationContractorSearchResults as $contractorId => $contractorLabel)
+                                                                    <li>
+                                                                        <button
+                                                                            type="button"
+                                                                            wire:click="selectReservationContractor({{ (int) $contractorId }})"
+                                                                            class="flex w-full px-3 py-2 text-left text-sm text-gray-900 transition hover:bg-primary-50 dark:text-gray-100 dark:hover:bg-primary-950/40"
+                                                                            role="option"
+                                                                        >
+                                                                            {{ $contractorLabel }}
+                                                                        </button>
+                                                                    </li>
+                                                                @endforeach
+                                                            </ul>
+                                                        @else
+                                                            <div class="px-3 py-2.5 text-sm text-gray-600 dark:text-gray-300">
+                                                                Brak dopasowań dla „{{ $this->reservationContractorSearch }}”.
+                                                            </div>
+                                                        @endif
+                                                    </div>
+                                                @endif
+                                            </div>
+                                        @endif
+                                    </div>
+                                    <div class="sm:col-span-2">
+                                        <label class="text-xs text-gray-600">Nr potwierdzenia dostawcy</label>
                                         <input type="text" wire:model="reservationForm.booking_reference" class="fi-input w-full rounded-lg border-gray-300 text-sm dark:border-gray-600 dark:bg-gray-900" />
                                     </div>
                                     <div>
@@ -592,6 +706,13 @@
                                                 <option value="{{ $k }}">{{ $v }}</option>
                                             @endforeach
                                         </select>
+                                    </div>
+                                    <div>
+                                        <label class="text-xs text-gray-600">Kwota rezerwacji</label>
+                                        <input type="number" step="0.01" min="0" wire:model="reservationForm.reserved_amount" class="fi-input w-full rounded-lg border-gray-300 text-sm dark:border-gray-600 dark:bg-gray-900" />
+                                        @if (! empty($reservationForm['amount_hint']))
+                                            <p class="mt-0.5 text-[11px] text-gray-500">Podstawiono: {{ $reservationForm['amount_hint'] }}</p>
+                                        @endif
                                     </div>
                                     <div>
                                         <label class="text-xs text-gray-600">Potwierdzić do</label>
@@ -608,6 +729,7 @@
                                     <div>
                                         <label class="text-xs text-gray-600">Zaliczka zapłacona</label>
                                         <input type="date" wire:model="reservationForm.deposit_paid_at" class="fi-input w-full rounded-lg border-gray-300 text-sm dark:border-gray-600 dark:bg-gray-900" />
+                                        <p class="mt-0.5 text-[11px] text-gray-500">Jeśli nie ma jeszcze wpłat, zapisze pierwszą zaliczkę. Kolejne raty dodajesz w sekcji Wpłaty.</p>
                                     </div>
                                     <div class="sm:col-span-2">
                                         <label class="text-xs text-gray-600">Notatki biura</label>
@@ -621,9 +743,24 @@
                                         <div wire:loading wire:target="reservationAttachmentFiles" class="text-xs text-gray-500">Wgrywanie…</div>
                                     </div>
                                 </div>
-                                <div class="flex gap-2 pt-1">
-                                    <x-filament::button size="sm" wire:click="saveReservation" wire:loading.attr="disabled">Zapisz rezerwację</x-filament::button>
-                                    <x-filament::button size="sm" color="gray" wire:click="$set('showReservationForm', false)">Anuluj</x-filament::button>
+                                <div class="flex flex-wrap items-center justify-between gap-2 pt-1">
+                                    @if (! empty($reservationForm['reservation_id']))
+                                        <x-filament::button
+                                            size="sm"
+                                            color="danger"
+                                            wire:click="deleteReservation"
+                                            wire:confirm="Usunąć tę rezerwację z punktu? Numer potwierdzenia będzie można wpisać na innym klocku."
+                                            wire:loading.attr="disabled"
+                                        >
+                                            Usuń rezerwację
+                                        </x-filament::button>
+                                    @else
+                                        <span></span>
+                                    @endif
+                                    <div class="flex gap-2">
+                                        <x-filament::button size="sm" color="gray" wire:click="$set('showReservationForm', false)">Anuluj</x-filament::button>
+                                        <x-filament::button size="sm" wire:click="saveReservation" wire:loading.attr="disabled">Zapisz rezerwację</x-filament::button>
+                                    </div>
                                 </div>
                             </div>
                         @elseif ($drawerReservations->isEmpty())
@@ -640,6 +777,12 @@
                                             · {{ \App\Models\Reservation::$statuses[$reservation->status] ?? $reservation->status }}
                                         </div>
                                         <div class="mt-0.5 text-xs text-gray-500">
+                                            {{ $reservation->contractor?->name ?? 'Bez kontrahenta' }}
+                                            @if ($reservation->reserved_amount !== null)
+                                                · {{ \App\Support\ReservationPricingLabel::format($reservation) }}
+                                            @endif
+                                        </div>
+                                        <div class="mt-0.5 text-xs text-gray-500">
                                             @foreach (\App\Support\Reservations\ReservationWorkflowDisplay::workflowLines($reservation) as $line)
                                                 <div>{{ $line }}</div>
                                             @endforeach
@@ -650,6 +793,15 @@
                                                 {{ \Illuminate\Support\Str::limit($reservationOfficeNotes, 160) }}
                                             </div>
                                         @endif
+                                        <div class="mt-1.5 flex gap-3 text-xs">
+                                            <button type="button" class="text-primary-600 hover:underline" wire:click="startEditReservation">Edytuj</button>
+                                            <button
+                                                type="button"
+                                                class="text-rose-600 hover:underline"
+                                                wire:click="deleteReservation({{ (int) $reservation->id }})"
+                                                wire:confirm="Usunąć tę rezerwację z punktu? Numer potwierdzenia będzie można wpisać na innym klocku."
+                                            >Usuń</button>
+                                        </div>
                                     </li>
                                 @endforeach
                             </ul>

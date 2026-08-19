@@ -85,7 +85,7 @@
             "
         >
         {{-- Nagłówek: koszty + przychody klientów + gotówka pilota --}}
-        <div class="grid w-full gap-3 sm:grid-cols-2 xl:grid-cols-4 2xl:grid-cols-7">
+        <div class="grid w-full gap-3 sm:grid-cols-2 xl:grid-cols-4 2xl:grid-cols-8">
             <div class="rounded-xl border border-gray-200 bg-white p-4 shadow-sm dark:border-gray-700 dark:bg-gray-900" title="Suma kosztów z kalkulacji programu / szablonu (ekwiwalent PLN, także pozycje bez przeliczenia).">
                 <div class="text-xs font-medium uppercase tracking-wide text-gray-500">Koszty (kalkulacja)</div>
                 <div class="mt-1 text-xl font-bold leading-snug text-gray-900 dark:text-gray-100">{{ $totals['calculation_label'] ?? '—' }}</div>
@@ -118,6 +118,43 @@
                 <div class="mt-1 text-xl font-bold leading-snug text-sky-900 dark:text-sky-100">{{ $totals['client_paid_label'] ?? '—' }}</div>
                 <div class="mt-1 text-xs text-gray-500">przychód rzeczywisty</div>
             </div>
+            @php
+                $clientDuePln = (float) ($totals['client_due_pln'] ?? 0);
+                $clientPaidPln = (float) ($totals['client_paid_pln'] ?? 0);
+                $clientRemainingPln = round($clientDuePln - $clientPaidPln, 2);
+                $clientRemainingTone = abs($clientRemainingPln) <= 0.009 ? 'ok' : ($clientRemainingPln < 0 ? 'over' : 'due');
+                $clientRemainingLabel = match ($clientRemainingTone) {
+                    'ok' => 'Saldo klientów',
+                    'over' => 'Nadpłata od klientów',
+                    default => 'Do dopłaty od klientów',
+                };
+                $clientRemainingValue = $clientRemainingTone === 'ok'
+                    ? \App\Support\MoneyFormatter::format(0, 'PLN')
+                    : (($clientRemainingTone === 'over' ? 'nadpłata ' : '').\App\Support\MoneyFormatter::format(abs($clientRemainingPln), 'PLN'));
+            @endphp
+            <div
+                @class([
+                    'rounded-xl border p-4 shadow-sm',
+                    'border-emerald-200 bg-emerald-50/40 dark:border-emerald-900/40 dark:bg-emerald-950/20' => $clientRemainingTone === 'ok',
+                    'border-amber-200 bg-amber-50/40 dark:border-amber-900/40 dark:bg-amber-950/20' => $clientRemainingTone === 'over',
+                    'border-rose-200 bg-rose-50/40 dark:border-rose-900/40 dark:bg-rose-950/20' => $clientRemainingTone === 'due',
+                ])
+                title="Różnica: należne − wpłacone. Nadpłata gdy klienci wpłacili więcej."
+            >
+                <div @class([
+                    'text-xs font-medium uppercase tracking-wide',
+                    'text-emerald-700' => $clientRemainingTone === 'ok',
+                    'text-amber-800' => $clientRemainingTone === 'over',
+                    'text-rose-700' => $clientRemainingTone === 'due',
+                ])>{{ $clientRemainingLabel }}</div>
+                <div @class([
+                    'mt-1 text-xl font-bold leading-snug',
+                    'text-emerald-800 dark:text-emerald-200' => $clientRemainingTone === 'ok',
+                    'text-amber-900 dark:text-amber-200' => $clientRemainingTone === 'over',
+                    'text-rose-800 dark:text-rose-200' => $clientRemainingTone === 'due',
+                ])>{{ $clientRemainingValue }}</div>
+                <div class="mt-1 text-xs text-gray-500">należne − wpłacone</div>
+            </div>
             @php $pilotCash = $overview['pilot_cash'] ?? []; @endphp
             <div
                 class="rounded-xl border border-indigo-200 bg-indigo-50/40 p-4 shadow-sm dark:border-indigo-900/40 dark:bg-indigo-950/20"
@@ -131,6 +168,7 @@
                     @if (empty($pilotCash['lines']) && empty($pilotCash['has_pilot_costs']))
                         <div>Brak pozycji z płatnikiem Pilot</div>
                     @endif
+                    <div>Wypłacono z biura: {{ $overview['pilot_cash_label'] ?? '—' }}</div>
                     <div>Wydane gotówką: {{ $pilotCash['spent_label'] ?? '—' }}</div>
                     <a
                         href="{{ \App\Filament\Resources\EventResource::getUrl('finance-pilot-cash', ['record' => $this->record]) }}"

@@ -146,4 +146,56 @@ class EventProgramPointCreatorTest extends TestCase
         $this->assertNotNull($clonedChild);
         $this->assertSame('Podpunkt', $clonedChild->name);
     }
+
+    public function test_search_template_points_distinguishes_set_from_point_and_city_tag(): void
+    {
+        $krakow = \App\Models\Tag::query()->create([
+            'name' => 'Kraków',
+            'visibility' => 'internal',
+            'status' => 'active',
+        ]);
+        $warsaw = \App\Models\Tag::query()->create([
+            'name' => 'Warszawa',
+            'visibility' => 'internal',
+            'status' => 'active',
+        ]);
+
+        $set = EventTemplateProgramPoint::factory()->create([
+            'name' => 'Rejs statkiem po Wiśle',
+            'description' => 'Rejs z Wawelu do Tyńca',
+            'duration_hours' => 2,
+            'duration_minutes' => 30,
+            'unit_price' => 45,
+        ]);
+        $child = EventTemplateProgramPoint::factory()->create(['name' => 'Bilet na rejs']);
+        $set->children()->attach($child->id, ['order' => 1]);
+        $set->tags()->attach($krakow->id);
+
+        $point = EventTemplateProgramPoint::factory()->create([
+            'name' => 'Rejs statkiem po Wiśle',
+            'description' => 'Rejs z Łazienek Królewskich',
+            'duration_hours' => 1,
+            'duration_minutes' => 0,
+            'unit_price' => 35,
+        ]);
+        $point->tags()->attach($warsaw->id);
+
+        $creator = app(EventProgramPointCreator::class);
+        $results = $creator->searchTemplatePoints('rejs statkiem');
+        $this->assertTrue($results->contains('id', $set->id));
+        $this->assertTrue($results->contains('id', $point->id));
+
+        $options = $creator->searchCatalogSelectOptions('rejs statkiem');
+        $this->assertArrayHasKey('template_'.$set->id, $options);
+        $this->assertArrayHasKey('template_'.$point->id, $options);
+        $this->assertStringContainsString('Set (1)', $options['template_'.$set->id]);
+        $this->assertStringContainsString('Kraków', $options['template_'.$set->id]);
+        $this->assertStringContainsString('Punkt', $options['template_'.$point->id]);
+        $this->assertStringContainsString('Warszawa', $options['template_'.$point->id]);
+        $this->assertStringContainsString('Wawelu', $options['template_'.$set->id]);
+
+        $cityOnly = $creator->searchTemplatePoints('Kraków');
+        $this->assertTrue($cityOnly->contains('id', $set->id));
+        $this->assertFalse($cityOnly->contains('id', $point->id));
+    }
 }

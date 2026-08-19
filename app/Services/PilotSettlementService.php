@@ -7,16 +7,12 @@ use App\Actions\Finance\RecordSettlementCostPaymentAction;
 use App\Actions\Finance\UpdateSettlementCostPaymentAction;
 use App\Data\RecordSettlementCostPaymentData;
 use App\Data\UpdateSettlementCostPaymentData;
-use App\Enums\TaskPriority;
-use App\Enums\TaskSource;
 use App\Models\Currency;
 use App\Models\Event;
 use App\Models\EventSettlement;
 use App\Models\EventSettlementCost;
 use App\Models\EventSettlementDocument;
 use App\Models\PilotCashPreparation;
-use App\Models\Task;
-use App\Models\TaskStatus;
 use App\Models\User;
 use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Collection;
@@ -135,6 +131,50 @@ class PilotSettlementService
                 return $cost;
             })
             ->values();
+    }
+
+    /**
+     * Sumy ledgera wydatków pilota (per waluta) — bez zaliczek biura w „wydane”.
+     *
+     * @param  Collection<int, EventSettlementCost>  $lines
+     * @return list<array{currency: string, planned: float, office_paid: float, pilot_paid: float, pilot_due: float}>
+     */
+    public function summarizeExpenseLines(Collection $lines): array
+    {
+        $buckets = [];
+
+        foreach ($lines as $cost) {
+            $currency = $cost->actualCurrency ?? $cost->plannedCurrency;
+            $symbol = (string) ($currency?->symbol ?? $currency?->code ?? 'PLN');
+            $key = $symbol !== '' ? $symbol : 'PLN';
+
+            if (! isset($buckets[$key])) {
+                $buckets[$key] = [
+                    'currency' => $key,
+                    'planned' => 0.0,
+                    'office_paid' => 0.0,
+                    'pilot_paid' => 0.0,
+                    'pilot_due' => 0.0,
+                ];
+            }
+
+            $buckets[$key]['planned'] += round((float) ($cost->planned_amount ?? 0), 2);
+            $buckets[$key]['office_paid'] += round((float) ($cost->ledger_office_paid ?? 0), 2);
+            $buckets[$key]['pilot_paid'] += round((float) ($cost->ledger_paid_amount ?? 0), 2);
+            $buckets[$key]['pilot_due'] += round((float) ($cost->ledger_pilot_due ?? 0), 2);
+        }
+
+        return collect($buckets)
+            ->map(fn (array $row): array => [
+                'currency' => $row['currency'],
+                'planned' => round($row['planned'], 2),
+                'office_paid' => round($row['office_paid'], 2),
+                'pilot_paid' => round($row['pilot_paid'], 2),
+                'pilot_due' => round($row['pilot_due'], 2),
+            ])
+            ->sortBy('currency')
+            ->values()
+            ->all();
     }
 
     /**
@@ -1096,39 +1136,8 @@ class PilotSettlementService
 
     public function notifyOfficeOfUpdate(EventSettlement $settlement): void
     {
-        $event = $settlement->event;
-
-        if (! $event) {
-            return;
-        }
-
-        $statusId = TaskStatus::query()->orderBy('order')->value('id');
-
-        if (! $statusId) {
-            return;
-        }
-
-        $title = 'Aktualizacja rozliczenia pilota: '.$event->name;
-
-        $exists = Task::query()
-            ->where('title', $title)
-            ->where('created_at', '>=', now()->subDay())
-            ->exists();
-
-        if ($exists) {
-            return;
-        }
-
-        Task::create([
-            'title' => $title,
-            'description' => 'Pilot zaktualizował raport rozliczenia imprezy #'.$event->id.'.',
-            'priority' => TaskPriority::Normal->value,
-            'source' => TaskSource::System->value,
-            'status_id' => $statusId,
-            'author_id' => Auth::id(),
-            'due_date' => now()->addDay(),
-            'order' => Task::where('status_id', $statusId)->max('order') + 1,
-        ]);
+        // Auto-taski z rozliczenia pilota wyłączone — zaśmiecały skrzynkę biura.
+        // Biuro widzi update w Finanse / Pilot; ręczne zadanie można dodać z belki.
     }
 
     protected function resolveCurrencyRate(?int $currencyId): float

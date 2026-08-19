@@ -122,10 +122,38 @@ class TaskQueryFilters
     public static function applyOwnershipScope(Builder $query, string $scope, ?int $userId = null): Builder
     {
         return match ($scope) {
-            'assigned' => self::assignedTo($query, $userId),
+            'assigned' => self::assignedToIncludingSharedSystem($query, $userId),
             'authored' => self::authoredBy($query, $userId),
             default => $query,
         };
+    }
+
+    /**
+     * Skrzynka „Przypisane do mnie”: moje + wspólne systemowe (allowlista), jak topbar.
+     * Dzięki temu auto-taski z imprezy nie znikają tylko dlatego, że assignee to opiekun imprezy.
+     */
+    public static function assignedToIncludingSharedSystem(Builder $query, ?int $userId = null): Builder
+    {
+        $userId ??= Auth::id();
+
+        if (! $userId) {
+            return $query;
+        }
+
+        $user = Auth::user();
+        $shareSystem = $user && method_exists($user, 'hasRole')
+            && $user->hasRole(['super_admin', 'admin', 'biuro']);
+
+        return $query->where(function (Builder $inner) use ($userId, $shareSystem): void {
+            $inner->where('assignee_id', $userId);
+
+            if ($shareSystem) {
+                $inner->orWhere(function (Builder $system): void {
+                    $system->where('source', TaskSource::System->value);
+                    SystemTaskPolicy::constrainAllowedSystem($system);
+                });
+            }
+        });
     }
 
     public static function topLevelOnly(Builder $query): Builder
@@ -193,11 +221,22 @@ class TaskQueryFilters
         return $query;
     }
 
-    public static function orderByLatestActivityDesc(Builder $query): Builder
+    public static function orderByLatestActivity(Builder $query, string $direction = 'desc'): Builder
     {
         self::withLatestActivityAtColumn($query);
 
-        return $query->orderByDesc('latest_activity_at');
+        $dir = strtolower($direction) === 'asc' ? 'asc' : 'desc';
+        $tasksTable = $query->getModel()->getTable();
+        $expression = self::latestActivitySqlExpression($tasksTable, $query->getConnection()->getDriverName());
+
+        // orderByRaw z pełnym wyrażeniem — alias latest_activity_at bywa kwalifikowany
+        // jako tasks.latest_activity_at i wtedy sort kolumny Filament pada.
+        return $query->orderByRaw("({$expression}) {$dir}");
+    }
+
+    public static function orderByLatestActivityDesc(Builder $query): Builder
+    {
+        return self::orderByLatestActivity($query, 'desc');
     }
 
     public static function orderByHierarchyThenLatestActivityDesc(Builder $query): Builder

@@ -1,16 +1,15 @@
 <div class="space-y-3">
     <div class="rounded-lg border border-amber-200 bg-amber-50 p-3 text-xs text-amber-900">
-        Planer służy do <b>ustawiania godzin</b>: przeciągaj i rozciągaj bloki.
+        Planer służy do <b>ustawiania godzin</b>: przeciągaj i rozciągaj bloki albo <b>kliknij blok</b>, aby wpisać godziny ręcznie.
         Pełną edycję punktów (nazwa, opis, notatki, cena) robisz w zakładce <b>Lista</b> lub <b>Dzień</b>.
         Pokazuje wyłącznie punkty <b>uwzględnione w programie</b>.
-        <b>Kliknij blok</b>, aby usunąć go z programu.
     </div>
 
     <div class="flex items-center gap-2">
         <x-filament::button wire:click="repairOrderNow" color="gray" size="xs">
             Napraw kolejność teraz
         </x-filament::button>
-        <span class="text-xs text-gray-500">Przeciągnij lub rozciągnij blok, aby zmienić czas. Kliknij, aby usunąć z programu.</span>
+        <span class="text-xs text-gray-500">Przeciągnij lub rozciągnij blok, albo kliknij, aby wpisać godziny.</span>
     </div>
 
     @if(empty($plannerData['events']))
@@ -47,6 +46,79 @@
             class="event-program-planner-surface min-h-[960px] rounded-lg border border-gray-200 bg-white p-2"
         ></div>
     </div>
+
+    @if($showEditModal)
+        <div
+            class="fixed inset-0 z-50 flex items-center justify-center bg-black/50"
+            wire:click.self="closeModals"
+        >
+            <div class="w-full max-w-md rounded-xl bg-white p-6 shadow-2xl">
+                <div class="mb-4 flex items-center justify-between">
+                    <h3 class="text-base font-semibold text-gray-900">Godziny punktu</h3>
+                    <button wire:click="closeModals" class="text-gray-400 hover:text-gray-600">
+                        <svg class="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/>
+                        </svg>
+                    </button>
+                </div>
+
+                <p class="mb-4 text-sm text-gray-700">
+                    <span class="font-semibold">{{ $editingData['name'] }}</span>
+                </p>
+
+                <div class="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                    <div>
+                        <label for="planner-edit-start-time" class="mb-1 block text-xs font-medium text-gray-700">Godz. start</label>
+                        <input
+                            id="planner-edit-start-time"
+                            type="time"
+                            step="60"
+                            wire:model="editingData.start_time"
+                            class="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-primary-500 focus:ring-1 focus:ring-primary-500"
+                        >
+                    </div>
+                    <div>
+                        <label for="planner-edit-end-time" class="mb-1 block text-xs font-medium text-gray-700">Godz. koniec</label>
+                        <input
+                            id="planner-edit-end-time"
+                            type="time"
+                            step="60"
+                            wire:model="editingData.end_time"
+                            class="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-primary-500 focus:ring-1 focus:ring-primary-500"
+                        >
+                    </div>
+                </div>
+
+                <div class="mt-3 flex items-center gap-2">
+                    <input
+                        id="planner-edit-hide-times"
+                        type="checkbox"
+                        wire:model="editingData.hide_times"
+                        class="h-4 w-4 rounded border-gray-300 text-primary-600 focus:ring-primary-500"
+                    >
+                    <label for="planner-edit-hide-times" class="text-sm text-gray-700">Ukryj godziny w programie</label>
+                </div>
+                @error('editingData.end_time')
+                    <p class="mt-2 text-xs text-red-600">{{ $message }}</p>
+                @enderror
+
+                <div class="mt-6 flex items-center justify-between gap-2">
+                    <x-filament::button wire:click="requestRemoveEditingPoint" color="danger" size="sm">
+                        Usuń z programu
+                    </x-filament::button>
+
+                    <div class="flex gap-2">
+                        <x-filament::button wire:click="closeModals" color="gray" size="sm">
+                            Anuluj
+                        </x-filament::button>
+                        <x-filament::button wire:click="saveEditingPoint" color="primary" size="sm">
+                            Zapisz godziny
+                        </x-filament::button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    @endif
 
     @if($showDeleteModal)
         <div
@@ -86,8 +158,8 @@
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/fullcalendar@6.1.15/index.global.min.css">
     <style>
         .event-program-planner-surface .fc-event.event-program-child {
-            border-left: 3px solid rgba(255, 255, 255, 0.75) !important;
-            box-shadow: inset 4px 0 0 rgba(255, 255, 255, 0.2);
+            border-left: 2px solid rgba(255, 255, 255, 0.35) !important;
+            box-shadow: none;
         }
     </style>
 @endassets
@@ -173,7 +245,7 @@
             const payer = renderStatusBadge(event.extendedProps?.payer, 'B', 'Kto placi: brak danych.');
             const reservation = renderStatusBadge(event.extendedProps?.reservation, 'R', 'Rezerwacja: brak danych.');
             const titleClass = isChild
-                ? 'truncate text-[12px] font-semibold leading-5 text-white/95 pl-2 border-l-2 border-white/50'
+                ? 'truncate text-[12px] font-semibold leading-5 text-white/95 pl-1'
                 : 'truncate text-[14px] font-bold leading-5 text-white';
 
             return `<div class="event-program-card flex w-full items-start justify-between gap-2 overflow-hidden ${isChild ? 'event-program-card-child' : ''}">
@@ -274,7 +346,7 @@
                     return;
                 }
 
-                component.call('openDeleteModal', Number(info.event.id));
+                component.call('openEditModal', Number(info.event.id));
             },
         });
 

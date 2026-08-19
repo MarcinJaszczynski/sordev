@@ -11,50 +11,7 @@
                 <span class="font-normal text-gray-500 dark:text-gray-400">({{ $this->comments->count() }})</span>
             @endif
         </h3>
-
-        <button
-            type="button"
-            wire:click="toggleCommentComposer"
-            class="inline-flex h-8 w-8 items-center justify-center rounded-lg text-gray-500 transition hover:bg-gray-100 hover:text-primary-600 dark:text-gray-400 dark:hover:bg-white/5 dark:hover:text-primary-400"
-            title="{{ $showCommentComposer ? 'Anuluj' : 'Dodaj komentarz' }}"
-        >
-            @if ($showCommentComposer)
-                <x-heroicon-o-x-mark class="h-5 w-5" />
-            @else
-                <x-heroicon-o-plus class="h-5 w-5" />
-            @endif
-        </button>
     </div>
-
-    @if ($showCommentComposer)
-        <div class="border-b border-gray-200 px-4 py-3 dark:border-white/10">
-            <form wire:submit="addComment" class="space-y-3">
-                <textarea
-                    wire:model="newCommentContent"
-                    rows="3"
-                    placeholder="Napisz komentarz..."
-                    class="block w-full rounded-lg border-gray-300 text-sm shadow-sm focus:border-primary-500 focus:ring-primary-500 dark:border-gray-600 dark:bg-gray-800 dark:text-white dark:focus:border-primary-500"
-                    autofocus
-                ></textarea>
-                @error('newCommentContent')
-                    <p class="text-sm text-danger-600 dark:text-danger-400">{{ $message }}</p>
-                @enderror
-                <div class="flex justify-end gap-2">
-                    <x-filament::button
-                        type="button"
-                        color="gray"
-                        size="sm"
-                        wire:click="toggleCommentComposer"
-                    >
-                        Anuluj
-                    </x-filament::button>
-                    <x-filament::button type="submit" size="sm">
-                        Wyślij
-                    </x-filament::button>
-                </div>
-            </form>
-        </div>
-    @endif
 
     <div
         x-ref="thread"
@@ -75,8 +32,36 @@
             </div>
         @empty
             <p class="py-6 text-center text-sm text-gray-500 dark:text-gray-400">
-                Brak komentarzy. Kliknij +, aby dodać pierwszy.
+                Brak komentarzy. Napisz pierwszy poniżej.
             </p>
         @endforelse
+    </div>
+
+    {{--
+        Bez <form>: modal akcji Filament już jest formularzem, a zagnieżdżony <form>
+        jest ignorowany przez HTML i psuje focus-trap (kursor wraca do tytułu).
+        type="button" + wire:click, żeby Enter/Wyślij nie zamykały modala (callMountedAction).
+    --}}
+    <div
+        class="border-t border-gray-200 px-4 py-3 dark:border-white/10"
+        x-on:keydown.stop
+        x-on:mousedown.stop
+    >
+        <div class="space-y-3">
+            <textarea
+                wire:model="newCommentContent"
+                rows="3"
+                placeholder="Napisz komentarz..."
+                class="block w-full rounded-lg border-gray-300 text-sm shadow-sm focus:border-primary-500 focus:ring-primary-500 dark:border-gray-600 dark:bg-gray-800 dark:text-white dark:focus:border-primary-500"
+            ></textarea>
+            @error('newCommentContent')
+                <p class="text-sm text-danger-600 dark:text-danger-400">{{ $message }}</p>
+            @enderror
+            <div class="flex justify-end">
+                <x-filament::button type="button" size="sm" wire:click="addComment">
+                    Wyślij
+                </x-filament::button>
+            </div>
+        </div>
     </div>
 </section>

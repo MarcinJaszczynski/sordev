@@ -9,7 +9,6 @@ use App\Filament\Resources\EventResource\Pages\EventHotelPlanning;
 use App\Filament\Resources\EventResource\Pages\ManageEventDayInsurances;
 use App\Filament\Resources\EventResource\Pages\ManageEventPilot;
 use App\Filament\Resources\EventResource\Pages\ManageEventReservations;
-use App\Filament\Resources\EventResource\Pages\ManageEventTasks;
 use App\Filament\Resources\EventResource\Pages\ManageEventTransport;
 use App\Support\WorkflowModuleNavigation;
 use Illuminate\Contracts\Support\Htmlable;
@@ -26,13 +25,12 @@ trait HasEventOperationsSubNavigation
     public static function operationsSubNavigationActiveTab(): string
     {
         return match (static::class) {
-            ManageEventTasks::class => 'tasks',
             ManageEventReservations::class => 'reservations',
             ManageEventTransport::class => 'transport',
             EventHotelPlanning::class => 'hotels',
             ManageEventPilot::class => 'pilot',
             ManageEventDayInsurances::class => 'insurances',
-            default => 'tasks',
+            default => 'reservations',
         };
     }
 
@@ -42,14 +40,6 @@ trait HasEventOperationsSubNavigation
     public static function operationsSubNavigationTabs(int|string $recordId): array
     {
         $tabs = [
-            [
-                'key' => 'tasks',
-                'label' => 'Zadania',
-                'description' => null,
-                'icon' => 'heroicon-o-clipboard-document-list',
-                'url' => EventResource::getUrl('tasks', ['record' => $recordId]),
-                'badge' => null,
-            ],
             [
                 'key' => 'reservations',
                 'label' => 'Rezerwacje',
@@ -104,7 +94,6 @@ trait HasEventOperationsSubNavigation
     public static function operationsRouteNames(): array
     {
         $routes = [
-            ManageEventTasks::getRouteName(),
             ManageEventReservations::getRouteName(),
             ManageEventTransport::getRouteName(),
             EventHotelPlanning::getRouteName(),
@@ -129,7 +118,7 @@ trait HasEventOperationsSubNavigation
 
         return $this->eventRecordBreadcrumbs(
             moduleLabel: 'Operacje',
-            moduleUrl: EventResource::getUrl('tasks', ['record' => $recordId]),
+            moduleUrl: EventResource::getUrl('reservations', ['record' => $recordId]),
             sectionLabel: null,
         );
     }

@@ -8,6 +8,8 @@ use App\Filament\Resources\EventResource\RelationManagers\ProgramPointsRelationM
 use App\Models\Event;
 use App\Models\EventProgramPoint;
 use App\Services\EventProgramScheduleService;
+use App\Services\HotelStayReservationSync;
+use App\Services\ProgramPointReservationSync;
 use App\Support\ProgramTimeSlots;
 use Filament\Actions;
 use Filament\Actions\ActionGroup;
@@ -64,6 +66,9 @@ class EditEventProgram extends Page
         $this->clampProgramDay();
         $this->syncProgramDayStartTimeProperty();
         $this->syncProgramDayRouteProperty();
+
+        app(HotelStayReservationSync::class)->backfillForEvent($this->getRecord());
+        app(ProgramPointReservationSync::class)->backfillForEvent($this->getRecord());
 
         if ($this->programView === 'planner') {
             $this->dispatchPlannerInit();
@@ -205,10 +210,16 @@ class EditEventProgram extends Page
 
     public function updateProgramDayRoute(?string $route = null): void
     {
-        $route = trim($route ?? $this->programDayRoute);
-
         /** @var Event $event */
         $event = $this->getRecord();
+
+        // Slot fakultatywny = opcje pod stronę/szablon, nie dzień wycieczki z trasą.
+        if ($event->isFacultativeProgramDay($this->programDay)) {
+            return;
+        }
+
+        $route = trim($route ?? $this->programDayRoute);
+
         $event->setProgramDayRoute($this->programDay, $route !== '' ? $route : null);
         $event->save();
 

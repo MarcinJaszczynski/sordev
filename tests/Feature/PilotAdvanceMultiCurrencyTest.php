@@ -420,6 +420,16 @@ class PilotAdvanceMultiCurrencyTest extends TestCase
         $this->assertSame(300.0, (float) $line->ledger_office_paid);
         $this->assertSame(500.0, (float) $line->ledger_pilot_due);
         $this->assertTrue((bool) $line->ledger_is_top_up);
+
+        $totals = app(PilotSettlementService::class)->summarizeExpenseLines(
+            app(PilotSettlementService::class)->getExpenseLines($settlement->fresh())
+        );
+        $this->assertCount(1, $totals);
+        $this->assertSame('PLN', $totals[0]['currency']);
+        $this->assertSame(800.0, $totals[0]['planned']);
+        $this->assertSame(300.0, $totals[0]['office_paid']);
+        $this->assertSame(0.0, $totals[0]['pilot_paid']);
+        $this->assertSame(500.0, $totals[0]['pilot_due']);
     }
 
     public function test_admin_can_edit_and_delete_office_cash_payout(): void
@@ -450,7 +460,7 @@ class PilotAdvanceMultiCurrencyTest extends TestCase
 
         Livewire::actingAs($admin)
             ->test(PilotCashDesk::class, ['event' => $event->fresh(), 'context' => 'admin'])
-            ->assertSee('Wydatki pilota')
+            ->assertSee('Wydatki / koszty pilota')
             ->assertSee('Gotówka od biura')
             ->assertSee('2 500,00')
             ->call('editOfficePayout', $plnId)
@@ -474,6 +484,93 @@ class PilotAdvanceMultiCurrencyTest extends TestCase
         $this->assertNull(
             $settlement->fresh()->pilotCashPreparations()->where('currency_id', $plnId)->value('provided_amount')
         );
+    }
+
+    public function test_clear_all_office_cash_payouts_resets_paid_flag_for_all_currencies(): void
+    {
+        Role::firstOrCreate(['name' => 'admin']);
+        $admin = User::factory()->create(['status' => 'active']);
+        $admin->assignRole('admin');
+        $this->actingAs($admin);
+
+        $pilot = User::factory()->create(['status' => 'active']);
+        $pilot->assignRole('pilot');
+
+        $plnId = Currency::query()->create([
+            'name' => 'PLN', 'code' => 'PLN', 'symbol' => 'PLN', 'exchange_rate' => 1,
+        ])->id;
+        $eurId = Currency::query()->create([
+            'name' => 'EUR', 'code' => 'EUR', 'symbol' => 'EUR', 'exchange_rate' => 4.3,
+        ])->id;
+
+        $event = Event::factory()->create([
+            'assigned_to' => $pilot->id,
+            'shared_with_pilot' => true,
+            'status' => Event::STATUS_CONFIRMED,
+            'pilot_funds_paid' => false,
+        ]);
+
+        app(PilotAdvanceService::class)->approvePayment($event, paidLines: [
+            ['amount' => 1000, 'currency_id' => $plnId],
+            ['amount' => 50, 'currency_id' => $eurId],
+        ]);
+
+        $event->refresh();
+        $this->assertTrue($event->pilot_funds_paid);
+
+        app(PilotAdvanceService::class)->clearAllOfficeCashPayouts($event->fresh());
+
+        $event->refresh();
+        $this->assertFalse((bool) $event->pilot_funds_paid);
+        $this->assertNull($event->pilot_funds_paid_at);
+        $this->assertNull($event->pilot_funds_paid_by);
+        $this->assertSame(0, PilotAdvanceLine::query()->where('event_id', $event->id)->where('phase', 'paid')->count());
+
+        $settlement = \App\Models\EventSettlement::findOrCreateActiveForEvent($event);
+        $this->assertNull(
+            $settlement->pilotCashPreparations()->where('currency_id', $plnId)->value('provided_amount')
+        );
+        $this->assertNull(
+            $settlement->pilotCashPreparations()->where('currency_id', $eurId)->value('provided_amount')
+        );
+    }
+
+    public function test_manage_event_pilot_can_revoke_paid_funds_via_form_action(): void
+    {
+        Role::firstOrCreate(['name' => 'admin']);
+        $admin = User::factory()->create(['status' => 'active']);
+        $admin->assignRole('admin');
+
+        $pilot = User::factory()->create(['status' => 'active']);
+        $pilot->assignRole('pilot');
+
+        $plnId = Currency::query()->create([
+            'name' => 'PLN', 'code' => 'PLN', 'symbol' => 'PLN', 'exchange_rate' => 1,
+        ])->id;
+
+        $event = Event::factory()->create([
+            'assigned_to' => $pilot->id,
+            'shared_with_pilot' => true,
+            'status' => Event::STATUS_CONFIRMED,
+        ]);
+
+        $this->actingAs($admin);
+        app(PilotAdvanceService::class)->approvePayment($event, paidLines: [
+            ['amount' => 1500, 'currency_id' => $plnId],
+        ]);
+
+        Livewire::actingAs($admin)
+            ->test(\App\Filament\Resources\EventResource\Pages\ManageEventPilot::class, [
+                'record' => $event->getKey(),
+            ])
+            ->assertFormFieldExists('pilot_funds_paid')
+            ->assertSee('Zmień / dopłać / dodaj walutę')
+            ->assertSee('Rozliczenie — gotówka i wymiana walut')
+            ->call('revokePilotOfficePayout')
+            ->assertNotified();
+
+        $event->refresh();
+        $this->assertFalse((bool) $event->pilot_funds_paid);
     }
 
     public function test_advance_url_for_targets_merged_settlement_tab(): void

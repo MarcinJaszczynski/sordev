@@ -27,7 +27,12 @@ class ProgramPointContractorSync
             ->update(['contractor_id' => $point->contractor_id]);
 
         Reservation::query()
-            ->where('program_point_id', $point->id)
+            ->where(function ($query) use ($point): void {
+                $query->where('program_point_id', $point->id);
+                if (filled($point->reservation_id)) {
+                    $query->orWhere('id', $point->reservation_id);
+                }
+            })
             ->update(['contractor_id' => $point->contractor_id]);
     }
 }

@@ -2,8 +2,8 @@
     $items = $items ?? \App\Support\EventReadinessIndicators::forEventOverview($event);
 @endphp
 
-{{-- Stałe 4 karty w jednym rzędzie na desktopie (bez grupowania w dół). --}}
-<div class="event-readiness-overview grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-4">
+{{-- Pięć kart obok siebie — ten sam wygląd, jeden rząd (na wąskim ekranie kolumna). --}}
+<div class="event-readiness-overview">
     @foreach ($items as $item)
         @php
             $href = $item['url'] ?? null;

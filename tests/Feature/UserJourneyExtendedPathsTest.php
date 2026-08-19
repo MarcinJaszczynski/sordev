@@ -417,7 +417,7 @@ class UserJourneyExtendedPathsTest extends TestCase
         $event = $event->fresh();
         $this->assertSame(Event::STATUS_TO_SETTLE, $event->status);
         $this->assertSame($pilot->id, (int) $event->assigned_to);
-        $this->assertTrue(
+        $this->assertFalse(
             Task::query()
                 ->where('taskable_id', $event->id)
                 ->where('description', 'like', '%event-status:'.$event->id.':to_settle%')

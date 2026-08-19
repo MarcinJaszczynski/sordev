@@ -154,7 +154,16 @@ class EventProgramPointOrderService
     {
         return EventProgramPoint::query()
             ->where('event_id', $event->id)
-            ->with(['templatePoint', 'contractor', 'contractorLocation', 'reservations.contractor', 'children', 'parent'])
+            ->with([
+                'templatePoint',
+                'contractor',
+                'contractorLocation',
+                'reservations.contractor',
+                'hotelStays.reservation',
+                'sharedReservation.contractor',
+                'children.reservations',
+                'parent',
+            ])
             ->withCount('children')
             ->get();
     }

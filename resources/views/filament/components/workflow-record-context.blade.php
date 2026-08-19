@@ -1,5 +1,6 @@
 @php
     $context = $context ?? [];
+    $livewireId = $livewireId ?? null;
 @endphp
 
 @if (! empty($context['title']))
@@ -38,7 +39,13 @@
                         @foreach ($context['meta'] as $item)
                             <div class="text-sm">
                                 <dt class="inline text-gray-500">{{ $item['label'] }}:</dt>
-                                <dd class="inline font-medium text-gray-900 dark:text-gray-100">{{ $item['value'] }}</dd>
+                                @if (! empty($item['url']))
+                                    <dd class="inline font-medium">
+                                        <a href="{{ $item['url'] }}" class="text-primary-700 underline-offset-2 hover:underline dark:text-primary-300">{{ $item['value'] }}</a>
+                                    </dd>
+                                @else
+                                    <dd class="inline font-medium text-gray-900 dark:text-gray-100">{{ $item['value'] }}</dd>
+                                @endif
                             </div>
                         @endforeach
                     </dl>
@@ -88,6 +95,10 @@
                                 <span class="text-gray-500">{{ $labels['client_paid'] ?? 'Wpłacono od klientów' }}:</span>
                                 <span class="font-semibold text-sky-800 dark:text-sky-300">{{ $finance['client_paid'] ?? '—' }}</span>
                             </div>
+                            <div>
+                                <span class="text-gray-500">{{ $labels['client_remaining'] ?? 'Do dopłaty od klientów' }}:</span>
+                                <span class="font-semibold {{ ($finance['client_remaining_tone'] ?? 'due') === 'ok' ? 'text-emerald-700 dark:text-emerald-400' : (($finance['client_remaining_tone'] ?? '') === 'over' ? 'text-amber-700 dark:text-amber-300' : 'text-rose-700 dark:text-rose-400') }}">{{ $finance['client_remaining'] ?? '—' }}</span>
+                            </div>
                         </div>
                         @if (! empty($finance['calc_plan_hint']))
                             <p class="text-xs text-amber-800 dark:text-amber-200">{{ $finance['calc_plan_hint'] }}</p>
@@ -99,9 +110,14 @@
                 <div class="flex flex-wrap gap-2">
                     @foreach ($context['links'] as $link)
                         @if (! empty($link['wire_click']))
+                            {{-- HtmlString z render hooka: wire:click bywa zawodny — wołamy komponent po ID. --}}
                             <button
                                 type="button"
-                                wire:click="{{ $link['wire_click'] }}"
+                                @if (filled($livewireId))
+                                    onclick="window.Livewire.find(@js($livewireId))?.call(@js($link['wire_click']))"
+                                @else
+                                    wire:click="{{ $link['wire_click'] }}"
+                                @endif
                                 class="workflow-record-context-link inline-flex min-h-[var(--admin-touch-min)] items-center gap-1.5 rounded-lg border border-gray-200 bg-gray-50 px-3 py-1.5 text-sm font-medium text-gray-800 hover:bg-white dark:border-white/10 dark:bg-gray-800 dark:text-gray-200"
                             >
                                 @if (! empty($link['icon']))

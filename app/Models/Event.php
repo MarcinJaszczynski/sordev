@@ -46,6 +46,9 @@ class Event extends Model
         'cancelled' => self::STATUS_CANCELLED,
     ];
 
+    /** Maksymalna długość kodu imprezy (kolumna `events.code` + wniosek o fakturę). */
+    public const CODE_MAX_LENGTH = 32;
+
     /** @var array<int, \App\Models\Contact> */
     private static array $contactsByIdCache = [];
 
@@ -57,6 +60,7 @@ class Event extends Model
         'transport_contractor_id',
         'driver_contractor_id',
         'name',
+        'code',
         'client_name',
         'client_email',
         'client_phone',
@@ -207,6 +211,11 @@ class Event extends Model
             return null;
         }
 
+        // Slot fakultatywny nie ma trasy przejazdu (to nie jest dzień wycieczki).
+        if ($this->isFacultativeProgramDay($day)) {
+            return null;
+        }
+
         $routes = is_array($this->program_day_routes) ? $this->program_day_routes : [];
         $raw = $routes[(string) $day] ?? $routes[$day] ?? null;
 
@@ -220,6 +229,8 @@ class Event extends Model
     }
 
     /**
+     * Trasy przejazdu tylko dla dni wycieczki (bez dnia fakultatywnego).
+     *
      * @return array<string, string>
      */
     public function programDayRoutes(): array
@@ -229,6 +240,7 @@ class Event extends Model
         }
 
         $routes = is_array($this->program_day_routes) ? $this->program_day_routes : [];
+        $coreDays = $this->resolveCoreProgramDaysCount();
         $normalized = [];
 
         foreach ($routes as $day => $route) {
@@ -236,10 +248,15 @@ class Event extends Model
                 continue;
             }
 
+            $dayNumber = (int) $day;
+            if ($dayNumber < 1 || $dayNumber > $coreDays) {
+                continue;
+            }
+
             $value = trim($route);
 
             if ($value !== '') {
-                $normalized[(string) $day] = $value;
+                $normalized[(string) $dayNumber] = $value;
             }
         }
 
@@ -255,6 +272,15 @@ class Event extends Model
         }
 
         $routes = is_array($this->program_day_routes) ? $this->program_day_routes : [];
+
+        // Nie zapisujemy tras na slot fakultatywny; ewentualny stary wpis czyścimy.
+        if ($this->isFacultativeProgramDay($day)) {
+            unset($routes[(string) $day], $routes[$day]);
+            $this->program_day_routes = $routes !== [] ? $routes : null;
+
+            return;
+        }
+
         $route = is_string($route) ? trim($route) : null;
 
         if ($route === null || $route === '') {
@@ -438,6 +464,28 @@ class Event extends Model
         return $code;
     }
 
+    /**
+     * Normalizuje ręcznie wpisany kod: bez spacji, wielkie litery.
+     * Pusty wpis zwraca null (generator nadaje kod przy tworzeniu).
+     */
+    public static function normalizeCode(?string $value): ?string
+    {
+        if ($value === null) {
+            return null;
+        }
+
+        $normalized = strtoupper((string) preg_replace('/\s+/', '', $value));
+
+        return $normalized === '' ? null : $normalized;
+    }
+
+    public function setCodeAttribute(mixed $value): void
+    {
+        $this->attributes['code'] = self::normalizeCode(
+            $value === null ? null : (string) $value
+        );
+    }
+
     protected static function booted()
     {
 
@@ -446,8 +494,14 @@ class Event extends Model
                 $event->created_by = Auth::id();
             }
 
-            if (empty($event->code)) {
+            if (blank($event->code)) {
                 $event->code = self::generateUniqueCode();
+            }
+        });
+
+        static::updating(function ($event) {
+            if ($event->isDirty('code') && blank($event->code)) {
+                $event->code = $event->getOriginal('code');
             }
         });
 
@@ -938,10 +992,11 @@ class Event extends Model
     }
 
     /**
-     * Liczba dni programu widoczna w UI (trasy, zakładki).
+     * Liczba dni programu w UI Programu (zakładki + lista), w tym slot fakultatywny.
      *
-     * Bierze max(core, max dzień punktów), żeby błędne duration_days=1
-     * nie obcinało tras / programu, a dzień fakultatywny nadal był widoczny na końcu.
+     * Bierze max(core, max dzień punktów), żeby dzień fakultatywny (core+1)
+     * nadal był widoczny na końcu — pod szablon / stronę. Trasy przejazdu
+     * (Transport, PDF kierowcy) używają resolveCoreProgramDaysCount().
      */
     public function resolveProgramDaysCount(): int
     {
@@ -1033,8 +1088,23 @@ class Event extends Model
 
     public function resolveGratisCountForParticipantCount(?int $participantCount = null): int
     {
+        return $this->resolveQtyFieldForParticipantCount('gratis', $participantCount);
+    }
+
+    public function resolveDriverCountForParticipantCount(?int $participantCount = null): int
+    {
+        return $this->resolveQtyFieldForParticipantCount('driver', $participantCount);
+    }
+
+    protected function resolveQtyFieldForParticipantCount(string $field, ?int $participantCount = null): int
+    {
         $count = max(1, (int) ($participantCount ?? $this->participant_count ?? 1));
 
+        return max(0, (int) ($this->closestQtyVariantForParticipantCount($count)?->{$field} ?? 0));
+    }
+
+    protected function closestQtyVariantForParticipantCount(int $count): ?EventQty
+    {
         if ($this->relationLoaded('qtyVariants')) {
             $exactVariant = $this->qtyVariants
                 ->where('qty', $count)
@@ -1042,14 +1112,12 @@ class Event extends Model
                 ->first();
 
             if ($exactVariant) {
-                return max(0, (int) ($exactVariant->gratis ?? 0));
+                return $exactVariant;
             }
 
-            $variant = $this->qtyVariants
+            return $this->qtyVariants
                 ->sortBy(fn ($variant) => abs(((int) ($variant->qty ?? 0)) - $count))
                 ->first();
-
-            return max(0, (int) ($variant?->gratis ?? 0));
         }
 
         $exactVariant = $this->qtyVariants()
@@ -1058,14 +1126,12 @@ class Event extends Model
             ->first();
 
         if ($exactVariant) {
-            return max(0, (int) ($exactVariant->gratis ?? 0));
+            return $exactVariant;
         }
 
-        $variant = $this->qtyVariants()
+        return $this->qtyVariants()
             ->orderByRaw('ABS(qty - ?)', [$count])
             ->first();
-
-        return max(0, (int) ($variant->gratis ?? 0));
     }
 
     /**
@@ -1314,6 +1380,7 @@ class Event extends Model
             'event_template_id' => $template->id,
             'start_place_id' => $data['start_place_id'] ?? null,
             'name' => $data['name'],
+            'code' => $data['code'] ?? null,
             'client_name' => $data['client_name'],
             'client_email' => $data['client_email'] ?? null,
             'client_phone' => $data['client_phone'] ?? null,
@@ -1484,17 +1551,15 @@ class Event extends Model
             // ignore if no template prices
         }
 
-        // Kopiuj ubezpieczenia dniowe
+        // Kopiuj ubezpieczenia dniowe (idempotentnie, w horyzoncie imprezy).
         try {
-            foreach ($template->dayInsurances()->get() as $di) {
-                \App\Models\EventDayInsurance::create([
-                    'event_id' => $event->id,
-                    'day' => $di->day,
-                    'insurance_id' => $di->insurance_id,
-                ]);
-            }
+            app(\App\Actions\Events\SyncEventDayInsurancesFromTemplateAction::class)($event, $template);
         } catch (\Throwable $e) {
-            // ignore
+            \Illuminate\Support\Facades\Log::warning('copy day insurances from template failed', [
+                'event_id' => $event->id,
+                'event_template_id' => $template->id,
+                'error' => $e->getMessage(),
+            ]);
         }
 
         // Kopiuj dostępność miejsc startowych
@@ -1645,7 +1710,8 @@ class Event extends Model
 
     /**
      * Przelicz ilości (quantity) w punktach programu na podstawie osób koszowych
-     * (płacący; + gratis tylko gdy include_gratis_in_cost). Dotyczy punktów z group_size > 0.
+     * (płacący + zaznaczone dodatki: opiekunowie / pilot / kierowca).
+     * Dotyczy punktów z group_size > 0.
      */
     public function resyncProgramPointQuantities(): void
     {

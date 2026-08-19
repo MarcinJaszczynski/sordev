@@ -23,7 +23,7 @@
     {{-- Actions / Filters --}}
     <div class="flex items-center gap-2 w-full md:w-auto justify-end">
         {{-- Reset --}}
-        @if($searchTerm || $tasksScope !== 'assigned' || $priorityFilter || $contextFilter || $dueFilter || $showFinishedTasks)
+        @if($searchTerm || $tasksScope !== 'assigned' || $priorityFilter || $contextFilter || $dueFilter || $sourceFilter !== 'office' || $showFinishedTasks)
         <button wire:click="refreshBoard" class="text-xs font-medium text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200 flex items-center gap-1 transition mr-2">
             <x-heroicon-m-x-mark class="w-4 h-4" />
             Wyczyść filtry
@@ -35,12 +35,20 @@
             <button @click="open = !open" type="button" class="relative flex items-center justify-center gap-2 bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 rounded-lg px-3 py-2 text-sm font-medium text-gray-700 dark:text-gray-200 shadow-sm hover:bg-gray-50 dark:hover:bg-gray-700 transition focus:outline-none focus:ring-2 focus:ring-primary-500">
                 <x-heroicon-m-funnel class="w-4 h-4 text-gray-400 dark:text-gray-500" />
                 Filtry
-                @if($tasksScope !== 'assigned' || $priorityFilter || $contextFilter || $dueFilter || $showFinishedTasks)
+                @if($tasksScope !== 'assigned' || $priorityFilter || $contextFilter || $dueFilter || $sourceFilter !== 'office' || $showFinishedTasks)
                     <span class="absolute top-0 right-0 -mt-1 -mr-1 flex h-3 w-3 items-center justify-center rounded-full bg-primary-600 ring-2 ring-white dark:ring-gray-900"></span>
                 @endif
             </button>
             
             <div x-show="open" @click.away="open = false" x-transition class="absolute right-0 top-full mt-2 w-72 rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 shadow-xl p-4 z-50 flex flex-col gap-4" style="display: none;">
+                <div>
+                    <label class="block text-xs font-semibold text-gray-700 dark:text-gray-300 mb-1">Źródło</label>
+                    <select wire:model.live="sourceFilter" class="block w-full border-gray-300 dark:border-gray-600 dark:bg-gray-800 dark:text-gray-200 rounded-md shadow-sm focus:ring-primary-500 focus:border-primary-500 sm:text-sm">
+                        <option value="office">Biuro</option>
+                        <option value="system">Systemowe</option>
+                        <option value="">Wszystkie</option>
+                    </select>
+                </div>
                 <div>
                     <label class="block text-xs font-semibold text-gray-700 dark:text-gray-300 mb-1">Priorytet</label>
                     <select wire:model.live="priorityFilter" class="block w-full border-gray-300 dark:border-gray-600 dark:bg-gray-800 dark:text-gray-200 rounded-md shadow-sm focus:ring-primary-500 focus:border-primary-500 sm:text-sm">
@@ -239,7 +247,7 @@
                                 id="{{ $task->id }}" 
                                 style="{{ $palette['cardStyle'] }}"
                                 wire:click="openEditTaskModal({{ $task->id }})"
-                                class="task-card record group px-3 py-3 cursor-pointer transition hover:shadow-md relative rounded-lg border" 
+                                class="task-card record group px-3 py-3 cursor-pointer transition hover:shadow-md relative rounded-lg border {{ $task->source === \App\Enums\TaskSource::System ? 'border-amber-300/80 bg-amber-50/40 dark:border-amber-500/40 dark:bg-amber-500/5' : '' }}" 
                             >
                                 @php
                                     $isOverdueTask = $task->due_date && $task->due_date->isPast();
@@ -279,6 +287,11 @@
                                     <h4 class="min-w-0 flex-1 break-words font-semibold text-sm leading-5 text-left {{ $titleColorClass }}">
                                         {{ $task->title }}
                                     </h4>
+                                    @if ($task->source === \App\Enums\TaskSource::System)
+                                        <span class="flex-shrink-0 text-[10px] px-1.5 py-0.5 rounded-full font-bold border border-amber-300 bg-amber-100 text-amber-900 dark:border-amber-500/40 dark:bg-amber-500/20 dark:text-amber-200">
+                                            System
+                                        </span>
+                                    @endif
                                     <span class="priority-badge flex-shrink-0 text-[10px] px-1.5 py-0.5 rounded-full font-bold border" style="{{ $priorityStyles }}">
                                         {{ $priorityLabel }}
                                     </span>
@@ -293,9 +306,12 @@
                                 </div>
 
                                 @if($task->parent)
-                                    <p class="mb-1.5 text-[11px] text-indigo-600 dark:text-indigo-300 truncate">
-                                        Podzadanie: {{ $task->parent->title }}
-                                    </p>
+                                    <div class="mb-1.5 flex min-w-0 items-baseline gap-1 text-[11px] leading-tight text-gray-500 dark:text-gray-400">
+                                        <span class="shrink-0" aria-hidden="true">↳</span>
+                                        <p class="min-w-0 truncate font-medium">
+                                            {{ $task->parent->title }}
+                                        </p>
+                                    </div>
                                 @endif
 
                                 @if($descriptionFull !== '')
@@ -373,7 +389,11 @@
                                         @mouseleave="open = false"
                                     >
                                         <div class="text-[10px] font-semibold text-gray-500 dark:text-gray-400">
-                                            Ostatni komentarz · {{ $latestComment->author?->name ?? '—' }} · {{ $latestComment->created_at?->format('d.m.Y H:i') ?? '—' }}
+                                            Ostatni komentarz
+                                            @if($commentsCount > 1)
+                                                <span class="ml-1 inline-flex items-center rounded-full bg-slate-200 px-1.5 py-0 text-[10px] font-bold text-slate-800 dark:bg-slate-700 dark:text-slate-100">{{ $commentsCount }}</span>
+                                            @endif
+                                            · {{ $latestComment->author?->name ?? '—' }} · {{ $latestComment->created_at?->format('d.m.Y H:i') ?? '—' }}
                                         </div>
                                         <p class="mt-0.5 text-xs italic leading-snug text-gray-700 dark:text-gray-300 line-clamp-2 whitespace-pre-wrap">
                                             {{ $latestCommentPreview }}

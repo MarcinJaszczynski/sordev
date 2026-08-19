@@ -279,7 +279,7 @@ class UserJourneyPathsTest extends TestCase
         ));
     }
 
-    public function test_status_change_to_offer_creates_office_task(): void
+    public function test_status_change_to_offer_does_not_create_office_task(): void
     {
         $biuro = User::factory()->create(['status' => 'active']);
         $biuro->assignRole('biuro');
@@ -299,17 +299,45 @@ class UserJourneyPathsTest extends TestCase
 
         $this->assertSame(Event::STATUS_OFFER, $event->fresh()->status);
 
+        $this->assertFalse(
+            Task::query()
+                ->where('taskable_type', Event::class)
+                ->where('taskable_id', $event->id)
+                ->where('description', 'like', '%event-status:'.$event->id.':offer%')
+                ->exists(),
+        );
+    }
+
+    public function test_status_change_to_confirmed_creates_office_task(): void
+    {
+        $biuro = User::factory()->create(['status' => 'active']);
+        $biuro->assignRole('biuro');
+
+        $event = Event::factory()->create([
+            'status' => Event::STATUS_OFFER,
+            'created_by' => $this->admin->id,
+            'assigned_to' => $biuro->id,
+            'name' => 'Potwierdzenie automatyzacja',
+        ]);
+
+        app(ChangeEventStatusAction::class)(new ChangeEventStatusData(
+            event: $event,
+            status: Event::STATUS_CONFIRMED,
+            reason: 'Test potwierdzenia',
+        ));
+
+        $this->assertSame(Event::STATUS_CONFIRMED, $event->fresh()->status);
+
         $tasks = Task::query()
             ->where('taskable_type', Event::class)
             ->where('taskable_id', $event->id)
             ->get();
 
-        $this->assertNotEmpty($tasks);
         $this->assertTrue(
-            $tasks->contains(fn (Task $task): bool => str_contains((string) $task->title, 'Przygotuj/wyślij ofertę')),
+            $tasks->contains(fn (Task $task): bool => str_contains((string) $task->title, 'Impreza potwierdzona')),
         );
         $this->assertTrue(
-            $tasks->contains(fn (Task $task): bool => str_contains((string) $task->description, 'event-status:'.$event->id.':offer')),
+            $tasks->contains(fn (Task $task): bool => str_contains((string) $task->description, 'event-status:'.$event->id.':confirmed')),
         );
     }
 
@@ -395,7 +423,7 @@ class UserJourneyPathsTest extends TestCase
 
         $event = $event->fresh();
         $this->assertSame(Event::STATUS_TO_SETTLE, $event->status);
-        $this->assertTrue(
+        $this->assertFalse(
             Task::query()
                 ->where('taskable_id', $event->id)
                 ->where('description', 'like', '%event-status:'.$event->id.':to_settle%')

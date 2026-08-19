@@ -189,10 +189,10 @@
                             <div class="border-t border-gray-100 px-3 py-2 dark:border-white/5">
                                 <button
                                     type="button"
-                                    wire:click="openQuickCreate"
+                                    wire:click="openQuickCreate(true)"
                                     class="text-sm font-medium text-primary-600 hover:text-primary-700 dark:text-primary-400"
                                 >
-                                    Dodaj nowy kontakt
+                                    Utwórz nową firmę / klienta
                                 </button>
                             </div>
                         @endif
@@ -211,29 +211,60 @@
             </div>
 
             @if (! $showQuickCreate)
-                <button
-                    type="button"
-                    wire:click="openQuickCreate"
-                    class="mt-3 text-sm font-medium text-gray-600 hover:text-gray-800 dark:text-gray-400 dark:hover:text-gray-200"
-                >
-                    Kontaktu nie ma w bazie? Wprowadź ręcznie
-                </button>
+                <div class="mt-3 flex flex-col items-start gap-2">
+                    @if ($primaryContractorId)
+                        <button
+                            type="button"
+                            wire:click="openQuickCreate"
+                            class="text-sm font-medium text-gray-600 hover:text-gray-800 dark:text-gray-400 dark:hover:text-gray-200"
+                        >
+                            Dodaj osobę do firmy głównego zamawiającego
+                        </button>
+                    @endif
+                    <button
+                        type="button"
+                        wire:click="openQuickCreate(true)"
+                        class="text-sm font-medium text-primary-600 hover:text-primary-700 dark:text-primary-400"
+                    >
+                        {{ $primaryContractorId ? 'Utwórz nową firmę / klienta' : 'Kontaktu nie ma w bazie? Wprowadź ręcznie' }}
+                    </button>
+                </div>
             @endif
 
             @if ($showQuickCreate)
                 <div class="mt-4 rounded-lg border border-gray-200 p-3 dark:border-white/10">
-                    <p class="mb-3 text-sm font-medium text-gray-800 dark:text-gray-100">Dane dodatkowego kontaktu</p>
+                    <p class="mb-3 text-sm font-medium text-gray-800 dark:text-gray-100">
+                        {{ $createAsNewCompany ? 'Nowa firma / klient' : 'Dane dodatkowego kontaktu' }}
+                    </p>
+                    @if ($primaryContractorId)
+                        <label class="mb-3 inline-flex items-start gap-2 text-sm text-gray-700 dark:text-gray-300">
+                            <input
+                                type="checkbox"
+                                wire:model.live="createAsNewCompany"
+                                class="mt-0.5 rounded border-gray-400 text-primary-600 shadow-sm focus:ring-primary-500 dark:border-white/20 dark:bg-white/5"
+                            />
+                            <span>
+                                <span class="font-medium">Utwórz nową firmę (typ klient)</span>
+                                <span class="mt-0.5 block text-xs text-gray-500 dark:text-gray-400">
+                                    Odznacz, aby dopisać osobę do firmy głównego zamawiającego.
+                                </span>
+                            </span>
+                        </label>
+                    @endif
                     <div class="grid gap-3 sm:grid-cols-2">
-                        @unless ($primaryContractorId)
+                        @if ($createAsNewCompany || ! $primaryContractorId)
                             <div class="sm:col-span-2">
                                 <label class="mb-1 block text-sm font-medium text-gray-700 dark:text-gray-200">Firma / instytucja</label>
                                 <input type="text" wire:model="companyName" class="fi-input block w-full rounded-lg border-gray-300 text-sm shadow-sm dark:border-white/10 dark:bg-white/5" />
+                                <p class="mt-1 text-xs text-gray-500 dark:text-gray-400">
+                                    Nowa firma dostanie typ „klient”. Pole opcjonalne — bez nazwy użyjemy imienia i nazwiska.
+                                </p>
                             </div>
                         @else
                             <p class="sm:col-span-2 text-xs text-gray-500 dark:text-gray-400">
                                 Osoba zostanie powiązana z firmą głównego zamawiającego.
                             </p>
-                        @endunless
+                        @endif
                         <div>
                             <label class="mb-1 block text-sm font-medium text-gray-700 dark:text-gray-200">Imię</label>
                             <input type="text" wire:model="firstName" class="fi-input block w-full rounded-lg border-gray-300 text-sm shadow-sm dark:border-white/10 dark:bg-white/5" />

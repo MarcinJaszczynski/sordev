@@ -962,6 +962,25 @@
         overflow-wrap: anywhere;
     }
 
+    .fi-page:has(.admin-program-toolbar) .fi-resource-relation-managers .fi-ta-cell.epp-finance-col,
+    .fi-ta-cell.epp-finance-col {
+        width: 22%;
+        min-width: 12.5rem;
+        max-width: 20rem;
+        white-space: normal !important;
+        word-break: break-word !important;
+        overflow-wrap: anywhere;
+        vertical-align: top;
+    }
+
+    .epp-ops--finance {
+        margin-top: 0;
+    }
+
+    .epp-ops--finance .epp-ops__label {
+        min-width: 5.5rem;
+    }
+
     .fi-page:has(.admin-program-toolbar) .fi-resource-relation-managers .fi-ta-cell.epp-money-col,
     .fi-ta-cell.epp-money-col {
         white-space: nowrap !important;
@@ -1296,33 +1315,7 @@
     }
 
     .epp-name-cell--child {
-        padding-left: 2rem;
-        margin-left: 0.15rem;
-        border-left: none;
-    }
-
-    .epp-tree-branch {
-        position: absolute;
-        left: 0.65rem;
-        top: 0;
-        bottom: 0;
-        width: 1px;
-        background: linear-gradient(180deg, #cbd5e1 0%, #cbd5e1 55%, transparent 100%);
-        pointer-events: none;
-    }
-
-    .epp-name-cell--child .epp-tree-branch::after {
-        content: '';
-        position: absolute;
-        left: 0;
-        top: 1.05rem;
-        width: 0.75rem;
-        height: 1px;
-        background: #cbd5e1;
-    }
-
-    .fi-ta-row.epp-table-row--set-child-last .epp-tree-branch {
-        bottom: 50%;
+        padding-left: 0.85rem;
     }
 
     .epp-name-head {
@@ -1640,12 +1633,132 @@
         line-height: 1;
     }
 
+    .epp-title-row {
+        display: flex;
+        flex-wrap: wrap;
+        align-items: center;
+        gap: 0.4rem 0.55rem;
+    }
+
     .epp-title {
         font-size: 0.95rem;
         font-weight: 700;
         color: #0f172a;
         line-height: 1.35;
         word-break: break-word;
+    }
+
+    .epp-scope {
+        display: inline-flex;
+        flex-wrap: wrap;
+        gap: 0.22rem;
+        align-items: center;
+    }
+
+    .epp-scope-chip {
+        display: inline-flex;
+        align-items: center;
+        padding: 0.12rem 0.45rem;
+        border-radius: 999px;
+        font-size: 0.62rem;
+        font-weight: 800;
+        line-height: 1.2;
+        letter-spacing: 0.01em;
+        text-transform: uppercase;
+        white-space: nowrap;
+        border: 1px solid transparent;
+    }
+
+    .epp-scope-chip--program-on {
+        background: #dcfce7;
+        color: #166534;
+        border-color: #86efac;
+    }
+
+    .epp-scope-chip--program-off {
+        background: #fee2e2;
+        color: #991b1b;
+        border-color: #fecaca;
+    }
+
+    .epp-scope-chip--calc-on {
+        background: #dbeafe;
+        color: #1d4ed8;
+        border-color: #93c5fd;
+    }
+
+    .epp-scope-chip--calc-off {
+        background: #ffedd5;
+        color: #9a3412;
+        border-color: #fed7aa;
+    }
+
+    .epp-scope-chip--rez-ok {
+        background: #d1fae5;
+        color: #065f46;
+        border-color: #6ee7b7;
+    }
+
+    .epp-scope-chip--rez-pending {
+        background: #fef3c7;
+        color: #92400e;
+        border-color: #fcd34d;
+    }
+
+    .fi-ta-row.epp-table-row--out-of-scope > td {
+        background: #fff7ed !important;
+    }
+
+    .epp-ops {
+        display: flex;
+        flex-direction: column;
+        gap: 0.08rem;
+        margin-top: 0.1rem;
+        font-size: 0.72rem;
+        line-height: 1.35;
+        color: #475569;
+    }
+
+    .epp-ops__row {
+        display: flex;
+        flex-wrap: wrap;
+        align-items: baseline;
+        gap: 0.15rem 0.4rem;
+    }
+
+    .epp-ops__label {
+        font-size: 0.62rem;
+        font-weight: 600;
+        letter-spacing: 0.04em;
+        text-transform: uppercase;
+        color: #94a3b8;
+        min-width: 4.6rem;
+    }
+
+    .epp-ops__row--total {
+        color: #0f172a;
+        font-weight: 600;
+    }
+
+    .epp-ops__row--ok {
+        color: #166534;
+    }
+
+    .epp-ops__row--rez {
+        color: #0f766e;
+        font-weight: 700;
+    }
+
+    .epp-ops__row--warn {
+        color: #92400e;
+    }
+
+    .epp-ops__row--due {
+        color: #9f1239;
+    }
+
+    .epp-ops__row--muted {
+        color: #94a3b8;
     }
 
     .epp-meta {
@@ -2179,7 +2292,7 @@
     .event-program-day-tree .epp-td--drag { width: 1.6rem; text-align: center; }
     .event-program-day-tree .epp-td--order { width: 2.2rem; text-align: center; }
     .event-program-day-tree .epp-td--time { width: 6.5rem; white-space: nowrap; }
-    .event-program-day-tree .epp-td--flags { width: 4.5rem; text-align: center; }
+    .event-program-day-tree .epp-td--flags { width: 8.2rem; text-align: center; }
     .event-program-day-tree .epp-td--actions { width: 2.4rem; text-align: center; }
 
     .event-program-day-tree .epp-blocks {
@@ -2198,8 +2311,7 @@
     }
 
     .event-program-day-tree .epp-block--set {
-        border-color: #bfdbfe;
-        box-shadow: inset 3px 0 0 #3b82f6;
+        border-color: #dbeafe;
     }
 
     .event-program-day-tree .epp-block--selected {
@@ -2303,16 +2415,18 @@
     }
 
     .event-program-day-tree .epp-flag {
-        width: 1.15rem;
-        height: 1.15rem;
-        padding: 0;
-        border-radius: 0.2rem;
-        font-size: 0.6rem;
+        min-width: 2.35rem;
+        height: 1.35rem;
+        padding: 0 0.28rem;
+        border-radius: 0.28rem;
+        font-size: 0.62rem;
         font-weight: 800;
-        line-height: 1.15rem;
+        line-height: 1.35rem;
         text-align: center;
         cursor: pointer;
         flex-shrink: 0;
+        letter-spacing: 0.01em;
+        text-transform: uppercase;
     }
 
     .event-program-day-tree .epp-flag--on {
@@ -2321,10 +2435,20 @@
         color: #fff;
     }
 
+    .event-program-day-tree .epp-flag--program.epp-flag--on {
+        background: #16a34a;
+        border-color: #15803d;
+    }
+
+    .event-program-day-tree .epp-flag--calc.epp-flag--on {
+        background: #2563eb;
+        border-color: #1d4ed8;
+    }
+
     .event-program-day-tree .epp-flag--off {
-        background: #fff;
-        border: 1px solid #e2e8f0;
-        color: #cbd5e1;
+        background: #fff7ed;
+        border: 1px solid #fdba74;
+        color: #9a3412;
     }
 
     .event-program-day-tree .epp-menu {
@@ -2713,17 +2837,66 @@
         pointer-events: none;
     }
 
-    /* Gotowość operacyjna — karty na podsumowaniu imprezy */
+    /* Gotowość operacyjna — 5 kart w jednym rzędzie (telefon: kolumna).
+       !important: przebija utility Tailwind (grid-cols-1 / sm:grid-cols-2). */
+    .event-readiness-overview {
+        display: grid !important;
+        grid-template-columns: repeat(5, minmax(0, 1fr)) !important;
+        gap: 0.55rem;
+        width: 100%;
+        align-items: stretch;
+    }
+
     .event-readiness-overview-card {
         display: flex;
+        flex-direction: column;
         align-items: flex-start;
-        gap: 0.85rem;
-        padding: 1rem;
+        gap: 0.45rem;
+        min-width: 0;
+        height: 100%;
+        padding: 0.7rem 0.75rem;
         border-radius: 0.75rem;
         border: 1px solid var(--sor-border, #e5e7eb);
         background: var(--sor-surface-elevated, #fff);
         box-shadow: var(--sor-shadow-sm, 0 1px 2px rgb(0 0 0 / 0.04));
         transition: border-color 0.15s ease, box-shadow 0.15s ease;
+    }
+
+    @media (max-width: 639.98px) {
+        .event-readiness-overview {
+            grid-template-columns: 1fr !important;
+        }
+
+        .event-readiness-overview-card {
+            flex-direction: row;
+            gap: 0.85rem;
+            padding: 1rem;
+        }
+
+        .event-readiness-overview-card__icon-wrap {
+            width: 2.5rem;
+            height: 2.5rem;
+            border-radius: 0.65rem;
+        }
+
+        .event-readiness-overview-card__icon {
+            width: 1.25rem;
+            height: 1.25rem;
+        }
+
+        .event-readiness-overview-card__label {
+            font-size: 0.72rem;
+        }
+
+        .event-readiness-overview-card__status {
+            margin: 0.2rem 0 0;
+            font-size: 0.98rem;
+        }
+
+        .event-readiness-overview-card__hint {
+            margin: 0.35rem 0 0;
+            font-size: 0.78rem;
+        }
     }
 
     .event-readiness-overview-card:hover {
@@ -2744,20 +2917,20 @@
         display: flex;
         align-items: center;
         justify-content: center;
-        width: 2.5rem;
-        height: 2.5rem;
+        width: 2rem;
+        height: 2rem;
         flex-shrink: 0;
-        border-radius: 0.65rem;
+        border-radius: 0.5rem;
     }
 
     .event-readiness-overview-card__icon {
-        width: 1.25rem;
-        height: 1.25rem;
+        width: 1.1rem;
+        height: 1.1rem;
     }
 
     .event-readiness-overview-card__label {
         margin: 0;
-        font-size: 0.72rem;
+        font-size: 0.65rem;
         font-weight: 700;
         letter-spacing: 0.04em;
         text-transform: uppercase;
@@ -2765,17 +2938,17 @@
     }
 
     .event-readiness-overview-card__status {
-        margin: 0.2rem 0 0;
-        font-size: 0.98rem;
+        margin: 0.1rem 0 0;
+        font-size: 0.82rem;
         font-weight: 700;
-        line-height: 1.3;
+        line-height: 1.25;
         color: var(--sor-text, #111827);
     }
 
     .event-readiness-overview-card__hint {
-        margin: 0.35rem 0 0;
-        font-size: 0.78rem;
-        line-height: 1.45;
+        margin: 0.2rem 0 0;
+        font-size: 0.7rem;
+        line-height: 1.35;
         color: var(--sor-text-muted, #6b7280);
         display: -webkit-box;
         -webkit-line-clamp: 2;
@@ -3047,8 +3220,105 @@
         margin-bottom: 0;
     }
 
-    .fi-ta-table .fi-ta-row:has([class*="↳"]) td {
-        background: #f8fafc;
+    .fi-ta-table .fi-ta-row:has(.task-list-subtask) > td {
+        background: color-mix(in srgb, #f8fafc 85%, transparent);
+    }
+
+    .dark .fi-ta-table .fi-ta-row:has(.task-list-subtask) > td {
+        background: color-mix(in srgb, rgb(255 255 255 / 0.04) 100%, transparent);
+    }
+
+    /* Lista zadań: table-layout:fixed + max-width:0 wymusza respektowanie szerokości (bez nachodzenia). */
+    .fi-ta-table:has(.task-list-cell) {
+        table-layout: fixed;
+        width: 100%;
+        min-width: 68rem;
+    }
+
+    .fi-ta-table:has(.task-list-cell) > thead > tr > th,
+    .fi-ta-table:has(.task-list-cell) > tbody > tr > td {
+        vertical-align: top;
+        overflow: hidden;
+        max-width: 0;
+        box-sizing: border-box;
+    }
+
+    /* Checkbox / selection — nie ściskaj. */
+    .fi-ta-table:has(.task-list-cell) > thead > tr > th.fi-ta-selection-cell,
+    .fi-ta-table:has(.task-list-cell) > tbody > tr > td.fi-ta-selection-cell,
+    .fi-ta-table:has(.task-list-cell) .fi-ta-selection-cell {
+        width: 3rem;
+        min-width: 3rem;
+        max-width: 3rem;
+    }
+
+    .fi-ta-table th.fi-ta-col-task-summary,
+    .fi-ta-table td.fi-ta-col-task-summary {
+        width: 38%;
+        min-width: 16rem;
+        max-width: none;
+    }
+
+    .fi-ta-table th.fi-ta-col-task-context,
+    .fi-ta-table td.fi-ta-col-task-context {
+        width: 15%;
+        min-width: 9rem;
+        max-width: none;
+        white-space: normal;
+        overflow-wrap: break-word;
+        word-break: break-word;
+    }
+
+    .fi-ta-table th.fi-ta-col-task-status,
+    .fi-ta-table td.fi-ta-col-task-status {
+        width: 10%;
+        min-width: 7.5rem;
+        max-width: none;
+        overflow: visible;
+    }
+
+    .fi-ta-table th.fi-ta-col-task-due,
+    .fi-ta-table td.fi-ta-col-task-due {
+        width: 11%;
+        min-width: 7.5rem;
+        max-width: none;
+        white-space: nowrap;
+    }
+
+    .fi-ta-table th.fi-ta-col-task-modified,
+    .fi-ta-table td.fi-ta-col-task-modified {
+        width: 12%;
+        min-width: 8rem;
+        max-width: none;
+        white-space: nowrap;
+    }
+
+    .fi-ta-table:has(.task-list-cell) .fi-ta-actions-header-cell,
+    .fi-ta-table:has(.task-list-cell) .fi-ta-actions-cell,
+    .fi-ta-table:has(.task-list-cell) th:last-child,
+    .fi-ta-table:has(.task-list-cell) td:last-child {
+        width: 5.5rem;
+        min-width: 5.5rem;
+        max-width: 5.5rem;
+        white-space: nowrap;
+        overflow: visible;
+    }
+
+    .task-list-context-cell {
+        display: block;
+        width: 100%;
+        min-width: 0;
+        max-width: 100%;
+        white-space: normal;
+        overflow-wrap: break-word;
+        word-break: break-word;
+    }
+
+    .task-list-cell {
+        display: block;
+        width: 100%;
+        min-width: 0;
+        max-width: 100%;
     }
 
     .fi-ta-text-item-label:empty + .fi-ta-text-item {
@@ -3067,6 +3337,15 @@
         white-space: nowrap !important;
         word-break: normal !important;
         overflow-wrap: normal !important;
+    }
+
+    /* Katalog punktów: set / punkt / miasto w wynikach selecta — kilka linii, nie ucinać. */
+    .fi-dropdown-list-item {
+        align-items: flex-start;
+    }
+    .fi-dropdown-list-item-label {
+        white-space: normal;
+        line-height: 1.35;
     }
 
     @media (max-width: 767.98px) {

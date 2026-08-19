@@ -2,7 +2,6 @@
 
 namespace App\Filament\Resources\TaskResource\RelationManagers;
 
-use App\Enums\TaskSource;
 use App\Filament\Concerns\InteractsWithTaskEditModal;
 use App\Filament\Concerns\InteractsWithTaskListQuickActions;
 use App\Filament\Resources\TaskResource;
@@ -48,21 +47,19 @@ class TasksRelationManager extends RelationManager
         return $table
             ->modifyQueryUsing(function (Builder $query): Builder {
                 TaskQueryFilters::applyDefaultListScopes($query, officeOnly: true);
+                TaskQueryFilters::withLatestActivityAtColumn($query);
 
-                // Domyślnie: najnowsza modyfikacja (updated_at DESC).
-                return $query->orderByDesc('updated_at')->orderByDesc('id');
+                return $query;
             })
-            ->defaultSort('updated_at', 'desc')
+            ->defaultSort(
+                fn (Builder $query, string $direction): Builder => TaskQueryFilters::orderByLatestActivity($query, $direction),
+                'desc',
+            )
             ->columns(TaskResource::eventWorkspaceTableColumns())
             ->searchable()
             ->filters([
                 TaskResource::finishedVisibilityTableFilter(),
-                Tables\Filters\SelectFilter::make('source')
-                    ->label('Źródło')
-                    ->options([
-                        TaskSource::System->value => TaskSource::System->label(),
-                        TaskSource::Office->value => TaskSource::Office->label(),
-                    ]),
+                TaskResource::sourceTableFilter(),
                 Tables\Filters\Filter::make('mine_only')
                     ->label('Tylko moje')
                     ->query(function (Builder $query): Builder {
@@ -71,7 +68,7 @@ class TasksRelationManager extends RelationManager
             ])
             ->recordUrl(null)
             ->recordAction(null)
-            ->actionsColumnLabel('Działanie')
+            ->actionsColumnLabel('Akcje')
             ->actions([
                 TaskResource::modalEditTableAction(),
                 Tables\Actions\DeleteAction::make(),

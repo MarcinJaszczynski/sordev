@@ -26,6 +26,7 @@ use App\Services\ProgramPointSetFinanceAggregator;
 use App\Services\ProgramPointSetTimePropagator;
 use App\Services\ProgramPointSettlementCostCache;
 use App\Support\EventProgramPointPaymentDueColumn;
+use App\Support\ProgramPointCostPricing;
 use App\Support\ProgramTimeSlots;
 use App\Support\Reservations\ReservationWorkflowDisplay;
 use Filament\Forms;
@@ -484,6 +485,10 @@ class ProgramPointsRelationManager extends RelationManager
                             ->orderByDesc('id')
                             ->get();
 
+                        if ($reservations->isEmpty() && ($shared = $record->latestVisibleReservation())) {
+                            $reservations = collect([$shared]);
+                        }
+
                         if ($reservations->isEmpty()) {
                             return new HtmlString('<div class="text-sm text-gray-500">Brak rezerwacji — dodaj w bocznym panelu „Płatności”.</div>');
                         }
@@ -508,18 +513,14 @@ class ProgramPointsRelationManager extends RelationManager
                     ->label('Uwagi dla pilota')
                     ->columnSpanFull(),
 
-                Forms\Components\Toggle::make('include_in_program')
-                    ->label('Uwzględnij w programie')
-                    ->default(true),
+                $this->programPointScopeFields(),
 
-                Forms\Components\Toggle::make('include_in_calculation')
-                    ->label('Uwzględnij w kalkulacji')
-                    ->default(true),
-
-                Forms\Components\Toggle::make('include_gratis_in_cost')
-                    ->label('Liczyć z opiekunami / gratisami')
-                    ->helperText('Domyślnie tylko płacący.')
-                    ->default(false),
+                ...EventProgramPointPricingFields::costHeadcountToggles(
+                    max(1, (int) ($this->getOwnerRecord()->participant_count ?? 1)),
+                    max(0, $this->getOwnerRecord()->resolveGratisCountForParticipantCount()),
+                    ProgramPointCostPricing::pilotCount($this->getOwnerRecord()),
+                    max(0, $this->getOwnerRecord()->resolveDriverCountForParticipantCount()),
+                ),
 
                 Forms\Components\Toggle::make('active')
                     ->label('Aktywny')
@@ -542,7 +543,11 @@ class ProgramPointsRelationManager extends RelationManager
                         'contractor',
                         'currency',
                         'templatePoint',
-                        'reservations.contractor',
+                        'reservations' => fn ($reservations) => $reservations
+                            ->withTrashed()
+                            ->with(['contractor', 'historyEntries.user:id,name']),
+                        'hotelStays.reservation',
+                        'sharedReservation.contractor',
                         'parent.templatePoint',
                         'event.activeSettlement',
                     ])
@@ -645,81 +650,11 @@ class ProgramPointsRelationManager extends RelationManager
                     ->disabled(fn (EventProgramPoint $record): bool => (bool) $record->getAttribute('_is_set_parent'))
                     ->width('5.5rem'),
 
-                Tables\Columns\TextColumn::make('finance_calc')
-                    ->label('Szablon')
-                    ->alignEnd()
-                    ->tooltip(function (EventProgramPoint $record): ?string {
-                        $s = $this->buildProgramPointPricesSummaryViewData($record);
-                        if (! empty($s['hideSetParentFinance'])) {
-                            return null;
-                        }
-
-                        $full = trim(($s['calc'] ?? '').' '.($s['calcSub'] ?? ''));
-
-                        return $full !== '' && $full !== '—'
-                            ? 'Cena z szablonu (informacyjnie): '.$full
-                            : 'Brak ceny w szablonie';
-                    })
-                    ->state(function (EventProgramPoint $record): string {
-                        $s = $this->buildProgramPointPricesSummaryViewData($record);
-
-                        return ! empty($s['hideSetParentFinance']) ? '—' : ($s['calc'] ?? '—');
-                    })
-                    ->extraAttributes(['class' => 'tabular-nums text-xs money-nowrap epp-money-col']),
-
-                Tables\Columns\TextColumn::make('finance_plan')
-                    ->label('Plan')
-                    ->alignEnd()
-                    ->weight('semibold')
-                    ->color(fn (EventProgramPoint $record): ?string => $this->buildProgramPointPricesSummaryViewData($record)['planDiffersFromCalc'] ?? false ? 'warning' : null)
-                    ->tooltip(function (EventProgramPoint $record): ?string {
-                        $s = $this->buildProgramPointPricesSummaryViewData($record);
-                        if (! empty($s['hideSetParentFinance'])) {
-                            return null;
-                        }
-                        $full = trim(($s['planned'] ?? '').' '.($s['plannedSub'] ?? ''));
-                        if (! empty($s['planDiffersFromCalc'])) {
-                            return 'Plan ≠ szablon ('.$s['calc'].'). '.$full;
-                        }
-
-                        return $full !== '' ? $full : null;
-                    })
-                    ->state(function (EventProgramPoint $record): string {
-                        $s = $this->buildProgramPointPricesSummaryViewData($record);
-
-                        return ! empty($s['hideSetParentFinance']) ? '—' : ($s['planned'] ?? '—');
-                    })
-                    ->extraAttributes(['class' => 'tabular-nums text-xs money-nowrap epp-money-col']),
-
-                Tables\Columns\TextColumn::make('finance_paid')
-                    ->label('Zapł.')
-                    ->alignEnd()
-                    ->html()
-                    ->extraAttributes(['class' => 'money-nowrap epp-money-col'])
-                    ->state(function (EventProgramPoint $record): string {
-                        $s = $this->buildProgramPointPricesSummaryViewData($record);
-                        if (! empty($s['hideSetParentFinance'])) {
-                            return '<span class="text-gray-400">—</span>';
-                        }
-
-                        $paidClass = match ($s['paidStatus'] ?? 'none') {
-                            'full' => 'text-emerald-700 dark:text-emerald-300',
-                            'partial' => 'text-amber-700 dark:text-amber-300',
-                            default => 'text-gray-700 dark:text-gray-200',
-                        };
-
-                        $title = e(trim(($s['paid'] ?? '').' '.($s['paidSub'] ?? '').' · '.($s['paymentHint'] ?? '')));
-                        $html = '<div class="text-xs leading-snug tabular-nums text-right money-nowrap" title="'.$title.'">';
-                        $html .= '<div class="font-semibold '.$paidClass.'">'.e($s['paid'] ?? '—').'</div>';
-                        if (($s['paidStatus'] ?? '') === 'full') {
-                            $html .= '<div class="text-[10px] text-emerald-700">opłacone</div>';
-                        } elseif (($s['remaining'] ?? '—') !== '—') {
-                            $html .= '<div class="text-[10px] text-rose-700">zost. '.e($s['remaining']).'</div>';
-                        }
-                        $html .= '</div>';
-
-                        return $html;
-                    }),
+                Tables\Columns\ViewColumn::make('finance')
+                    ->label('Finanse')
+                    ->view('filament.components.program-point-finance-cell')
+                    ->extraAttributes(['class' => 'epp-finance-col'])
+                    ->extraCellAttributes(['class' => 'epp-finance-col']),
 
                 Tables\Columns\TextColumn::make('finance_doc')
                     ->label('Faktura')
@@ -771,25 +706,42 @@ class ProgramPointsRelationManager extends RelationManager
                     }),
 
                 Tables\Columns\TextColumn::make('flags')
-                    ->label('Flagi')
+                    ->label('Zakres')
                     ->html()
-                    ->toggleable(isToggledHiddenByDefault: true)
+                    ->toggleable()
                     ->state(function (EventProgramPoint $record): string {
-                        $badge = static fn (string $label, bool $on, string $onClass, string $offClass): string => sprintf(
-                            '<span class="epp-flag %s" title="%s">%s</span>',
-                            $on ? $onClass : $offClass,
-                            e($label),
-                            e($label)
-                        );
+                        $chip = static function (string $onLabel, string $offLabel, bool $on, string $onClass, string $offClass): string {
+                            return sprintf(
+                                '<span class="epp-scope-chip %s" title="%s">%s</span>',
+                                $on ? $onClass : $offClass,
+                                e($on ? $onLabel : $offLabel),
+                                e($on ? $onLabel : $offLabel)
+                            );
+                        };
 
-                        return '<div class="epp-flags">'
-                            .$badge('Program', (bool) $record->include_in_program, 'epp-flag--on', 'epp-flag--off')
-                            .$badge('Kalk.', (bool) $record->include_in_calculation, 'epp-flag--on', 'epp-flag--off')
-                            .$badge('Aktywny', (bool) $record->active, 'epp-flag--on', 'epp-flag--off')
+                        $reservation = $record->latestVisibleReservation();
+                        $reservationHtml = '';
+                        if ($reservation && ! in_array((string) $reservation->status, ['cancelled', 'not_required'], true)) {
+                            $rezLabel = \App\Models\Reservation::$statuses[$reservation->status] ?? $reservation->status;
+                            $rezClass = in_array((string) $reservation->status, ['confirmed', 'completed', 'partially_confirmed'], true)
+                                ? 'epp-scope-chip--rez-ok'
+                                : 'epp-scope-chip--rez-pending';
+                            $reservationHtml = sprintf(
+                                '<span class="epp-scope-chip %s" title="%s">%s</span>',
+                                $rezClass,
+                                e($rezLabel),
+                                e($rezLabel),
+                            );
+                        }
+
+                        return '<div class="epp-scope">'
+                            .$chip('Program', 'Poza programem', (bool) $record->include_in_program, 'epp-scope-chip--program-on', 'epp-scope-chip--program-off')
+                            .$chip('Kalkulacja', 'Poza kalk.', (bool) $record->include_in_calculation, 'epp-scope-chip--calc-on', 'epp-scope-chip--calc-off')
+                            .$reservationHtml
                             .'</div>';
                     })
-                    ->alignCenter()
-                    ->width('6.5rem'),
+                    ->alignStart()
+                    ->width('8.5rem'),
             ])
             ->filters([
                 Tables\Filters\SelectFilter::make('paid_by_settlement')
@@ -963,34 +915,33 @@ class ProgramPointsRelationManager extends RelationManager
                     ->modalWidth('7xl')
                     ->modalSubmitActionLabel('Dodaj punkt')
                     ->modalCancelActionLabel('Anuluj')
+                    ->fillForm(function (): array {
+                        $day = max(1, (int) ($this->getActiveProgramDayTab() ?? $this->ownerProgramDay ?? 1));
+
+                        return [
+                            'day' => $day,
+                            'order' => $this->nextProgramPointOrderForDay($day),
+                            'include_in_program' => true,
+                            'include_in_calculation' => true,
+                            'include_gratis_in_cost' => false,
+                            'include_pilot_in_cost' => false,
+                            'include_driver_in_cost' => false,
+                            'active' => true,
+                        ];
+                    })
                     ->form([
                         Forms\Components\Select::make('source_point')
-                            ->label('Szukaj w szablonach i punktach innych imprez (opcjonalne)')
+                            ->label('Szukaj w katalogu szablonów i punktach innych imprez')
                             ->searchable()
-                            ->preload()
                             ->nullable()
-                            ->options(function () {
-                                $templatePoints = EventTemplateProgramPoint::all()->mapWithKeys(function ($point) {
-                                    $label = '[Szablon] '.$point->name;
-
-                                    return ['template_'.$point->id => $label];
-                                });
-                                $eventPoints = EventProgramPoint::whereNull('event_id')->get()->mapWithKeys(function ($point) {
-                                    // Punkty bez event_id nie powinny istnieć, więc pobierzmy z innych imprez
-                                    return [];
-                                });
-                                $otherEventPoints = EventProgramPoint::whereNotNull('event_id')->with('event')->get()->mapWithKeys(function ($point) {
-                                    $eventName = $point->event?->name ?? ('Impreza #'.$point->event_id);
-                                    $label = '[Inna impreza] '.$point->name.' ('.$eventName.')';
-
-                                    return ['event_'.$point->id => $label];
-                                });
-
-                                return $templatePoints->all() + $otherEventPoints->all();
-                            })
                             ->allowHtml()
-                            ->placeholder('Wpisz aby szukać w szablonach lub punktach innych imprez...')
-                            ->helperText('Opcjonalne — zostaw puste, aby stworzyć nowy punkt specyficzny dla tej imprezy')
+                            ->optionsLimit(40)
+                            ->getSearchResultsUsing(fn (string $search): array => app(EventProgramPointCreator::class)
+                                ->searchCatalogSelectOptions($search, (int) $this->getOwnerRecord()->id))
+                            ->getOptionLabelUsing(fn (?string $value): ?string => app(EventProgramPointCreator::class)
+                                ->catalogOptionSelectedLabel($value))
+                            ->placeholder('Wpisz min. 2 znaki, np. rejs Wisła Kraków…')
+                            ->helperText('W wynikach widać, czy to set czy punkt, tagi (miasto), czas i cenę. Puste pole = nowy punkt tylko dla tej imprezy.')
                             ->reactive()
                             ->afterStateUpdated(function ($state, callable $set, Forms\Get $get) {
                                 if ($state) {
@@ -1027,6 +978,8 @@ class ProgramPointsRelationManager extends RelationManager
                             ->maxLength(255)
                             ->placeholder('Wpisz nazwę punktu programu')
                             ->helperText('Zostanie automatycznie wypełniona przy wyborze z biblioteki'),
+
+                        $this->programPointScopeFields(),
 
                         $this->programPointRichTextField('description')
                             ->label('Opis punktu programu (dla tej imprezy)')
@@ -1097,6 +1050,9 @@ class ProgramPointsRelationManager extends RelationManager
 
                         EventProgramPointPricingFields::section([
                             'default_participant_count' => max(1, (int) ($this->getOwnerRecord()->participant_count ?? 1)),
+                            'gratis_count' => max(0, $this->getOwnerRecord()->resolveGratisCountForParticipantCount()),
+                            'pilot_count' => ProgramPointCostPricing::pilotCount($this->getOwnerRecord()),
+                            'driver_count' => max(0, $this->getOwnerRecord()->resolveDriverCountForParticipantCount()),
                         ]),
 
                         Forms\Components\Grid::make(2)
@@ -1131,25 +1087,9 @@ class ProgramPointsRelationManager extends RelationManager
                             ->label('Uwagi dla pilota')
                             ->columnSpanFull(),
 
-                        Forms\Components\Grid::make(2)
-                            ->schema([
-                                Forms\Components\Toggle::make('include_in_program')
-                                    ->label('Uwzględnij w programie')
-                                    ->default(true),
-
-                                Forms\Components\Toggle::make('include_in_calculation')
-                                    ->label('Uwzględnij w kalkulacji')
-                                    ->default(true),
-
-                                Forms\Components\Toggle::make('include_gratis_in_cost')
-                                    ->label('Liczyć z opiekunami / gratisami')
-                                    ->helperText('Domyślnie tylko płacący.')
-                                    ->default(false),
-
-                                Forms\Components\Toggle::make('active')
-                                    ->label('Aktywny')
-                                    ->default(true),
-                            ]),
+                        Forms\Components\Toggle::make('active')
+                            ->label('Aktywny')
+                            ->default(true),
                     ])
                     ->action(function (array $data) {
                         $source = $data['source_point'] ?? null;
@@ -1165,8 +1105,16 @@ class ProgramPointsRelationManager extends RelationManager
                         }
 
                         $unitPrice = (float) ($data['unit_price'] ?? ($templatePoint?->unit_price ?? $eventPoint?->unit_price ?? 0));
-                        $participantCount = max(1, (int) ($this->getOwnerRecord()->participant_count ?? 1));
-                        $pricingPayload = EventProgramPointPricingFields::mergePricingIntoPayload($data, $unitPrice, $participantCount);
+                        $event = $this->getOwnerRecord();
+                        $participantCount = max(1, (int) ($event->participant_count ?? 1));
+                        $pricingPayload = EventProgramPointPricingFields::mergePricingIntoPayload(
+                            $data,
+                            $unitPrice,
+                            $participantCount,
+                            max(0, $event->resolveGratisCountForParticipantCount($participantCount)),
+                            ProgramPointCostPricing::pilotCount($event),
+                            max(0, $event->resolveDriverCountForParticipantCount($participantCount)),
+                        );
 
                         // Klonowanie z szablonu lub innej imprezy
                         if ($templatePoint) {
@@ -1194,10 +1142,12 @@ class ProgramPointsRelationManager extends RelationManager
                                     'notes' => $data['notes'] ?? null,
                                     'office_notes' => $data['office_notes'] ?? $templatePoint->office_notes ?? null,
                                     'pilot_notes' => $data['pilot_notes'] ?? $templatePoint->pilot_notes ?? null,
-                                    'include_in_program' => $data['include_in_program'],
-                                    'include_in_calculation' => $data['include_in_calculation'],
+                                    'include_in_program' => (bool) ($data['include_in_program'] ?? true),
+                                    'include_in_calculation' => (bool) ($data['include_in_calculation'] ?? true),
                                     'include_gratis_in_cost' => (bool) ($data['include_gratis_in_cost'] ?? $templatePoint->include_gratis_in_cost ?? false),
-                                    'active' => $data['active'],
+                                    'include_pilot_in_cost' => (bool) ($data['include_pilot_in_cost'] ?? $templatePoint->include_pilot_in_cost ?? false),
+                                    'include_driver_in_cost' => (bool) ($data['include_driver_in_cost'] ?? $templatePoint->include_driver_in_cost ?? false),
+                                    'active' => (bool) ($data['active'] ?? true),
                                 ],
                             );
                         } elseif ($eventPoint) {
@@ -1215,6 +1165,11 @@ class ProgramPointsRelationManager extends RelationManager
                                 return $cloned;
                             };
                             $createdPoint = $cloneRecursive($eventPoint, $this->getOwnerRecord()->id, $data['parent_id'] ?? null, $data['day']);
+                            $createdPoint->update([
+                                'include_in_program' => (bool) ($data['include_in_program'] ?? true),
+                                'include_in_calculation' => (bool) ($data['include_in_calculation'] ?? true),
+                                'active' => (bool) ($data['active'] ?? true),
+                            ]);
                         } else {
                             $createdPoint = $this->getOwnerRecord()->programPoints()->create([
                                 'name' => $data['name'],
@@ -1235,10 +1190,12 @@ class ProgramPointsRelationManager extends RelationManager
                                 'notes' => $data['notes'] ?? null,
                                 'office_notes' => $data['office_notes'] ?? null,
                                 'pilot_notes' => $data['pilot_notes'] ?? null,
-                                'include_in_program' => $data['include_in_program'],
-                                'include_in_calculation' => $data['include_in_calculation'],
+                                'include_in_program' => (bool) ($data['include_in_program'] ?? true),
+                                'include_in_calculation' => (bool) ($data['include_in_calculation'] ?? true),
                                 'include_gratis_in_cost' => (bool) ($data['include_gratis_in_cost'] ?? false),
-                                'active' => $data['active'],
+                                'include_pilot_in_cost' => (bool) ($data['include_pilot_in_cost'] ?? false),
+                                'include_driver_in_cost' => (bool) ($data['include_driver_in_cost'] ?? false),
+                                'active' => (bool) ($data['active'] ?? true),
                             ]);
                         }
 
@@ -1673,7 +1630,18 @@ class ProgramPointsRelationManager extends RelationManager
         $allPoints = EventProgramPoint::query()
             ->where('event_id', $event->id)
             ->withTrashed()
-            ->with(['templatePoint', 'contractor', 'contractorLocation', 'reservations.contractor', 'children', 'parent'])
+            ->with([
+                'templatePoint',
+                'contractor',
+                'contractorLocation',
+                'reservations' => fn ($reservations) => $reservations
+                    ->withTrashed()
+                    ->with(['contractor', 'historyEntries.user:id,name']),
+                'hotelStays.reservation',
+                'sharedReservation.contractor',
+                'children',
+                'parent',
+            ])
             ->withCount('children')
             ->get();
 
@@ -1756,6 +1724,24 @@ class ProgramPointsRelationManager extends RelationManager
         }
 
         $this->settlementCostCache->warm($records, $event);
+    }
+
+    private function programPointScopeFields(): Forms\Components\Fieldset
+    {
+        return Forms\Components\Fieldset::make('Gdzie ma być ten punkt')
+            ->schema([
+                Forms\Components\Toggle::make('include_in_program')
+                    ->label('W programie')
+                    ->helperText('Oferta, PDF, widok klienta i pilota.')
+                    ->default(true)
+                    ->inline(false),
+                Forms\Components\Toggle::make('include_in_calculation')
+                    ->label('W kalkulacji')
+                    ->helperText('Kosztorys i rozliczenie.')
+                    ->default(true)
+                    ->inline(false),
+            ])
+            ->columns(2);
     }
 
     private function programPointRichTextField(string $name): \FilamentTiptapEditor\TiptapEditor
@@ -1867,6 +1853,18 @@ class ProgramPointsRelationManager extends RelationManager
 
         if (! $record->active) {
             $classes[] = 'epp-table-row--inactive';
+        }
+
+        if (! $record->getAttribute('_is_set_parent')) {
+            $inProgram = (bool) $record->include_in_program;
+            $inCalc = (bool) $record->include_in_calculation;
+            if (! $inProgram && ! $inCalc) {
+                $classes[] = 'epp-table-row--out-of-scope';
+            } elseif ($inProgram && ! $inCalc) {
+                $classes[] = 'epp-table-row--program-only';
+            } elseif (! $inProgram && $inCalc) {
+                $classes[] = 'epp-table-row--calc-only';
+            }
         }
 
         if ($record->trashed()) {
@@ -2022,6 +2020,8 @@ class ProgramPointsRelationManager extends RelationManager
      *     hasUploadedFile: bool,
      *     statusLabel: string|null,
      *     statusColor: string,
+     *     paidBy: string|null,
+     *     payerHint: string|null,
      * }
      */
     protected function buildProgramPointPricesSummaryViewData(EventProgramPoint $record): array
@@ -2042,6 +2042,14 @@ class ProgramPointsRelationManager extends RelationManager
         );
 
         return $this->programPointFinanceViewDataCache[$id] = $summary;
+    }
+
+    /**
+     * @return array<string, mixed>
+     */
+    public function programPointFinanceViewData(EventProgramPoint $record): array
+    {
+        return $this->buildProgramPointPricesSummaryViewData($record);
     }
 
     /**
@@ -2087,6 +2095,10 @@ class ProgramPointsRelationManager extends RelationManager
             'statusColor' => 'gray',
             'planDiffersFromCalc' => false,
             'paidBy' => null,
+            'payerHint' => null,
+            'totalLine' => null,
+            'advanceLine' => null,
+            'remainingLine' => null,
             'isSetRollup' => false,
             'hideSetParentFinance' => true,
         ];

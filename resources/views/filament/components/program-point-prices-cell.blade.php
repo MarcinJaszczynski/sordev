@@ -25,6 +25,7 @@
     $statusLabel = $statusLabel ?? null;
     $statusColor = $statusColor ?? 'gray';
     $planDiffersFromCalc = $planDiffersFromCalc ?? false;
+    $payerHint = $payerHint ?? null;
     $documentFirstUrl = $documentFirstUrl ?? null;
     $calcSub = $calcSub ?? null;
     $plannedSub = $plannedSub ?? null;
@@ -93,6 +94,8 @@
 
         @if (! empty($pilotDueHint))
             <div class="epp-prices-pilot-due" title="{{ $pilotDueHint }}">{{ $pilotDueHint }}</div>
+        @elseif (! empty($payerHint))
+            <div class="epp-prices-pilot-due" title="{{ $payerHint }}">{{ $payerHint }}</div>
         @endif
 
         @if ($statusLabel)

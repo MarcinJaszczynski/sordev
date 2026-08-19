@@ -87,16 +87,6 @@ class TaskFormFields
             $taskableId = $taskableId->columnSpanFull();
         }
 
-        $contextNavigation = Forms\Components\ViewField::make('context_navigation')
-            ->label('Przejdź do')
-            ->view('filament.pages.partials.calendar-entry-links')
-            ->viewData(fn (?Task $record): array => [
-                'links' => \App\Support\Tasks\TaskContextRegistry::linksForTask($record),
-                'openInNewTab' => true,
-            ])
-            ->visible(fn (?Task $record): bool => filled($record?->taskable_type))
-            ->columnSpanFull();
-
         $attachments = Forms\Components\FileUpload::make('pending_attachments')
             ->label($compact ? 'Załączniki' : 'Pliki')
             ->disk('public')
@@ -118,9 +108,19 @@ class TaskFormFields
                 $taskableId,
                 $description,
                 $attachments,
-                $contextNavigation,
             ];
         }
+
+        // Compact (modal) nie dostaje tego pola — TaskFullEditor renderuje linki raz, nad formularzem.
+        $contextNavigation = Forms\Components\ViewField::make('context_navigation')
+            ->label('Przejdź do')
+            ->view('filament.pages.partials.calendar-entry-links')
+            ->viewData(fn (?Task $record): array => [
+                'links' => \App\Support\Tasks\TaskContextRegistry::linksForTask($record),
+                'openInNewTab' => true,
+            ])
+            ->visible(fn (?Task $record): bool => filled($record?->taskable_type))
+            ->columnSpanFull();
 
         return [
             Forms\Components\Group::make()

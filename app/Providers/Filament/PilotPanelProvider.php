@@ -124,7 +124,10 @@ class PilotPanelProvider extends PanelProvider
                     if (is_object($livewire) && method_exists($livewire, 'getWorkflowContext')) {
                         $context = $livewire->getWorkflowContext();
                         if (! empty($context)) {
-                            $html .= view('filament.components.workflow-record-context', ['context' => $context])->render();
+                            $html .= view('filament.components.workflow-record-context', [
+                                'context' => $context,
+                                'livewireId' => method_exists($livewire, 'getId') ? $livewire->getId() : null,
+                            ])->render();
                         }
                     }
 

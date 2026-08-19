@@ -16,12 +16,37 @@
         $commentsCount = (int) ($record->comments_count ?? $record->comments?->count() ?? 0);
         $isExpanded = $this->expandedCommentsTaskId === $record->id;
         $expandedComments = $isExpanded ? $this->expandedCommentsFor($record->id) : [];
+        $isSubtask = filled($record->parent_id);
+        if ($isSubtask) {
+            $record->loadMissing('parent');
+        }
     @endphp
 
-    <div class="min-w-[220px] max-w-[420px]">
+    <div @class([
+        'task-list-cell min-w-0 w-full',
+        'task-list-subtask pl-3 border-l border-gray-300 dark:border-gray-600' => $isSubtask,
+    ])>
+        @if ($isSubtask && $record->parent)
+            <div class="mb-0.5 flex min-w-0 items-baseline gap-1 text-[0.7rem] leading-tight text-gray-500 dark:text-gray-400">
+                <span class="shrink-0" aria-hidden="true">↳</span>
+                <button
+                    type="button"
+                    class="min-w-0 truncate text-left hover:text-primary-600 hover:underline dark:hover:text-primary-400"
+                    title="Otwórz zadanie nadrzędne"
+                    x-on:click.stop="$wire.openEditTaskModal({{ $record->parent_id }})"
+                >
+                    {{ $record->parent->title }}
+                </button>
+            </div>
+        @endif
+
         <button
             type="button"
-            class="text-left font-semibold text-gray-900 dark:text-gray-100 text-[0.84rem] leading-snug hover:text-primary-600 dark:hover:text-primary-400"
+            @class([
+                'block w-full min-w-0 text-left text-[0.84rem] leading-snug hover:text-primary-600 dark:hover:text-primary-400',
+                'font-medium text-gray-700 dark:text-gray-300' => $isSubtask,
+                'font-semibold text-gray-950 dark:text-white' => ! $isSubtask,
+            ])
             x-on:click.stop="$wire.openEditTaskModal({{ $record->id }})"
         >
             {{ $title }}
@@ -76,7 +101,11 @@
                             </div>
                         @else
                             <div class="font-semibold italic leading-tight">
-                                Ostatni komentarz · {{ $comment->author?->name ?? '—' }} · {{ $comment->created_at?->format('d.m.Y H:i') ?? '—' }}
+                                Ostatni komentarz
+                                @if ($commentsCount > 1)
+                                    <span class="ml-1 inline-flex items-center rounded-full bg-slate-200 px-1.5 py-0 text-[0.65rem] font-bold not-italic text-slate-800 dark:bg-slate-700 dark:text-slate-100">{{ $commentsCount }}</span>
+                                @endif
+                                · {{ $comment->author?->name ?? '—' }} · {{ $comment->created_at?->format('d.m.Y H:i') ?? '—' }}
                             </div>
                             <div class="mt-0.5 italic leading-snug whitespace-pre-wrap">
                                 {{ \App\Support\Tasks\TaskListColumn::sanitizeTaskText($comment->content, 512) }}

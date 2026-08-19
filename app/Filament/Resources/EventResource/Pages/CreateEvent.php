@@ -6,6 +6,7 @@ use App\Filament\Forms\EventKeyInfoFields;
 use App\Filament\Forms\EventNotesFields;
 use App\Filament\Forms\EventOrderingPartyFields;
 use App\Filament\Resources\EventResource;
+use App\Filament\Resources\EventResource\Concerns\InteractsWithEventOrderingPartyLookups;
 use App\Filament\Resources\EventResource\Traits\SearchContractorTrait;
 use App\Models\Currency;
 use App\Models\Event;
@@ -19,7 +20,6 @@ use Filament\Resources\Pages\CreateRecord;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Schema;
-use Livewire\Attributes\On;
 
 /**
  * Create = szybkie zapytanie (inquiry).
@@ -27,6 +27,7 @@ use Livewire\Attributes\On;
  */
 class CreateEvent extends CreateRecord
 {
+    use InteractsWithEventOrderingPartyLookups;
     use SearchContractorTrait;
 
     protected static string $resource = EventResource::class;
@@ -235,13 +236,18 @@ class CreateEvent extends CreateRecord
         $this->syncClientFieldsFromOrderingParties();
 
         if (blank($data['client_name'] ?? null)) {
-            $parties = $data['ordering_parties'] ?? $this->data['ordering_parties'] ?? [];
-            if (is_array($parties) && $parties !== []) {
+            $parties = $this->resolvedOrderingParties();
+            if ($parties !== []) {
                 $attrs = app(\App\Services\EventOrderingPartyService::class)->primaryClientAttributes($parties);
                 $data['client_name'] = $attrs['client_name'] ?? $data['client_name'] ?? null;
                 $data['client_email'] = $attrs['client_email'] ?? $data['client_email'] ?? null;
                 $data['client_phone'] = $attrs['client_phone'] ?? $data['client_phone'] ?? null;
             }
+        }
+
+        $resolvedParties = $this->resolvedOrderingParties();
+        if ($resolvedParties !== []) {
+            $data['ordering_parties'] = $resolvedParties;
         }
 
         if (blank($data['event_template_id'] ?? null) && ! $this->canCreateWithoutTemplate()) {
@@ -266,9 +272,9 @@ class CreateEvent extends CreateRecord
             return;
         }
 
-        $parties = $this->data['ordering_parties'] ?? [];
+        $parties = $this->resolvedOrderingParties();
 
-        if (! is_array($parties) || $parties === []) {
+        if ($parties === []) {
             return;
         }
 
@@ -312,60 +318,6 @@ class CreateEvent extends CreateRecord
         }
     }
 
-    /**
-     * @param  array<int, array<string, mixed>>  $orderingParties
-     */
-    #[On('client-lookup-applied')]
-    public function applyClientLookup(
-        array $orderingParties,
-        string $clientName = '',
-        ?string $clientEmail = null,
-        ?string $clientPhone = null,
-    ): void {
-        $additional = array_values(array_slice(
-            is_array($this->data['ordering_parties'] ?? null) ? $this->data['ordering_parties'] : [],
-            1,
-        ));
-        $primary = $orderingParties[0] ?? null;
-
-        $this->data['ordering_parties'] = $primary
-            ? array_values(array_merge([$primary], $additional))
-            : $additional;
-        $this->data['client_name'] = $clientName;
-        $this->data['client_email'] = $clientEmail;
-        $this->data['client_phone'] = $clientPhone;
-    }
-
-    #[On('client-lookup-cleared')]
-    public function clearClientLookup(): void
-    {
-        $additional = array_values(array_slice(
-            is_array($this->data['ordering_parties'] ?? null) ? $this->data['ordering_parties'] : [],
-            1,
-        ));
-
-        $this->data['ordering_parties'] = $additional;
-        $this->data['client_name'] = null;
-        $this->data['client_email'] = null;
-        $this->data['client_phone'] = null;
-    }
-
-    /**
-     * @param  array<int, array<string, mixed>>  $additionalParties
-     */
-    #[On('additional-ordering-parties-updated')]
-    public function applyAdditionalOrderingParties(array $additionalParties): void
-    {
-        $current = is_array($this->data['ordering_parties'] ?? null)
-            ? $this->data['ordering_parties']
-            : [];
-        $primary = $current[0] ?? null;
-
-        $this->data['ordering_parties'] = $primary
-            ? array_values(array_merge([$primary], array_values($additionalParties)))
-            : array_values($additionalParties);
-    }
-
     protected function handleRecordCreation(array $data): \Illuminate\Database\Eloquent\Model
     {
         $pilotBirth = $data['pilot_birth_date'] ?? null;
@@ -374,7 +326,10 @@ class CreateEvent extends CreateRecord
         $pilotContractorId = Schema::hasColumn('events', 'pilot_contractor_id')
             ? (filled($data['pilot_contractor_id'] ?? null) ? (int) $data['pilot_contractor_id'] : null)
             : null;
-        $orderingParties = $data['ordering_parties'] ?? null;
+        $orderingParties = $this->resolvedOrderingParties();
+        if ($orderingParties === []) {
+            $orderingParties = $data['ordering_parties'] ?? null;
+        }
         $orderingContractorIds = $data['orderingContractors'] ?? null;
         unset(
             $data['ordering_parties'],

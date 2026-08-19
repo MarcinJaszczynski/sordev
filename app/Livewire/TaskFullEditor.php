@@ -3,14 +3,14 @@
 namespace App\Livewire;
 
 use App\Enums\TaskPriority;
+use App\Filament\Concerns\DispatchesTopbarNotificationRefresh;
 use App\Filament\Resources\TaskResource;
 use App\Filament\Resources\TaskResource\RelationManagers;
 use App\Models\Task;
 use App\Models\TaskComment;
+use App\Services\NotificationService;
 use App\Support\Tasks\TaskAttachmentStore;
 use App\Support\Tasks\TaskContextRegistry;
-use App\Filament\Concerns\DispatchesTopbarNotificationRefresh;
-use App\Services\NotificationService;
 use Filament\Forms\Concerns\InteractsWithForms;
 use Filament\Forms\Contracts\HasForms;
 use Filament\Forms\Form;
@@ -38,8 +38,6 @@ class TaskFullEditor extends Component implements HasForms
     public ?array $data = [];
 
     public ?string $activeRelationManager = null;
-
-    public bool $showCommentComposer = false;
 
     public string $newCommentContent = '';
 
@@ -126,16 +124,6 @@ class TaskFullEditor extends Component implements HasForms
             ->get();
     }
 
-    public function toggleCommentComposer(): void
-    {
-        $this->showCommentComposer = ! $this->showCommentComposer;
-
-        if (! $this->showCommentComposer) {
-            $this->newCommentContent = '';
-            $this->resetErrorBag('newCommentContent');
-        }
-    }
-
     public function addComment(): void
     {
         if (! $this->record->exists) {
@@ -155,7 +143,6 @@ class TaskFullEditor extends Component implements HasForms
         NotificationService::clearCacheForTaskCommentStakeholders($comment);
 
         $this->newCommentContent = '';
-        $this->showCommentComposer = false;
         $this->record->load(['comments.author']);
         unset($this->comments);
 
@@ -167,6 +154,20 @@ class TaskFullEditor extends Component implements HasForms
         $this->dispatch('task-full-editor-updated', taskId: $this->record->id);
         $this->dispatch('comment-added');
         $this->dispatchTopbarNotificationRefresh();
+    }
+
+    public function openParentTask(): void
+    {
+        $this->record->loadMissing('parent');
+
+        $parentId = (int) ($this->record->parent_id ?? 0);
+
+        if ($parentId <= 0) {
+            return;
+        }
+
+        // Rodzic Livewire (ListTasks / Event tasks / Kanban) otworzy modal nadrzędnego.
+        $this->dispatch('open-edit-task-modal', taskId: $parentId);
     }
 
     /**

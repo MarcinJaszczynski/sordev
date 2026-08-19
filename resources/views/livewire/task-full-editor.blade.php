@@ -1,4 +1,51 @@
 <div class="fi-task-full-editor space-y-4">
+    @if ($record->exists && $record->parent_id)
+        @php
+            $record->loadMissing('parent');
+            $parent = $record->parent;
+            $parentUrl = $parent
+                ? \App\Support\Tasks\TaskNavigation::fullViewUrl($parent)
+                : null;
+        @endphp
+        @if ($parent)
+            <div class="flex flex-col gap-2 rounded-xl border border-indigo-200 bg-indigo-50 px-3 py-2.5 dark:border-indigo-500/40 dark:bg-indigo-500/10 sm:flex-row sm:items-center sm:justify-between">
+                <div class="min-w-0">
+                    <div class="text-[0.65rem] font-bold uppercase tracking-wide text-indigo-700 dark:text-indigo-300">
+                        Podzadanie
+                    </div>
+                    <div class="mt-0.5 truncate text-sm text-indigo-950 dark:text-indigo-100">
+                        Nadrzędne:
+                        <span class="font-semibold">{{ $parent->title }}</span>
+                    </div>
+                </div>
+                <div class="flex flex-wrap items-center gap-2">
+                    <x-filament::button
+                        type="button"
+                        color="primary"
+                        icon="heroicon-o-arrow-up-left"
+                        wire:click="openParentTask"
+                        size="sm"
+                    >
+                        Otwórz zadanie główne
+                    </x-filament::button>
+                    @if ($parentUrl)
+                        <x-filament::button
+                            tag="a"
+                            :href="$parentUrl"
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            color="gray"
+                            icon="heroicon-o-arrow-top-right-on-square"
+                            size="sm"
+                        >
+                            W nowej karcie
+                        </x-filament::button>
+                    @endif
+                </div>
+            </div>
+        @endif
+    @endif
+
     @if ($this->contextLinks() !== [])
         <div class="rounded-xl border border-gray-200 bg-gray-50 p-3 dark:border-gray-700 dark:bg-gray-900/40">
             @include('filament.pages.partials.calendar-entry-links', [
@@ -8,18 +55,20 @@
         </div>
     @endif
 
-    <x-filament-panels::form
-        id="task-full-editor-form"
-        wire:submit="save"
-    >
+    {{--
+        Div zamiast <form>: modal akcji Filament już owija treść w <form wire:submit="callMountedAction">.
+        Zagnieżdżony formularz jest nielegalny w HTML (wewnętrzny </form> zamyka modal)
+        i przycisk Zapisz zamykałby modal bez zapisu.
+    --}}
+    <div id="task-full-editor-form" class="fi-form grid gap-y-6">
         {{ $this->form }}
 
         <div class="mt-4 flex justify-end">
-            <x-filament::button type="submit">
+            <x-filament::button type="button" wire:click="save">
                 Zapisz
             </x-filament::button>
         </div>
-    </x-filament-panels::form>
+    </div>
 
     @if ($record->exists)
         @php

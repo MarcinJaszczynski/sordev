@@ -1073,6 +1073,10 @@ final class EventFinanceOverviewService
      */
     private function paymentMetaForPlanCost(Collection $payments, EventSettlementCost $planCost): array
     {
+        if (Schema::hasColumn('event_settlement_costs', 'reservation_id')
+            && method_exists($payments, 'loadMissing')) {
+            $payments->loadMissing('reservation');
+        }
         $planCurrency = $planCost->plannedCurrency;
         $planRate = (float) ($planCost->planned_rate ?? ($planCurrency?->exchange_rate ?? 1));
 
@@ -1114,6 +1118,10 @@ final class EventFinanceOverviewService
                 'document_number' => $p->document_number ?: $p->invoice_number,
                 'status' => $p->payment_status,
                 'status_label' => EventSettlementCost::$paymentStatuses[$p->payment_status] ?? ($p->payment_status ?: '—'),
+                'reservation_id' => $p->reservation_id ? (int) $p->reservation_id : null,
+                'reservation_label' => $p->reservation
+                    ? (string) ($p->reservation->booking_reference ?: ('#'.$p->reservation->id))
+                    : null,
             ];
         })->values();
 

@@ -31,12 +31,26 @@
     $returnClock = Schema::hasColumn('events', 'return_time')
         ? $formatClock($event->return_time ?? null)
         : null;
-    $startDateLabel = $event->start_date
-        ? $event->start_date->copy()->locale('pl')->translatedFormat('l').', '.$event->start_date->format('d.m.Y')
-        : null;
-    $endDateLabel = $event->end_date
-        ? $event->end_date->copy()->locale('pl')->translatedFormat('l').', '.$event->end_date->format('d.m.Y')
-        : null;
+    $formatDayLabel = static function (mixed $date): ?string {
+        if (! $date) {
+            return null;
+        }
+
+        $value = $date instanceof \Carbon\CarbonInterface
+            ? $date->copy()
+            : \Carbon\Carbon::parse($date);
+
+        return $value->locale('pl')->translatedFormat('l').', '.$value->format('d.m.Y');
+    };
+    $startDateLabel = $formatDayLabel($event->start_date);
+    // Horyzont trwania (duration / szablon / span dat) — bierz późniejszą z end_date
+    // i daty wyliczonej, żeby złapać zarówno za krótkie end_date, jak i dłuższy duration.
+    $computedReturnDate = $event->dateForProgramDay($event->resolveCoreProgramDaysCount());
+    $returnDate = $event->end_date?->copy();
+    if ($computedReturnDate && (! $returnDate || $computedReturnDate->gt($returnDate))) {
+        $returnDate = $computedReturnDate;
+    }
+    $endDateLabel = $formatDayLabel($returnDate);
     $returnPlace = filled($travelLegends['return_place'] ?? null) && ($travelLegends['return_place'] ?? '—') !== '—'
         ? (string) $travelLegends['return_place']
         : $pickupPlace;
@@ -78,11 +92,17 @@
     @forelse($byDay->sortKeys() as $day => $dayPoints)
         @php
             $dayDate = $baseDate->copy()->addDays($day - 1);
+            $dayRoute = $event->programDayRoute((int) $day);
         @endphp
         <section class="sor-lw-card overflow-hidden !p-0">
             <header class="border-b border-gray-100 bg-gray-50 px-4 py-3 dark:border-gray-700 dark:bg-gray-800">
                 <h3 class="sor-lw-title">Dzień {{ $day }}</h3>
                 <p class="sor-lw-muted">{{ $dayDate->format('d.m.Y (l)') }}</p>
+                @if(filled($dayRoute))
+                    <p class="mt-1 text-sm font-medium text-gray-800 dark:text-gray-100">
+                        Trasa: {{ $dayRoute }}
+                    </p>
+                @endif
             </header>
             <ul class="divide-y divide-gray-100 dark:divide-gray-700">
                 @foreach($dayPoints as $point)
@@ -96,6 +116,7 @@
                         $isSetParent = ($point->children_count ?? 0) > 0;
                         $isSetChild = filled($point->parent_id);
                         $showPay = $financeHint && ! empty($financeHint['has_pilot_obligation']);
+                        $showOfficePay = $financeHint && ! empty($financeHint['has_office_obligation']);
                         $reservationLines = PilotProgramReservationDisplay::linesForPoint($point);
                     @endphp
                     <li @class([
@@ -118,6 +139,8 @@
                                     @endif
                                     @if($showPay)
                                         <span class="ml-2 inline-flex items-center rounded-full bg-sky-100 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-sky-800 dark:bg-sky-900/40 dark:text-sky-200">👤 Pilot płaci</span>
+                                    @elseif($showOfficePay)
+                                        <span class="ml-2 inline-flex items-center rounded-full bg-teal-100 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-teal-800 dark:bg-teal-900/40 dark:text-teal-200">Płaci biuro</span>
                                     @endif
                                 </p>
                                 @if($start || $end)
@@ -149,8 +172,6 @@
                                                 </li>
                                             @endforeach
                                         </ul>
-                                    @else
-                                        <p class="text-xs italic text-gray-500 dark:text-gray-400">Brak rezerwacji</p>
                                     @endif
                                 </div>
                                 @if(filled($description))

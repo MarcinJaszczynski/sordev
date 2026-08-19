@@ -87,29 +87,35 @@
             </div>
 
             <div class="admin-program-day-start flex flex-wrap items-end gap-3 rounded-xl border border-gray-200 bg-white px-4 py-3 dark:border-gray-700 dark:bg-gray-900">
-                <div class="min-w-[12rem] flex-1">
-                    <label for="program-day-route" class="mb-1 block text-sm font-medium text-gray-700 dark:text-gray-200">
-                        Trasa przejazdu — dzień {{ $programDay }}
-                    </label>
-                    <p class="text-xs text-gray-500 dark:text-gray-400">
-                        Widoczna w zakładce Transport i pakiecie kierowcy / teczce imprezy.
-                    </p>
-                </div>
-                <div class="min-w-[16rem] flex-[2]">
-                    <input
-                        id="program-day-route"
-                        type="text"
-                        wire:key="program-day-route-{{ $programDay }}"
-                        wire:model="programDayRoute"
-                        wire:change="updateProgramDayRoute"
-                        placeholder="Wpisz trasę przejazdu"
-                        maxlength="500"
-                        class="fi-input block w-full rounded-lg border-gray-300 text-sm shadow-sm transition focus:border-primary-500 focus:ring-primary-500 dark:border-gray-600 dark:bg-gray-800 dark:text-white"
-                    />
-                </div>
+                @unless ($record->isFacultativeProgramDay($programDay))
+                    <div class="min-w-[12rem] flex-1">
+                        <label for="program-day-route" class="mb-1 block text-sm font-medium text-gray-700 dark:text-gray-200">
+                            Trasa przejazdu — dzień {{ $programDay }}
+                        </label>
+                        <p class="text-xs text-gray-500 dark:text-gray-400">
+                            Widoczna w portalu pilota, w zakładce Transport i w pakiecie kierowcy / teczce imprezy.
+                        </p>
+                    </div>
+                    <div class="min-w-[16rem] flex-[2]">
+                        <input
+                            id="program-day-route"
+                            type="text"
+                            wire:key="program-day-route-{{ $programDay }}"
+                            wire:model="programDayRoute"
+                            wire:change="updateProgramDayRoute"
+                            placeholder="Wpisz trasę przejazdu"
+                            maxlength="500"
+                            class="fi-input block w-full rounded-lg border-gray-300 text-sm shadow-sm transition focus:border-primary-500 focus:ring-primary-500 dark:border-gray-600 dark:bg-gray-800 dark:text-white"
+                        />
+                    </div>
+                @endunless
                 <div>
                     <label for="program-day-start-time" class="mb-1 block text-sm font-medium text-gray-700 dark:text-gray-200">
-                        Start realizacji programu — dzień {{ $programDay }}
+                        @if ($record->isFacultativeProgramDay($programDay))
+                            Start realizacji — opcje fakultatywne
+                        @else
+                            Start realizacji programu — dzień {{ $programDay }}
+                        @endif
                     </label>
                     <p class="text-xs text-gray-500 dark:text-gray-400">
                         Od tej godziny układane są kolejne punkty (śniadanie, zwiedzanie itd.).

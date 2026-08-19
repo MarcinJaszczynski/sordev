@@ -627,18 +627,42 @@ class EventHotelPlanTest extends TestCase
 
         $event = Event::factory()->create(['duration_days' => 3]);
         $contractor = Contractor::create(['name' => 'Hotel Auto Save', 'nip' => '9876543210']);
+        $type = \App\Models\ContractorType::query()->firstOrCreate(['name' => 'hotel']);
+        $contractor->types()->sync([$type->id]);
 
         EventHotelStay::create(['event_id' => $event->id, 'day' => 1]);
         EventHotelStay::create(['event_id' => $event->id, 'day' => 2]);
 
         Livewire::test(\App\Livewire\EventHotelPlanEditor::class, ['eventId' => $event->id])
-            ->set('stays.0.contractor_id', $contractor->id)
-            ->assertHasNoErrors();
+            ->set('hotelContractorSearch', 'Auto Save')
+            ->assertSet('showHotelSearchResults', true)
+            ->assertSee('Hotel Auto Save')
+            ->call('selectHotel', $contractor->id)
+            ->assertHasNoErrors()
+            ->assertSee('Hotel tej nocy')
+            ->assertDontSee('Wyszukaj hotel po nazwie');
 
         $this->assertSame(
             $contractor->id,
             (int) $event->hotelStays()->where('day', 1)->value('contractor_id'),
         );
+    }
+
+    public function test_hotel_livesearch_requires_minimum_query_length(): void
+    {
+        $user = User::factory()->create();
+        Role::firstOrCreate(['name' => 'admin', 'guard_name' => 'web']);
+        $user->assignRole('admin');
+        $this->actingAs($user);
+
+        $event = Event::factory()->create(['duration_days' => 2]);
+        EventHotelStay::create(['event_id' => $event->id, 'day' => 1]);
+
+        Livewire::test(\App\Livewire\EventHotelPlanEditor::class, ['eventId' => $event->id])
+            ->set('hotelContractorSearch', 'H')
+            ->assertSet('showHotelSearchResults', false)
+            ->set('hotelContractorSearch', 'Ho')
+            ->assertSet('showHotelSearchResults', true);
     }
 
     public function test_link_stays_does_not_attach_hotel_contractor_to_przejazd_do_hotelu(): void

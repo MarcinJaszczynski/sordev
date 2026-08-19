@@ -6,10 +6,12 @@ use App\Models\Currency;
 use App\Models\Event;
 use App\Models\EventProgramPoint;
 use App\Models\EventSettlementCost;
+use App\Models\Reservation;
 use App\Support\CurrencyAmountDisplay;
 use App\Support\EventProgramPointPricesSummary;
 use App\Support\ProgramPointCostPricing;
-use App\Services\ProgramPointPricingCalculator;
+use App\Support\Reservations\ReservationWorkflowDisplay;
+use Carbon\Carbon;
 
 final class ProgramPointListFinanceDisplay
 {
@@ -36,6 +38,11 @@ final class ProgramPointListFinanceDisplay
      *     statusLabel: string|null,
      *     statusColor: string,
      *     planDiffersFromCalc: bool,
+     *     paidBy: string,
+     *     payerHint: string|null,
+     *     totalLine: string|null,
+     *     advanceLine: array{text: string, status: string}|null,
+     *     remainingLine: array{text: string, tone: string}|null,
      * }
      */
     public function summarizePoint(
@@ -140,6 +147,40 @@ final class ProgramPointListFinanceDisplay
             default => 'gray',
         };
 
+        // Zaliczka na planie (bez osobnego wiersza wpłaty / bez rezerwacji) też ma być widoczna przy cenie.
+        if ($paymentHint === null) {
+            $paymentHint = $this->buildPlanAdvanceFallbackHint(
+                $baseCost,
+                $planPaidBy,
+                $plannedCurrency,
+                $planConvertToPln,
+                $planRate,
+            );
+        }
+
+        $payerHint = $planPaidBy === 'pilot' ? 'płaci pilot' : null;
+
+        [$advanceLine, $remainingLine] = $this->buildOperationalPaymentLines(
+            $advanceRows,
+            $baseCost,
+            $planPaidBy,
+            $plannedAmountRaw,
+            $paidAmountRaw,
+            $plannedCurrency,
+            $planConvertToPln,
+            $planRate,
+            $isForeign,
+        );
+
+        $reservation = $this->latestActiveReservation($record);
+        if ($reservation) {
+            $advanceLine = $this->overlayReservationAdvanceLine(
+                $advanceLine,
+                $reservation,
+                $planPaidBy,
+            );
+        }
+
         $planDiffersFromCalc = $plannedAmountRaw > 0.009
             && $calcAmountRaw > 0.009
             && abs($plannedAmountRaw - $calcAmountRaw) > 0.02;
@@ -168,6 +209,10 @@ final class ProgramPointListFinanceDisplay
             'statusColor' => $statusColor,
             'planDiffersFromCalc' => $planDiffersFromCalc,
             'paidBy' => $planPaidBy,
+            'payerHint' => $payerHint,
+            'totalLine' => $plannedAmountRaw > 0.009 ? $plannedFormatted : null,
+            'advanceLine' => $advanceLine,
+            'remainingLine' => $remainingLine,
         ];
     }
 
@@ -208,7 +253,15 @@ final class ProgramPointListFinanceDisplay
         }
 
         $includeGratis = (bool) ($template?->include_gratis_in_cost ?? $record->include_gratis_in_cost ?? false);
-        $headcount = ProgramPointCostPricing::costHeadcount($event, $participantCount, $includeGratis);
+        $includePilot = (bool) ($template?->include_pilot_in_cost ?? $record->include_pilot_in_cost ?? false);
+        $includeDriver = (bool) ($template?->include_driver_in_cost ?? $record->include_driver_in_cost ?? false);
+        $headcount = ProgramPointCostPricing::costHeadcount(
+            $event,
+            $participantCount,
+            $includeGratis,
+            $includePilot,
+            $includeDriver,
+        );
         $groupSize = $template?->group_size ?? $record->group_size;
         $fixedQty = max(1, (int) ($record->quantity ?? 1));
         $total = ProgramPointPricingCalculator::totalPrice($unit, $headcount, $groupSize, $fixedQty);
@@ -242,33 +295,25 @@ final class ProgramPointListFinanceDisplay
         bool $isForeign,
         float $planRate,
     ): array {
+        // Tylko zaksięgowane actual — planowana zaliczka / rezerwacja ≠ wpłata.
         $paidPln = (float) $paymentRows->sum(function (EventSettlementCost $row): float {
-            if ($row->actual_amount_pln !== null && (float) $row->actual_amount_pln > 0) {
-                return (float) $row->actual_amount_pln;
-            }
-
             $raw = (float) ($row->actual_amount ?? 0);
-            if ($raw > 0) {
-                return $raw * (float) ($row->actual_rate ?? 1);
+            $pln = $row->actual_amount_pln !== null ? (float) $row->actual_amount_pln : 0.0;
+            if ($raw <= 0.009 && $pln <= 0.009) {
+                return 0.0;
             }
 
-            $advancePln = (float) ($row->advance_amount ?? 0);
-            if ($advancePln > 0 && ! CurrencyAmountDisplay::isForeignCurrency($row->actual_currency_id ?? $row->planned_currency_id)) {
-                return $advancePln;
+            if ($pln > 0.009) {
+                return $pln;
             }
 
-            return 0.0;
+            return $raw * (float) ($row->actual_rate ?? 1);
         });
 
         $paidForeign = (float) $paymentRows->sum(function (EventSettlementCost $row) use ($isForeign, $planRate): float {
             $raw = (float) ($row->actual_amount ?? 0);
             if ($raw > 0.009) {
                 return $raw;
-            }
-
-            $advance = (float) ($row->advance_amount ?? 0);
-            if ($advance > 0.009) {
-                return $advance;
             }
 
             $pln = $row->actual_amount_pln !== null
@@ -281,34 +326,6 @@ final class ProgramPointListFinanceDisplay
 
             return 0.0;
         });
-
-        if ($baseCost) {
-            if ($paidPln <= 0.009) {
-                $paidPln = (float) ($baseCost->actual_amount_pln ?? 0);
-            }
-            if ($paidForeign <= 0.009) {
-                $paidForeign = (float) ($baseCost->actual_amount ?? 0);
-            }
-            $baseAdvance = (float) ($baseCost->advance_amount ?? 0);
-            if ($baseAdvance > 0.009) {
-                if ($isForeign) {
-                    $paidForeign = max($paidForeign, $baseAdvance);
-                } else {
-                    $paidPln = max($paidPln, $baseAdvance);
-                }
-            }
-        }
-
-        if ($paidPln <= 0.009 && $paidForeign <= 0.009) {
-            $legacyPaid = (float) ($record->paid_price ?? 0);
-            if ($legacyPaid > 0.009) {
-                if ($isForeign) {
-                    $paidForeign = $legacyPaid;
-                } else {
-                    $paidPln = $legacyPaid;
-                }
-            }
-        }
 
         return [$paidPln, $paidForeign];
     }
@@ -395,6 +412,161 @@ final class ProgramPointListFinanceDisplay
         }
 
         return $hint;
+    }
+
+    private function buildPlanAdvanceFallbackHint(
+        ?EventSettlementCost $baseCost,
+        string $planPaidBy,
+        ?Currency $plannedCurrency,
+        bool $convertToPln,
+        float $planRate,
+    ): ?string {
+        if (! $baseCost) {
+            return null;
+        }
+
+        $baseAdvance = (float) ($baseCost->advance_amount ?? 0);
+        if ($baseAdvance <= 0.009) {
+            return null;
+        }
+
+        $payerLabel = EventSettlementCost::$paidByOptions[$planPaidBy] ?? $planPaidBy;
+
+        return 'Zaliczka '.$payerLabel.' '.$this->formatMoney($baseAdvance, $plannedCurrency, $convertToPln, $planRate);
+    }
+
+    /**
+     * @param  \Illuminate\Support\Collection<int, EventSettlementCost>|\Illuminate\Database\Eloquent\Collection<int, EventSettlementCost>  $advanceRows
+     * @return array{0: array{text: string, status: string}|null, 1: array{text: string, tone: string}|null}
+     */
+    private function buildOperationalPaymentLines(
+        $advanceRows,
+        ?EventSettlementCost $baseCost,
+        string $planPaidBy,
+        float $plannedAmountRaw,
+        float $paidAmountRaw,
+        ?Currency $plannedCurrency,
+        bool $convertToPln,
+        float $planRate,
+        bool $isForeign,
+    ): array {
+        $advanceRow = $advanceRows
+            ->filter(fn (EventSettlementCost $row): bool => EventSettlementCost::isAdvancePaymentType($row->advance_type)
+                || (float) ($row->advance_amount ?? 0) > 0.009)
+            ->sortByDesc(fn (EventSettlementCost $row): string => (string) ($row->paid_at ?? ''))
+            ->first();
+
+        $advanceAmount = 0.0;
+        $advancePayer = $planPaidBy;
+        $advancePaidAt = null;
+        $advanceDueAt = null;
+
+        if ($advanceRow) {
+            $advanceAmount = $this->sumPaymentsInPlanCurrency(collect([$advanceRow]), $isForeign, $planRate);
+            if ($advanceAmount <= 0.009) {
+                $advanceAmount = round((float) ($advanceRow->advance_amount ?? 0), 2);
+            }
+            $advancePayer = (string) ($advanceRow->paid_by ?? $planPaidBy);
+            $advancePaidAt = filled($advanceRow->paid_at) || (float) ($advanceRow->actual_amount ?? 0) > 0.009
+                ? $advanceRow->paid_at
+                : null;
+            $advanceDueAt = $advanceRow->advance_due_date;
+        } else {
+            $baseAdvance = (float) ($baseCost->advance_amount ?? 0);
+            if ($baseAdvance > 0.009) {
+                $advanceAmount = $baseAdvance;
+                $advancePaidAt = filled($baseCost->paid_at) && in_array((string) $baseCost->payment_status, ['advance_paid', 'partially_paid', 'paid'], true)
+                    ? $baseCost->paid_at
+                    : null;
+                $advanceDueAt = $baseCost->advance_due_date;
+            }
+        }
+
+        $advanceLine = null;
+        if ($advanceAmount > 0.009) {
+            $payerLabel = EventSettlementCost::$paidByOptions[$advancePayer] ?? 'Biuro';
+            $amountLabel = $this->formatMoney($advanceAmount, $plannedCurrency, $convertToPln, $planRate);
+            $status = filled($advancePaidAt) ? 'paid' : 'pending';
+            $when = filled($advancePaidAt)
+                ? $this->formatDay($advancePaidAt)
+                : (filled($advanceDueAt) ? 'do '.$this->formatDay($advanceDueAt) : null);
+
+            $advanceLine = [
+                'text' => implode(' · ', array_filter([
+                    $status === 'paid' ? 'zapłacona' : 'do zapłaty',
+                    $payerLabel,
+                    $amountLabel,
+                    $when,
+                ])),
+                'status' => $status,
+            ];
+        }
+
+        $restRaw = max(0.0, round($plannedAmountRaw - $paidAmountRaw, 2));
+
+        $remainingLine = null;
+        if ($restRaw > 0.009) {
+            $payerLabel = EventSettlementCost::$paidByOptions[$planPaidBy] ?? 'Biuro';
+            $amountLabel = $this->formatMoney($restRaw, $plannedCurrency, $convertToPln, $planRate);
+
+            $remainingLine = [
+                'text' => implode(' · ', array_filter([$payerLabel, $amountLabel])),
+                'tone' => $paidAmountRaw > 0.009 ? 'warn' : 'due',
+            ];
+        }
+
+        return [$advanceLine, $remainingLine];
+    }
+
+    private function latestActiveReservation(EventProgramPoint $record): ?Reservation
+    {
+        return $record->latestVisibleReservation();
+    }
+
+    /**
+     * Daty zaliczki z rezerwacji; kwota zostaje z wpłat / planu gdy już jest na linii.
+     *
+     * @param  array{text: string, status: string}|null  $advanceLine
+     * @return array{text: string, status: string}|null
+     */
+    private function overlayReservationAdvanceLine(
+        ?array $advanceLine,
+        Reservation $reservation,
+        string $planPaidBy,
+    ): ?array {
+        $deposit = ReservationWorkflowDisplay::depositLine($reservation);
+        if ($deposit['status'] === 'not_set') {
+            return $advanceLine;
+        }
+
+        // Wpłata już ma płatnika i kwotę — rezerwacja nie może nadpisać np. Biuro → Pilot.
+        if ($advanceLine) {
+            return $advanceLine;
+        }
+
+        $payerLabel = EventSettlementCost::$paidByOptions[$planPaidBy] ?? 'Biuro';
+        $status = $deposit['status'] === 'paid' ? 'paid' : ($deposit['status'] === 'overdue' ? 'overdue' : 'pending');
+        $stateLabel = match ($status) {
+            'paid' => 'zapłacona',
+            'overdue' => 'po terminie',
+            default => 'do zapłaty',
+        };
+
+        return [
+            'text' => implode(' · ', array_filter([$stateLabel, $payerLabel, $deposit['text']])),
+            'status' => $status,
+        ];
+    }
+
+    private function formatDay(mixed $value): ?string
+    {
+        if (! $value) {
+            return null;
+        }
+
+        $date = $value instanceof Carbon ? $value : Carbon::parse($value);
+
+        return $date->format('d.m.Y');
     }
 
     private function formatMoney(float $amount, ?Currency $currency, bool $convertToPln, float $rate): string

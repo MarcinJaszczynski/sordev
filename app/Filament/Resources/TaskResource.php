@@ -3,6 +3,7 @@
 namespace App\Filament\Resources;
 
 use App\Enums\TaskPriority;
+use App\Enums\TaskSource;
 use App\Filament\Forms\TaskFormFields;
 use App\Filament\Resources\TaskResource\Pages;
 use App\Filament\Resources\TaskResource\RelationManagers;
@@ -14,7 +15,6 @@ use App\Support\Tasks\TaskAuthorization;
 use App\Support\Tasks\TaskListColumn;
 use App\Support\Tasks\TaskNavigation;
 use App\Support\Tasks\TaskQueryFilters;
-use App\Services\NotificationService;
 use Filament\Forms;
 use Filament\Forms\Form;
 use Filament\Navigation\NavigationItem;
@@ -22,7 +22,6 @@ use Filament\Notifications\Notification;
 use Filament\Resources\Resource;
 use Filament\Tables;
 use Filament\Tables\Table;
-use Illuminate\Contracts\View\View;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Collection;
 use Illuminate\Database\Eloquent\SoftDeletingScope;
@@ -101,7 +100,7 @@ class TaskResource extends Resource
      */
     public static function eventWorkspaceTableColumns(): array
     {
-        return static::adminListTableColumns(showContextColumn: true, showSourceColumn: true);
+        return static::adminListTableColumns(showContextColumn: true);
     }
 
     public static function form(Form $form): Form
@@ -128,51 +127,64 @@ class TaskResource extends Resource
     /**
      * @return array<int, Tables\Columns\Column>
      */
-    public static function adminListTableColumns(bool $showContextColumn = true, bool $showSourceColumn = false): array
+    public static function adminListTableColumns(bool $showContextColumn = true): array
     {
         $columns = [
             Tables\Columns\ViewColumn::make('task_summary')
                 ->label('Zadanie')
                 ->searchable(['title', 'description'])
                 ->sortable(['title'])
-                ->view('filament.tasks.list-task-cell'),
+                ->view('filament.tasks.list-task-cell')
+                ->extraHeaderAttributes(['class' => 'fi-ta-col-task-summary'])
+                ->extraCellAttributes(['class' => 'fi-ta-col-task-summary']),
         ];
 
         if ($showContextColumn) {
             $columns[] = Tables\Columns\ViewColumn::make('context_summary')
                 ->label('Kontekst')
-                ->view('filament.tasks.list-task-context-cell');
+                ->view('filament.tasks.list-task-context-cell')
+                ->extraHeaderAttributes(['class' => 'fi-ta-col-task-context'])
+                ->extraCellAttributes(['class' => 'fi-ta-col-task-context']);
         } else {
             $columns[] = Tables\Columns\ViewColumn::make('context_summary')
                 ->label('Kontekst')
                 ->view('filament.tasks.list-task-context-cell')
-                ->viewData(['showContextRecord' => false]);
-
-            if ($showSourceColumn) {
-                $columns[] = Tables\Columns\TextColumn::make('source')
-                    ->label('Źródło')
-                    ->badge()
-                    ->formatStateUsing(fn ($state) => match ($state instanceof \App\Enums\TaskSource ? $state->value : (string) $state) {
-                        \App\Enums\TaskSource::PilotChecklist->value => 'Lista kontrolna pilota',
-                        default => 'Biuro',
-                    })
-                    ->color(fn ($state) => ($state instanceof \App\Enums\TaskSource ? $state->value : (string) $state) === \App\Enums\TaskSource::PilotChecklist->value
-                        ? 'info'
-                        : 'gray');
-            }
+                ->viewData(['showContextRecord' => false])
+                ->extraHeaderAttributes(['class' => 'fi-ta-col-task-context'])
+                ->extraCellAttributes(['class' => 'fi-ta-col-task-context']);
         }
 
         return array_merge($columns, [
             Tables\Columns\SelectColumn::make('status_id')
                 ->label('Status')
                 ->options(fn (): array => TaskStatus::query()->orderBy('order')->pluck('name', 'id')->all())
-                ->sortable()
-                ->selectablePlaceholder(false),
+                ->sortable(query: function (Builder $query, string $direction): Builder {
+                    $dir = strtolower($direction) === 'asc' ? 'asc' : 'desc';
+
+                    return $query->orderBy(
+                        TaskStatus::query()
+                            ->select('order')
+                            ->whereColumn('task_statuses.id', 'tasks.status_id')
+                            ->limit(1),
+                        $dir,
+                    );
+                })
+                ->selectablePlaceholder(false)
+                ->extraHeaderAttributes(['class' => 'fi-ta-col-task-status'])
+                ->extraCellAttributes(['class' => 'fi-ta-col-task-status']),
             Tables\Columns\TextColumn::make('due_date')
                 ->label('Termin / Priorytet')
                 ->html()
                 ->state(fn (Task $record): string => TaskListColumn::duePriorityCellHtml($record))
-                ->sortable(),
+                ->sortable(query: function (Builder $query, string $direction): Builder {
+                    $dir = strtolower($direction) === 'asc' ? 'asc' : 'desc';
+
+                    return $query
+                        ->orderByRaw('due_date IS NULL')
+                        ->orderBy('due_date', $dir);
+                })
+                ->extraHeaderAttributes(['class' => 'fi-ta-col-task-due'])
+                ->extraCellAttributes(['class' => 'fi-ta-col-task-due']),
             Tables\Columns\TextColumn::make('modified_at')
                 ->label('Modyfikacja')
                 ->html()
@@ -181,7 +193,9 @@ class TaskResource extends Resource
                     $dir = strtolower($direction) === 'asc' ? 'asc' : 'desc';
 
                     return $query->orderByRaw('COALESCE(updated_at, created_at) '.$dir);
-                }),
+                })
+                ->extraHeaderAttributes(['class' => 'fi-ta-col-task-modified'])
+                ->extraCellAttributes(['class' => 'fi-ta-col-task-modified']),
         ]);
     }
 
@@ -276,10 +290,6 @@ class TaskResource extends Resource
                 ->label('Przypisane do')
                 ->placeholder('—')
                 ->sortable(),
-            Tables\Columns\TextColumn::make('author.name')
-                ->label('Autor')
-                ->placeholder('—')
-                ->sortable(),
             Tables\Columns\TextColumn::make('created_at')
                 ->label('Utworzono')
                 ->dateTime('d.m.Y H:i')
@@ -327,22 +337,7 @@ class TaskResource extends Resource
      */
     public static function eventTasksTableColumns(): array
     {
-        $columns = static::sharedTableColumns(showContext: false);
-
-        array_splice($columns, 1, 0, [
-            Tables\Columns\TextColumn::make('source')
-                ->label('Źródło')
-                ->badge()
-                ->formatStateUsing(fn ($state) => match ($state instanceof \App\Enums\TaskSource ? $state->value : (string) $state) {
-                    \App\Enums\TaskSource::PilotChecklist->value => 'Lista kontrolna pilota',
-                    default => 'Biuro',
-                })
-                ->color(fn ($state) => ($state instanceof \App\Enums\TaskSource ? $state->value : (string) $state) === \App\Enums\TaskSource::PilotChecklist->value
-                    ? 'info'
-                    : 'gray'),
-        ]);
-
-        return $columns;
+        return static::sharedTableColumns(showContext: false);
     }
 
     /**
@@ -353,6 +348,7 @@ class TaskResource extends Resource
         $filters = [
             static::finishedVisibilityTableFilter(),
             static::archivedVisibilityTableFilter(),
+            static::sourceTableFilter(),
             Tables\Filters\SelectFilter::make('priority')
                 ->label('Priorytet')
                 ->options(TaskPriority::options()),
@@ -371,20 +367,66 @@ class TaskResource extends Resource
         return $filters;
     }
 
+    public static function sourceTableFilter(): Tables\Filters\SelectFilter
+    {
+        // Relacja imprezy czasem nie inicjalizuje SelectFilter::default() — wtedy value=null
+        // i widać wszystko (w tym System). Query wymusza „Biuro”, dopóki user nie wybierze inaczej.
+        return Tables\Filters\SelectFilter::make('source')
+            ->label('Źródło')
+            ->options([
+                TaskSource::Office->value => 'Biuro',
+                TaskSource::System->value => 'Systemowe',
+                'all' => 'Wszystkie',
+            ])
+            ->default(TaskSource::Office->value)
+            ->selectablePlaceholder(false)
+            ->query(function (Builder $query, array $data): Builder {
+                $value = $data['value'] ?? TaskSource::Office->value;
+
+                if ($value === 'all' || $value === null || $value === '') {
+                    return $query;
+                }
+
+                return $query->where('source', $value);
+            });
+    }
+
+    /**
+     * @return array{label: string, color: string}
+     */
+    public static function sourceBadgePresentation(mixed $state): array
+    {
+        $value = $state instanceof TaskSource ? $state->value : (string) $state;
+
+        return match ($value) {
+            TaskSource::System->value => [
+                'label' => 'System',
+                'color' => 'warning',
+            ],
+            TaskSource::PilotChecklist->value => [
+                'label' => 'Checklista pilota',
+                'color' => 'info',
+            ],
+            default => [
+                'label' => 'Biuro',
+                'color' => 'gray',
+            ],
+        };
+    }
+
     public static function configureAdminTaskListTable(
         Table $table,
         bool $officeOnly = true,
         bool $showContextColumn = true,
-        bool $showSourceColumn = false,
         bool $includeTrashed = false,
         ?\Closure $additionalQueryModifier = null,
     ): Table {
         return $table
             ->modifyQueryUsing(function (Builder $query) use ($officeOnly, $additionalQueryModifier): Builder {
                 TaskQueryFilters::applyDefaultListScopes($query, $officeOnly);
-
-                // Flat sort: podzadanie jako osobna pozycja wg własnej aktywności (nie pod rodzicem).
-                $query = TaskQueryFilters::orderByLatestActivityDesc($query);
+                // Tylko alias — ORDER BY jest w defaultSort / sortowaniu kolumny.
+                // Twardy orderBy tutaj blokował kliknięcia nagłówków (pierwszy ORDER BY wygrywa).
+                TaskQueryFilters::withLatestActivityAtColumn($query);
 
                 if ($additionalQueryModifier) {
                     $query = $additionalQueryModifier($query);
@@ -392,12 +434,15 @@ class TaskResource extends Resource
 
                 return $query;
             })
-            ->defaultSort('latest_activity_at', 'desc')
-            ->columns(static::adminListTableColumns($showContextColumn, $showSourceColumn))
+            ->defaultSort(
+                fn (Builder $query, string $direction): Builder => TaskQueryFilters::orderByLatestActivity($query, $direction),
+                'desc',
+            )
+            ->columns(static::adminListTableColumns($showContextColumn))
             ->filters(static::sharedTableFilters($includeTrashed))
             ->recordUrl(null)
             ->recordAction(null)
-            ->actionsColumnLabel('Działanie')
+            ->actionsColumnLabel('Akcje')
             ->actions([
                 static::modalEditTableAction(),
                 Tables\Actions\DeleteAction::make()
@@ -418,9 +463,7 @@ class TaskResource extends Resource
         return $table
             ->modifyQueryUsing(function (Builder $query) use ($officeOnly, $additionalQueryModifier): Builder {
                 TaskQueryFilters::applyDefaultListScopes($query, $officeOnly);
-
-                // Flat sort: podzadanie jako osobna pozycja wg własnej aktywności (nie pod rodzicem).
-                $query = TaskQueryFilters::orderByLatestActivityDesc($query);
+                TaskQueryFilters::withLatestActivityAtColumn($query);
 
                 if ($additionalQueryModifier) {
                     $query = $additionalQueryModifier($query);
@@ -428,7 +471,10 @@ class TaskResource extends Resource
 
                 return $query;
             })
-            ->defaultSort('latest_activity_at', 'desc')
+            ->defaultSort(
+                fn (Builder $query, string $direction): Builder => TaskQueryFilters::orderByLatestActivity($query, $direction),
+                'desc',
+            )
             ->columns(static::sharedTableColumns($showContext))
             ->filters(static::sharedTableFilters($includeTrashed))
             ->recordUrl(null)

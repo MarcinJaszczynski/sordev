@@ -167,6 +167,7 @@ class AdminPanelProvider extends PanelProvider
 
                     return view('filament.components.workflow-record-context', [
                         'context' => $context,
+                        'livewireId' => method_exists($livewire, 'getId') ? $livewire->getId() : null,
                     ])->render();
                 },
             )

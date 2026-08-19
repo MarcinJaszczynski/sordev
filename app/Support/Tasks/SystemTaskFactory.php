@@ -30,15 +30,17 @@ final class SystemTaskFactory
             }
         }
 
-        if ($event?->assigned_to) {
-            $assigned = User::query()->find($event->assigned_to);
+        // Zadania biurowe: opiekun imprezy, nie assigned_to (to bywa konto pilota).
+        $caretakerId = $event?->office_caretaker_id;
+        if ($caretakerId) {
+            $caretaker = User::query()->find($caretakerId);
 
-            if ($assigned) {
-                return (int) $assigned->id;
+            if ($caretaker) {
+                return (int) $caretaker->id;
             }
         }
 
-        $office = OfficeTaskRecipients::users()->first();
+        $office = OfficeTaskRecipients::users()->sortBy('id')->first();
 
         if ($office) {
             return (int) $office->id;
@@ -61,6 +63,10 @@ final class SystemTaskFactory
         ?string $url = null,
         bool $onlyOpenWhenFinding = true,
     ): ?Task {
+        if (! SystemTaskPolicy::allowsFingerprint($fingerprint)) {
+            return null;
+        }
+
         $statusId = Task::getDefaultStatusId();
 
         if (! $statusId) {

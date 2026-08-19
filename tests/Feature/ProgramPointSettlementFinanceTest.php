@@ -159,10 +159,8 @@ class ProgramPointSettlementFinanceTest extends TestCase
             ->where('description', 'like', '%[payment-reminder:settlement_cost:'.$cost->id.':plan]%')
             ->first();
 
-        $this->assertNotNull($task);
-        $this->assertSame($dueDate->toDateString(), $task->due_date?->toDateString());
-        $this->assertStringContainsString('560,00 EUR', (string) $task->description);
-        $this->assertStringNotContainsString('≈', (string) $task->description);
+        // Auto-przypomnienia płatności wyłączone (SystemTaskPolicy).
+        $this->assertNull($task);
     }
 
     public function test_document_sync_links_invoice_to_settlement_cost(): void
@@ -377,8 +375,7 @@ class ProgramPointSettlementFinanceTest extends TestCase
             ->where('description', 'like', '%[payment-reminder:settlement_cost:'.$advanceCost->id.':advance]%')
             ->first();
 
-        $this->assertNotNull($task);
-        $this->assertSame($dueDate->toDateString(), $task->due_date?->toDateString());
+        $this->assertNull($task);
     }
 
     public function test_paid_advance_retires_task_reminder(): void
@@ -423,8 +420,23 @@ class ProgramPointSettlementFinanceTest extends TestCase
             ->where('advance_type', 'advance')
             ->firstOrFail();
 
+        $fingerprint = '[payment-reminder:settlement_cost:'.$advanceCost->id.':advance]';
+        Task::create([
+            'title' => 'Termin zaliczki',
+            'description' => "Kwota.\n\n{$fingerprint}",
+            'due_date' => $dueDate,
+            'status_id' => Task::getDefaultStatusId(),
+            'priority' => 'urgent',
+            'source' => 'system',
+            'author_id' => $user->id,
+            'assignee_id' => $user->id,
+            'taskable_type' => Event::class,
+            'taskable_id' => $event->id,
+            'order' => 1,
+        ]);
+
         $this->assertSame(1, Task::query()
-            ->where('description', 'like', '%[payment-reminder:settlement_cost:'.$advanceCost->id.':advance]%')
+            ->where('description', 'like', '%'.$fingerprint.'%')
             ->count());
 
         $helper->saveAdvances($point->fresh(['currency', 'templatePoint', 'event']), [
@@ -449,7 +461,7 @@ class ProgramPointSettlementFinanceTest extends TestCase
         $this->assertSame(
             1,
             Task::query()
-                ->where('description', 'like', '%[payment-reminder:settlement_cost:'.$advanceCost->id.':advance]%')
+                ->where('description', 'like', '%'.$fingerprint.'%')
                 ->where('status_id', $completedStatusId)
                 ->count(),
         );

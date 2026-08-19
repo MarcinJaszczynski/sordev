@@ -15,11 +15,38 @@ use App\Services\ProgramPointPricingCalculator;
  * - group_size = 1  → cena × liczba osób koszowych
  * - group_size > 1  → cena × ceil(osoby / group_size)  (np. 15 za 10 zł → 45 os. = 30 zł)
  * - group_size = 0  → cena × sztuki (quantity)
- * - osoby koszowe = domyślnie tylko płacący; opiekunowie/gratisy tylko gdy
- *   include_gratis_in_cost na punkcie jest włączone.
+ * - osoby koszowe = domyślnie tylko płacący;
+ *   opiekunowie / pilot / kierowca tylko gdy odpowiednie flagi na punkcie są włączone.
  */
 final class ProgramPointCostPricing
 {
+    /**
+     * Składa headcount z płacących i zaznaczonych dodatków.
+     */
+    public static function applyIncludedExtras(
+        int $paying,
+        int $gratis,
+        int $pilot,
+        int $driver,
+        bool $includeGratis,
+        bool $includePilot,
+        bool $includeDriver,
+    ): int {
+        $total = max(1, $paying);
+
+        if ($includeGratis) {
+            $total += max(0, $gratis);
+        }
+        if ($includePilot) {
+            $total += max(0, $pilot);
+        }
+        if ($includeDriver) {
+            $total += max(0, $driver);
+        }
+
+        return max(1, $total);
+    }
+
     /**
      * Liczba osób, za które liczymy koszt punktu.
      */
@@ -27,19 +54,24 @@ final class ProgramPointCostPricing
         Event $event,
         ?int $payingParticipants = null,
         bool $includeGratis = false,
+        bool $includePilot = false,
+        bool $includeDriver = false,
     ): int {
         $paying = max(1, (int) ($payingParticipants ?? $event->participant_count ?? 1));
-        if (! $includeGratis) {
-            return $paying;
-        }
 
-        $gratis = max(0, $event->resolveGratisCountForParticipantCount($paying));
-
-        return max(1, $paying + $gratis);
+        return self::applyIncludedExtras(
+            $paying,
+            $event->resolveGratisCountForParticipantCount($paying),
+            self::pilotCount($event),
+            $event->resolveDriverCountForParticipantCount($paying),
+            $includeGratis,
+            $includePilot,
+            $includeDriver,
+        );
     }
 
     /**
-     * Headcount dla konkretnego punktu (respektuje include_gratis_in_cost).
+     * Headcount dla konkretnego punktu (respektuje flagi doliczania osób).
      */
     public static function costHeadcountForPoint(
         EventProgramPoint $point,
@@ -50,15 +82,26 @@ final class ProgramPointCostPricing
             $event,
             $payingParticipants,
             (bool) ($point->include_gratis_in_cost ?? false),
+            (bool) ($point->include_pilot_in_cost ?? false),
+            (bool) ($point->include_driver_in_cost ?? false),
         );
+    }
+
+    public static function pilotCount(Event $event): int
+    {
+        return filled($event->assigned_to) ? 1 : 0;
     }
 
     /**
      * @return array{
      *   paying: int,
      *   gratis: int,
+     *   pilot: int,
+     *   driver: int,
      *   headcount: int,
      *   include_gratis: bool,
+     *   include_pilot: bool,
+     *   include_driver: bool,
      *   group_size: int|null,
      *   billable_units: int,
      *   unit_price: float,
@@ -78,9 +121,25 @@ final class ProgramPointCostPricing
 
         $paying = max(1, (int) ($payingParticipants ?? $event->participant_count ?? 1));
         $gratisAvailable = max(0, $event->resolveGratisCountForParticipantCount($paying));
+        $pilotAvailable = self::pilotCount($event);
+        $driverAvailable = max(0, $event->resolveDriverCountForParticipantCount($paying));
+
         $includeGratis = (bool) ($point->include_gratis_in_cost ?? false);
+        $includePilot = (bool) ($point->include_pilot_in_cost ?? false);
+        $includeDriver = (bool) ($point->include_driver_in_cost ?? false);
+
         $gratis = $includeGratis ? $gratisAvailable : 0;
-        $headcount = self::costHeadcount($event, $paying, $includeGratis);
+        $pilot = $includePilot ? $pilotAvailable : 0;
+        $driver = $includeDriver ? $driverAvailable : 0;
+        $headcount = self::applyIncludedExtras(
+            $paying,
+            $gratisAvailable,
+            $pilotAvailable,
+            $driverAvailable,
+            $includeGratis,
+            $includePilot,
+            $includeDriver,
+        );
 
         $groupSize = $point->group_size;
         $unitPrice = (float) ($point->unit_price ?? 0);
@@ -115,31 +174,26 @@ final class ProgramPointCostPricing
         };
 
         $unitFmt = number_format($unitPrice, 2, ',', ' ');
-        $hint = $includeGratis
-            ? sprintf(
-                '%s · %d os. (%d+%d gratis) · %d jedn. × %s %s',
-                $pricingMode,
-                $headcount,
-                $paying,
-                $gratis,
-                $billable,
-                $unitFmt,
-                $code,
-            )
-            : sprintf(
-                '%s · %d os. (bez opiekunów) · %d jedn. × %s %s',
-                $pricingMode,
-                $headcount,
-                $billable,
-                $unitFmt,
-                $code,
-            );
+        $extras = self::extrasHint($paying, $gratis, $pilot, $driver, $includeGratis, $includePilot, $includeDriver);
+        $hint = sprintf(
+            '%s · %d os. (%s) · %d jedn. × %s %s',
+            $pricingMode,
+            $headcount,
+            $extras,
+            $billable,
+            $unitFmt,
+            $code,
+        );
 
         return [
             'paying' => $paying,
             'gratis' => $gratis,
+            'pilot' => $pilot,
+            'driver' => $driver,
             'headcount' => $headcount,
             'include_gratis' => $includeGratis,
+            'include_pilot' => $includePilot,
+            'include_driver' => $includeDriver,
             'group_size' => $groupSize === null ? null : (int) $groupSize,
             'billable_units' => $billable,
             'unit_price' => round($unitPrice, 2),
@@ -162,5 +216,32 @@ final class ProgramPointCostPricing
     public static function totalPlnForOffer(EventProgramPoint $point, Event $event, ?int $payingParticipants = null): float
     {
         return self::breakdown($point, $event, $payingParticipants)['total_pln_offer'];
+    }
+
+    private static function extrasHint(
+        int $paying,
+        int $gratis,
+        int $pilot,
+        int $driver,
+        bool $includeGratis,
+        bool $includePilot,
+        bool $includeDriver,
+    ): string {
+        if (! $includeGratis && ! $includePilot && ! $includeDriver) {
+            return 'tylko płacący';
+        }
+
+        $parts = [$paying.' płac.'];
+        if ($includeGratis) {
+            $parts[] = $gratis.' opiekun.';
+        }
+        if ($includePilot) {
+            $parts[] = $pilot.' pilot';
+        }
+        if ($includeDriver) {
+            $parts[] = $driver.' kierowca';
+        }
+
+        return implode(' + ', $parts);
     }
 }

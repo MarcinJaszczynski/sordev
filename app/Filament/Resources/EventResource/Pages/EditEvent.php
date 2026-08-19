@@ -8,6 +8,7 @@ use App\Data\ChangeEventStatusData;
 use App\Data\RecalculateEventTotalsData;
 use App\Filament\Resources\EventResource;
 use App\Filament\Resources\EventResource\Concerns\HasEventWorkflowContext;
+use App\Filament\Resources\EventResource\Concerns\InteractsWithEventOrderingPartyLookups;
 use App\Models\Event;
 use App\Services\EventManualPricePerPersonService;
 use App\Services\EventParticipantCountChangeService;
@@ -19,11 +20,11 @@ use Filament\Notifications\Notification;
 use Filament\Resources\Pages\EditRecord;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Schema;
-use Livewire\Attributes\On;
 
 class EditEvent extends EditRecord
 {
     use HasEventWorkflowContext;
+    use InteractsWithEventOrderingPartyLookups;
 
     protected static string $resource = EventResource::class;
 
@@ -56,20 +57,14 @@ class EditEvent extends EditRecord
 
     protected ?int $previousParticipantCount = null;
 
+    protected ?string $previousStatus = null;
+
+    protected ?string $pendingStatusChange = null;
+
     protected function getHeaderActions(): array
     {
+        // Wspólne: Oferta Word / Nowe zadanie — tylko w boxie workflow (HasEventWorkflowContext).
         return [
-            Actions\Action::make('create_event_task')
-                ->label('Nowe zadanie')
-                ->icon('heroicon-m-plus')
-                ->color('primary')
-                ->action(fn () => $this->openEventCreateTaskModal()),
-            Actions\Action::make('download_offer')
-                ->label('Oferta Word')
-                ->icon('heroicon-o-document-arrow-down')
-                ->color('gray')
-                ->url(fn (): string => route('admin.events.offer.word', $this->record))
-                ->openUrlInNewTab(),
             Actions\Action::make('open_participants')
                 ->label('Uczestnicy')
                 ->icon('heroicon-o-users')
@@ -138,6 +133,7 @@ class EditEvent extends EditRecord
 
         $data['ordering_parties'] = app(\App\Services\EventOrderingPartyService::class)
             ->partiesToFormState($this->record);
+        $this->seedLookupOrderingParties($data['ordering_parties']);
 
         $data = array_merge($data, app(EventManualPricePerPersonService::class)->formState($this->record));
 
@@ -147,6 +143,15 @@ class EditEvent extends EditRecord
     protected function mutateFormDataBeforeSave(array $data): array
     {
         $this->previousParticipantCount = max(1, (int) ($this->record->participant_count ?? 1));
+        $this->previousStatus = (string) ($this->record->status ?? '');
+
+        $newStatus = isset($data['status']) ? (string) $data['status'] : '';
+        if ($newStatus !== '' && $newStatus !== $this->previousStatus) {
+            $this->pendingStatusChange = $newStatus;
+            unset($data['status']);
+        } else {
+            $this->pendingStatusChange = null;
+        }
 
         $data = $this->normalizeScheduleData($data);
 
@@ -157,9 +162,7 @@ class EditEvent extends EditRecord
             : ($this->record->start_place_id ? (int) $this->record->start_place_id : null);
 
         $this->pendingGratisCount = $gratisCount;
-        $this->pendingOrderingParties = is_array($data['ordering_parties'] ?? null)
-            ? $data['ordering_parties']
-            : (is_array($this->data['ordering_parties'] ?? null) ? $this->data['ordering_parties'] : null);
+        $this->pendingOrderingParties = $this->resolvedOrderingParties();
         unset($data['gratis_count'], $data['ordering_parties']);
 
         // Przygotuj dane dla synchronizacji ceny ręcznej
@@ -271,6 +274,15 @@ class EditEvent extends EditRecord
 
         $this->previousParticipantCount = null;
 
+        if (filled($this->pendingStatusChange)) {
+            app(ChangeEventStatusAction::class)(new ChangeEventStatusData(
+                event: $this->record->fresh() ?? $this->record,
+                status: $this->pendingStatusChange,
+            ));
+            $this->pendingStatusChange = null;
+            $this->previousStatus = null;
+        }
+
         if ($this->pendingManualPriceSync !== null) {
             app(EventManualPricePerPersonService::class)->sync(
                 $this->record->fresh(),
@@ -331,60 +343,6 @@ class EditEvent extends EditRecord
         }
 
         $this->dispatch('event-program-points-refresh');
-    }
-
-    /**
-     * @param  array<int, array<string, mixed>>  $orderingParties
-     */
-    #[On('client-lookup-applied')]
-    public function applyClientLookup(
-        array $orderingParties,
-        string $clientName = '',
-        ?string $clientEmail = null,
-        ?string $clientPhone = null,
-    ): void {
-        $additional = array_values(array_slice(
-            is_array($this->data['ordering_parties'] ?? null) ? $this->data['ordering_parties'] : [],
-            1,
-        ));
-        $primary = $orderingParties[0] ?? null;
-
-        $this->data['ordering_parties'] = $primary
-            ? array_values(array_merge([$primary], $additional))
-            : $additional;
-        $this->data['client_name'] = $clientName;
-        $this->data['client_email'] = $clientEmail;
-        $this->data['client_phone'] = $clientPhone;
-    }
-
-    #[On('client-lookup-cleared')]
-    public function clearClientLookup(): void
-    {
-        $additional = array_values(array_slice(
-            is_array($this->data['ordering_parties'] ?? null) ? $this->data['ordering_parties'] : [],
-            1,
-        ));
-
-        $this->data['ordering_parties'] = $additional;
-        $this->data['client_name'] = null;
-        $this->data['client_email'] = null;
-        $this->data['client_phone'] = null;
-    }
-
-    /**
-     * @param  array<int, array<string, mixed>>  $additionalParties
-     */
-    #[On('additional-ordering-parties-updated')]
-    public function applyAdditionalOrderingParties(array $additionalParties): void
-    {
-        $current = is_array($this->data['ordering_parties'] ?? null)
-            ? $this->data['ordering_parties']
-            : [];
-        $primary = $current[0] ?? null;
-
-        $this->data['ordering_parties'] = $primary
-            ? array_values(array_merge([$primary], array_values($additionalParties)))
-            : array_values($additionalParties);
     }
 
     public function financials(): array

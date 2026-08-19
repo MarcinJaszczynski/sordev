@@ -39,7 +39,14 @@ class TaskFullEditorTest extends TestCase
         $component = Livewire::actingAs($user)
             ->test(TaskFullEditor::class, ['taskId' => $task->id])
             ->assertSet('data.title', 'Pełne zadanie')
-            ->assertSee('Kontrahent');
+            ->assertSee('Kontrahent')
+            ->assertSee('Otwórz powiązany ekran w nowej karcie:');
+
+        $this->assertSame(
+            1,
+            substr_count($component->html(), 'Otwórz powiązany ekran w nowej karcie:'),
+            'Lista kontekstu w modalu zadania ma być renderowana jeden raz.',
+        );
 
         $this->assertCount(3, $component->instance()->getRelationManagers());
     }
@@ -144,7 +151,7 @@ class TaskFullEditorTest extends TestCase
 
         Livewire::actingAs($user)
             ->test(TaskFullEditor::class, ['taskId' => $task->id])
-            ->call('toggleCommentComposer')
+            ->assertSee('Napisz komentarz')
             ->set('newCommentContent', 'Nowy komentarz z modala')
             ->call('addComment')
             ->assertDispatched('task-full-editor-updated')
@@ -180,5 +187,32 @@ class TaskFullEditorTest extends TestCase
             ->test(TaskFullEditor::class, ['taskId' => $parent->id])
             ->assertSee('Podzadanie')
             ->assertSee('Podzadania');
+    }
+
+    public function test_subtask_editor_shows_parent_banner_and_dispatches_open_parent(): void
+    {
+        $user = User::factory()->create();
+
+        $parent = Task::create([
+            'title' => 'Zadanie nadrzędne do otwarcia',
+            'status_id' => Task::getDefaultStatusId(),
+            'priority' => 'normal',
+            'author_id' => $user->id,
+        ]);
+
+        $subtask = Task::create([
+            'title' => 'Moje podzadanie',
+            'status_id' => Task::getDefaultStatusId(),
+            'priority' => 'normal',
+            'author_id' => $user->id,
+            'parent_id' => $parent->id,
+        ]);
+
+        Livewire::actingAs($user)
+            ->test(TaskFullEditor::class, ['taskId' => $subtask->id])
+            ->assertSee('Otwórz zadanie główne')
+            ->assertSee('Zadanie nadrzędne do otwarcia')
+            ->call('openParentTask')
+            ->assertDispatched('open-edit-task-modal', taskId: $parent->id);
     }
 }

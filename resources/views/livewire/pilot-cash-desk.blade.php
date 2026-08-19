@@ -251,8 +251,10 @@
 
     @if ($focus !== 'exchange')
     <section @class(['pilot-card' => $compact, 'rounded-xl border border-gray-200 bg-white p-4 dark:border-gray-700 dark:bg-gray-900' => ! $compact])>
-        <h3 class="mb-1 text-base font-semibold text-gray-900 dark:text-gray-100">Wydatki pilota</h3>
-        <p class="mb-3 text-xs text-gray-500">Tylko pozycje z płatnikiem Pilot — jak na zakładce Koszty.</p>
+        <h3 class="mb-1 text-base font-semibold text-gray-900 dark:text-gray-100">Wydatki / koszty pilota</h3>
+        <p class="mb-3 text-xs text-gray-500">
+            Pozycje z płatnikiem Pilot. Kolumna „Zapłacono” to tylko gotówka pilota — zaliczki biura są osobno (nie sumują się jako wydatek pilota).
+        </p>
 
         @if ($this->officePayouts->isNotEmpty())
             <div class="mb-3 rounded-lg border border-indigo-100 bg-indigo-50/70 px-3 py-2 text-sm text-indigo-950 dark:border-indigo-900/40 dark:bg-indigo-950/30 dark:text-indigo-100">

@@ -16,10 +16,6 @@
         $end = $record->hide_times ? null : ($record->end_time ? substr((string) $record->end_time, 0, 5) : null);
 
         $contractorName = $record->contractor?->name;
-        $reservation = $record->relationLoaded('reservations')
-            ? $record->reservations->sortByDesc('id')->first()
-            : $record->reservations()->withTrashed()->orderByDesc('id')->first();
-        $reservationIsTrashed = $reservation?->trashed() ?? false;
 
         /** @var \Illuminate\Support\Collection<int, \App\Models\EventProgramPoint>|null $setChildren */
         $setChildren = $record->getAttribute('_set_children_preview');
@@ -35,10 +31,6 @@
         'epp-name-cell--set-parent' => $isSetParent,
         'epp-name-cell--has-set-preview' => $isSetParent && $setChildren instanceof \Illuminate\Support\Collection && $setChildren->isNotEmpty(),
     ])>
-        @if ($isChild)
-            <span class="epp-tree-branch" aria-hidden="true"></span>
-        @endif
-
         <div class="epp-name-head">
             @if ($isSetParent)
                 <span class="epp-set-badge-wrap">
@@ -87,7 +79,10 @@
             </span>
         </div>
 
-        <div class="epp-title">{{ $name }}</div>
+        <div class="epp-title-row">
+            <span class="epp-title">{{ $name }}</span>
+            @include('filament.components.program-point-scope-chips', ['record' => $record])
+        </div>
 
         @php
             // W panelu admin zawsze pokazujemy opis (show_description steruje tylko frontem / PDF).
@@ -100,54 +95,21 @@
             </div>
         @endif
 
-        @if ($contractorName || $reservation)
+        @if ($contractorName)
             <div class="epp-meta">
-                @if ($contractorName)
-                    @php
-                        $contractor = $record->contractor;
-                    @endphp
-                    <div>
-                        <span class="font-medium">{{ $contractorName }}</span>
-                        @if ($contractor)
-                            <x-contractor-contact-details
-                                :contractor="$contractor"
-                                :location="$record->contractorLocation"
-                                class="mt-0.5 text-[11px] leading-snug text-gray-600 dark:text-gray-400"
-                            />
-                        @endif
-                    </div>
-                @endif
-                @if ($reservation)
-                    @if ($contractorName)
-                        <span class="epp-meta-sep">|</span>
+                @php
+                    $contractor = $record->contractor;
+                @endphp
+                <div>
+                    <span class="font-medium">{{ $contractorName }}</span>
+                    @if ($contractor)
+                        <x-contractor-contact-details
+                            :contractor="$contractor"
+                            :location="$record->contractorLocation"
+                            class="mt-0.5 text-[11px] leading-snug text-gray-600 dark:text-gray-400"
+                        />
                     @endif
-                    @php
-                        $resStatus = \App\Models\Reservation::$statuses[$reservation->status] ?? $reservation->status;
-                        $depositLabel = \App\Support\Reservations\ReservationWorkflowDisplay::depositStatusLabel($reservation);
-                        $confirmBy = filled($reservation->confirm_by)
-                            ? \App\Support\Reservations\ReservationWorkflowDisplay::formatDate($reservation->confirm_by)
-                            : null;
-                    @endphp
-                    <span class="inline-flex flex-wrap items-center gap-1">
-                        @if ($reservationIsTrashed)
-                            <span class="epp-reservation-badge epp-reservation-badge--cancelled" title="Rezerwacja usunięta z punktu">
-                                Rezerwacja usunięta
-                            </span>
-                        @endif
-                        <span class="epp-reservation-badge epp-reservation-badge--{{ $reservation->status }}">
-                            {{ $resStatus }}
-                        </span>
-                        <span class="epp-reservation-badge epp-reservation-badge--deposit-{{ \App\Support\Reservations\ReservationWorkflowDisplay::depositStatus($reservation) }}">
-                            {{ $depositLabel }}
-                        </span>
-                        @if ($confirmBy)
-                            <span class="text-[11px] text-gray-500">potw. do {{ $confirmBy }}</span>
-                        @endif
-                        @if (filled($reservation->booking_reference))
-                            <span class="text-[11px] text-gray-500">nr {{ $reservation->booking_reference }}</span>
-                        @endif
-                    </span>
-                @endif
+                </div>
             </div>
         @endif
 

@@ -7,30 +7,13 @@
     @php
         $contextType = $record->taskable_type_label ?: 'Wolne / nieprzypisane';
         $contextRecord = $record->taskable_label;
+        $showContextRecord = $showContextRecord ?? true;
     @endphp
 
-    <table class="border-collapse min-w-[160px]">
-        <tr>
-            <td class="pr-2 py-px text-[0.72rem] text-gray-400 align-top whitespace-nowrap">Nadrzędne:</td>
-            <td class="text-[0.78rem] leading-snug text-gray-900 dark:text-gray-100">
-                @if ($record->parent)
-                    <button
-                        type="button"
-                        class="text-left text-primary-600 hover:underline dark:text-primary-400"
-                        x-on:click.stop="$wire.openEditTaskModal({{ $record->parent_id }})"
-                    >
-                        {{ $record->parent->title }}
-                    </button>
-                @else
-                    —
-                @endif
-            </td>
-        </tr>
-        @if ($showContextRecord ?? true)
-        <tr>
-            <td class="pr-2 py-px text-[0.72rem] text-gray-400 align-top whitespace-nowrap">Kontekst:</td>
-            <td class="text-[0.78rem] leading-snug text-gray-900 dark:text-gray-100">
-                {{ $contextType }} /
+    <div class="task-list-context-cell space-y-1 text-[0.78rem] leading-snug">
+        @if ($showContextRecord)
+            <div class="text-[0.7rem] text-gray-400">{{ $contextType }}</div>
+            <div class="min-w-0 break-words text-gray-900 dark:text-gray-100">
                 @if ($record->taskable_type && $record->taskable_id)
                     <button
                         type="button"
@@ -42,8 +25,18 @@
                 @else
                     {{ $contextRecord }}
                 @endif
-            </td>
-        </tr>
+            </div>
+        @elseif ($record->parent)
+            <div class="text-[0.7rem] text-gray-400">Nadrzędne</div>
+            <button
+                type="button"
+                class="min-w-0 break-words text-left text-primary-600 hover:underline dark:text-primary-400"
+                x-on:click.stop="$wire.openEditTaskModal({{ $record->parent_id }})"
+            >
+                {{ $record->parent->title }}
+            </button>
+        @else
+            <span class="text-gray-400">—</span>
         @endif
-    </table>
+    </div>
 @endif

@@ -50,6 +50,28 @@ class ProgramPointCostPricingTest extends TestCase
         $this->assertSame(44, ProgramPointCostPricing::costHeadcount($event));
         $this->assertSame(44, ProgramPointCostPricing::costHeadcount($event, null, false));
         $this->assertSame(48, ProgramPointCostPricing::costHeadcount($event, null, true));
+        $this->assertSame(44, ProgramPointCostPricing::costHeadcount($event, null, false, true, false));
+        $this->assertSame(45, ProgramPointCostPricing::costHeadcount($event, null, false, false, true));
+        $this->assertSame(49, ProgramPointCostPricing::costHeadcount($event, null, true, false, true));
+    }
+
+    public function test_cost_headcount_adds_pilot_when_assigned(): void
+    {
+        $user = User::factory()->create();
+        $event = Event::factory()->create([
+            'participant_count' => 44,
+            'assigned_to' => $user->id,
+        ]);
+        EventQty::create([
+            'event_id' => $event->id,
+            'qty' => 44,
+            'gratis' => 4,
+            'staff' => 1,
+            'driver' => 1,
+        ]);
+
+        $this->assertSame(45, ProgramPointCostPricing::costHeadcount($event, null, false, true, false));
+        $this->assertSame(50, ProgramPointCostPricing::costHeadcount($event, null, true, true, true));
     }
 
     public function test_breakdown_respects_include_gratis_in_cost_flag(): void
@@ -431,5 +453,82 @@ class ProgramPointCostPricingTest extends TestCase
 
         $this->assertNotNull($programLineOn);
         $this->assertSame(450.0, (float) $programLineOn['cost_pln']);
+
+        EventCostCalculator::clearRequestCache();
+        $pilot = User::factory()->create();
+        $event->update(['assigned_to' => $pilot->id]);
+        $point->update([
+            'include_gratis_in_cost' => true,
+            'include_pilot_in_cost' => true,
+            'include_driver_in_cost' => true,
+        ]);
+        $resultCrew = EventCostCalculator::for($event->fresh())->calculate(40);
+        $programLineCrew = collect($resultCrew['lines'])->firstWhere('name', 'Obiad');
+
+        $this->assertNotNull($programLineCrew);
+        // 40 płacących + 5 opiekunów + 1 pilot + 1 kierowca
+        $this->assertSame(470.0, (float) $programLineCrew['cost_pln']);
+    }
+
+    public function test_breakdown_respects_pilot_and_driver_flags_independently(): void
+    {
+        $user = User::factory()->create();
+        $pln = Currency::create([
+            'name' => 'Złoty',
+            'symbol' => 'PLN',
+            'code' => 'PLN',
+            'exchange_rate' => 1,
+        ]);
+
+        $event = Event::factory()->create([
+            'participant_count' => 40,
+            'assigned_to' => $user->id,
+        ]);
+        EventQty::create([
+            'event_id' => $event->id,
+            'qty' => 40,
+            'gratis' => 5,
+            'staff' => 1,
+            'driver' => 1,
+        ]);
+
+        $point = EventProgramPoint::create([
+            'event_id' => $event->id,
+            'day' => 1,
+            'order' => 1,
+            'name' => 'Obiad fakultatywny',
+            'unit_price' => 10,
+            'quantity' => 1,
+            'group_size' => 1,
+            'currency_id' => $pln->id,
+            'convert_to_pln' => true,
+            'include_in_program' => true,
+            'include_gratis_in_cost' => true,
+            'include_pilot_in_cost' => false,
+            'include_driver_in_cost' => false,
+            'active' => true,
+        ]);
+
+        $onlyGratis = ProgramPointCostPricing::breakdown($point, $event);
+        $this->assertSame(45, $onlyGratis['headcount']);
+        $this->assertSame(450.0, $onlyGratis['total']);
+        $this->assertFalse($onlyGratis['include_pilot']);
+        $this->assertFalse($onlyGratis['include_driver']);
+
+        $point->update(['include_pilot_in_cost' => true]);
+        $withPilot = ProgramPointCostPricing::breakdown($point->fresh(), $event);
+        $this->assertSame(46, $withPilot['headcount']);
+        $this->assertSame(460.0, $withPilot['total']);
+        $this->assertTrue($withPilot['include_pilot']);
+        $this->assertSame(1, $withPilot['pilot']);
+
+        $point->update(['include_driver_in_cost' => true]);
+        $withCrew = ProgramPointCostPricing::breakdown($point->fresh(), $event);
+        $this->assertSame(47, $withCrew['headcount']);
+        $this->assertSame(470.0, $withCrew['total']);
+        $this->assertTrue($withCrew['include_driver']);
+        $this->assertSame(1, $withCrew['driver']);
+        $this->assertStringContainsString('pilot', $withCrew['hint']);
+        $this->assertStringContainsString('kierowca', $withCrew['hint']);
     }
 }

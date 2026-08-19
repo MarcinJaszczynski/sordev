@@ -48,17 +48,8 @@ final class TypedContractorSelect
         $select = Forms\Components\Select::make($field)
             ->hiddenLabel()
             ->searchable()
-            ->preload()
             ->live()
             ->nullable()
-            ->options(function (Get $get) use ($lookup, $typeNames, $searchAllField, $field, $resolveRestrictedIds): array {
-                return $lookup->searchOptions(
-                    typeNames: $typeNames,
-                    searchAll: (bool) $get($searchAllField),
-                    includeId: filled($get($field)) ? (int) $get($field) : null,
-                    restrictToIds: $resolveRestrictedIds(),
-                );
-            })
             ->getSearchResultsUsing(function (string $search, Get $get) use ($lookup, $typeNames, $searchAllField, $field, $resolveRestrictedIds): array {
                 return $lookup->searchOptions(
                     search: $search,
@@ -76,6 +67,9 @@ final class TypedContractorSelect
                 $contractor = Contractor::query()->find($value);
 
                 return $contractor ? $lookup->formatOptionLabel($contractor) : null;
+            })
+            ->getOptionLabelsUsing(function (array $values) use ($lookup): array {
+                return $lookup->optionsForIds($values);
             })
             ->createOptionForm([
                 Forms\Components\TextInput::make('name')

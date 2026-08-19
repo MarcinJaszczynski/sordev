@@ -511,8 +511,6 @@ final class EventSettlementImportService
             'actual_amount_pln',
             'notes',
             'payment_method',
-            'payment_status',
-            'advance_amount',
         ] as $field) {
             $value = $existing->{$field};
 
@@ -616,7 +614,7 @@ final class EventSettlementImportService
         $depositPaidAt = $activeReservations
             ->map(fn (Reservation $reservation) => $reservation->deposit_paid_at)
             ->filter()
-            ->sort()
+            ->sortBy(fn ($value) => $value instanceof Carbon ? $value->timestamp : Carbon::parse($value)->timestamp)
             ->first();
 
         if ($depositPaidAt) {

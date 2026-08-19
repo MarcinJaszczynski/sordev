@@ -100,19 +100,16 @@ class EventPaymentScheduleTest extends TestCase
         $this->assertStringContainsString('PLN', (string) $advance['amount_label']);
 
         $html = EventProgramPointPaymentDueColumn::html($point, $rows);
-        $this->assertStringContainsString('Zaliczka', $html);
-        $this->assertStringContainsString('Hotel Rzym', $html);
+        $this->assertStringContainsString('Zaliczka do zapłaty', $html);
         $this->assertStringContainsString($dueDate->format('d.m.Y'), $html);
+        $this->assertStringContainsString('EUR', $html);
 
         $task = Task::query()
             ->where('description', 'like', '%[payment-reminder:settlement_cost:'.$cost->id.':advance]%')
             ->first();
 
-        $this->assertNotNull($task);
-        $this->assertSame($dueDate->toDateString(), $task->due_date?->toDateString());
-        $this->assertStringContainsString('500,00 EUR', (string) $task->description);
-        $this->assertStringContainsString('≈', (string) $task->description);
-        $this->assertSame($user->id, (int) $task->assignee_id);
+        // Auto-przypomnienia płatności wyłączone (SystemTaskPolicy).
+        $this->assertNull($task);
     }
 
     public function test_advance_in_eur_without_convert_omits_pln_equivalent(): void
@@ -265,7 +262,24 @@ class EventPaymentScheduleTest extends TestCase
             'advance_amount' => 900,
         ]);
 
-        $this->assertSame(1, Task::query()->where('description', 'like', '%[payment-reminder:settlement_cost:'.$cost->id.':advance]%')->count());
+        // Tworzenie auto-reminderów wyłączone — seedujemy legacy task, żeby sprawdzić retire przy paid.
+        $fingerprint = '[payment-reminder:settlement_cost:'.$cost->id.':advance]';
+        $openStatusId = Task::getDefaultStatusId();
+        Task::create([
+            'title' => 'Termin zaliczki: Hotel',
+            'description' => "Kwota.\n\n{$fingerprint}",
+            'due_date' => now()->addDays(3),
+            'status_id' => $openStatusId,
+            'priority' => 'urgent',
+            'source' => 'system',
+            'author_id' => $user->id,
+            'assignee_id' => $user->id,
+            'taskable_type' => Event::class,
+            'taskable_id' => $event->id,
+            'order' => 1,
+        ]);
+
+        $this->assertSame(1, Task::query()->where('description', 'like', '%'.$fingerprint.'%')->count());
 
         $cost->update([
             'payment_status' => 'paid',
@@ -277,7 +291,7 @@ class EventPaymentScheduleTest extends TestCase
         $this->assertSame(
             1,
             Task::query()
-                ->where('description', 'like', '%[payment-reminder:settlement_cost:'.$cost->id.':advance]%')
+                ->where('description', 'like', '%'.$fingerprint.'%')
                 ->where('status_id', $completedStatusId)
                 ->count(),
         );
@@ -285,7 +299,7 @@ class EventPaymentScheduleTest extends TestCase
         $this->assertSame(
             0,
             Task::query()
-                ->where('description', 'like', '%[payment-reminder:settlement_cost:'.$cost->id.':advance]%')
+                ->where('description', 'like', '%'.$fingerprint.'%')
                 ->where('status_id', '!=', $completedStatusId)
                 ->count(),
         );
@@ -357,7 +371,8 @@ class EventPaymentScheduleTest extends TestCase
         app(EventPaymentReminderSyncService::class)->syncSettlementCost($cost);
         app(EventPaymentReminderSyncService::class)->syncSettlementCost($cost->fresh());
 
-        $this->assertSame(1, Task::query()->where('description', 'like', '%[payment-reminder:settlement_cost:'.$cost->id.':advance]%')->count());
+        // Auto-przypomnienia płatności wyłączone (SystemTaskPolicy) — nie zaśmiecamy skrzynki.
+        $this->assertSame(0, Task::query()->where('description', 'like', '%[payment-reminder:settlement_cost:'.$cost->id.':advance]%')->count());
     }
 
     public function test_contract_installment_reminders_are_aggregated_per_event_and_label(): void
@@ -421,11 +436,7 @@ class EventPaymentScheduleTest extends TestCase
             ->where('status_id', '!=', $completedStatusId)
             ->get();
 
-        $this->assertCount(3, $grouped);
-        $this->assertTrue($grouped->every(fn (Task $task): bool => str_contains((string) $task->description, 'Zapłaciło 0 z 3')));
-        $this->assertTrue($grouped->contains(fn (Task $task): bool => str_contains((string) $task->title, 'Zaliczka (10%)')));
-        $this->assertTrue($grouped->contains(fn (Task $task): bool => str_contains((string) $task->title, 'Dopłata (90%)')));
-        $this->assertTrue($grouped->contains(fn (Task $task): bool => str_contains((string) $task->title, 'Waluta u pilota')));
+        $this->assertCount(0, $grouped);
     }
 
     public function test_aggregated_contract_reminder_retires_when_all_paid(): void
@@ -473,7 +484,7 @@ class EventPaymentScheduleTest extends TestCase
             ->where('description', 'like', '%[payment-reminder:event_contract_installment:'.$event->id.':%')
             ->whereHas('status', fn ($q) => $q->where('name', '!=', 'Zakończone'))
             ->count();
-        $this->assertSame(1, $activeBefore);
+        $this->assertSame(0, $activeBefore);
 
         foreach ($contracts as $contract) {
             $contract->update([
@@ -523,5 +534,131 @@ class EventPaymentScheduleTest extends TestCase
         $legacy->refresh();
         $completedStatusId = TaskStatus::query()->where('name', 'Zakończone')->value('id');
         $this->assertSame($completedStatusId, (int) $legacy->status_id);
+    }
+
+    public function test_reservation_deposit_on_program_point_shows_readable_advance_line(): void
+    {
+        $user = $this->createOfficeUser();
+        $event = Event::factory()->create(['assigned_to' => $user->id]);
+        $point = EventProgramPoint::create([
+            'event_id' => $event->id,
+            'day' => 1,
+            'order' => 1,
+            'name' => 'Hotel',
+            'planned_price' => 4000,
+            'include_in_program' => true,
+            'active' => true,
+        ]);
+
+        $settlement = EventSettlement::create([
+            'event_id' => $event->id,
+            'status' => 'active',
+            'created_by' => $user->id,
+        ]);
+
+        $dueDate = now()->addDays(5);
+        EventSettlementCost::create([
+            'settlement_id' => $settlement->id,
+            'source_type' => 'program_point',
+            'source_id' => $point->id,
+            'name' => 'Hotel',
+            'payment_status' => 'reserved',
+            'advance_type' => 'deposit',
+            'advance_due_date' => $dueDate,
+            'advance_amount' => 1200,
+            'planned_amount' => 4000,
+            'planned_amount_pln' => 4000,
+            'paid_by' => 'office',
+        ]);
+
+        $rows = app(EventPaymentScheduleService::class)->collectForProgramPoint($point->fresh(), $event->fresh());
+        $html = EventProgramPointPaymentDueColumn::html($point, $rows);
+
+        $this->assertStringContainsString('Zaliczka do zapłaty', $html);
+        $this->assertStringContainsString($dueDate->format('d.m.Y'), $html);
+        $this->assertStringContainsString('1', $html);
+        $this->assertStringNotContainsString(' · Plan · ', $html);
+        $this->assertFalse((bool) ($rows->first()['is_overdue'] ?? true));
+    }
+
+    public function test_paid_advance_shows_paid_phrase_remaining_and_today_is_not_overdue(): void
+    {
+        $user = $this->createOfficeUser();
+        $event = Event::factory()->create(['assigned_to' => $user->id]);
+        $point = EventProgramPoint::create([
+            'event_id' => $event->id,
+            'day' => 1,
+            'order' => 1,
+            'name' => 'Muzeum',
+            'include_in_program' => true,
+            'active' => true,
+        ]);
+
+        $settlement = EventSettlement::create([
+            'event_id' => $event->id,
+            'status' => 'active',
+            'created_by' => $user->id,
+        ]);
+
+        EventSettlementCost::create([
+            'settlement_id' => $settlement->id,
+            'source_type' => 'program_point',
+            'source_id' => $point->id,
+            'name' => 'Muzeum',
+            'payment_status' => 'advance_paid',
+            'advance_type' => 'deposit',
+            'advance_due_date' => now(),
+            'paid_at' => now(),
+            'advance_amount' => 500,
+            'planned_amount' => 2000,
+            'planned_amount_pln' => 2000,
+            'paid_by' => 'office',
+        ]);
+
+        $rows = app(EventPaymentScheduleService::class)->collectForProgramPoint($point->fresh(), $event->fresh());
+        $row = $rows->first();
+        $html = EventProgramPointPaymentDueColumn::html($point, $rows);
+
+        $this->assertNotNull($row);
+        $this->assertSame('advance_paid', $row['kind']);
+        $this->assertFalse((bool) $row['is_overdue']);
+        $this->assertStringContainsString('Zaliczka zapłacona', $html);
+        $this->assertStringContainsString('pozostało', $html);
+        $this->assertStringNotContainsString('#dc2626', $html);
+    }
+
+    public function test_calendar_includes_unpaid_reservation_deposit_due_date(): void
+    {
+        $user = $this->createOfficeUser();
+        $this->actingAs($user);
+        $dueDate = now()->addDays(5)->toDateString();
+        $event = Event::factory()->create([
+            'name' => 'Wycieczka zaliczka',
+            'start_date' => now()->addMonth()->toDateString(),
+        ]);
+        $point = EventProgramPoint::factory()->create([
+            'event_id' => $event->id,
+            'name' => 'Bilety Bałtów',
+        ]);
+
+        $reservation = \App\Models\Reservation::query()->create([
+            'event_id' => $event->id,
+            'program_point_id' => $point->id,
+            'status' => 'confirmed',
+            'deposit_due_at' => $dueDate,
+            'participant_count' => 20,
+            'reserved_at' => now(),
+            'confirmed_at' => now(),
+        ]);
+
+        $items = app(CalendarEventAggregator::class)->events([
+            'from' => now()->toDateString(),
+            'to' => now()->addMonth()->toDateString(),
+            'types' => ['payments'],
+        ]);
+
+        $this->assertTrue($items->contains(fn (array $row): bool => $row['id'] === 'res-deposit-'.$reservation->id));
+        $this->assertTrue($items->contains(fn (array $row): bool => str_contains((string) ($row['title'] ?? ''), 'Zaliczka rezerwacji')));
+        $this->assertTrue($items->contains(fn (array $row): bool => ($row['start'] ?? null) === $dueDate));
     }
 }

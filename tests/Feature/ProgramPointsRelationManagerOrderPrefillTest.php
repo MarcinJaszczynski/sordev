@@ -119,6 +119,9 @@ class ProgramPointsRelationManagerOrderPrefillTest extends TestCase
             ->assertTableActionDataSet([
                 'day' => 1,
                 'order' => 3,
+                'include_in_program' => true,
+                'include_in_calculation' => true,
+                'active' => true,
             ]);
     }
 

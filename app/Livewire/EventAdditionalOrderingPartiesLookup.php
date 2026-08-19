@@ -22,6 +22,9 @@ class EventAdditionalOrderingPartiesLookup extends Component
 
     public bool $searchAll = false;
 
+    /** Nowa firma z typem „klient” zamiast dopisania osoby do firmy głównego zamawiającego. */
+    public bool $createAsNewCompany = false;
+
     public string $firstName = '';
 
     public string $lastName = '';
@@ -161,8 +164,9 @@ class EventAdditionalOrderingPartiesLookup extends Component
         $this->showResults = true;
     }
 
-    public function openQuickCreate(): void
+    public function openQuickCreate(bool $asNewCompany = false): void
     {
+        $this->createAsNewCompany = $asNewCompany || $this->primaryContractorId === null;
         $this->showQuickCreate = true;
         $this->showResults = false;
 
@@ -243,8 +247,10 @@ class EventAdditionalOrderingPartiesLookup extends Component
 
         $lookup = app(ClientLookupService::class);
 
-        // Gdy znamy firmę głównego zamawiającego — dopisz kontakt do niej, nie twórz drugiej firmy.
-        if ($this->primaryContractorId) {
+        $attachToPrimary = $this->primaryContractorId !== null && ! $this->createAsNewCompany;
+
+        // Domyślnie dopisz osobę do firmy głównego zamawiającego. Przy „nowa firma” — typ klient.
+        if ($attachToPrimary) {
             $firstName = trim($this->firstName);
             $lastName = trim($this->lastName);
 
@@ -333,7 +339,7 @@ class EventAdditionalOrderingPartiesLookup extends Component
 
         Notification::make()
             ->title($replacing ? 'Dodatkowy kontakt zmieniony' : 'Dodatkowy kontakt dodany')
-            ->body('Utworzono wpis w bazie kontaktów i kontrahentów.')
+            ->body('Utworzono nową firmę z typem „klient”.')
             ->success()
             ->send();
     }
@@ -398,6 +404,7 @@ class EventAdditionalOrderingPartiesLookup extends Component
             'showQuickCreate',
             'showAddPanel',
             'searchAll',
+            'createAsNewCompany',
             'firstName',
             'lastName',
             'phone',
@@ -514,6 +521,7 @@ class EventAdditionalOrderingPartiesLookup extends Component
         $this->address = '';
         $this->companyName = '';
         $this->notes = '';
+        $this->createAsNewCompany = false;
     }
 
     public function render()

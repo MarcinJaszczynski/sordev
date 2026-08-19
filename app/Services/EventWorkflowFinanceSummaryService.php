@@ -28,6 +28,8 @@ final class EventWorkflowFinanceSummaryService
      *     remaining: string,
      *     client_due: string,
      *     client_paid: string,
+     *     client_remaining: string,
+     *     client_remaining_tone: string,
      *     pilot_cash: string,
      *     pilot_cash_paid: string,
      *     pilot_cash_lines: list<array{label: string, value: string}>,
@@ -53,6 +55,7 @@ final class EventWorkflowFinanceSummaryService
             'remaining' => 'Do zapłaty dostawcom',
             'client_due' => 'Należne od klientów',
             'client_paid' => 'Wpłacono od klientów',
+            'client_remaining' => 'Do dopłaty od klientów',
             'pilot_cash' => 'Gotówka dla pilota (plan)',
             'pilot_cash_paid' => 'Wypłacono pilotowi',
         ];
@@ -69,6 +72,9 @@ final class EventWorkflowFinanceSummaryService
         $pilotCashPaid = $this->pilotAdvance->formatOfficePayoutLabel($event);
 
         if (! $settlement) {
+            [$clientRemaining, $clientRemainingTone] = $this->formatClientRemaining(0, $clientForeign);
+            $labels['client_remaining'] = $this->clientRemainingLabel($clientRemainingTone);
+
             return [
                 'price_per_person' => $pricePerPerson,
                 'price_per_person_hint' => $priceHint,
@@ -78,6 +84,8 @@ final class EventWorkflowFinanceSummaryService
                 'remaining' => $zero,
                 'client_due' => CurrencyAmountDisplay::formatMixedTotal(0, $clientForeign['due'], 2),
                 'client_paid' => CurrencyAmountDisplay::formatMixedTotal(0, $clientForeign['paid'], 2),
+                'client_remaining' => $clientRemaining,
+                'client_remaining_tone' => $clientRemainingTone,
                 'pilot_cash' => $zero,
                 'pilot_cash_paid' => $pilotCashPaid,
                 'pilot_cash_lines' => [],
@@ -93,6 +101,11 @@ final class EventWorkflowFinanceSummaryService
 
         $clientDuePln = round((float) ($totals['client_due_pln'] ?? 0), 2);
         $clientPaidPln = round((float) ($totals['client_paid_pln'] ?? 0), 2);
+        [$clientRemaining, $clientRemainingTone] = $this->formatClientRemaining(
+            round($clientDuePln - $clientPaidPln, 2),
+            $clientForeign,
+        );
+        $labels['client_remaining'] = $this->clientRemainingLabel($clientRemainingTone);
 
         return [
             'price_per_person' => $pricePerPerson,
@@ -103,6 +116,8 @@ final class EventWorkflowFinanceSummaryService
             'remaining' => (string) ($totals['remaining_label'] ?? $zero),
             'client_due' => CurrencyAmountDisplay::formatMixedTotal($clientDuePln, $clientForeign['due'], 2),
             'client_paid' => CurrencyAmountDisplay::formatMixedTotal($clientPaidPln, $clientForeign['paid'], 2),
+            'client_remaining' => $clientRemaining,
+            'client_remaining_tone' => $clientRemainingTone,
             // Już złożone: „1 200,00 PLN + 693,00 EUR (≈ 3 014,55 PLN)”
             'pilot_cash' => (string) ($pilot['needed_label'] ?? $zero),
             'pilot_cash_paid' => $pilotCashPaid,
@@ -151,5 +166,55 @@ final class EventWorkflowFinanceSummaryService
         }
 
         return ['due' => $due, 'paid' => $paid];
+    }
+
+    /**
+     * @param  array{due: array<string, float>, paid: array<string, float>}  $clientForeign
+     * @return array{0: string, 1: string}
+     */
+    private function formatClientRemaining(float $remainingPln, array $clientForeign): array
+    {
+        $remainingForeign = [];
+        $codes = array_unique(array_merge(
+            array_keys($clientForeign['due'] ?? []),
+            array_keys($clientForeign['paid'] ?? []),
+        ));
+
+        foreach ($codes as $code) {
+            $diff = round((float) (($clientForeign['due'][$code] ?? 0) - ($clientForeign['paid'][$code] ?? 0)), 2);
+            if (abs($diff) > 0.009) {
+                $remainingForeign[$code] = $diff;
+            }
+        }
+
+        $hasForeign = $remainingForeign !== [];
+        if (abs($remainingPln) <= 0.009 && ! $hasForeign) {
+            return [MoneyFormatter::format(0, 'PLN').' · rozliczone', 'ok'];
+        }
+
+        $tone = $remainingPln < -0.009 ? 'over' : 'due';
+        foreach ($remainingForeign as $amount) {
+            if ($amount < -0.009) {
+                $tone = 'over';
+                break;
+            }
+        }
+
+        $amountLabel = CurrencyAmountDisplay::formatMixedTotal(abs($remainingPln), array_map('abs', $remainingForeign), 2);
+
+        if ($tone === 'over') {
+            return ['nadpłata '.$amountLabel, 'over'];
+        }
+
+        return [$amountLabel, 'due'];
+    }
+
+    private function clientRemainingLabel(string $tone): string
+    {
+        return match ($tone) {
+            'over' => 'Nadpłata od klientów',
+            'ok' => 'Saldo klientów',
+            default => 'Do dopłaty od klientów',
+        };
     }
 }

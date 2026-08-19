@@ -136,41 +136,8 @@
 
                             <div class="grid gap-4 md:grid-cols-2">
                                 <div class="space-y-3">
-                                    <label class="text-sm font-medium text-gray-950">Hotel / kontrahent</label>
-                                    <input
-                                        type="search"
-                                        wire:model.live.debounce.300ms="hotelContractorSearch"
-                                        placeholder="Wyszukaj hotel po nazwie, mieście, NIP…"
-                                        class="block w-full rounded-lg border-gray-300 text-sm shadow-sm"
-                                    />
-                                    <label class="inline-flex items-center gap-2 text-sm text-gray-700">
-                                        <input
-                                            type="checkbox"
-                                            wire:model.live="hotelContractorSearchAll"
-                                            class="rounded border-gray-400"
-                                        />
-                                        Szukaj we wszystkich kontrahentach
-                                    </label>
-                                    <select wire:model.live="stays.{{ $activeStayIndex }}.contractor_id" class="block w-full rounded-lg border-gray-300 text-sm shadow-sm">
-                                        <option value="">— wybierz hotel —</option>
-                                        @foreach ($hotels as $id => $name)
-                                            <option value="{{ $id }}">{{ $name }}</option>
-                                        @endforeach
-                                    </select>
-                                    @if ($showLocationSelect)
-                                        <label class="mt-3 block text-sm font-medium text-gray-950">Miejsce prowadzenia działalności</label>
-                                        <select wire:model.live="stays.{{ $activeStayIndex }}.contractor_location_id" class="block w-full rounded-lg border-gray-300 text-sm shadow-sm">
-                                            <option value="">— wybierz oddział —</option>
-                                            @foreach ($locationOptions as $id => $name)
-                                                <option value="{{ $id }}">{{ $name }}</option>
-                                            @endforeach
-                                        </select>
-                                        <p class="text-xs text-gray-500">Adres podjazdu dla pilota — nie adres rozliczeniowy sieci hotelowej.</p>
-                                    @endif
-                                    <p class="text-xs text-gray-500">Hotel zapisuje się automatycznie po wyborze z listy. Domyślnie lista obejmuje kontrahentów typu hotel. Zaznacz opcję powyżej, gdy hotel ma źle przypisany typ.</p>
-
                                     @if ($activeContractor)
-                                        <div class="mt-3 rounded-lg border border-gray-200 bg-gray-50 px-3 py-3 dark:border-gray-700 dark:bg-gray-900/40">
+                                        <div class="rounded-lg border border-gray-200 bg-gray-50 px-3 py-3 dark:border-gray-700 dark:bg-gray-900/40">
                                             <div class="flex flex-wrap items-start justify-between gap-2">
                                                 <div>
                                                     <p class="text-xs font-semibold uppercase tracking-wide text-gray-500">Hotel tej nocy</p>
@@ -179,6 +146,13 @@
                                                     </p>
                                                 </div>
                                                 <div class="flex flex-wrap gap-2">
+                                                    <button
+                                                        type="button"
+                                                        wire:click="clearHotelSelection"
+                                                        class="inline-flex items-center rounded-md border border-gray-300 bg-white px-2.5 py-1 text-xs font-medium text-gray-700 hover:bg-gray-50 dark:border-gray-600 dark:bg-gray-800 dark:text-gray-200"
+                                                    >
+                                                        Zmień
+                                                    </button>
                                                     @if ($contractorEditUrl)
                                                         <a
                                                             href="{{ $contractorEditUrl }}"
@@ -215,6 +189,133 @@
                                                 <p class="mt-2 text-xs text-amber-800 dark:text-amber-200">
                                                     Brak punktu programu z oznaczeniem hotel na dzień {{ $stay['day'] }} — dane kontaktu nie trafią automatycznie do programu/PDF.
                                                 </p>
+                                            @endif
+                                        </div>
+
+                                        @if ($showLocationSelect)
+                                            <div>
+                                                <label class="block text-sm font-medium text-gray-950">Miejsce prowadzenia działalności</label>
+                                                <select wire:model.live="stays.{{ $activeStayIndex }}.contractor_location_id" class="mt-1 block w-full rounded-lg border-gray-300 text-sm shadow-sm dark:border-gray-600 dark:bg-gray-800">
+                                                    <option value="">— wybierz oddział —</option>
+                                                    @foreach ($locationOptions as $id => $name)
+                                                        <option value="{{ $id }}">{{ $name }}</option>
+                                                    @endforeach
+                                                </select>
+                                                <p class="mt-1 text-xs text-gray-500">Adres podjazdu dla pilota — nie adres rozliczeniowy sieci hotelowej.</p>
+                                            </div>
+                                        @endif
+
+                                        <div class="rounded-lg border border-gray-200 bg-white px-3 py-3 dark:border-gray-700 dark:bg-gray-900/40">
+                                            <div class="flex flex-wrap items-start justify-between gap-2">
+                                                <div>
+                                                    <p class="text-xs font-semibold uppercase tracking-wide text-gray-500">Rezerwacja hotelu</p>
+                                                    <p class="mt-0.5 text-sm text-gray-700 dark:text-gray-200">
+                                                        Status wspólny dla
+                                                        @if ($hotelReservationDays !== [])
+                                                            nocy {{ collect($hotelReservationDays)->map(fn ($d) => 'D'.$d)->implode(', ') }}
+                                                        @else
+                                                            tego hotelu
+                                                        @endif
+                                                    </p>
+                                                </div>
+                                                @if ($hotelReservationId)
+                                                    <a
+                                                        href="{{ \App\Filament\Resources\EventResource::getUrl('reservations', ['record' => $event]) }}"
+                                                        class="text-xs font-medium text-primary-600 hover:text-primary-700"
+                                                    >
+                                                        Operacje → Rezerwacje
+                                                    </a>
+                                                @endif
+                                            </div>
+
+                                            <div class="mt-3 grid gap-3 sm:grid-cols-2">
+                                                <div class="sm:col-span-2">
+                                                    <label class="block text-xs font-medium text-gray-700 dark:text-gray-300">Status</label>
+                                                    <select wire:model.live="hotelReservationStatus" class="mt-1 block w-full rounded-lg border-gray-300 text-sm shadow-sm dark:border-gray-600 dark:bg-gray-800">
+                                                        @foreach (\App\Models\Reservation::$statuses as $value => $label)
+                                                            <option value="{{ $value }}">{{ $label }}</option>
+                                                        @endforeach
+                                                    </select>
+                                                </div>
+                                                <div>
+                                                    <label class="block text-xs font-medium text-gray-700 dark:text-gray-300">Potwierdzić do</label>
+                                                    <input type="date" wire:model.live="hotelReservationConfirmBy" class="mt-1 block w-full rounded-lg border-gray-300 text-sm shadow-sm dark:border-gray-600 dark:bg-gray-800" />
+                                                </div>
+                                                <div>
+                                                    <label class="block text-xs font-medium text-gray-700 dark:text-gray-300">Potwierdzono</label>
+                                                    <input type="date" wire:model.live="hotelReservationConfirmedAt" class="mt-1 block w-full rounded-lg border-gray-300 text-sm shadow-sm dark:border-gray-600 dark:bg-gray-800" />
+                                                </div>
+                                                <div>
+                                                    <label class="block text-xs font-medium text-gray-700 dark:text-gray-300">Zaliczka do</label>
+                                                    <input type="date" wire:model.live="hotelReservationDepositDueAt" class="mt-1 block w-full rounded-lg border-gray-300 text-sm shadow-sm dark:border-gray-600 dark:bg-gray-800" />
+                                                </div>
+                                                <div>
+                                                    <label class="block text-xs font-medium text-gray-700 dark:text-gray-300">Zaliczka zapłacona</label>
+                                                    <input type="date" wire:model.live="hotelReservationDepositPaidAt" class="mt-1 block w-full rounded-lg border-gray-300 text-sm shadow-sm dark:border-gray-600 dark:bg-gray-800" />
+                                                </div>
+                                                <div class="sm:col-span-2">
+                                                    <label class="block text-xs font-medium text-gray-700 dark:text-gray-300">Nr potwierdzenia dostawcy</label>
+                                                    <input type="text" wire:model.blur="hotelReservationBookingReference" placeholder="np. z maila / vouchera" class="mt-1 block w-full rounded-lg border-gray-300 text-sm shadow-sm dark:border-gray-600 dark:bg-gray-800" />
+                                                </div>
+                                            </div>
+                                            <p class="mt-2 text-xs text-gray-500">Ta sama rezerwacja jest widoczna i edytowalna w Operacje → Rezerwacje. Gotowość imprezy wymaga statusu potwierdzonego.</p>
+                                        </div>
+                                    @else
+                                        <div
+                                            class="relative"
+                                            x-data="{ open: @entangle('showHotelSearchResults') }"
+                                            @click.outside="open = false"
+                                        >
+                                            <label class="mb-1 block text-sm font-medium text-gray-950">Hotel / kontrahent</label>
+                                            <div class="relative">
+                                                <input
+                                                    type="search"
+                                                    wire:model.live.debounce.300ms="hotelContractorSearch"
+                                                    @focus="if (Object.keys($wire.hotelSearchResults).length) { open = true }"
+                                                    placeholder="Wyszukaj hotel po nazwie, mieście, NIP…"
+                                                    autocomplete="off"
+                                                    class="block w-full rounded-lg border-gray-300 py-2 pl-9 pr-3 text-sm shadow-sm dark:border-gray-600 dark:bg-gray-800"
+                                                />
+                                                <x-heroicon-m-magnifying-glass class="pointer-events-none absolute left-2.5 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400" />
+                                            </div>
+                                            <p class="mt-1 text-xs text-gray-500">Wpisz min. {{ \App\Livewire\EventHotelPlanEditor::HOTEL_SEARCH_MIN_LENGTH }} znaki — wyniki pojawią się automatycznie. Hotel zapisuje się po wyborze.</p>
+                                            <label class="mt-2 inline-flex items-center gap-2 text-sm text-gray-700 dark:text-gray-300">
+                                                <input
+                                                    type="checkbox"
+                                                    wire:model.live="hotelContractorSearchAll"
+                                                    class="rounded border-gray-400 text-primary-600 shadow-sm focus:ring-primary-500"
+                                                />
+                                                Szukaj we wszystkich kontrahentach
+                                            </label>
+                                            <p class="mt-1 text-xs text-gray-500">Domyślnie tylko typ hotel. Zaznacz, gdy hotel ma źle przypisany typ.</p>
+
+                                            @if ($showHotelSearchResults)
+                                                <div
+                                                    x-show="open"
+                                                    x-cloak
+                                                    class="absolute z-40 mt-1 w-full overflow-hidden rounded-lg border border-gray-200 bg-white shadow-lg dark:border-gray-700 dark:bg-gray-900"
+                                                >
+                                                    @if ($hotelSearchResults !== [])
+                                                        <ul class="max-h-64 divide-y divide-gray-100 overflow-y-auto dark:divide-gray-800" role="listbox">
+                                                            @foreach ($hotelSearchResults as $hotelId => $hotelLabel)
+                                                                <li>
+                                                                    <button
+                                                                        type="button"
+                                                                        wire:click="selectHotel({{ (int) $hotelId }})"
+                                                                        class="flex w-full px-3 py-2.5 text-left text-sm text-gray-900 transition hover:bg-primary-50 dark:text-gray-100 dark:hover:bg-primary-950/40"
+                                                                        role="option"
+                                                                    >
+                                                                        {{ $hotelLabel }}
+                                                                    </button>
+                                                                </li>
+                                                            @endforeach
+                                                        </ul>
+                                                    @else
+                                                        <div class="px-3 py-3 text-sm text-gray-600 dark:text-gray-300">
+                                                            Brak dopasowań dla „{{ $hotelContractorSearch }}”.
+                                                        </div>
+                                                    @endif
+                                                </div>
                                             @endif
                                         </div>
                                     @endif

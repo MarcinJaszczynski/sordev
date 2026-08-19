@@ -10,6 +10,7 @@ use App\Models\EventAgreementPaymentSchedule;
 use App\Models\EventProgramPoint;
 use App\Models\EventSettlementCost;
 use App\Models\VendorInvoice;
+use App\Support\CalendarDay;
 use App\Support\CurrencyAmountDisplay;
 use Carbon\Carbon;
 use Illuminate\Database\Eloquent\Collection as EloquentCollection;
@@ -200,7 +201,10 @@ class EventPaymentScheduleService
             'due_date' => $invoice->due_date->toDateString(),
             'title' => $invoice->invoice_number ?: ($invoice->ksef_number ?: 'Faktura #'.$invoice->id),
             'amount_label' => \App\Support\MoneyFormatter::format($amount, $invoice->currency ?: 'PLN'),
-            'is_overdue' => $invoice->due_date->isPast(),
+            'phrase' => 'Faktura — termin',
+            'is_overdue' => CalendarDay::isBeforeToday($invoice->due_date),
+            'remaining_label' => null,
+            'status' => 'due',
             'url' => \App\Support\AdminPanelUrls::vendorInvoiceEdit($invoice),
             'source_type' => 'vendor_invoice',
             'source_id' => $invoice->id,
@@ -373,9 +377,21 @@ class EventPaymentScheduleService
      */
     private function mapSettlementCostRow(EventSettlementCost $cost, Event $event): ?array
     {
+        if (in_array($cost->payment_status, ['paid', 'cancelled'], true)) {
+            return null;
+        }
+
         $kind = $this->resolveSettlementKind($cost);
 
-        if ($kind === null || ! $this->isSettlementCostOutstanding($cost, $kind)) {
+        if ($kind === null) {
+            return null;
+        }
+
+        if ($this->isAdvanceMarkedPaid($cost)) {
+            return $this->mapPaidAdvanceRow($cost, $event, $kind === 'plan' ? 'advance' : $kind);
+        }
+
+        if (! $this->isSettlementCostOutstanding($cost, $kind)) {
             return null;
         }
 
@@ -385,22 +401,107 @@ class EventPaymentScheduleService
             return null;
         }
 
+        $displayKind = $kind === 'plan' && $this->looksLikeDeposit($cost) ? 'advance' : $kind;
+
         return [
             'id' => 'cost-'.$cost->id,
-            'kind' => $kind,
-            'kind_label' => $this->kindLabel($kind),
+            'kind' => $displayKind,
+            'kind_label' => $this->kindLabel($displayKind),
+            'phrase' => $this->unpaidPhrase($displayKind),
             'due_date' => $dueDate->toDateString(),
             'title' => $cost->name ?: 'Koszt rozliczenia',
-            'amount_label' => $this->formatSettlementCostAmount($cost, $kind),
-            'is_overdue' => $dueDate->isPast(),
+            'amount_label' => $this->formatSettlementCostAmount($cost, $displayKind),
+            'remaining_label' => null,
+            'status' => 'due',
+            'is_overdue' => CalendarDay::isBeforeToday($dueDate),
             'url' => $cost->settlement_id
                 ? \App\Support\AdminPanelUrls::eventFinanceForSettlement($cost->settlement_id)
                 : \App\Support\AdminPanelUrls::eventFinance($event),
             'source_type' => 'settlement_cost',
             'source_id' => $cost->id,
             'event_id' => $event->id,
-            'color' => $kind === 'advance' ? '#0d9488' : '#ea580c',
+            'color' => $displayKind === 'advance' ? '#0d9488' : '#ea580c',
         ];
+    }
+
+    /**
+     * @return array<string, mixed>|null
+     */
+    private function mapPaidAdvanceRow(EventSettlementCost $cost, Event $event, string $kind): ?array
+    {
+        $paidAt = $cost->paid_at ?? $cost->advance_due_date;
+
+        if (! $paidAt) {
+            return null;
+        }
+
+        $amountKind = $kind === 'plan' ? 'advance' : $kind;
+        $remaining = $this->remainingAfterAdvance($cost);
+        $remainingLabel = $remaining > 0.009
+            ? CurrencyAmountDisplay::format(
+                $remaining,
+                $cost->plannedCurrency,
+                (bool) ($cost->planned_convert_to_pln ?? true),
+            )
+            : null;
+
+        return [
+            'id' => 'cost-paid-'.$cost->id,
+            'kind' => 'advance_paid',
+            'kind_label' => 'Zaliczka zapłacona',
+            'phrase' => 'Zaliczka zapłacona',
+            'due_date' => $paidAt->toDateString(),
+            'title' => $cost->name ?: 'Koszt rozliczenia',
+            'amount_label' => $this->formatSettlementCostAmount($cost, $amountKind),
+            'remaining_label' => $remainingLabel,
+            'status' => 'paid',
+            'is_overdue' => false,
+            'url' => $cost->settlement_id
+                ? \App\Support\AdminPanelUrls::eventFinanceForSettlement($cost->settlement_id)
+                : \App\Support\AdminPanelUrls::eventFinance($event),
+            'source_type' => 'settlement_cost',
+            'source_id' => $cost->id,
+            'event_id' => $event->id,
+            'color' => '#166534',
+        ];
+    }
+
+    private function remainingAfterAdvance(EventSettlementCost $cost): float
+    {
+        $planned = round((float) ($cost->planned_amount ?? 0), 2);
+        $paid = round((float) ($cost->advance_amount ?? 0), 2);
+
+        if ($paid <= 0.009) {
+            $paid = round((float) ($cost->actual_amount ?? 0), 2);
+        }
+
+        return max(0.0, round($planned - $paid, 2));
+    }
+
+    private function unpaidPhrase(string $kind): string
+    {
+        return match ($kind) {
+            'advance' => 'Zaliczka do zapłaty',
+            'plan' => 'Termin płatności',
+            'payment' => 'Wpłata do',
+            default => 'Płatność do',
+        };
+    }
+
+    private function looksLikeDeposit(EventSettlementCost $cost): bool
+    {
+        return in_array($cost->advance_type, ['advance', 'deposit'], true)
+            || (float) ($cost->advance_amount ?? 0) > 0.009
+            || in_array($cost->payment_status, ['advance_required', 'reserved', 'advance_paid'], true);
+    }
+
+    private function isAdvanceMarkedPaid(EventSettlementCost $cost): bool
+    {
+        if (in_array($cost->payment_status, ['advance_paid'], true)) {
+            return true;
+        }
+
+        return filled($cost->paid_at) && $this->looksLikeDeposit($cost);
     }
 
     /**
@@ -425,7 +526,10 @@ class EventPaymentScheduleService
             'due_date' => $schedule->due_date->toDateString(),
             'title' => $schedule->label ?: ('Rata #'.($schedule->sort_order ?? '?')),
             'amount_label' => \App\Support\MoneyFormatter::format((float) $schedule->amount, $contract->currency ?: 'PLN'),
-            'is_overdue' => $schedule->due_date->isPast(),
+            'phrase' => 'Rata kontraktu do',
+            'is_overdue' => CalendarDay::isBeforeToday($schedule->due_date),
+            'remaining_label' => null,
+            'status' => 'due',
             'url' => $contract->id
                 ? \App\Support\AdminPanelUrls::contractEdit($contract)
                 : null,
@@ -458,7 +562,10 @@ class EventPaymentScheduleService
             'due_date' => $schedule->due_date->toDateString(),
             'title' => $schedule->label ?: ('Rata #'.($schedule->sort_order ?? '?')),
             'amount_label' => \App\Support\MoneyFormatter::format((float) $schedule->amount, 'PLN'),
-            'is_overdue' => $schedule->due_date->isPast(),
+            'phrase' => 'Rata umowy do',
+            'is_overdue' => CalendarDay::isBeforeToday($schedule->due_date),
+            'remaining_label' => null,
+            'status' => 'due',
             'url' => \App\Support\AdminPanelUrls::eventEdit($event),
             'source_type' => 'agreement_schedule',
             'source_id' => $schedule->id,
@@ -488,7 +595,10 @@ class EventPaymentScheduleService
             'due_date' => $invoice->due_date->toDateString(),
             'title' => $invoice->invoice_number ?: ($invoice->ksef_number ?: 'Faktura #'.$invoice->id),
             'amount_label' => \App\Support\MoneyFormatter::format($amount, $invoice->currency ?: 'PLN'),
-            'is_overdue' => $invoice->due_date->isPast(),
+            'phrase' => 'Faktura — termin',
+            'is_overdue' => CalendarDay::isBeforeToday($invoice->due_date),
+            'remaining_label' => null,
+            'status' => 'due',
             'url' => \App\Support\AdminPanelUrls::vendorInvoiceEdit($invoice),
             'source_type' => 'vendor_invoice',
             'source_id' => $invoice->id,
@@ -500,7 +610,7 @@ class EventPaymentScheduleService
     private function resolveSettlementKind(EventSettlementCost $cost): ?string
     {
         if ($cost->source_type === 'program_point') {
-            return 'plan';
+            return $this->looksLikeDeposit($cost) ? 'advance' : 'plan';
         }
 
         if ($cost->source_type === 'program_point_payment') {
@@ -542,9 +652,15 @@ class EventPaymentScheduleService
     private function formatSettlementCostAmount(EventSettlementCost $cost, string $kind): string
     {
         $amount = match ($kind) {
-            'advance' => (float) ($cost->advance_amount ?? $cost->planned_amount ?? 0),
+            'advance', 'advance_paid' => (float) ($cost->advance_amount ?? 0) > 0.009
+                ? (float) $cost->advance_amount
+                : (float) ($cost->planned_amount ?? 0),
             default => (float) ($cost->planned_amount ?? $cost->advance_amount ?? 0),
         };
+
+        if ($amount <= 0.009) {
+            return 'kwota nieustalona';
+        }
 
         return CurrencyAmountDisplay::format(
             $amount,
@@ -556,8 +672,9 @@ class EventPaymentScheduleService
     private function kindLabel(string $kind): string
     {
         return match ($kind) {
-            'plan' => 'Plan',
+            'plan' => 'Termin płatności',
             'advance' => 'Zaliczka',
+            'advance_paid' => 'Zaliczka zapłacona',
             'payment' => 'Wpłata',
             'contract_schedule' => 'Rata kontraktu',
             'agreement_schedule' => 'Rata umowy',

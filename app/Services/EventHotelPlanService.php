@@ -12,10 +12,10 @@ use App\Models\EventHotelRoomLine;
 use App\Models\EventHotelRoomOccupant;
 use App\Models\EventHotelRoomUnit;
 use App\Models\EventHotelStay;
-use App\Support\ContractorContactDetails;
 use App\Models\EventProgramPoint;
 use App\Models\EventTemplateHotelDay;
 use App\Models\HotelRoom;
+use App\Support\ContractorContactDetails;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
@@ -717,6 +717,9 @@ class EventHotelPlanService
                     ? $stay->contractor_location_id
                     : null,
                 'event_program_point_id' => $stay->event_program_point_id,
+                'reservation_id' => Schema::hasColumn('event_hotel_stays', 'reservation_id')
+                    ? $stay->reservation_id
+                    : null,
                 'offer_notes' => $stay->offer_notes,
                 'notes' => $stay->notes,
                 'same_as_day' => $stay->same_as_day,

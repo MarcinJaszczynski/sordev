@@ -5,6 +5,8 @@ namespace App\Services;
 use App\Models\Event;
 use App\Models\EventProgramPoint;
 use App\Models\EventTemplateProgramPoint;
+use App\Support\ProgramPointSearchDisplay;
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Support\Collection;
 
 class EventProgramPointCreator
@@ -31,6 +33,8 @@ class EventProgramPointCreator
         'include_in_program',
         'include_in_calculation',
         'include_gratis_in_cost',
+        'include_pilot_in_cost',
+        'include_driver_in_cost',
         'active',
     ];
 
@@ -71,6 +75,8 @@ class EventProgramPointCreator
             'include_in_program' => true,
             'include_in_calculation' => true,
             'include_gratis_in_cost' => (bool) ($template->include_gratis_in_cost ?? false),
+            'include_pilot_in_cost' => (bool) ($template->include_pilot_in_cost ?? false),
+            'include_driver_in_cost' => (bool) ($template->include_driver_in_cost ?? false),
             'active' => true,
         ], $options));
 
@@ -173,23 +179,142 @@ class EventProgramPointCreator
     }
 
     /** @return Collection<int, EventTemplateProgramPoint> */
-    public function searchTemplatePoints(string $term, int $limit = 25): Collection
+    public function searchTemplatePoints(string $term, int $limit = 25, bool $allowEmpty = false): Collection
     {
         $term = trim($term);
 
+        if ($term === '') {
+            if (! $allowEmpty) {
+                return collect();
+            }
+        } elseif (mb_strlen($term) < 2) {
+            return collect();
+        }
+
+        $query = EventTemplateProgramPoint::query()
+            ->with([
+                'tags:id,name',
+                'currency:id,symbol,code',
+                'parents' => fn ($parents) => $parents->select('event_template_program_points.id', 'event_template_program_points.name'),
+            ])
+            ->withCount(['children', 'parents']);
+
+        if ($term !== '') {
+            $this->applyCatalogSearch($query, $term);
+        }
+
+        return $query
+            ->orderBy('name')
+            ->limit($limit)
+            ->get();
+    }
+
+    /**
+     * Opcje selecta: szablony + punkty innych imprez, z etykietą set/punkt/miasto.
+     *
+     * @return array<string, string>
+     */
+    public function searchCatalogSelectOptions(string $term, ?int $excludeEventId = null, int $limit = 30): array
+    {
+        $options = [];
+
+        foreach ($this->searchTemplatePoints($term, $limit) as $point) {
+            $options['template_'.$point->id] = ProgramPointSearchDisplay::html($point);
+        }
+
+        if (mb_strlen(trim($term)) >= 2) {
+            foreach ($this->searchEventPoints($term, $excludeEventId, min(10, $limit)) as $point) {
+                $options['event_'.$point->id] = ProgramPointSearchDisplay::eventPointHtml($point);
+            }
+        }
+
+        return $options;
+    }
+
+    public function catalogOptionSelectedLabel(?string $value): ?string
+    {
+        if (! filled($value)) {
+            return null;
+        }
+
+        if (str_starts_with($value, 'template_')) {
+            $point = EventTemplateProgramPoint::query()
+                ->with([
+                    'tags:id,name',
+                    'currency:id,symbol,code',
+                    'parents' => fn ($parents) => $parents->select('event_template_program_points.id', 'event_template_program_points.name'),
+                ])
+                ->withCount(['children', 'parents'])
+                ->find((int) str_replace('template_', '', $value));
+
+            return $point ? ProgramPointSearchDisplay::selectedLabel($point) : null;
+        }
+
+        if (str_starts_with($value, 'event_')) {
+            $point = EventProgramPoint::query()
+                ->with(['event:id,name,code', 'contractor:id,name', 'contractorLocation:id,name,city', 'templatePoint:id,name'])
+                ->withCount('children')
+                ->find((int) str_replace('event_', '', $value));
+
+            return $point ? ProgramPointSearchDisplay::eventPointSelectedLabel($point) : null;
+        }
+
+        return null;
+    }
+
+    /** @return Collection<int, EventProgramPoint> */
+    public function searchEventPoints(string $term, ?int $excludeEventId = null, int $limit = 10): Collection
+    {
+        $term = trim($term);
         if (mb_strlen($term) < 2) {
             return collect();
         }
 
-        return EventTemplateProgramPoint::query()
-            ->where(function ($query) use ($term): void {
-                $query->where('name', 'like', '%'.$term.'%')
-                    ->orWhere('description', 'like', '%'.$term.'%')
-                    ->orWhere('office_notes', 'like', '%'.$term.'%');
+        $like = '%'.$term.'%';
+
+        return EventProgramPoint::query()
+            ->with([
+                'event:id,name,code',
+                'contractor:id,name',
+                'contractorLocation:id,name,city',
+                'templatePoint:id,name',
+            ])
+            ->withCount('children')
+            ->whereNotNull('event_id')
+            ->when($excludeEventId, fn (Builder $query) => $query->where('event_id', '!=', $excludeEventId))
+            ->where(function (Builder $query) use ($like): void {
+                $query->where('name', 'like', $like)
+                    ->orWhere('description', 'like', $like)
+                    ->orWhereHas('event', fn (Builder $event) => $event->where('name', 'like', $like)->orWhere('code', 'like', $like))
+                    ->orWhereHas('contractor', fn (Builder $contractor) => $contractor->where('name', 'like', $like))
+                    ->orWhereHas('contractorLocation', fn (Builder $location) => $location->where('city', 'like', $like)->orWhere('name', 'like', $like));
             })
             ->orderBy('name')
             ->limit($limit)
             ->get();
+    }
+
+    private function applyCatalogSearch(Builder $query, string $term): void
+    {
+        $fragments = collect(preg_split('/[,\s]+/u', $term) ?: [])
+            ->map(fn ($fragment) => trim((string) $fragment))
+            ->filter(fn (string $fragment): bool => mb_strlen($fragment) >= 2)
+            ->values();
+
+        if ($fragments->isEmpty()) {
+            $fragments = collect([$term]);
+        }
+
+        foreach ($fragments as $fragment) {
+            $like = '%'.$fragment.'%';
+            $query->where(function (Builder $group) use ($like): void {
+                $group->whereRaw('UPPER(name) LIKE UPPER(?)', [$like])
+                    ->orWhereRaw('UPPER(description) LIKE UPPER(?)', [$like])
+                    ->orWhereRaw('UPPER(office_notes) LIKE UPPER(?)', [$like])
+                    ->orWhereHas('tags', fn (Builder $tags) => $tags->whereRaw('UPPER(name) LIKE UPPER(?)', [$like]))
+                    ->orWhereHas('parents', fn (Builder $parents) => $parents->whereRaw('UPPER(event_template_program_points.name) LIKE UPPER(?)', [$like]));
+            });
+        }
     }
 
     protected function resolveOrder(Event $event, int $day, ?int $parentId, array $options): int
@@ -251,6 +376,8 @@ class EventProgramPointCreator
                 'include_in_program' => true,
                 'include_in_calculation' => true,
                 'include_gratis_in_cost' => (bool) ($childTemplate->include_gratis_in_cost ?? false),
+                'include_pilot_in_cost' => (bool) ($childTemplate->include_pilot_in_cost ?? false),
+                'include_driver_in_cost' => (bool) ($childTemplate->include_driver_in_cost ?? false),
                 'active' => true,
             ]);
 

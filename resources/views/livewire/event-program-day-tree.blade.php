@@ -42,7 +42,7 @@
             >
             <span>Zaznacz dzień</span>
         </label>
-        <span class="epp-day-toolbar__hint">P — program · K — kalkulacja · A — aktywny</span>
+        <span class="epp-day-toolbar__hint">Prog = program · Kalk = kalkulacja · Akt = aktywny</span>
         <button
             type="button"
             wire:click="openAddBlock({{ $activeDay }})"
@@ -73,7 +73,7 @@
                         <div class="epp-td epp-td--order">#</div>
                         <div class="epp-td epp-td--time">Godziny</div>
                         <div class="epp-td epp-td--name">Punkt programu</div>
-                        <div class="epp-td epp-td--flags">P · K · A</div>
+                        <div class="epp-td epp-td--flags">Program · Kalk.</div>
                         <div class="epp-td epp-td--actions"></div>
                     </div>
                 </div>
@@ -158,15 +158,34 @@
                     </label>
 
                     @if($templateResults->isNotEmpty())
-                        <ul class="max-h-40 overflow-y-auto rounded-lg border border-gray-200 dark:border-gray-700 divide-y divide-gray-100 dark:divide-gray-800">
+                        <ul class="max-h-64 overflow-y-auto rounded-lg border border-gray-200 dark:border-gray-700 divide-y divide-gray-100 dark:divide-gray-800">
                             @foreach($templateResults as $template)
+                                @php
+                                    $searchKind = \App\Support\ProgramPointSearchDisplay::kindLabel($template);
+                                    $searchMeta = \App\Support\ProgramPointSearchDisplay::metaLine($template);
+                                    $searchSnippet = \App\Support\ProgramPointSearchDisplay::snippet($template, 70);
+                                @endphp
                                 <li>
                                     <button
                                         type="button"
                                         wire:click="selectTemplatePoint({{ $template->id }})"
                                         class="w-full px-3 py-2 text-left text-sm hover:bg-gray-50 dark:hover:bg-gray-800 @if($selectedTemplatePointId === $template->id) bg-primary-50 dark:bg-primary-950/30 @endif"
                                     >
-                                        <span class="font-medium">{{ $template->name }}</span>
+                                        <span class="flex flex-wrap items-baseline gap-x-1.5">
+                                            <span @class([
+                                                'inline-flex rounded px-1 py-px text-[10px] font-semibold uppercase tracking-wide',
+                                                'bg-violet-100 text-violet-800' => str_starts_with($searchKind, 'Set'),
+                                                'bg-slate-100 text-slate-700' => $searchKind === 'Podpunkt',
+                                                'bg-sky-100 text-sky-800' => $searchKind === 'Punkt',
+                                            ])>{{ $searchKind }}</span>
+                                            <span class="font-medium">{{ $template->name }}</span>
+                                        </span>
+                                        @if($searchMeta !== '')
+                                            <span class="mt-0.5 block text-[11px] text-gray-600 dark:text-gray-400">{{ $searchMeta }}</span>
+                                        @endif
+                                        @if($searchSnippet)
+                                            <span class="mt-0.5 block text-[11px] text-gray-400">{{ $searchSnippet }}</span>
+                                        @endif
                                     </button>
                                 </li>
                             @endforeach
@@ -179,6 +198,21 @@
                         Lub nazwa nowego punktu
                         <input type="text" wire:model.live.debounce.500ms="addForm.name" class="mt-1 w-full rounded-lg border-gray-300 text-sm dark:border-gray-600 dark:bg-gray-800">
                     </label>
+
+                    <fieldset class="rounded-lg border border-gray-200 p-3 dark:border-gray-700">
+                        <legend class="px-1 text-sm font-semibold text-gray-800 dark:text-gray-100">Gdzie ma być ten punkt</legend>
+                        <p class="mb-2 text-xs text-gray-500">Domyślnie w programie i w kalkulacji.</p>
+                        <div class="flex flex-col gap-2 sm:flex-row sm:gap-6">
+                            <label class="inline-flex items-center gap-2 text-sm font-medium text-gray-800 dark:text-gray-100">
+                                <input type="checkbox" wire:model="addForm.include_in_program" class="rounded border-gray-300 text-primary-600">
+                                W programie
+                            </label>
+                            <label class="inline-flex items-center gap-2 text-sm font-medium text-gray-800 dark:text-gray-100">
+                                <input type="checkbox" wire:model="addForm.include_in_calculation" class="rounded border-gray-300 text-primary-600">
+                                W kalkulacji
+                            </label>
+                        </div>
+                    </fieldset>
 
                     @if($addModalMode === 'child' && isset($detachablePointsByDay[$addForm['day'] ?? 1]))
                         <label class="block text-sm font-medium text-gray-700 dark:text-gray-300">

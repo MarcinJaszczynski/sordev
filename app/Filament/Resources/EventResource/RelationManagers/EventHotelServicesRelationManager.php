@@ -2,8 +2,8 @@
 
 namespace App\Filament\Resources\EventResource\RelationManagers;
 
-use App\Filament\Forms\EventProgramPointPricingFields;
 use App\Filament\Forms\ContractorWithLocationFields;
+use App\Filament\Forms\EventProgramPointPricingFields;
 use App\Filament\Forms\TypedContractorSelect;
 use App\Filament\Resources\EventResource\Concerns\InteractsWithSettlementCostDrawer;
 use App\Filament\Resources\EventResource\Concerns\ManagesProgramPointSettlementFinance;
@@ -43,7 +43,6 @@ class EventHotelServicesRelationManager extends RelationManager
 
     protected bool $pendingApplyToAllDays = false;
 
-    /** @var ProgramPointSettlementCostCache|null */
     protected ?ProgramPointSettlementCostCache $settlementCostCache = null;
 
     /** @var array<int, array<string, mixed>> */
@@ -119,9 +118,9 @@ class EventHotelServicesRelationManager extends RelationManager
                     ->numeric()
                     ->minValue(1)
                     ->default(1)
-                        ->required()
-                        ->live()
-                        ->afterStateUpdated(function ($state, Forms\Set $set, Forms\Get $get): void {
+                    ->required()
+                    ->live()
+                    ->afterStateUpdated(function ($state, Forms\Set $set, Forms\Get $get): void {
                         if (filled($get('contractor_id'))) {
                             return;
                         }
@@ -165,6 +164,9 @@ class EventHotelServicesRelationManager extends RelationManager
 
                 EventProgramPointPricingFields::section([
                     'default_participant_count' => max(1, (int) ($this->getOwnerRecord()->participant_count ?? 1)),
+                    'gratis_count' => max(0, $this->getOwnerRecord()->resolveGratisCountForParticipantCount()),
+                    'pilot_count' => \App\Support\ProgramPointCostPricing::pilotCount($this->getOwnerRecord()),
+                    'driver_count' => max(0, $this->getOwnerRecord()->resolveDriverCountForParticipantCount()),
                     'pricing_basis_selector' => true,
                 ]),
 
@@ -373,12 +375,16 @@ class EventHotelServicesRelationManager extends RelationManager
             $data['currency_id'] = Currency::defaultPlnId();
         }
 
-        $participantCount = max(1, (int) ($this->getOwnerRecord()->participant_count ?? 1));
+        $event = $this->getOwnerRecord();
+        $participantCount = max(1, (int) ($event->participant_count ?? 1));
 
         return EventProgramPointPricingFields::mergePricingIntoPayload(
             $data,
             (float) ($data['unit_price'] ?? 0),
             $participantCount,
+            max(0, $event->resolveGratisCountForParticipantCount($participantCount)),
+            \App\Support\ProgramPointCostPricing::pilotCount($event),
+            max(0, $event->resolveDriverCountForParticipantCount($participantCount)),
         );
     }
 

@@ -3,6 +3,7 @@
 namespace App\Services;
 
 use App\Models\Contractor;
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Support\Facades\Schema;
 
 class ContractorLookupService
@@ -38,19 +39,7 @@ class ContractorLookupService
         $search = trim($search);
 
         if ($search !== '') {
-            $query->where(function ($q) use ($search): void {
-                $q->where('name', 'like', "%{$search}%")
-                    ->orWhere('phone', 'like', "%{$search}%")
-                    ->orWhere('email', 'like', "%{$search}%");
-
-                if (Schema::hasColumn('contractors', 'nip')) {
-                    $q->orWhere('nip', 'like', "%{$search}%");
-                }
-
-                $q->orWhere('street', 'like', "%{$search}%")
-                    ->orWhere('city', 'like', "%{$search}%")
-                    ->orWhere('postal_code', 'like', "%{$search}%");
-            });
+            $this->applySearchFilter($query, $search);
         }
 
         $contractors = $query->limit($limit)->get();
@@ -104,8 +93,66 @@ class ContractorLookupService
 
     public function formatOptionLabel(Contractor $contractor): string
     {
+        $label = $contractor->displayLabel();
+        $person = trim(implode(' ', array_filter([
+            filled($contractor->firstname) ? trim((string) $contractor->firstname) : null,
+            filled($contractor->surname) ? trim((string) $contractor->surname) : null,
+        ])));
+        if ($person !== '' && ! str_contains(mb_strtolower($label), mb_strtolower($person))) {
+            $label = $person.' · '.$label;
+        }
+
         $city = filled($contractor->city) ? trim((string) $contractor->city) : 'brak miasta';
 
-        return $contractor->displayLabel().' ('.$city.')';
+        return $label.' ('.$city.')';
+    }
+
+    /**
+     * Każdy token z frazy musi pasować do któregoś z pól kontrahenta (AND).
+     * Dzięki temu „Michał Chruściel” trafia w name / firstname+surname,
+     * a nie wymaga dokładnego LIKE na całej frazie w jednej kolumnie.
+     */
+    protected function applySearchFilter(Builder $query, string $search): void
+    {
+        $tokens = preg_split('/\s+/u', $search, -1, PREG_SPLIT_NO_EMPTY) ?: [];
+
+        if ($tokens === []) {
+            return;
+        }
+
+        $hasPersonColumns = Schema::hasColumn('contractors', 'firstname')
+            && Schema::hasColumn('contractors', 'surname');
+        $hasNip = Schema::hasColumn('contractors', 'nip');
+
+        foreach ($tokens as $token) {
+            $like = '%'.$token.'%';
+
+            $query->where(function (Builder $tokenQuery) use ($like, $hasPersonColumns, $hasNip): void {
+                $tokenQuery->where('name', 'like', $like)
+                    ->orWhere('phone', 'like', $like)
+                    ->orWhere('email', 'like', $like)
+                    ->orWhere('street', 'like', $like)
+                    ->orWhere('city', 'like', $like)
+                    ->orWhere('postal_code', 'like', $like);
+
+                if ($hasNip) {
+                    $tokenQuery->orWhere('nip', 'like', $like);
+                }
+
+                if ($hasPersonColumns) {
+                    $tokenQuery->orWhere('firstname', 'like', $like)
+                        ->orWhere('surname', 'like', $like)
+                        ->orWhereRaw(
+                            "CONCAT(COALESCE(firstname, ''), ' ', COALESCE(surname, '')) LIKE ?",
+                            [$like]
+                        );
+                }
+
+                $tokenQuery->orWhereHas('contacts', function (Builder $contactQuery) use ($like): void {
+                    $contactQuery->where('first_name', 'like', $like)
+                        ->orWhere('last_name', 'like', $like);
+                });
+            });
+        }
     }
 }

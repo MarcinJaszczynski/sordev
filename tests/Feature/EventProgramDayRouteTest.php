@@ -99,7 +99,7 @@ class EventProgramDayRouteTest extends TestCase
         $this->assertSame('Poznań – Gdańsk', $event->programDayRoute(2));
     }
 
-    public function test_transport_page_shows_route_fields_for_program_days_when_duration_is_wrong(): void
+    public function test_transport_page_shows_only_core_route_days_when_facultative_points_exist(): void
     {
         if (! Schema::hasColumn('events', 'program_day_routes')) {
             $this->markTestSkipped('Kolumna program_day_routes nie istnieje.');
@@ -108,10 +108,11 @@ class EventProgramDayRouteTest extends TestCase
         $admin = User::factory()->create(['status' => 'active']);
         $admin->assignRole('admin');
 
+        $start = now()->startOfDay();
         $event = Event::factory()->create([
-            'duration_days' => 1,
-            'start_date' => now()->startOfDay(),
-            'end_date' => now()->startOfDay(),
+            'duration_days' => 2,
+            'start_date' => $start,
+            'end_date' => $start->copy()->addDay(),
         ]);
 
         \App\Models\EventProgramPoint::query()->create([
@@ -123,20 +124,63 @@ class EventProgramDayRouteTest extends TestCase
         ]);
         \App\Models\EventProgramPoint::query()->create([
             'event_id' => $event->id,
-            'day' => 3,
+            'day' => 2,
             'order' => 1,
-            'name' => 'Dzień 3',
+            'name' => 'Dzień 2',
             'active' => true,
         ]);
+        // Slot fakultatywny (core+1) — tylko pod stronę/szablon, nie pod trasy.
+        \App\Models\EventProgramPoint::query()->create([
+            'event_id' => $event->id,
+            'day' => 3,
+            'order' => 1,
+            'name' => 'Opcja fakultatywna',
+            'active' => true,
+        ]);
+
+        $this->assertSame(2, $event->resolveCoreProgramDaysCount());
+        $this->assertSame(3, $event->resolveProgramDaysCount());
 
         $this->actingAs($admin);
 
         Livewire::test(ManageEventTransport::class, ['record' => $event->getKey()])
             ->assertFormFieldExists('program_day_routes.1')
             ->assertFormFieldExists('program_day_routes.2')
-            ->assertFormFieldExists('program_day_routes.3')
+            ->assertFormFieldDoesNotExist('program_day_routes.3')
             ->assertSee('Wysłano do kierowcy')
             ->assertSee('Wyślij do kierowcy');
+    }
+
+    public function test_program_day_routes_ignore_facultative_day_entries(): void
+    {
+        if (! Schema::hasColumn('events', 'program_day_routes')) {
+            $this->markTestSkipped('Kolumna program_day_routes nie istnieje.');
+        }
+
+        $start = now()->startOfDay();
+        $event = Event::factory()->create([
+            'duration_days' => 2,
+            'start_date' => $start,
+            'end_date' => $start->copy()->addDay(),
+            'program_day_routes' => [
+                '1' => 'Warszawa – Kraków',
+                '2' => 'Kraków – Zakopane',
+                '3' => 'Nie powinno się pokazać',
+            ],
+        ]);
+
+        $this->assertSame([
+            '1' => 'Warszawa – Kraków',
+            '2' => 'Kraków – Zakopane',
+        ], $event->programDayRoutes());
+        $this->assertNull($event->programDayRoute(3));
+
+        $event->setProgramDayRoute(3, 'Próba zapisu fakultatywu');
+        $event->save();
+        $event->refresh();
+
+        $this->assertArrayNotHasKey('3', $event->program_day_routes ?? []);
+        $this->assertNull($event->programDayRoute(3));
     }
 
     public function test_transport_page_can_mark_driver_pickup_info_as_sent(): void

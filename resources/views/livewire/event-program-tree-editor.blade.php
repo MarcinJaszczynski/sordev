@@ -1177,7 +1177,7 @@
                                          x-transition:leave-start="opacity-100 scale-100"
                                          x-transition:leave-end="opacity-0 scale-95"
                                          class="results-container absolute z-50 bg-white border border-gray-300 rounded-lg shadow-lg w-full mt-1 pr-2"
-                                         style="min-width: 100%; max-height: 320px; overflow-y: auto;"
+                                         style="min-width: 100%; max-height: 420px; overflow-y: auto;"
                                          wire:key="search-results-{{ md5($searchProgramPoint) }}">
                                         <ul class="divide-y divide-gray-100">
                                             @forelse($availableProgramPoints as $index => $sdkPoint)
@@ -1192,20 +1192,26 @@
                                                         'bg-primary-50': selectedIndex === {{ $index }},
                                                         'hover:bg-primary-50': selectedIndex !== {{ $index }}
                                                     }">
-                                                    <div class="flex flex-col">
-                                                        <span class="font-medium text-gray-900">{{ $sdkPoint->name }}</span>
-                                                        @if($sdkPoint->description)
-                                                            <span class="text-xs text-gray-600 mt-1">{{ \Illuminate\Support\Str::limit(strip_tags($sdkPoint->description), 60) }}</span>
+                                                    @php
+                                                        $searchKind = \App\Support\ProgramPointSearchDisplay::kindLabel($sdkPoint);
+                                                        $searchMeta = \App\Support\ProgramPointSearchDisplay::metaLine($sdkPoint);
+                                                        $searchSnippet = \App\Support\ProgramPointSearchDisplay::snippet($sdkPoint, 80);
+                                                    @endphp
+                                                    <div class="flex flex-col gap-0.5">
+                                                        <div class="flex flex-wrap items-baseline gap-x-1.5">
+                                                            <span @class([
+                                                                'inline-flex rounded px-1 py-px text-[10px] font-semibold uppercase tracking-wide',
+                                                                'bg-violet-100 text-violet-800' => str_starts_with($searchKind, 'Set'),
+                                                                'bg-slate-100 text-slate-700' => $searchKind === 'Podpunkt',
+                                                                'bg-sky-100 text-sky-800' => $searchKind === 'Punkt',
+                                                            ])>{{ $searchKind }}</span>
+                                                            <span class="font-medium text-gray-900">{{ $sdkPoint->name }}</span>
+                                                        </div>
+                                                        @if($searchMeta !== '')
+                                                            <span class="text-xs text-gray-600">{{ $searchMeta }}</span>
                                                         @endif
-                                                        @if($sdkPoint->tags && $sdkPoint->tags->count() > 0)
-                                                            <div class="flex flex-wrap gap-1 mt-2">
-                                                                @foreach($sdkPoint->tags->take(3) as $tag)
-                                                                    <span class="inline-block px-2 py-1 text-xs bg-blue-100 text-blue-800 rounded">{{ $tag->name }}</span>
-                                                                @endforeach
-                                                                @if($sdkPoint->tags->count() > 3)
-                                                                    <span class="text-xs text-gray-500">+{{ $sdkPoint->tags->count() - 3 }} więcej</span>
-                                                                @endif
-                                                            </div>
+                                                        @if($searchSnippet)
+                                                            <span class="text-xs text-gray-500">{{ $searchSnippet }}</span>
                                                         @endif
                                                     </div>
                                                 </li>
@@ -1270,24 +1276,28 @@
                                 @error('modalData.notes') <span class="text-red-500 text-sm">{{ $message }}</span>
                                 @enderror
                             </div>
-                            <div class="grid grid-cols-1 sm:grid-cols-3 gap-4 pt-2">
+                            <div class="rounded-lg border border-gray-200 bg-slate-50 p-3">
+                                <p class="mb-2 text-sm font-semibold text-gray-800">Gdzie ma być ten punkt</p>
+                                <p class="mb-3 text-xs text-gray-500">Domyślnie w programie i w kalkulacji.</p>
+                                <div class="grid grid-cols-1 sm:grid-cols-3 gap-3">
                                 <label class="flex items-center">
                                     <input type="checkbox" wire:model.live.debounce.500ms="modalData.include_in_program"
                                         id="include_in_program"
                                         class="rounded border-gray-300 text-primary-600 shadow-sm focus:border-primary-500 focus:ring-primary-500">
-                                    <span class="ml-2 text-sm text-gray-700">Uwzględnij w programie</span>
+                                    <span class="ml-2 text-sm font-medium text-gray-800">W programie</span>
                                 </label>
                                 <label class="flex items-center">
                                     <input type="checkbox" wire:model.live.debounce.500ms="modalData.include_in_calculation"
                                         id="include_in_calculation"
                                         class="rounded border-gray-300 text-primary-600 shadow-sm focus:border-primary-500 focus:ring-primary-500">
-                                    <span class="ml-2 text-sm text-gray-700">Uwzględnij w kalkulacji</span>
+                                    <span class="ml-2 text-sm font-medium text-gray-800">W kalkulacji</span>
                                 </label>
                                 <label class="flex items-center">
                                     <input type="checkbox" wire:model.live.debounce.500ms="modalData.active" id="active"
                                         class="rounded border-gray-300 text-primary-600 shadow-sm focus:border-primary-500 focus:ring-primary-500">
                                     <span class="ml-2 text-sm text-gray-700">Aktywny</span>
                                 </label>
+                                </div>
                             </div>
                             <div class="mt-5 sm:mt-6 sm:grid sm:grid-cols-2 sm:gap-3 sm:grid-flow-row-dense">
                                 <button type="submit"

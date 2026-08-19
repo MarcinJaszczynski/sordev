@@ -32,6 +32,31 @@ final class EventProgramPointPaymentDueColumn
     }
 
     /**
+     * Jednolita etykieta tekstowa (HTML i podsumowania setów).
+     *
+     * @param  array<string, mixed>  $row
+     */
+    public static function plainLine(array $row): string
+    {
+        $date = isset($row['due_date'])
+            ? \Carbon\Carbon::parse($row['due_date'])->format('d.m.Y')
+            : '—';
+        $phrase = (string) ($row['phrase'] ?? $row['kind_label'] ?? 'Płatność');
+        $amount = trim((string) ($row['amount_label'] ?? ''));
+        $remaining = trim((string) ($row['remaining_label'] ?? ''));
+
+        $line = $phrase.' '.$date;
+        if ($amount !== '' && $amount !== '—') {
+            $line .= ' · '.$amount;
+        }
+        if ($remaining !== '') {
+            $line .= ' · pozostało '.$remaining;
+        }
+
+        return $line;
+    }
+
+    /**
      * @param  Collection<int, array<string, mixed>>  $paymentRows
      */
     private static function renderPaymentRows(Collection $paymentRows): string
@@ -41,15 +66,18 @@ final class EventProgramPointPaymentDueColumn
         $lines = [];
 
         foreach ($visible as $index => $row) {
-            $date = \Carbon\Carbon::parse($row['due_date'])->format('d.m.Y');
-            $color = ($row['is_overdue'] ?? false) ? '#dc2626' : '#111827';
+            $status = (string) ($row['status'] ?? 'due');
+            $isOverdue = (bool) ($row['is_overdue'] ?? false);
+            $color = match (true) {
+                $status === 'paid' => '#166534',
+                $isOverdue => '#dc2626',
+                default => '#111827',
+            };
             $weight = $index === 0 ? '700' : '600';
-            $kind = e($row['kind_label'] ?? 'Płatność');
-            $title = e($row['title'] ?? '');
-            $amount = e($row['amount_label'] ?? '');
+            $line = e(self::plainLine($row));
 
             $lines[] = '<div style="font-size:0.76rem;line-height:1.35;color:'.$color.';font-weight:'.$weight.'">'
-                .$date.' · '.$kind.' · '.$title.' · '.$amount
+                .$line
                 .'</div>';
         }
 

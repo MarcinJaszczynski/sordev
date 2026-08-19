@@ -285,8 +285,12 @@ final class EventPrintPdfDataFactory
 
     public function buildProgramByDay(Event $event): Collection
     {
+        $coreDays = $event->resolveCoreProgramDaysCount();
+
+        // Bez slotu fakultatywnego — to opcje pod stronę/szablon, nie dzień wycieczki w PDF.
         return $event->programPoints
             ->where('include_in_program', true)
+            ->filter(fn ($point) => (int) ($point->day ?? 1) <= $coreDays)
             ->values()
             ->groupBy(fn ($point) => (int) ($point->day ?? 1))
             ->sortKeys();

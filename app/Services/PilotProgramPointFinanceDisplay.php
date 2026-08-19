@@ -289,8 +289,30 @@ final class PilotProgramPointFinanceDisplay
         ?EventSettlementCost $base,
         Collection $paymentRows,
     ): ?array {
-        if (! $base || ! $this->pointConcernsPilot($base, $paymentRows)) {
+        if (! $base) {
             return null;
+        }
+
+        if (! $this->pointConcernsPilot($base, $paymentRows)) {
+            $payer = (string) ($base->paid_by ?? 'office');
+            $planned = (float) ($base->planned_amount ?? 0);
+            if ($payer !== 'office' || $planned <= 0.009) {
+                return null;
+            }
+
+            $convertToPln = (bool) ($base->planned_convert_to_pln ?? true);
+
+            return [
+                'has_pilot_obligation' => false,
+                'has_office_obligation' => true,
+                'payer' => 'office',
+                'payer_label' => 'Płaci biuro',
+                'lines' => [],
+                'planned_label' => \App\Support\CurrencyAmountDisplay::format($planned, $base->plannedCurrency, $convertToPln),
+                'advance_label' => null,
+                'due_date_label' => null,
+                'payment_lines' => [],
+            ];
         }
 
         $payer = (string) ($base->paid_by ?? 'office');

@@ -132,10 +132,57 @@ class TaskQueryFiltersTest extends TestCase
             ->pluck('id')
             ->all();
 
-        // Scope "assigned" = Moje (assignee OR author), zgodnie z TaskQueryFilters::mine().
-        $this->assertEqualsCanonicalizing([$assigned->id, $authored->id], $assignedIds);
+        // Scope "assigned" = assignee_id (+ wspólne systemowe dla biura, gdy Auth ma rolę).
+        $this->assertEqualsCanonicalizing([$assigned->id], $assignedIds);
         $this->assertEqualsCanonicalizing([$authored->id], $authoredIds);
         $this->assertCount(3, $allIds);
+    }
+
+    public function test_assigned_scope_includes_allowed_system_tasks_for_office_users(): void
+    {
+        \Spatie\Permission\Models\Role::firstOrCreate(['name' => 'biuro', 'guard_name' => 'web']);
+
+        $user = User::factory()->create(['status' => 'active']);
+        $user->assignRole('biuro');
+        $other = User::factory()->create();
+        $this->actingAs($user);
+
+        $mine = Task::create([
+            'title' => 'Moje',
+            'status_id' => Task::getDefaultStatusId(),
+            'priority' => 'normal',
+            'source' => 'office',
+            'author_id' => $user->id,
+            'assignee_id' => $user->id,
+        ]);
+
+        $sharedSystem = Task::create([
+            'title' => 'Impreza potwierdzona',
+            'description' => "Lista.\n\nevent-status:9:confirmed",
+            'status_id' => Task::getDefaultStatusId(),
+            'priority' => 'urgent',
+            'source' => 'system',
+            'author_id' => $other->id,
+            'assignee_id' => $other->id,
+        ]);
+
+        $disallowedSystem = Task::create([
+            'title' => 'Zaliczka',
+            'description' => '[payment-reminder:settlement_cost:1:advance]',
+            'status_id' => Task::getDefaultStatusId(),
+            'priority' => 'urgent',
+            'source' => 'system',
+            'author_id' => $other->id,
+            'assignee_id' => $other->id,
+        ]);
+
+        $ids = TaskQueryFilters::applyOwnershipScope(Task::query(), 'assigned', $user->id)
+            ->pluck('id')
+            ->all();
+
+        $this->assertContains($mine->id, $ids);
+        $this->assertContains($sharedSystem->id, $ids);
+        $this->assertNotContains($disallowedSystem->id, $ids);
     }
 
     public function test_top_level_only_excludes_subtasks(): void

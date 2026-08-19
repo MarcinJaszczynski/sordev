@@ -309,4 +309,291 @@ class EditEventClientLookupTest extends TestCase
             ->assertSet('data.ordering_parties.0.contractor_id', (string) $new->id)
             ->assertSet('data.ordering_parties.1.contractor_id', (string) $extra->id);
     }
+
+    public function test_saving_additional_party_keeps_existing_primary_without_manual_state(): void
+    {
+        $admin = User::factory()->create(['status' => 'active']);
+        $admin->assignRole('admin');
+
+        $contractor = Contractor::create([
+            'name' => 'Firma Główna',
+            'status' => 'active',
+        ]);
+        $primaryContact = Contact::create([
+            'first_name' => 'Główny',
+            'last_name' => 'Kontakt',
+            'phone' => '111222333',
+        ]);
+        $additionalContact = Contact::create([
+            'first_name' => 'Dodatkowy',
+            'last_name' => 'Kontakt',
+            'phone' => '444555666',
+        ]);
+        $contractor->contacts()->attach([$primaryContact->id, $additionalContact->id]);
+
+        $event = Event::factory()->create([
+            'client_name' => 'Główny Kontakt · Firma Główna',
+            'client_phone' => '111222333',
+            'contractor_id' => $contractor->id,
+            'status' => Event::STATUS_CONFIRMED,
+        ]);
+        $event->syncOrderingParties([[
+            'contact_id' => $primaryContact->id,
+            'contractor_id' => $contractor->id,
+            'department_label' => null,
+        ]]);
+
+        $this->actingAs($admin);
+
+        Livewire::test(EditEvent::class, ['record' => $event->getKey()])
+            ->call('applyAdditionalOrderingParties', [
+                [
+                    'contact_id' => (string) $additionalContact->id,
+                    'contractor_id' => (string) $contractor->id,
+                    'department_label' => null,
+                    'notes' => 'Drugi kontakt',
+                ],
+            ])
+            ->call('save')
+            ->assertHasNoFormErrors();
+
+        $event->refresh();
+
+        $this->assertStringContainsString('Główny Kontakt', (string) $event->client_name);
+
+        $parties = $event->orderingContractors()->orderByPivot('sort_order')->get();
+        $this->assertCount(2, $parties);
+        $this->assertSame($primaryContact->id, (int) $parties[0]->pivot->contact_id);
+        $this->assertSame($additionalContact->id, (int) $parties[1]->pivot->contact_id);
+    }
+
+    public function test_saving_additional_party_keeps_primary_when_repeater_state_is_empty(): void
+    {
+        $admin = User::factory()->create(['status' => 'active']);
+        $admin->assignRole('admin');
+
+        $contractor = Contractor::create([
+            'name' => 'Firma Główna',
+            'status' => 'active',
+        ]);
+        $primaryContact = Contact::create([
+            'first_name' => 'Główny',
+            'last_name' => 'Kontakt',
+            'phone' => '111222333',
+        ]);
+        $additionalContact = Contact::create([
+            'first_name' => 'Dodatkowy',
+            'last_name' => 'Kontakt',
+            'phone' => '444555666',
+        ]);
+        $contractor->contacts()->attach([$primaryContact->id, $additionalContact->id]);
+
+        $event = Event::factory()->create([
+            'client_name' => 'Główny Kontakt · Firma Główna',
+            'client_phone' => '111222333',
+            'contractor_id' => $contractor->id,
+            'status' => Event::STATUS_CONFIRMED,
+        ]);
+        $event->syncOrderingParties([[
+            'contact_id' => $primaryContact->id,
+            'contractor_id' => $contractor->id,
+            'department_label' => null,
+        ]]);
+
+        $this->actingAs($admin);
+
+        Livewire::test(EditEvent::class, ['record' => $event->getKey()])
+            ->set('data.ordering_parties', [])
+            ->dispatch('additional-ordering-parties-updated', additionalParties: [
+                [
+                    'contact_id' => (string) $additionalContact->id,
+                    'contractor_id' => (string) $contractor->id,
+                    'department_label' => null,
+                    'notes' => 'Drugi kontakt',
+                ],
+            ])
+            ->call('save')
+            ->assertHasNoFormErrors();
+
+        $event->refresh();
+
+        $this->assertStringContainsString('Główny Kontakt', (string) $event->client_name);
+
+        $parties = $event->orderingContractors()->orderByPivot('sort_order')->get();
+        $this->assertCount(2, $parties);
+        $this->assertSame($primaryContact->id, (int) $parties[0]->pivot->contact_id);
+        $this->assertSame($additionalContact->id, (int) $parties[1]->pivot->contact_id);
+        $this->assertSame('Drugi kontakt', $parties[1]->pivot->notes);
+    }
+
+    public function test_apply_additional_ordering_parties_preserves_primary_with_uuid_keys(): void
+    {
+        $admin = User::factory()->create(['status' => 'active']);
+        $admin->assignRole('admin');
+
+        $contractor = Contractor::create([
+            'name' => 'Firma Główna',
+            'status' => 'active',
+        ]);
+        $primaryContact = Contact::create([
+            'first_name' => 'Główny',
+            'last_name' => 'Kontakt',
+            'phone' => '111222333',
+        ]);
+        $additionalContact = Contact::create([
+            'first_name' => 'Dodatkowy',
+            'last_name' => 'Kontakt',
+            'phone' => '444555666',
+        ]);
+        $contractor->contacts()->attach([$primaryContact->id, $additionalContact->id]);
+
+        $event = Event::factory()->create([
+            'client_name' => 'Główny Kontakt · Firma Główna',
+            'client_email' => null,
+            'client_phone' => '111222333',
+            'contractor_id' => $contractor->id,
+            'status' => Event::STATUS_CONFIRMED,
+        ]);
+        $event->syncOrderingParties([[
+            'contact_id' => $primaryContact->id,
+            'contractor_id' => $contractor->id,
+            'department_label' => null,
+        ]]);
+
+        $this->actingAs($admin);
+
+        $component = Livewire::test(EditEvent::class, ['record' => $event->getKey()]);
+
+        // Symulacja stanu repeatera Filament (klucze UUID zamiast 0,1,2).
+        $component->set('data.ordering_parties', [
+            '9f1a2b3c-4d5e-6f70-8192-a3b4c5d6e7f8' => [
+                'contact_id' => (string) $primaryContact->id,
+                'contractor_id' => (string) $contractor->id,
+                'department_label' => null,
+                'notes' => null,
+            ],
+        ]);
+
+        $component
+            ->call('applyAdditionalOrderingParties', [
+                [
+                    'contact_id' => (string) $additionalContact->id,
+                    'contractor_id' => (string) $contractor->id,
+                    'department_label' => null,
+                    'notes' => 'Drugi kontakt',
+                ],
+            ])
+            ->assertSet('data.ordering_parties.0.contact_id', (string) $primaryContact->id)
+            ->assertSet('data.ordering_parties.0.contractor_id', (string) $contractor->id)
+            ->assertSet('data.ordering_parties.1.contact_id', (string) $additionalContact->id)
+            ->assertSet('data.ordering_parties.1.notes', 'Drugi kontakt')
+            ->call('save')
+            ->assertHasNoFormErrors();
+
+        $event->refresh();
+
+        $this->assertSame($contractor->id, (int) $event->contractor_id);
+        $this->assertStringContainsString('Główny Kontakt', (string) $event->client_name);
+
+        $parties = $event->orderingContractors()->orderByPivot('sort_order')->get();
+        $this->assertCount(2, $parties);
+        $this->assertSame($primaryContact->id, (int) $parties[0]->pivot->contact_id);
+        $this->assertSame($additionalContact->id, (int) $parties[1]->pivot->contact_id);
+        $this->assertSame('Drugi kontakt', $parties[1]->pivot->notes);
+    }
+
+    public function test_additional_lookup_quick_create_dispatches_form_party(): void
+    {
+        $contractor = Contractor::create([
+            'name' => 'Firma Ręczna',
+            'status' => 'active',
+        ]);
+        $primaryContact = Contact::create([
+            'first_name' => 'Jan',
+            'last_name' => 'Główny',
+            'phone' => '500600700',
+        ]);
+        $contractor->contacts()->attach($primaryContact->id);
+
+        Livewire::test(EventAdditionalOrderingPartiesLookup::class, [
+            'additional' => [],
+            'primaryContractorId' => $contractor->id,
+        ])
+            ->call('openAddPanel')
+            ->call('openQuickCreate')
+            ->set('firstName', 'Maria')
+            ->set('lastName', 'Nowa')
+            ->set('phone', '501502503')
+            ->set('notes', 'Ręcznie dodany')
+            ->call('quickCreate')
+            ->assertDispatched('additional-ordering-parties-updated')
+            ->assertSee('Maria Nowa')
+            ->assertSee('Ręcznie dodany');
+
+        $this->assertDatabaseHas('contacts', [
+            'first_name' => 'Maria',
+            'last_name' => 'Nowa',
+            'phone' => '501502503',
+        ]);
+
+        $created = Contact::query()
+            ->where('first_name', 'Maria')
+            ->where('last_name', 'Nowa')
+            ->first();
+
+        $this->assertNotNull($created);
+        $this->assertTrue($contractor->contacts()->whereKey($created->id)->exists());
+    }
+
+    public function test_additional_lookup_quick_create_can_make_new_client_company(): void
+    {
+        $contractor = Contractor::create([
+            'name' => 'Firma Główna',
+            'status' => 'active',
+        ]);
+        $primaryContact = Contact::create([
+            'first_name' => 'Jan',
+            'last_name' => 'Główny',
+            'phone' => '500600700',
+        ]);
+        $contractor->contacts()->attach($primaryContact->id);
+
+        Livewire::test(EventAdditionalOrderingPartiesLookup::class, [
+            'additional' => [],
+            'primaryContractorId' => $contractor->id,
+        ])
+            ->call('openAddPanel')
+            ->assertSee('Utwórz nową firmę / klienta')
+            ->call('openQuickCreate', true)
+            ->assertSet('createAsNewCompany', true)
+            ->assertSee('Firma / instytucja')
+            ->set('companyName', 'Nowa Szkoła Testowa')
+            ->set('firstName', 'Anna')
+            ->set('lastName', 'Nowak')
+            ->set('phone', '501111222')
+            ->set('notes', 'Drugi zamawiający')
+            ->call('quickCreate')
+            ->assertDispatched('additional-ordering-parties-updated')
+            ->assertSee('Anna Nowak')
+            ->assertSee('Nowa Szkoła Testowa')
+            ->assertSee('Drugi zamawiający');
+
+        $createdCompany = Contractor::query()->where('name', 'Nowa Szkoła Testowa')->first();
+        $this->assertNotNull($createdCompany);
+        $this->assertNotSame($contractor->id, $createdCompany->id);
+        $this->assertTrue(
+            $createdCompany->types()->whereRaw('LOWER(name) = ?', ['klient'])->exists(),
+            'Nowa firma dodatkowego zamawiającego powinna mieć typ klient',
+        );
+
+        $createdContact = Contact::query()
+            ->where('first_name', 'Anna')
+            ->where('last_name', 'Nowak')
+            ->where('phone', '501111222')
+            ->first();
+
+        $this->assertNotNull($createdContact);
+        $this->assertTrue($createdCompany->contacts()->whereKey($createdContact->id)->exists());
+        $this->assertFalse($contractor->contacts()->whereKey($createdContact->id)->exists());
+    }
 }

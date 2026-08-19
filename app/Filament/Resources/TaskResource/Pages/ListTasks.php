@@ -28,7 +28,7 @@ class ListTasks extends ListRecords
 
     public function getSubheading(): ?string
     {
-        return 'Skrzynka cross-event — zadania w jednej imprezie znajdziesz w Operacjach karty imprezy';
+        return 'Skrzynka cross-event — zadania jednej imprezy: zakładka Zadania na karcie imprezy.';
     }
 
     public function mount(): void
@@ -40,7 +40,7 @@ class ListTasks extends ListRecords
         $this->mountInteractsWithTaskEditModal();
     }
 
-    public function getDefaultActiveTab(): string | int | null
+    public function getDefaultActiveTab(): string|int|null
     {
         return 'active';
     }
@@ -49,21 +49,14 @@ class ListTasks extends ListRecords
     {
         return [
             'active' => Tab::make('Aktywne')
-                ->icon('heroicon-o-user')
-                ->modifyQueryUsing(fn (Builder $query): Builder => TaskQueryFilters::orderByLatestActivityDesc($query)),
+                ->icon('heroicon-o-user'),
             'new' => Tab::make('Nowe (do zrobienia)')
                 ->icon('heroicon-o-sparkles')
-                ->modifyQueryUsing(function (Builder $query): Builder {
-                    TaskQueryFilters::openTodo($query);
-
-                    return TaskQueryFilters::orderByLatestActivityDesc($query);
-                }),
+                ->modifyQueryUsing(fn (Builder $query): Builder => TaskQueryFilters::openTodo($query)),
             'manual' => Tab::make('Kolejność ręczna')
-                ->icon('heroicon-o-bars-3')
-                ->modifyQueryUsing(fn (Builder $query): Builder => TaskQueryFilters::orderByManual($query)),
+                ->icon('heroicon-o-bars-3'),
             'all' => Tab::make('Wszystkie statusy')
-                ->icon('heroicon-o-queue-list')
-                ->modifyQueryUsing(fn (Builder $query): Builder => TaskQueryFilters::orderByLatestActivityDesc($query)),
+                ->icon('heroicon-o-queue-list'),
         ];
     }
 

@@ -17,7 +17,8 @@ final class EventProgramDayRouteFields
             return [];
         }
 
-        $days = $record?->resolveProgramDaysCount() ?? 1;
+        // Tylko dni wycieczki (core) — slot fakultatywny (core+1) jest pod szablon/stronę, nie pod kierowcę.
+        $days = $record?->resolveCoreProgramDaysCount() ?? 1;
         $fields = [];
 
         for ($day = 1; $day <= $days; $day++) {
@@ -35,7 +36,7 @@ final class EventProgramDayRouteFields
     public static function section(string $heading = 'Trasy przejazdu'): Forms\Components\Section
     {
         return Forms\Components\Section::make($heading)
-            ->description('Trasa autokaru na każdy dzień imprezy. Te same dane edytujesz też w zakładce Program.')
+            ->description('Ramowa trasa autokaru na każdy dzień wycieczki (bez opcji fakultatywnych). Widoczna w portalu pilota, w Programie i w pakiecie kierowcy.')
             ->schema(function (?Event $record, $livewire = null): array {
                 $event = $record
                     ?? (is_object($livewire) && method_exists($livewire, 'getRecord')

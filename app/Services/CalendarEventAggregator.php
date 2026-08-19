@@ -62,6 +62,10 @@ class CalendarEventAggregator
             $items = $items->merge($this->reservations($from, $to));
         }
 
+        if ($types->isEmpty() || $types->contains('payments') || $types->contains('reservations')) {
+            $items = $items->merge($this->reservationDeposits($from, $to));
+        }
+
         if ($types->isEmpty() || $types->contains('transport')) {
             $items = $items->merge($this->transportDepartures($from, $to));
         }
@@ -382,6 +386,44 @@ class CalendarEventAggregator
                 CalendarEventLinks::event($reservation->event_id),
                 CalendarEventLinks::contractor($reservation->contractor_id),
             ]));
+    }
+
+    /** @return Collection<int, array<string, mixed>> */
+    protected function reservationDeposits(Carbon $from, Carbon $to): Collection
+    {
+        if (! class_exists(Reservation::class) || ! Schema::hasColumn('reservations', 'deposit_due_at')) {
+            return collect();
+        }
+
+        return Reservation::query()
+            ->whereNotNull('deposit_due_at')
+            ->whereNull('deposit_paid_at')
+            ->whereBetween('deposit_due_at', [$from, $to])
+            ->whereNotIn('status', ['cancelled', 'not_required'])
+            ->with(['event', 'programPoint'])
+            ->limit(150)
+            ->get()
+            ->map(function (Reservation $reservation): array {
+                $pointName = $reservation->programPoint?->name;
+                $title = 'Zaliczka rezerwacji: '.($reservation->booking_reference ?: '#'.$reservation->id);
+                if (filled($pointName)) {
+                    $title .= ' — '.$pointName;
+                }
+
+                return $this->withLinks([
+                    'id' => 'res-deposit-'.$reservation->id,
+                    'title' => $title,
+                    'start' => $reservation->deposit_due_at?->toDateString(),
+                    'backgroundColor' => '#ea580c',
+                    'borderColor' => '#c2410c',
+                    'type' => 'payments',
+                    'event_id' => $reservation->event_id,
+                ], [
+                    CalendarEventLinks::reservation($reservation->id),
+                    CalendarEventLinks::event($reservation->event_id),
+                    CalendarEventLinks::contractor($reservation->contractor_id),
+                ]);
+            });
     }
 
     /** @return Collection<int, array<string, mixed>> */

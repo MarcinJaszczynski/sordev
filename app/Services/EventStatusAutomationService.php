@@ -36,30 +36,13 @@ final class EventStatusAutomationService
         ]);
 
         match ($to) {
-            Event::STATUS_OFFER => $this->createOfficeTask(
-                $event,
-                'Przygotuj/wyślij ofertę: '.$this->label($event),
-                'Status zmieniony z '.$this->statusLabel($from).' na ofertę.',
-                TaskPriority::Normal,
-            ),
-            Event::STATUS_PROVISIONAL_RESERVATION => $this->createOfficeTask(
-                $event,
-                'Rezerwacja wstępna — potwierdź dostawców: '.$this->label($event),
-                'Zabezpiecz hotel/transport i zaliczkę.',
-                TaskPriority::Urgent,
-            ),
             Event::STATUS_CONFIRMED => $this->createOfficeTask(
                 $event,
                 'Impreza potwierdzona — lista kontrolna: '.$this->label($event),
                 'Umowy, zaliczki, udostępnienie pilotowi i portalowi klienta.',
                 TaskPriority::Urgent,
             ),
-            Event::STATUS_TO_SETTLE => $this->createOfficeTask(
-                $event,
-                'Rozpocznij rozliczenie: '.$this->label($event),
-                'Wejdź w Finanse imprezy i domknij koszty oraz wpłaty.',
-                TaskPriority::Urgent,
-            ),
+            // Oferta / rezerwacja wstępna / do rozliczenia — bez auto-taska (zaśmiecało skrzynkę).
             default => null,
         };
 

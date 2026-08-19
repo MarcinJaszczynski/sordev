@@ -65,6 +65,14 @@ trait HandlesPilotExpenseLedger
         return app(PilotSettlementService::class)->getExpenseLines($settlement);
     }
 
+    /**
+     * @return list<array{currency: string, planned: float, office_paid: float, pilot_paid: float, pilot_due: float}>
+     */
+    public function getExpenseLedgerTotalsProperty(): array
+    {
+        return app(PilotSettlementService::class)->summarizeExpenseLines($this->expenseLines);
+    }
+
     public function getCashReconciliationProperty()
     {
         $settlement = app(PilotSettlementService::class)->getOrCreateSettlement($this->event);
@@ -87,13 +95,23 @@ trait HandlesPilotExpenseLedger
 
     public function startEditCost(int $costId): void
     {
-        $cost = EventSettlementCost::findOrFail($costId);
+        $line = $this->expenseLines->firstWhere('id', $costId);
+        $cost = $line ?? EventSettlementCost::findOrFail($costId);
+
         $this->editingCostId = $cost->id;
         $this->editCostPaidBy = 'pilot';
-        $paidDisplay = $cost->ledger_paid_amount ?? $cost->actual_amount;
-        $this->editCostActualAmount = $paidDisplay !== null
-            ? (string) $paidDisplay
-            : (string) ($cost->planned_amount ?? '');
+
+        $alreadyPaidByPilot = $cost->ledger_paid_amount ?? null;
+        if ($alreadyPaidByPilot === null && (float) ($cost->actual_amount ?? 0) > 0.009) {
+            $alreadyPaidByPilot = (float) $cost->actual_amount;
+        }
+
+        // Po zaliczce biura domyślnie dopłata, nie pełny plan — żeby pilot nie zapłacił „całości”.
+        $defaultAmount = $alreadyPaidByPilot !== null
+            ? (float) $alreadyPaidByPilot
+            : (float) ($cost->ledger_pilot_due ?? $cost->planned_amount ?? 0);
+
+        $this->editCostActualAmount = $this->formatLedgerAmountInput($defaultAmount);
         $this->editCostCurrencyId = $cost->actual_currency_id
             ?? $cost->planned_currency_id
             ?? $this->editCostCurrencyId
@@ -102,6 +120,15 @@ trait HandlesPilotExpenseLedger
         $this->editCostInvoiceNumber = (string) ($cost->invoice_number ?? $cost->document_number ?? '');
         $this->editCostReceiptNumber = (string) ($cost->receipt_number ?? '');
         $this->editCostPaymentMethod = 'cash';
+    }
+
+    private function formatLedgerAmountInput(float $amount): string
+    {
+        if (abs($amount - round($amount)) < 0.00001) {
+            return (string) (int) round($amount);
+        }
+
+        return rtrim(rtrim(number_format($amount, 2, '.', ''), '0'), '.');
     }
 
     public function cancelEditCost(): void
@@ -317,6 +344,10 @@ trait HandlesPilotExpenseLedger
 
     protected function ensurePilotMutationsAllowed(): void
     {
+        if (property_exists($this, 'context') && ($this->context ?? null) === 'admin') {
+            return;
+        }
+
         app(\App\Services\PilotAccessService::class)->assertPilotMutationsAllowed();
     }
 }

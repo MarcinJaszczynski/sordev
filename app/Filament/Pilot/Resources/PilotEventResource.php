@@ -10,7 +10,6 @@ use App\Support\PilotNavigation;
 use Filament\Infolists;
 use Filament\Infolists\Infolist;
 use Filament\Resources\Resource;
-use Filament\Tables;
 use Filament\Tables\Table;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Model;
@@ -93,24 +92,14 @@ class PilotEventResource extends Resource
 
         return $infolist
             ->schema([
-                Infolists\Components\Section::make('Informacje o wycieczce')
-                    ->columns(['default' => 1, 'md' => 2])
+                Infolists\Components\Section::make('Podstawienie i wyjazd')
+                    ->columns(['default' => 1, 'md' => 3])
+                    ->visible($pilotDetailsVisible)
                     ->schema([
-                        Infolists\Components\TextEntry::make('name')->label('Nazwa'),
-                        Infolists\Components\TextEntry::make('status')->label('Status')->badge(),
-                        Infolists\Components\TextEntry::make('start_date')->label('Data startu')->date('d.m.Y'),
-                        Infolists\Components\TextEntry::make('end_date')->label('Data końca')->date('d.m.Y'),
-                        Infolists\Components\TextEntry::make('participant_count')
-                            ->label('Liczba osób')
-                            ->formatStateUsing(function ($state, $record): string {
-                                $paying = max(0, (int) ($state ?? $record->participant_count ?? 0));
-                                $gratis = max(0, (int) $record->resolveGratisCountForParticipantCount($paying ?: null));
-
-                                return $gratis > 0
-                                    ? sprintf('%d + %d (płacący + opiekunowie)', $paying, $gratis)
-                                    : (string) $paying;
-                            })
-                            ->visible($pilotDetailsVisible),
+                        Infolists\Components\TextEntry::make('status')
+                            ->label('Status')
+                            ->badge()
+                            ->columnSpanFull(),
                         Infolists\Components\TextEntry::make('pickup_place_details')
                             ->label('Adres podstawienia autokaru')
                             ->state(function (Event $record): string {
@@ -127,41 +116,43 @@ class PilotEventResource extends Resource
                                 return (string) ($record->startPlace?->name ?: '—');
                             })
                             ->placeholder('—')
-                            ->columnSpanFull()
-                            ->visible($pilotDetailsVisible),
+                            ->columnSpanFull(),
                         Infolists\Components\TextEntry::make('substitution_time')
                             ->label('Godzina podstawienia')
                             ->formatStateUsing(fn ($state): string => self::formatClock($state))
                             ->placeholder('—')
-                            ->visible(fn (Event $record): bool => $pilotDetailsVisible($record) && Schema::hasColumn('events', 'substitution_time')),
+                            ->visible(fn (): bool => Schema::hasColumn('events', 'substitution_time')),
                         Infolists\Components\TextEntry::make('departure_time')
                             ->label('Godzina wyjazdu')
                             ->formatStateUsing(fn ($state): string => self::formatClock($state))
                             ->placeholder('—')
-                            ->visible(fn (Event $record): bool => $pilotDetailsVisible($record) && Schema::hasColumn('events', 'departure_time')),
+                            ->visible(fn (): bool => Schema::hasColumn('events', 'departure_time')),
                         Infolists\Components\TextEntry::make('return_time')
                             ->label('Godzina powrotu')
                             ->formatStateUsing(fn ($state): string => self::formatClock($state))
                             ->placeholder('—')
-                            ->visible(fn (Event $record): bool => $pilotDetailsVisible($record) && Schema::hasColumn('events', 'return_time')),
-                        Infolists\Components\TextEntry::make('assignedUser.name')
-                            ->label('Pilot')
-                            ->visible($pilotDetailsVisible),
-                        Infolists\Components\TextEntry::make('assignedUser.phone')
-                            ->label('Telefon pilota')
-                            ->placeholder('—')
-                            ->visible($pilotDetailsVisible),
-                        Infolists\Components\TextEntry::make('client_name')
-                            ->label('Klient')
-                            ->visible($pilotDetailsVisible),
-                        Infolists\Components\TextEntry::make('client_phone')
-                            ->label('Telefon klienta')
-                            ->visible($pilotDetailsVisible),
-                        Infolists\Components\TextEntry::make('client_email')
-                            ->label('E-mail klienta')
-                            ->placeholder('—')
-                            ->visible($pilotDetailsVisible),
+                            ->visible(fn (): bool => Schema::hasColumn('events', 'return_time')),
+                        Infolists\Components\TextEntry::make('participant_count')
+                            ->label('Liczba osób')
+                            ->formatStateUsing(function ($state, $record): string {
+                                $paying = max(0, (int) ($state ?? $record->participant_count ?? 0));
+                                $gratis = max(0, (int) $record->resolveGratisCountForParticipantCount($paying ?: null));
+
+                                return $gratis > 0
+                                    ? sprintf('%d + %d (płacący + opiekunowie)', $paying, $gratis)
+                                    : (string) $paying;
+                            })
+                            ->columnSpanFull(),
                     ]),
+                Infolists\Components\Section::make('Trasy przejazdu')
+                    ->description('Ramowa trasa autokaru na każdy dzień wycieczki.')
+                    ->visible(fn (Event $record): bool => $pilotDetailsVisible($record)
+                        && Schema::hasColumn('events', 'program_day_routes'))
+                    ->schema(function (Infolists\Components\Section $component): array {
+                        $record = $component->getRecord();
+
+                        return self::pilotRouteEntries($record instanceof Event ? $record : null);
+                    }),
                 Infolists\Components\Section::make('Transport')
                     ->columns(['default' => 1, 'md' => 2])
                     ->visible($pilotDetailsVisible)
@@ -181,6 +172,39 @@ class PilotEventResource extends Resource
                         Infolists\Components\TextEntry::make('driver_phone')->label('Telefon kierowcy'),
                         Infolists\Components\TextEntry::make('vehicle_registration')->label('Rejestracja autokaru'),
                     ]),
+                Infolists\Components\Section::make('Hotele')
+                    ->visible(fn (Event $record): bool => $pilotDetailsVisible($record) && self::pilotHotelLines($record) !== [])
+                    ->schema([
+                        Infolists\Components\TextEntry::make('pilot_hotel_summary')
+                            ->label('')
+                            ->state(fn (Event $record): string => implode("\n\n", self::pilotHotelLines($record)))
+                            ->placeholder('—')
+                            ->columnSpanFull()
+                            ->extraAttributes(['class' => 'whitespace-pre-line']),
+                    ]),
+                Infolists\Components\Section::make('Kontakty')
+                    ->columns(['default' => 1, 'md' => 2])
+                    ->visible($pilotDetailsVisible)
+                    ->schema([
+                        Infolists\Components\TextEntry::make('client_name')->label('Klient'),
+                        Infolists\Components\TextEntry::make('client_phone')->label('Telefon klienta'),
+                        Infolists\Components\TextEntry::make('client_email')
+                            ->label('E-mail klienta')
+                            ->placeholder('—')
+                            ->columnSpanFull(),
+                        Infolists\Components\TextEntry::make('assignedUser.name')->label('Pilot'),
+                        Infolists\Components\TextEntry::make('assignedUser.phone')
+                            ->label('Telefon pilota')
+                            ->placeholder('—'),
+                    ]),
+                Infolists\Components\Section::make('Uwagi dla pilota')
+                    ->visible(fn (Event $record): bool => $pilotDetailsVisible($record) && self::hasPilotFacingNotes($record))
+                    ->schema([
+                        Infolists\Components\TextEntry::make('pilot_notes')
+                            ->hiddenLabel()
+                            ->html()
+                            ->columnSpanFull(),
+                    ]),
                 Infolists\Components\Section::make('Diety')
                     ->visible(fn (Event $record): bool => $pilotDetailsVisible($record) && filled($record->diet_info))
                     ->schema([
@@ -189,17 +213,12 @@ class PilotEventResource extends Resource
                             ->placeholder('—')
                             ->columnSpanFull(),
                     ]),
-                Infolists\Components\Section::make('Uwagi dla pilota')
-                    ->visible($pilotDetailsVisible)
-                    ->schema([
-                        Infolists\Components\TextEntry::make('pilot_notes')
-                            ->label('Uwagi biura')
-                            ->html()
-                            ->columnSpanFull(),
-                    ]),
                 Infolists\Components\Section::make('Dostęp archiwalny')
                     ->visible(fn (Event $record): bool => ! ($pilotDetailsVisible)($record))
                     ->schema([
+                        Infolists\Components\TextEntry::make('status')
+                            ->label('Status')
+                            ->badge(),
                         Infolists\Components\TextEntry::make('archive_notice')
                             ->label('')
                             ->state(fn (Event $record): string => app(PilotAccessService::class)->archiveMessage($record))
@@ -228,5 +247,86 @@ class PilotEventResource extends Resource
         }
 
         return substr((string) $state, 0, 5);
+    }
+
+    private static function hasPilotFacingNotes(Event $record): bool
+    {
+        if (! Schema::hasColumn('events', 'pilot_notes')) {
+            return false;
+        }
+
+        return trim(strip_tags((string) ($record->pilot_notes ?? ''))) !== '';
+    }
+
+    /**
+     * @return array<int, Infolists\Components\Component>
+     */
+    private static function pilotRouteEntries(?Event $record): array
+    {
+        if (! $record || ! Schema::hasColumn('events', 'program_day_routes')) {
+            return [];
+        }
+
+        $days = $record->resolveCoreProgramDaysCount();
+        $entries = [];
+
+        for ($day = 1; $day <= $days; $day++) {
+            $currentDay = $day;
+            $date = $record->dateForProgramDay($currentDay)?->format('d.m.Y');
+
+            $entries[] = Infolists\Components\TextEntry::make("program_day_routes.{$currentDay}")
+                ->label($date ? "Dzień {$currentDay} ({$date})" : "Dzień {$currentDay}")
+                ->state(fn (Event $event): string => $event->programDayRoute($currentDay) ?: '—')
+                ->placeholder('—')
+                ->columnSpanFull();
+        }
+
+        return $entries;
+    }
+
+    /**
+     * @return list<string>
+     */
+    private static function pilotHotelLines(Event $record): array
+    {
+        if (! Schema::hasTable('event_hotel_stays')) {
+            return [];
+        }
+
+        $record->loadMissing([
+            'hotelStays.contractor',
+            'hotelStays.contractorLocation',
+            'hotelStays.programPoint.contractor',
+            'hotelStays.programPoint.contractorLocation',
+        ]);
+
+        $lines = [];
+
+        foreach ($record->hotelStays as $stay) {
+            $contractor = $stay->contractor ?? $stay->programPoint?->contractor;
+            if (! $contractor) {
+                continue;
+            }
+
+            $location = $stay->contractorLocation ?? $stay->programPoint?->contractorLocation;
+            $meta = ContractorContactDetails::operationalMeta($contractor, $location);
+            $name = trim((string) $contractor->name);
+            if ($name === '') {
+                continue;
+            }
+
+            if (filled($meta['branch_name'])) {
+                $name .= ' — '.$meta['branch_name'];
+            }
+
+            $block = 'Noc '.(int) $stay->day.': '.$name;
+            if (filled($meta['address'])) {
+                $block .= "\n".$meta['address'];
+            }
+
+            $lines[] = $block;
+        }
+
+        return $lines;
     }
 }

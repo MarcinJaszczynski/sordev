@@ -9,12 +9,15 @@ use App\Models\ContractorLocation;
 use App\Models\ContractorType;
 use App\Models\Currency;
 use App\Models\Event;
+use App\Models\EventHotelStay;
 use App\Models\EventProgramPoint;
 use App\Models\HotelRoom;
-use App\Services\EventHotelOccupantsImporter;
-use App\Services\EventHotelPlanService;
+use App\Models\Reservation;
 use App\Services\ContractorLocationService;
 use App\Services\ContractorLookupService;
+use App\Services\EventHotelOccupantsImporter;
+use App\Services\EventHotelPlanService;
+use App\Services\HotelStayReservationSync;
 use App\Support\ContractorContactDetails;
 use App\Support\EventHotelPlanFormatting;
 use Filament\Notifications\Notification;
@@ -57,11 +60,35 @@ class EventHotelPlanEditor extends Component
 
     public bool $hotelContractorSearchAll = false;
 
-    
+    public bool $showHotelSearchResults = false;
+
+    /** @var array<int, string> id => label */
+    public array $hotelSearchResults = [];
+
+    public const HOTEL_SEARCH_MIN_LENGTH = 2;
+
+    public ?int $hotelReservationId = null;
+
+    public string $hotelReservationStatus = 'pending';
+
+    public ?string $hotelReservationConfirmBy = null;
+
+    public ?string $hotelReservationConfirmedAt = null;
+
+    public ?string $hotelReservationDepositDueAt = null;
+
+    public ?string $hotelReservationDepositPaidAt = null;
+
+    public ?string $hotelReservationBookingReference = null;
+
+    /** @var list<int> */
+    public array $hotelReservationDays = [];
+
     public function mount(int $eventId): void
     {
         $this->eventId = $eventId;
         $this->loadPlan();
+        $this->syncHotelReservationFormFromActiveStay();
     }
 
     public function loadPlan(): void
@@ -69,12 +96,21 @@ class EventHotelPlanEditor extends Component
         $event = Event::query()->with([
             'hotelStays.roomLines.occupants',
             'hotelStays.contractor',
+            'hotelStays.reservation',
             'hotelProgramPoints',
         ])->findOrFail($this->eventId);
 
         app(EventHotelPlanService::class)->ensureStaysForEvent($event);
         app(EventHotelPlanService::class)->syncAllRoomUnitsForEvent($event);
-        $event->refresh()->load(['hotelStays.roomLines.occupants', 'hotelStays.roomLines.units', 'hotelStays.roomLines.hotelRoom', 'hotelStays.contractor']);
+        app(HotelStayReservationSync::class)->backfillForEvent($event);
+        app(\App\Services\ProgramPointReservationSync::class)->backfillForEvent($event);
+        $event->refresh()->load([
+            'hotelStays.roomLines.occupants',
+            'hotelStays.roomLines.units',
+            'hotelStays.roomLines.hotelRoom',
+            'hotelStays.contractor',
+            'hotelStays.reservation',
+        ]);
 
         $this->hotelPricingMode = $event->hotel_pricing_mode ?? 'lines';
         $this->hotelFlatStayAmount = $event->hotel_flat_stay_amount !== null
@@ -91,6 +127,7 @@ class EventHotelPlanEditor extends Component
 
         $this->copySourceDay = (int) ($this->stays[0]['day'] ?? 1);
         $this->copyTargetDays = collect($this->stays)->pluck('day')->map(fn ($d) => (int) $d)->all();
+        $this->syncHotelReservationFormFromActiveStay();
     }
 
     private function afterStayMutation(): void
@@ -101,6 +138,247 @@ class EventHotelPlanEditor extends Component
     public function selectStay(int $index): void
     {
         $this->activeStayIndex = max(0, min($index, count($this->stays) - 1));
+        $this->resetHotelSearch();
+        $this->syncHotelReservationFormFromActiveStay();
+    }
+
+    public function updatedHotelContractorSearch(): void
+    {
+        $this->refreshHotelSearchResults();
+    }
+
+    public function updatedHotelContractorSearchAll(): void
+    {
+        $this->refreshHotelSearchResults();
+    }
+
+    public function refreshHotelSearchResults(): void
+    {
+        if ($this->activeStayHasContractor()) {
+            $this->hotelSearchResults = [];
+            $this->showHotelSearchResults = false;
+
+            return;
+        }
+
+        $query = trim($this->hotelContractorSearch);
+
+        if (mb_strlen($query) < self::HOTEL_SEARCH_MIN_LENGTH) {
+            $this->hotelSearchResults = [];
+            $this->showHotelSearchResults = false;
+
+            return;
+        }
+
+        $this->hotelSearchResults = app(ContractorLookupService::class)->searchOptions(
+            search: $query,
+            typeNames: ContractorType::hotelTypeNames(),
+            searchAll: $this->hotelContractorSearchAll,
+        );
+        $this->showHotelSearchResults = true;
+    }
+
+    public function selectHotel(int $contractorId): void
+    {
+        if ($contractorId <= 0 || ! isset($this->stays[$this->activeStayIndex])) {
+            return;
+        }
+
+        $this->stays[$this->activeStayIndex]['contractor_id'] = $contractorId;
+
+        app(ContractorLocationService::class)->syncLocationOnContractorChange(
+            fn (string $field, mixed $state) => data_set($this->stays[$this->activeStayIndex], $field, $state),
+            $contractorId,
+        );
+
+        $this->persistStayContractor($this->activeStayIndex);
+        $this->resetHotelSearch();
+    }
+
+    public function clearHotelSelection(): void
+    {
+        if (! isset($this->stays[$this->activeStayIndex])) {
+            return;
+        }
+
+        $this->stays[$this->activeStayIndex]['contractor_id'] = null;
+        $this->stays[$this->activeStayIndex]['contractor_location_id'] = null;
+        $this->persistStayContractor($this->activeStayIndex);
+        $this->resetHotelSearch();
+    }
+
+    protected function resetHotelSearch(): void
+    {
+        $this->hotelContractorSearch = '';
+        $this->hotelSearchResults = [];
+        $this->showHotelSearchResults = false;
+    }
+
+    protected function activeStayHasContractor(): bool
+    {
+        return filled($this->stays[$this->activeStayIndex]['contractor_id'] ?? null);
+    }
+
+    /**
+     * @param  bool  $ensure  true = utwórz rezerwację, jeśli brak (po wyborze hotelu)
+     */
+    public function syncHotelReservationFormFromActiveStay(bool $ensure = false): void
+    {
+        $this->hotelReservationId = null;
+        $this->hotelReservationStatus = 'pending';
+        $this->hotelReservationConfirmBy = null;
+        $this->hotelReservationConfirmedAt = null;
+        $this->hotelReservationDepositDueAt = null;
+        $this->hotelReservationDepositPaidAt = null;
+        $this->hotelReservationBookingReference = null;
+        $this->hotelReservationDays = [];
+
+        $stayPayload = $this->stays[$this->activeStayIndex] ?? null;
+        $stayId = filled($stayPayload['id'] ?? null) ? (int) $stayPayload['id'] : null;
+        $contractorId = filled($stayPayload['contractor_id'] ?? null) ? (int) $stayPayload['contractor_id'] : null;
+
+        if (! $stayId || ! $contractorId) {
+            return;
+        }
+
+        $stay = EventHotelStay::query()->with(['reservation', 'event'])->find($stayId);
+
+        if (! $stay) {
+            return;
+        }
+
+        $sync = app(HotelStayReservationSync::class);
+        $reservation = $ensure
+            ? $sync->ensureForStay($stay)
+            : $sync->findForStay($stay);
+
+        if (! $reservation) {
+            $this->hotelReservationDays = EventHotelStay::query()
+                ->where('event_id', $this->eventId)
+                ->where('contractor_id', $contractorId)
+                ->orderBy('day')
+                ->pluck('day')
+                ->map(fn ($day) => (int) $day)
+                ->unique()
+                ->values()
+                ->all();
+
+            return;
+        }
+
+        $this->fillHotelReservationForm($reservation, $contractorId);
+    }
+
+    protected function fillHotelReservationForm(Reservation $reservation, int $contractorId): void
+    {
+        $this->hotelReservationId = (int) $reservation->id;
+        $this->hotelReservationStatus = (string) ($reservation->status ?? 'pending');
+        $this->hotelReservationConfirmBy = $reservation->confirm_by?->toDateString();
+        $this->hotelReservationConfirmedAt = $reservation->confirmed_at?->toDateString();
+        $this->hotelReservationDepositDueAt = $reservation->deposit_due_at?->toDateString();
+        $this->hotelReservationDepositPaidAt = $reservation->deposit_paid_at?->toDateString();
+        $this->hotelReservationBookingReference = $reservation->booking_reference;
+        $this->hotelReservationDays = EventHotelStay::query()
+            ->where('event_id', $this->eventId)
+            ->where('contractor_id', $contractorId)
+            ->orderBy('day')
+            ->pluck('day')
+            ->map(fn ($day) => (int) $day)
+            ->unique()
+            ->values()
+            ->all();
+
+        foreach ($this->stays as $index => $payload) {
+            if ((int) ($payload['contractor_id'] ?? 0) === $contractorId) {
+                $this->stays[$index]['reservation_id'] = (int) $reservation->id;
+            }
+        }
+    }
+
+    public function updatedHotelReservationStatus(): void
+    {
+        $this->persistHotelReservationWorkflow();
+    }
+
+    public function updatedHotelReservationConfirmBy(): void
+    {
+        $this->persistHotelReservationWorkflow();
+    }
+
+    public function updatedHotelReservationConfirmedAt(): void
+    {
+        $this->persistHotelReservationWorkflow();
+    }
+
+    public function updatedHotelReservationDepositDueAt(): void
+    {
+        $this->persistHotelReservationWorkflow();
+    }
+
+    public function updatedHotelReservationDepositPaidAt(): void
+    {
+        $this->persistHotelReservationWorkflow();
+    }
+
+    public function updatedHotelReservationBookingReference(): void
+    {
+        $this->persistHotelReservationWorkflow();
+    }
+
+    protected function persistHotelReservationWorkflow(): void
+    {
+        $stayPayload = $this->stays[$this->activeStayIndex] ?? null;
+        $stayId = filled($stayPayload['id'] ?? null) ? (int) $stayPayload['id'] : null;
+
+        if (! $stayId) {
+            return;
+        }
+
+        $stay = EventHotelStay::query()->with('event')->find($stayId);
+
+        if (! $stay || ! filled($stay->contractor_id)) {
+            return;
+        }
+
+        $sync = app(HotelStayReservationSync::class);
+        $reservation = $this->hotelReservationId
+            ? Reservation::query()->find($this->hotelReservationId)
+            : null;
+        $reservation ??= $sync->ensureForStay($stay);
+
+        if (! $reservation) {
+            return;
+        }
+
+        $this->hotelReservationId = (int) $reservation->id;
+
+        try {
+            $fresh = $sync->updateWorkflow($reservation, [
+                'status' => $this->hotelReservationStatus !== '' ? $this->hotelReservationStatus : 'pending',
+                'confirm_by' => $this->hotelReservationConfirmBy ?: null,
+                'confirmed_at' => $this->hotelReservationConfirmedAt ?: null,
+                'deposit_due_at' => $this->hotelReservationDepositDueAt ?: null,
+                'deposit_paid_at' => $this->hotelReservationDepositPaidAt ?: null,
+                'booking_reference' => filled($this->hotelReservationBookingReference)
+                    ? trim((string) $this->hotelReservationBookingReference)
+                    : null,
+            ]);
+
+            $this->fillHotelReservationForm($fresh, (int) $stay->contractor_id);
+
+            Notification::make()
+                ->title('Status rezerwacji hotelu zapisany')
+                ->success()
+                ->send();
+        } catch (\Throwable $e) {
+            report($e);
+
+            Notification::make()
+                ->title('Nie zapisano statusu rezerwacji')
+                ->body($e->getMessage())
+                ->danger()
+                ->send();
+        }
     }
 
     public function goToStep(int $step): void
@@ -409,6 +687,20 @@ class EventHotelPlanEditor extends Component
             $this->stays[$stayIndex]['contractor_location_id'] = $locationId;
             $this->stays[$stayIndex]['event_program_point_id'] = $freshStay?->event_program_point_id;
 
+            if ($contractorId && $freshStay) {
+                $reservation = app(HotelStayReservationSync::class)->ensureForStay(
+                    $freshStay->fresh(['event', 'reservation'])
+                );
+                $this->stays[$stayIndex]['reservation_id'] = $reservation?->id;
+                $this->syncHotelReservationFormFromActiveStay(ensure: false);
+            } else {
+                if ($freshStay) {
+                    app(HotelStayReservationSync::class)->detachStay($freshStay);
+                }
+                $this->stays[$stayIndex]['reservation_id'] = null;
+                $this->syncHotelReservationFormFromActiveStay(ensure: false);
+            }
+
             Notification::make()
                 ->title($contractorId ? 'Hotel zapisany' : 'Hotel usunięty z nocy')
                 ->success()
@@ -451,7 +743,7 @@ class EventHotelPlanEditor extends Component
         Notification::make()->title('Skopiowano na wybrane noce')->success()->send();
     }
 
-        public function initializeEmptyPlan(): void
+    public function initializeEmptyPlan(): void
     {
         $event = Event::findOrFail($this->eventId);
         app(EventHotelPlanService::class)->ensureStaysForEvent($event);
@@ -673,13 +965,6 @@ class EventHotelPlanEditor extends Component
             : null;
         $lookup = app(ContractorLookupService::class);
         $locationService = app(ContractorLocationService::class);
-        $hotels = $lookup->searchOptions(
-            search: $this->hotelContractorSearch,
-            typeNames: ContractorType::hotelTypeNames(),
-            searchAll: $this->hotelContractorSearchAll,
-            includeId: $activeContractorId,
-        );
-        $hotelLabels = $hotels;
         $locationOptions = $locationService->optionsForContractor(
             contractorId: $activeContractorId,
             includeId: $activeLocationId,
@@ -691,11 +976,8 @@ class EventHotelPlanEditor extends Component
         $contractorsById = Contractor::query()->whereIn('id', $contractorIds)->get()->keyBy('id');
         $locationsById = ContractorLocation::query()->whereIn('id', $locationIds)->get()->keyBy('id');
 
+        $hotelLabels = [];
         foreach ($contractorIds as $contractorId) {
-            if (isset($hotelLabels[$contractorId])) {
-                continue;
-            }
-
             $contractor = $contractorsById->get($contractorId);
 
             if ($contractor) {
@@ -743,7 +1025,6 @@ class EventHotelPlanEditor extends Component
 
         return view('livewire.event-hotel-plan-editor', [
             'event' => $event,
-            'hotels' => $hotels,
             'hotelLabels' => $hotelLabels,
             'locationOptions' => $locationOptions,
             'showLocationSelect' => $showLocationSelect,

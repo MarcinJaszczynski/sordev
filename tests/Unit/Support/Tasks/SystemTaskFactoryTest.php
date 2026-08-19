@@ -36,7 +36,10 @@ class SystemTaskFactoryTest extends TestCase
         $owner = User::factory()->create(['status' => 'active']);
         $owner->assignRole('biuro');
 
-        $event = Event::factory()->create(['assigned_to' => $owner->id]);
+        $event = Event::factory()->create([
+            'assigned_to' => $owner->id,
+            'office_caretaker_id' => $owner->id,
+        ]);
 
         $first = SystemTaskFactory::upsertShared(
             taskable: $event,
@@ -66,6 +69,24 @@ class SystemTaskFactoryTest extends TestCase
         $this->assertStringContainsString('Impreza potwierdzona — update', (string) $second?->title);
     }
 
+    public function test_upsert_rejects_disallowed_fingerprint(): void
+    {
+        $admin = User::factory()->create(['status' => 'active']);
+        $admin->assignRole('admin');
+        $event = Event::factory()->create(['assigned_to' => $admin->id]);
+
+        $task = SystemTaskFactory::upsertShared(
+            taskable: $event,
+            fingerprint: 'event-status:'.$event->id.':offer',
+            title: 'Oferta',
+            description: 'Nie powinno powstać',
+            eventForAssignee: $event,
+        );
+
+        $this->assertNull($task);
+        $this->assertSame(0, Task::query()->where('taskable_id', $event->id)->count());
+    }
+
     public function test_resolve_assignee_falls_back_to_first_office_user(): void
     {
         $admin = User::factory()->create(['status' => 'active', 'name' => 'AAA Admin']);
@@ -84,5 +105,29 @@ class SystemTaskFactoryTest extends TestCase
 
         $this->assertNotNull($task);
         $this->assertSame($admin->id, (int) $task->assignee_id);
+    }
+
+    public function test_resolve_assignee_ignores_pilot_assigned_to(): void
+    {
+        $admin = User::factory()->create(['status' => 'active']);
+        $admin->assignRole('admin');
+        $pilot = User::factory()->create(['status' => 'active']);
+        Role::firstOrCreate(['name' => 'pilot', 'guard_name' => 'web']);
+        $pilot->assignRole('pilot');
+
+        $event = Event::factory()->create(['assigned_to' => $pilot->id]);
+
+        $task = SystemTaskFactory::upsertShared(
+            taskable: $event,
+            fingerprint: 'event-status:'.$event->id.':confirmed',
+            title: 'Impreza potwierdzona',
+            description: 'Lista kontrolna',
+            priority: TaskPriority::Urgent,
+            eventForAssignee: $event,
+        );
+
+        $this->assertNotNull($task);
+        $this->assertSame($admin->id, (int) $task->assignee_id);
+        $this->assertNotSame($pilot->id, (int) $task->assignee_id);
     }
 }

@@ -27,6 +27,7 @@ class EventWorkflowFinanceSummaryServiceTest extends TestCase
         $this->assertArrayHasKey('remaining', $summary);
         $this->assertArrayHasKey('client_due', $summary);
         $this->assertArrayHasKey('client_paid', $summary);
+        $this->assertArrayHasKey('client_remaining', $summary);
         $this->assertArrayHasKey('pilot_cash', $summary);
         $this->assertArrayHasKey('pilot_cash_paid', $summary);
         $this->assertIsString($summary['price_per_person']);
