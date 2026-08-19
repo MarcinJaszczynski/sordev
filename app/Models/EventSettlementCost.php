@@ -51,6 +51,7 @@ class EventSettlementCost extends Model
         'reviewed_at',
         'review_notes',
         'contractor_id',
+        'reservation_id',
         'finance_group_id',
     ];
 
@@ -205,6 +206,11 @@ class EventSettlementCost extends Model
     public function contractor(): BelongsTo
     {
         return $this->belongsTo(Contractor::class);
+    }
+
+    public function reservation(): BelongsTo
+    {
+        return $this->belongsTo(Reservation::class);
     }
 
     public function financeGroup(): BelongsTo

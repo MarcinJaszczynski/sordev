@@ -6,6 +6,7 @@ use App\Actions\Reservations\UpsertReservationAction;
 use App\Data\UpsertReservationData;
 use App\Filament\Forms\ReservationFormFields;
 use App\Filament\Forms\ReservationFormOptions;
+use App\Filament\Resources\ReservationResource;
 use App\Models\EventProgramPoint;
 use App\Models\Reservation;
 use Filament\Forms;
@@ -13,7 +14,7 @@ use Filament\Forms\Form;
 use Filament\Resources\RelationManagers\RelationManager;
 use Filament\Tables;
 use Filament\Tables\Table;
-use Illuminate\Contracts\Database\Query\Builder;
+use Illuminate\Database\Eloquent\Builder;
 
 class ReservationsRelationManager extends RelationManager
 {
@@ -41,93 +42,15 @@ class ReservationsRelationManager extends RelationManager
     public function table(Table $table): Table
     {
         return $table
-            ->columns([
-                Tables\Columns\TextColumn::make('id')
-                    ->label('ID')
-                    ->sortable()
-                    ->width(60),
-
-                Tables\Columns\TextColumn::make('booking_reference')
-                    ->label('Nr potwierdzenia dostawcy')
-                    ->sortable()
-                    ->searchable()
-                    ->placeholder('—'),
-
-                Tables\Columns\TextColumn::make('contractor.name')
-                    ->label('Kontrahent')
-                    ->sortable()
-                    ->searchable(),
-
-                Tables\Columns\TextColumn::make('program_point_summary')
-                    ->label('Punkt programu')
-                    ->state(function (Reservation $record): string {
-                        $point = $record->programPoint;
-                        if (! $point) {
-                            return '—';
-                        }
-
-                        $prefix = $point->is_hotel ? '🏨 ' : '';
-
-                        return $prefix.'Dz.'.(int) ($point->day ?? 1).': '.($point->name ?? '—');
-                    })
-                    ->searchable(query: function (Builder $query, string $search): Builder {
-                        return $query->whereHas(
-                            'programPoint',
-                            fn (Builder $pointQuery): Builder => $pointQuery->where('name', 'like', '%'.$search.'%'),
-                        );
-                    }),
-
-                Tables\Columns\TextColumn::make('participant_count')
-                    ->label('Uczestnicy')
-                    ->sortable()
-                    ->alignCenter(),
-
-                Tables\Columns\TextColumn::make('reserved_amount')
-                    ->label('Kwota')
-                    ->formatStateUsing(fn (Reservation $record): string => \App\Support\ReservationPricingLabel::format($record))
-                    ->sortable()
-                    ->alignEnd(),
-
-                Tables\Columns\TextColumn::make('office_notes')
-                    ->label('Notatki biura')
-                    ->formatStateUsing(function (?string $state): string {
-                        $plain = trim(strip_tags((string) $state));
-
-                        return $plain !== '' ? \Illuminate\Support\Str::limit($plain, 80) : '—';
-                    })
-                    ->tooltip(function (Reservation $record): ?string {
-                        $plain = trim(strip_tags((string) ($record->office_notes ?? '')));
-
-                        return $plain !== '' ? $plain : null;
-                    })
-                    ->wrap()
-                    ->toggleable()
-                    ->searchable(),
-
-                Tables\Columns\BadgeColumn::make('status')
-                    ->label('Status')
-                    ->sortable()
-                    ->formatStateUsing(fn ($state) => Reservation::$statuses[$state] ?? $state)
-                    ->colors([
-                        'gray' => 'pending',
-                        'warning' => 'partially_confirmed',
-                        'success' => ['confirmed', 'completed'],
-                        'danger' => 'cancelled',
-                        'info' => 'not_required',
-                    ]),
-
-                Tables\Columns\TextColumn::make('reserved_at')
-                    ->label('Data rezerwacji')
-                    ->dateTime('d.m.Y H:i')
-                    ->sortable(),
-
-                Tables\Columns\TextColumn::make('expires_at')
-                    ->label('Wygasa')
-                    ->date('d.m.Y')
-                    ->sortable()
-                    ->placeholder('—')
-                    ->color(fn (Reservation $record): ?string => $record->expires_at?->isPast() ? 'danger' : null),
-            ])
+            ->modifyQueryUsing(fn (Builder $query): Builder => $query->with([
+                'event',
+                'programPoint.templatePoint',
+                'programPoint.contractor',
+                'contractor',
+                'settlementCost',
+            ]))
+            ->columns(ReservationResource::sharedTableColumns(includeEvent: false))
+            ->searchPlaceholder('Szukaj: nr rezerwacji, kontrahent, punkt programu, daty, uwagi…')
             ->filters([
                 Tables\Filters\SelectFilter::make('status')
                     ->label('Status')
@@ -182,6 +105,11 @@ class ReservationsRelationManager extends RelationManager
                 Tables\Actions\CreateAction::make()
                     ->label('Dodaj rezerwację')
                     ->modalWidth(ReservationFormFields::MODAL_WIDTH)
+                    ->fillForm(fn (): array => ReservationFormFields::defaultModalData(new ReservationFormOptions(
+                        eventId: $this->getOwnerRecord()->id,
+                        event: $this->getOwnerRecord(),
+                        defaultParticipantCount: (int) ($this->getOwnerRecord()->participant_count ?? 1),
+                    )))
                     ->using(function (array $data): Reservation {
                         return app(UpsertReservationAction::class)(UpsertReservationData::fromForm(
                             formData: $data,
@@ -190,12 +118,17 @@ class ReservationsRelationManager extends RelationManager
                     }),
             ])
             ->emptyStateHeading('Brak rezerwacji')
-            ->emptyStateDescription('Dodaj pierwszą rezerwację u kontrahenta w kontekście tej imprezy.')
+            ->emptyStateDescription('To ta sama lista co w programie imprezy i w „Wszystkie rezerwacje”. Dodaj rezerwację tutaj albo przy punkcie programu.')
             ->emptyStateActions([
                 Tables\Actions\CreateAction::make()
                     ->label('Dodaj rezerwację')
                     ->icon('heroicon-m-plus')
                     ->modalWidth(ReservationFormFields::MODAL_WIDTH)
+                    ->fillForm(fn (): array => ReservationFormFields::defaultModalData(new ReservationFormOptions(
+                        eventId: $this->getOwnerRecord()->id,
+                        event: $this->getOwnerRecord(),
+                        defaultParticipantCount: (int) ($this->getOwnerRecord()->participant_count ?? 1),
+                    )))
                     ->using(function (array $data): Reservation {
                         return app(UpsertReservationAction::class)(UpsertReservationData::fromForm(
                             formData: $data,

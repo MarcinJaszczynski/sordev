@@ -4,8 +4,8 @@ namespace App\Models;
 
 use App\Models\Concerns\HasStickyNotes;
 use App\Models\Concerns\HasTasks;
-use App\Services\ProgramPointPricingCalculator;
 use App\Services\ProgramPointContractorSync;
+use App\Services\ProgramPointPricingCalculator;
 use App\Support\CurrencyAmountDisplay;
 use App\Support\ProgramPointCostPricing;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
@@ -70,6 +70,8 @@ class EventProgramPoint extends Model
         'include_in_program',
         'include_in_calculation',
         'include_gratis_in_cost',
+        'include_pilot_in_cost',
+        'include_driver_in_cost',
         'active',
         'show_title_style',
         'show_description',
@@ -79,6 +81,7 @@ class EventProgramPoint extends Model
         'parent_id',
         'contractor_id',
         'contractor_location_id',
+        'reservation_id',
         'is_hotel',
         'is_transport',
         'is_hotel_service',
@@ -93,6 +96,8 @@ class EventProgramPoint extends Model
         'include_in_program' => 'boolean',
         'include_in_calculation' => 'boolean',
         'include_gratis_in_cost' => 'boolean',
+        'include_pilot_in_cost' => 'boolean',
+        'include_driver_in_cost' => 'boolean',
         'active' => 'boolean',
         'show_title_style' => 'boolean',
         'show_description' => 'boolean',
@@ -105,6 +110,15 @@ class EventProgramPoint extends Model
         'times_manually_locked' => 'boolean',
         'start_date' => 'date',
         'end_date' => 'date',
+    ];
+
+    /**
+     * @var array<string, mixed>
+     */
+    protected $attributes = [
+        'include_gratis_in_cost' => false,
+        'include_pilot_in_cost' => false,
+        'include_driver_in_cost' => false,
     ];
 
     /**
@@ -127,22 +141,30 @@ class EventProgramPoint extends Model
     {
         static::saving(function ($point) {
             $groupSize = (int) ($point->group_size ?? 0);
-            $participants = max(1, (int) ($point->event?->participant_count ?? 1));
+            $event = $point->event;
+            $paying = max(1, (int) ($event?->participant_count ?? 1));
+            $costHeadcount = $event
+                ? ProgramPointCostPricing::costHeadcountForPoint($point, $event, $paying)
+                : $paying;
 
             if ($groupSize > 0) {
-                $point->quantity = ProgramPointPricingCalculator::billableUnits($participants, $groupSize);
+                $point->quantity = ProgramPointPricingCalculator::billableUnits($costHeadcount, $groupSize);
             }
 
             // Automatycznie oblicz total_price
-            $point->total_price = $point->resolveEffectiveTotalPrice($participants);
+            $point->total_price = $point->resolveEffectiveTotalPrice($costHeadcount);
 
-            // Kalkulacja (kosztorys) — zawsze live z unit_price × osoby.
+            // Kalkulacja (kosztorys) — zawsze live z unit_price × osoby koszowe.
             // Plan (ustalenia) NIE jest tu nadpisywany przy zmianie ceny.
-            $point->calculated_price = $point->resolveCalculationTotal($participants);
+            $point->calculated_price = $point->resolveCalculationTotal($paying);
         });
 
         // Seed planu tylko przy tworzeniu — default = kosztorys; potem plan żyje osobno.
         static::creating(function ($point) {
+            $point->include_pilot_in_cost = (bool) ($point->include_pilot_in_cost ?? false);
+            $point->include_driver_in_cost = (bool) ($point->include_driver_in_cost ?? false);
+            $point->include_gratis_in_cost = (bool) ($point->include_gratis_in_cost ?? false);
+
             if (is_null($point->planned_price) || (float) $point->planned_price == 0.0) {
                 $participants = max(1, (int) ($point->event?->participant_count ?? 1));
                 $point->planned_price = $point->calculated_price
@@ -319,6 +341,61 @@ class EventProgramPoint extends Model
         return $this->hasMany(Reservation::class, 'program_point_id');
     }
 
+    public function sharedReservation(): BelongsTo
+    {
+        return $this->belongsTo(Reservation::class, 'reservation_id');
+    }
+
+    public function hotelStays(): HasMany
+    {
+        return $this->hasMany(EventHotelStay::class, 'event_program_point_id');
+    }
+
+    /**
+     * Rezerwacja widoczna przy punkcie: wspólna grupa (hotel / transport / szablon), własna albo noc hotelu.
+     */
+    public function latestVisibleReservation(): ?Reservation
+    {
+        $shared = $this->relationLoaded('sharedReservation')
+            ? $this->sharedReservation
+            : (filled($this->reservation_id) ? $this->sharedReservation()->first() : null);
+
+        if ($shared instanceof Reservation && $shared->isActiveBooking()) {
+            return $shared;
+        }
+
+        $own = ($this->relationLoaded('reservations') ? $this->reservations : $this->reservations()->get())
+            ->filter(function (Reservation $reservation): bool {
+                if (method_exists($reservation, 'trashed') && $reservation->trashed()) {
+                    return false;
+                }
+
+                return $reservation->isActiveBooking();
+            })
+            ->sortByDesc('id')
+            ->first();
+
+        if ($own) {
+            return $own;
+        }
+
+        $stays = $this->relationLoaded('hotelStays')
+            ? $this->hotelStays
+            : $this->hotelStays()->with('reservation')->get();
+
+        $fromStay = $stays
+            ->map(fn (EventHotelStay $stay) => $stay->reservation)
+            ->filter(fn ($reservation) => $reservation instanceof Reservation && $reservation->isActiveBooking())
+            ->sortByDesc('id')
+            ->first();
+
+        if ($fromStay instanceof Reservation) {
+            return $fromStay;
+        }
+
+        return app(\App\Services\ProgramPointReservationSync::class)->findForPoint($this);
+    }
+
     /**
      * Oblicz koszt całkowity na podstawie ceny jednostkowej i ilości
      */
@@ -442,6 +519,8 @@ class EventProgramPoint extends Model
             'include_in_program' => $this->include_in_program,
             'include_in_calculation' => $this->include_in_calculation,
             'include_gratis_in_cost' => $this->include_gratis_in_cost,
+            'include_pilot_in_cost' => $this->include_pilot_in_cost,
+            'include_driver_in_cost' => $this->include_driver_in_cost,
             'active' => $this->active,
             'show_title_style' => $this->show_title_style,
             'show_description' => $this->show_description,

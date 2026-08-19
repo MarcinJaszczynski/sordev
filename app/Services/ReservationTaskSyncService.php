@@ -128,7 +128,8 @@ class ReservationTaskSyncService
             description: $description,
             priority: TaskPriority::Urgent,
             dueDate: $dueDate,
-            eventForAssignee: $event,
+            // Opiekun imprezy obsługuje klientów/pilotów — zadania rezerwacji/zaliczek idą na biuro.
+            eventForAssignee: null,
             url: AdminPanelUrls::reservationEdit($reservation),
         );
     }

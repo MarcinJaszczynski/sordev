@@ -70,6 +70,9 @@ final class UpdateSettlementCostPaymentAction
                 'advance_amount' => EventSettlementCost::isAdvancePaymentType($advanceType) ? $amount : null,
                 'notes' => $data->notes,
                 'payment_status' => EventSettlementCost::isAdvancePaymentType($advanceType) ? 'advance_paid' : 'paid',
+                ...(\Illuminate\Support\Facades\Schema::hasColumn('event_settlement_costs', 'reservation_id')
+                    ? ['reservation_id' => $data->reservationId ?? $payment->reservation_id]
+                    : []),
             ]);
 
             $this->refreshPlanPaymentStatus($plan->fresh(), $settlement->fresh(['costs']));
@@ -80,6 +83,9 @@ final class UpdateSettlementCostPaymentAction
             ));
 
             app(\App\Services\PilotSettlementService::class)->refreshCashFromCosts($settlement->fresh() ?? $settlement);
+
+            app(\App\Services\SyncReservationDepositFromCostPayment::class)
+                ->refreshAfterPaymentsChanged($plan->fresh());
 
             return $payment->fresh();
         });

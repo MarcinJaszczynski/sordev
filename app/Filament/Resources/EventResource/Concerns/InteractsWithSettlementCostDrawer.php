@@ -13,13 +13,16 @@ use App\Actions\Finance\UpdateSettlementCostPlanAction;
 use App\Actions\Finance\UpsertFinanceManualCostAction;
 use App\Actions\Finance\UpsertFinanceProgramCostAction;
 use App\Actions\Reservations\UpsertReservationAction;
-use App\Data\UpsertReservationData;
 use App\Data\ChangeSettlementCostPayerData;
 use App\Data\RecordSettlementCostPaymentData;
 use App\Data\UpdateSettlementCostPaymentData;
 use App\Data\UpdateSettlementCostPlanData;
 use App\Data\UpsertFinanceManualCostData;
 use App\Data\UpsertFinanceProgramCostData;
+use App\Data\UpsertReservationData;
+use App\Filament\Forms\ProgramPointSettlementFinanceFields;
+use App\Models\Contractor;
+use App\Models\ContractorType;
 use App\Models\Currency;
 use App\Models\Event;
 use App\Models\EventProgramPoint;
@@ -27,11 +30,12 @@ use App\Models\EventSettlement;
 use App\Models\EventSettlementCost;
 use App\Models\EventSettlementDocument;
 use App\Models\Reservation;
-use App\Filament\Forms\EventProgramPointPricingFields;
-use App\Filament\Forms\ProgramPointSettlementFinanceFields;
+use App\Services\ContractorLookupService;
 use App\Services\EventFinanceOverviewService;
 use App\Services\ProgramPointPricingCalculator;
 use App\Support\ProgramPointCostPricing;
+use App\Support\Reservations\ProgramPointReservationGroup;
+use App\Support\Reservations\ReservationFormDefaults;
 use Filament\Notifications\Notification;
 use Illuminate\Support\Carbon;
 use Livewire\Attributes\Computed;
@@ -78,6 +82,17 @@ trait InteractsWithSettlementCostDrawer
     /** @var array<string, mixed> */
     public array $reservationForm = [];
 
+    public string $reservationContractorSearch = '';
+
+    /** @var array<int, string> */
+    public array $reservationContractorSearchResults = [];
+
+    public bool $showReservationContractorSearchResults = false;
+
+    public bool $reservationContractorSearchAll = false;
+
+    public string $reservationContractorLabel = '';
+
     /** @var array<int, TemporaryUploadedFile> */
     public array $reservationAttachmentFiles = [];
 
@@ -119,7 +134,7 @@ trait InteractsWithSettlementCostDrawer
      */
     protected function invalidateSettlementCostCaches(): void
     {
-        unset($this->selectedRow);
+        unset($this->selectedRow, $this->drawerReservations);
     }
 
     protected function ensureSettlement(): EventSettlement
@@ -586,6 +601,7 @@ trait InteractsWithSettlementCostDrawer
             'due_date' => $payment['due_date'] ?? null,
             'document_number' => $payment['document_number'] ?? null,
             'notes' => $payment['notes'] ?? null,
+            'reservation_id' => $payment['reservation_id'] ?? null,
         ];
 
         $this->showPaymentForm = true;
@@ -609,6 +625,9 @@ trait InteractsWithSettlementCostDrawer
         $this->editingPaymentId = null;
         $this->resetPaymentForm();
         $this->invalidateSettlementCostCaches();
+        if ($this->showReservationForm) {
+            $this->hydrateReservationFormFromSelection();
+        }
         Notification::make()->title('Usunięto wpłatę')->success()->send();
     }
 
@@ -671,6 +690,7 @@ trait InteractsWithSettlementCostDrawer
                     amount: $amount,
                     rate: $rate,
                     currencyId: $payment->actual_currency_id ?? $payment->planned_currency_id,
+                    reservationId: filled($form['reservation_id'] ?? null) ? (int) $form['reservation_id'] : null,
                 ));
             } else {
                 $cost = EventSettlementCost::query()->with('plannedCurrency')->findOrFail($this->selectedCostId);
@@ -688,6 +708,7 @@ trait InteractsWithSettlementCostDrawer
                     amount: $amount,
                     rate: $rate,
                     currencyId: $cost->planned_currency_id,
+                    reservationId: filled($form['reservation_id'] ?? null) ? (int) $form['reservation_id'] : null,
                 ));
             }
         } catch (\Throwable $e) {
@@ -701,6 +722,9 @@ trait InteractsWithSettlementCostDrawer
         $this->editingPaymentId = null;
         $this->resetPaymentForm();
         $this->invalidateSettlementCostCaches();
+        if ($this->showReservationForm) {
+            $this->hydrateReservationFormFromSelection();
+        }
         Notification::make()
             ->title($wasEdit ? 'Zapisano wpłatę' : 'Dodano wpłatę')
             ->success()
@@ -723,8 +747,13 @@ trait InteractsWithSettlementCostDrawer
         }
 
         $event = $this->settlementCostEvent();
-        $includeGratis = (bool) ($this->planForm['include_gratis_in_cost'] ?? false);
-        $headcount = ProgramPointCostPricing::costHeadcount($event, null, $includeGratis);
+        $headcount = ProgramPointCostPricing::costHeadcount(
+            $event,
+            null,
+            (bool) ($this->planForm['include_gratis_in_cost'] ?? false),
+            (bool) ($this->planForm['include_pilot_in_cost'] ?? false),
+            (bool) ($this->planForm['include_driver_in_cost'] ?? false),
+        );
         $groupSizeInt = (int) ($this->planForm['group_size'] ?? 1);
         $fixedQty = max(1, (int) ($this->planForm['quantity'] ?? 1));
         $unit = (float) ($this->planForm['unit_price'] ?? 0);
@@ -828,6 +857,8 @@ trait InteractsWithSettlementCostDrawer
             'currency_id' => $currencyId,
             'convert_to_pln' => $convertToPln,
             'include_gratis_in_cost' => (bool) ($this->planForm['include_gratis_in_cost'] ?? false),
+            'include_pilot_in_cost' => (bool) ($this->planForm['include_pilot_in_cost'] ?? false),
+            'include_driver_in_cost' => (bool) ($this->planForm['include_driver_in_cost'] ?? false),
         ]);
 
         $currency = $currencyId ? Currency::query()->find($currencyId) : null;
@@ -870,6 +901,7 @@ trait InteractsWithSettlementCostDrawer
             'due_date' => null,
             'document_number' => null,
             'notes' => null,
+            'reservation_id' => null,
         ];
     }
 
@@ -940,6 +972,11 @@ trait InteractsWithSettlementCostDrawer
         if (filled($row['next_due_label'] ?? null)) {
             $this->paymentForm['due_date'] = $row['next_due_label'];
         }
+
+        $reservations = $this->drawerReservations;
+        $this->paymentForm['reservation_id'] = $reservations->count() === 1
+            ? (int) $reservations->first()->id
+            : null;
     }
 
     protected function resetPlanForm(): void
@@ -953,6 +990,8 @@ trait InteractsWithSettlementCostDrawer
             'currency_id' => $this->defaultCurrencyId(),
             'convert_to_pln' => true,
             'include_gratis_in_cost' => false,
+            'include_pilot_in_cost' => false,
+            'include_driver_in_cost' => false,
             'calculated_price' => null,
             'planned_price' => null,
             'paid_by' => 'office',
@@ -1056,7 +1095,15 @@ trait InteractsWithSettlementCostDrawer
 
         $event = $this->settlementCostEvent();
         $includeGratis = (bool) ($point?->include_gratis_in_cost ?? false);
-        $headcount = ProgramPointCostPricing::costHeadcount($event, null, $includeGratis);
+        $includePilot = (bool) ($point?->include_pilot_in_cost ?? false);
+        $includeDriver = (bool) ($point?->include_driver_in_cost ?? false);
+        $headcount = ProgramPointCostPricing::costHeadcount(
+            $event,
+            null,
+            $includeGratis,
+            $includePilot,
+            $includeDriver,
+        );
         $groupSize = (int) ($point?->group_size ?? 1);
         $quantity = max(1, (int) ($point?->quantity ?? 1));
         $unitPrice = (float) ($point?->unit_price ?? 0);
@@ -1075,6 +1122,8 @@ trait InteractsWithSettlementCostDrawer
             'currency_id' => $row['planned_currency_id'] ?? $point?->currency_id ?? $this->defaultCurrencyId(),
             'convert_to_pln' => (bool) ($row['planned_convert_to_pln'] ?? $point?->convert_to_pln ?? true),
             'include_gratis_in_cost' => $includeGratis,
+            'include_pilot_in_cost' => $includePilot,
+            'include_driver_in_cost' => $includeDriver,
             'calculated_price' => $calculated,
             'planned_price' => (float) ($point?->planned_price ?? $row['planned_amount'] ?? $calculated),
             'paid_by' => $row['paid_by'] ?? 'office',
@@ -1138,12 +1187,16 @@ trait InteractsWithSettlementCostDrawer
         }
 
         $reservationId = $this->reservationForm['reservation_id'] ?? null;
-        $reservation = $reservationId
-            ? $point->reservations()->whereKey($reservationId)->first()
-            : $point->reservations()->latest('id')->first();
+        $reservation = $this->resolveReservationForDrawer(
+            filled($reservationId) ? (int) $reservationId : null
+        );
 
         $formData = $this->reservationForm;
-        unset($formData['reservation_id']);
+        unset($formData['reservation_id'], $formData['amount_hint'], $formData['coverage_label']);
+
+        if (array_key_exists('contractor_id', $formData) && blank($formData['contractor_id'])) {
+            $formData['contractor_id'] = null;
+        }
 
         if (! empty($this->reservationAttachmentFiles)) {
             $formData['pending_attachments'] = $this->reservationAttachmentFiles;
@@ -1153,16 +1206,35 @@ trait InteractsWithSettlementCostDrawer
             ? EventSettlementCost::query()->find($this->selectedCostId)
             : null;
 
-        app(UpsertReservationAction::class)(UpsertReservationData::fromForm(
-            formData: $formData,
-            reservation: $reservation,
-            programPoint: $point,
-            settlementCost: $settlementCost,
-        ));
+        $linkedPoint = $point;
+        if (
+            $reservation
+            && filled($reservation->program_point_id)
+            && (int) $reservation->program_point_id !== (int) $point->id
+        ) {
+            $linkedPoint = $reservation->programPoint ?? $point;
+        }
+
+        try {
+            app(UpsertReservationAction::class)(UpsertReservationData::fromForm(
+                formData: $formData,
+                reservation: $reservation,
+                programPoint: $linkedPoint,
+                settlementCost: $settlementCost,
+            ));
+        } catch (\Throwable $e) {
+            Notification::make()
+                ->title('Nie udało się zapisać rezerwacji')
+                ->body($e->getMessage())
+                ->danger()
+                ->send();
+
+            return;
+        }
 
         $this->showReservationForm = false;
         $this->resetReservationForm();
-        unset($this->selectedRow);
+        unset($this->selectedRow, $this->drawerReservations);
         $this->invalidateSettlementCostCaches();
 
         Notification::make()
@@ -1171,19 +1243,185 @@ trait InteractsWithSettlementCostDrawer
             ->send();
     }
 
+    public function deleteReservation(?int $reservationId = null): void
+    {
+        $point = $this->selectedProgramPointForDrawer();
+        if (! $point) {
+            Notification::make()
+                ->title('Rezerwacja dostępna tylko dla punktów programu')
+                ->warning()
+                ->send();
+
+            return;
+        }
+
+        $reservationId ??= $this->reservationForm['reservation_id'] ?? null;
+        $reservation = $this->resolveReservationForDrawer(
+            filled($reservationId) ? (int) $reservationId : null
+        );
+
+        if (! $reservation) {
+            Notification::make()->title('Nie znaleziono rezerwacji')->warning()->send();
+
+            return;
+        }
+
+        try {
+            $reservation->delete();
+        } catch (\Throwable $e) {
+            Notification::make()
+                ->title('Nie udało się usunąć rezerwacji')
+                ->body($e->getMessage())
+                ->danger()
+                ->send();
+
+            return;
+        }
+
+        $this->showReservationForm = false;
+        $this->resetReservationForm();
+        unset($this->selectedRow, $this->drawerReservations);
+        $this->invalidateSettlementCostCaches();
+
+        Notification::make()
+            ->title('Usunięto rezerwację')
+            ->success()
+            ->send();
+    }
+
     protected function resetReservationForm(): void
     {
         $this->reservationForm = [
             'reservation_id' => null,
+            'contractor_id' => null,
             'booking_reference' => null,
             'status' => 'pending',
             'confirm_by' => null,
             'confirmed_at' => null,
             'deposit_due_at' => null,
             'deposit_paid_at' => null,
+            'reserved_amount' => null,
+            'participant_count' => 1,
+            'currency_id' => null,
+            'amount_basis' => 'lump_sum',
+            'participant_scope' => 'all',
+            'convert_to_pln' => true,
+            'amount_hint' => null,
+            'coverage_label' => null,
             'office_notes' => null,
         ];
         $this->reservationAttachmentFiles = [];
+        $this->resetReservationContractorSearch();
+        $this->reservationContractorLabel = '';
+    }
+
+    public function updatedReservationContractorSearch(): void
+    {
+        $this->refreshReservationContractorSearch();
+    }
+
+    public function updatedReservationContractorSearchAll(): void
+    {
+        $this->refreshReservationContractorSearch();
+    }
+
+    public function selectReservationContractor(int $contractorId): void
+    {
+        if ($contractorId <= 0) {
+            return;
+        }
+
+        $label = $this->reservationContractorSearchResults[$contractorId]
+            ?? $this->formatReservationContractorLabel($contractorId);
+
+        $this->reservationForm['contractor_id'] = $contractorId;
+        $this->reservationContractorLabel = $label ?? '';
+        $this->resetReservationContractorSearch();
+    }
+
+    public function clearReservationContractor(): void
+    {
+        $this->reservationForm['contractor_id'] = null;
+        $this->reservationContractorLabel = '';
+        $this->resetReservationContractorSearch();
+    }
+
+    protected function resetReservationContractorSearch(): void
+    {
+        $this->reservationContractorSearch = '';
+        $this->reservationContractorSearchResults = [];
+        $this->showReservationContractorSearchResults = false;
+    }
+
+    protected function refreshReservationContractorSearch(): void
+    {
+        $query = trim($this->reservationContractorSearch);
+
+        if (mb_strlen($query) < 2) {
+            $this->reservationContractorSearchResults = [];
+            $this->showReservationContractorSearchResults = false;
+
+            return;
+        }
+
+        $typeNames = $this->reservationContractorTypeNames();
+        $searchAll = $this->reservationContractorSearchAll || $typeNames === [];
+
+        $this->reservationContractorSearchResults = app(ContractorLookupService::class)->searchOptions(
+            search: $query,
+            typeNames: $typeNames,
+            searchAll: $searchAll,
+            includeId: filled($this->reservationForm['contractor_id'] ?? null)
+                ? (int) $this->reservationForm['contractor_id']
+                : null,
+        );
+        $this->showReservationContractorSearchResults = true;
+    }
+
+    /**
+     * @return array<int, string>
+     */
+    protected function reservationContractorTypeNames(): array
+    {
+        $point = $this->selectedProgramPointForDrawer();
+        if (! $point) {
+            return [];
+        }
+
+        if ((bool) $point->is_hotel) {
+            return ContractorType::hotelTypeNames();
+        }
+
+        if ((bool) $point->is_transport) {
+            return ContractorType::transportTypeNames();
+        }
+
+        return [];
+    }
+
+    public function reservationContractorHasTypeFilter(): bool
+    {
+        return $this->reservationContractorTypeNames() !== [];
+    }
+
+    protected function syncReservationContractorLabel(?int $contractorId): void
+    {
+        if (! $contractorId) {
+            $this->reservationContractorLabel = '';
+
+            return;
+        }
+
+        $this->reservationContractorLabel = $this->formatReservationContractorLabel($contractorId) ?? ('#'.$contractorId);
+    }
+
+    protected function formatReservationContractorLabel(int $contractorId): ?string
+    {
+        $contractor = Contractor::query()->find($contractorId);
+
+        return $contractor
+            ? app(ContractorLookupService::class)->formatOptionLabel($contractor)
+            : null;
     }
 
     protected function hydrateReservationFormFromSelection(): void
@@ -1195,24 +1433,70 @@ trait InteractsWithSettlementCostDrawer
             return;
         }
 
-        $reservation = $point->reservations()->latest('id')->first();
+        $settlementCost = $this->selectedCostId
+            ? EventSettlementCost::query()->find($this->selectedCostId)
+            : null;
+
+        $reservation = $this->resolveReservationForDrawer();
+        $defaults = ReservationFormDefaults::forProgramPoint($point, $settlementCost, $reservation);
+        $depositDue = $defaults['deposit_due_at']
+            ?? (filled($this->planForm['due_date'] ?? null) ? (string) $this->planForm['due_date'] : null);
+        $contractorId = $reservation?->contractor_id
+            ?? $point->contractor_id
+            ?? $settlementCost?->contractor_id;
+        $coverage = ProgramPointReservationGroup::coverageLabel($point);
+
         if (! $reservation) {
-            $this->resetReservationForm();
+            $this->reservationForm = [
+                'reservation_id' => null,
+                'contractor_id' => $contractorId,
+                'booking_reference' => null,
+                'status' => $defaults['status'],
+                'confirm_by' => null,
+                'confirmed_at' => null,
+                'deposit_due_at' => $depositDue,
+                'deposit_paid_at' => null,
+                'reserved_amount' => $defaults['reserved_amount'],
+                'participant_count' => $defaults['participant_count'],
+                'currency_id' => $defaults['currency_id'],
+                'amount_basis' => $defaults['amount_basis'],
+                'participant_scope' => $defaults['participant_scope'],
+                'convert_to_pln' => $defaults['convert_to_pln'],
+                'amount_hint' => $defaults['amount_hint'],
+                'coverage_label' => $coverage,
+                'office_notes' => null,
+            ];
+            $this->reservationAttachmentFiles = [];
+            $this->resetReservationContractorSearch();
+            $this->syncReservationContractorLabel(filled($contractorId) ? (int) $contractorId : null);
 
             return;
         }
 
         $this->reservationForm = [
             'reservation_id' => $reservation->id,
+            'contractor_id' => $contractorId,
             'booking_reference' => $reservation->booking_reference,
             'status' => $reservation->status,
             'confirm_by' => $reservation->confirm_by?->toDateString(),
             'confirmed_at' => $reservation->confirmed_at?->toDateString(),
-            'deposit_due_at' => $reservation->deposit_due_at?->toDateString(),
+            'deposit_due_at' => $reservation->deposit_due_at?->toDateString() ?? $depositDue,
             'deposit_paid_at' => $reservation->deposit_paid_at?->toDateString(),
+            'reserved_amount' => $reservation->reserved_amount !== null
+                ? round((float) $reservation->reserved_amount, 2)
+                : $defaults['reserved_amount'],
+            'participant_count' => max(1, (int) ($reservation->participant_count ?? $defaults['participant_count'])),
+            'currency_id' => $reservation->currency_id ?? $defaults['currency_id'],
+            'amount_basis' => $reservation->amount_basis ?? $defaults['amount_basis'],
+            'participant_scope' => $reservation->participant_scope ?? $defaults['participant_scope'],
+            'convert_to_pln' => (bool) ($reservation->convert_to_pln ?? $defaults['convert_to_pln']),
+            'amount_hint' => $reservation->reserved_amount !== null ? null : $defaults['amount_hint'],
+            'coverage_label' => $coverage,
             'office_notes' => $reservation->office_notes,
         ];
         $this->reservationAttachmentFiles = [];
+        $this->resetReservationContractorSearch();
+        $this->syncReservationContractorLabel(filled($contractorId) ? (int) $contractorId : null);
     }
 
     protected function selectedProgramPointForDrawer(): ?EventProgramPoint
@@ -1228,8 +1512,30 @@ trait InteractsWithSettlementCostDrawer
 
         return EventProgramPoint::query()
             ->where('event_id', $this->settlementCostEvent()->id)
-            ->with(['reservations', 'contractor'])
+            ->with(['reservations.contractor', 'sharedReservation.contractor', 'contractor', 'hotelStays.reservation.contractor'])
             ->find((int) $cost->source_id);
+    }
+
+    protected function resolveReservationForDrawer(?int $reservationId = null): ?Reservation
+    {
+        $point = $this->selectedProgramPointForDrawer();
+        if (! $point) {
+            return null;
+        }
+
+        if ($reservationId) {
+            $found = Reservation::query()
+                ->where('event_id', $point->event_id)
+                ->whereKey($reservationId)
+                ->first();
+
+            if ($found) {
+                return $found;
+            }
+        }
+
+        return $point->latestVisibleReservation()
+            ?? $point->reservations()->latest('id')->first();
     }
 
     /**
@@ -1239,7 +1545,17 @@ trait InteractsWithSettlementCostDrawer
     public function drawerReservations(): \Illuminate\Support\Collection
     {
         $point = $this->selectedProgramPointForDrawer();
+        if (! $point) {
+            return collect();
+        }
 
-        return $point?->reservations ?? collect();
+        $own = $point->reservations;
+        $visible = $point->latestVisibleReservation();
+
+        if ($visible && $own->doesntContain(fn (Reservation $reservation): bool => (int) $reservation->id === (int) $visible->id)) {
+            return $own->prepend($visible)->values();
+        }
+
+        return $own;
     }
 }

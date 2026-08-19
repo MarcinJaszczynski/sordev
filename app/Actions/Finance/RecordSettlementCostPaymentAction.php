@@ -56,6 +56,8 @@ final class RecordSettlementCostPaymentAction
         return DB::transaction(function () use ($data, $plan, $amount, $rate, $amountPln, $currencyId, $method, $paidBy, $advanceType): EventSettlementCost {
             $settlement = $plan->settlement()->firstOrFail();
             [$paymentSourceType, $paymentSourceId] = $this->resolvePaymentSource($plan);
+            $reservationId = app(\App\Services\SyncReservationDepositFromCostPayment::class)
+                ->resolveReservationIdForNewPayment($plan, $data->reservationId);
 
             $existingCount = $settlement->costs()
                 ->where('source_type', $paymentSourceType)
@@ -76,7 +78,7 @@ final class RecordSettlementCostPaymentAction
                 default => 'wpłata',
             };
 
-            $payment = $settlement->costs()->create([
+            $payload = [
                 'source_type' => $paymentSourceType,
                 'source_id' => $paymentSourceId,
                 'name' => $baseName.' • '.$label.' #'.($existingCount + 1),
@@ -101,7 +103,13 @@ final class RecordSettlementCostPaymentAction
                 'notes' => $data->notes,
                 'contractor_id' => $plan->contractor_id,
                 'order' => (int) ($plan->order ?? 0) + $existingCount + 1,
-            ]);
+            ];
+
+            if ($reservationId && \Illuminate\Support\Facades\Schema::hasColumn('event_settlement_costs', 'reservation_id')) {
+                $payload['reservation_id'] = $reservationId;
+            }
+
+            $payment = $settlement->costs()->create($payload);
 
             $this->refreshPlanPaymentStatus($plan, $settlement->fresh(['costs']));
 
@@ -111,6 +119,9 @@ final class RecordSettlementCostPaymentAction
             ));
 
             app(\App\Services\PilotSettlementService::class)->refreshCashFromCosts($settlement->fresh() ?? $settlement);
+
+            app(\App\Services\SyncReservationDepositFromCostPayment::class)
+                ->markPaidFromPayment($plan->fresh(), $payment->fresh());
 
             return $payment->fresh();
         });

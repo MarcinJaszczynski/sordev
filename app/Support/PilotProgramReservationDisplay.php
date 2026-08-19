@@ -6,6 +6,7 @@ namespace App\Support;
 
 use App\Models\EventProgramPoint;
 use App\Models\Reservation;
+use Illuminate\Support\Collection;
 
 /**
  * Kompaktowy podgląd rezerwacji w programie portalu pilota (status + godzina punktu).
@@ -23,13 +24,15 @@ final class PilotProgramReservationDisplay
      */
     public static function linesForPoint(EventProgramPoint $point): array
     {
-        $point->loadMissing('reservations');
+        $point->loadMissing(['reservations', 'children.reservations']);
+
+        $reservations = self::reservationsForPoint($point);
 
         $start = filled($point->start_time)
             ? substr((string) $point->start_time, 0, 5)
             : null;
 
-        return $point->reservations
+        return $reservations
             ->reject(fn (Reservation $reservation): bool => $reservation->status === 'not_required')
             ->sortBy(fn (Reservation $reservation): string => (string) ($reservation->reserved_at?->timestamp ?? $reservation->id))
             ->values()
@@ -47,6 +50,29 @@ final class PilotProgramReservationDisplay
                 ];
             })
             ->all();
+    }
+
+    /**
+     * Rezerwacje punktu; dla setu (rodzica) — także z podpunktów, gdy rodzic nie ma własnych.
+     *
+     * @return Collection<int, Reservation>
+     */
+    private static function reservationsForPoint(EventProgramPoint $point): Collection
+    {
+        $own = $point->reservations ?? collect();
+        if ($own->isNotEmpty()) {
+            return $own;
+        }
+
+        $children = $point->children ?? collect();
+        if ($children->isEmpty()) {
+            return collect();
+        }
+
+        return $children
+            ->flatMap(fn (EventProgramPoint $child) => $child->reservations ?? collect())
+            ->unique('id')
+            ->values();
     }
 
     private static function badgeClasses(string $status): string

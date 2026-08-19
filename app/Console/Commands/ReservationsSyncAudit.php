@@ -2,8 +2,11 @@
 
 namespace App\Console\Commands;
 
+use App\Models\Event;
 use App\Models\EventSettlement;
 use App\Models\Reservation;
+use App\Services\HotelStayReservationSync;
+use App\Services\ProgramPointReservationSync;
 use Illuminate\Console\Command;
 
 class ReservationsSyncAudit extends Command
@@ -20,6 +23,13 @@ class ReservationsSyncAudit extends Command
         $fix = (bool) $this->option('fix');
         $eventId = $this->option('event');
         $limit = max(0, (int) $this->option('limit'));
+
+        if ($fix) {
+            $hotelFixed = $this->backfillHotels($eventId);
+            $this->info('Hotel: dopięto rezerwacje dla '.$hotelFixed.' kontrahentów.');
+            $pointsFixed = $this->backfillProgramPoints($eventId);
+            $this->info('Punkty programu: dopięto grupy rezerwacji ('.$pointsFixed.').');
+        }
 
         $query = Reservation::query()
             ->with(['programPoint.event', 'settlementCost.settlement'])
@@ -164,5 +174,49 @@ class ReservationsSyncAudit extends Command
         $reservation->forceFill($updates)->saveQuietly();
 
         return true;
+    }
+
+    private function backfillHotels(mixed $eventId): int
+    {
+        $sync = app(HotelStayReservationSync::class);
+
+        if ($eventId !== null && $eventId !== '') {
+            $event = Event::query()->find((int) $eventId);
+
+            return $event ? $sync->backfillForEvent($event) : 0;
+        }
+
+        $ensured = 0;
+
+        Event::query()
+            ->whereHas('hotelStays', fn ($query) => $query->whereNotNull('contractor_id'))
+            ->orderBy('id')
+            ->each(function (Event $event) use ($sync, &$ensured): void {
+                $ensured += $sync->backfillForEvent($event);
+            });
+
+        return $ensured;
+    }
+
+    private function backfillProgramPoints(mixed $eventId): int
+    {
+        $sync = app(ProgramPointReservationSync::class);
+
+        if ($eventId !== null && $eventId !== '') {
+            $event = Event::query()->find((int) $eventId);
+
+            return $event ? $sync->backfillForEvent($event) : 0;
+        }
+
+        $linked = 0;
+
+        Event::query()
+            ->whereHas('reservations')
+            ->orderBy('id')
+            ->each(function (Event $event) use ($sync, &$linked): void {
+                $linked += $sync->backfillForEvent($event);
+            });
+
+        return $linked;
     }
 }

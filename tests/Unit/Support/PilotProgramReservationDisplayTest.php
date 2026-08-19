@@ -67,4 +67,38 @@ class PilotProgramReservationDisplayTest extends TestCase
         $this->assertSame('HTL-22', $lines[0]['reference']);
         $this->assertStringContainsString('emerald', $lines[0]['badge_classes']);
     }
+
+    public function test_set_parent_shows_child_reservations_when_own_empty(): void
+    {
+        if (! Schema::hasTable('reservations')) {
+            $this->markTestSkipped('Tabela reservations nie istnieje.');
+        }
+
+        $event = Event::factory()->create();
+        $parent = EventProgramPoint::factory()->create([
+            'event_id' => $event->id,
+            'name' => 'Set Olsztyn',
+            'parent_id' => null,
+        ]);
+        $child = EventProgramPoint::factory()->create([
+            'event_id' => $event->id,
+            'name' => 'Bilety',
+            'parent_id' => $parent->id,
+            'start_time' => '09:00:00',
+        ]);
+
+        Reservation::create([
+            'event_id' => $event->id,
+            'program_point_id' => $child->id,
+            'status' => 'confirmed',
+            'booking_reference' => 'SET-1',
+            'reserved_at' => now(),
+        ]);
+
+        $lines = PilotProgramReservationDisplay::linesForPoint($parent->fresh(['reservations', 'children.reservations']));
+
+        $this->assertCount(1, $lines);
+        $this->assertSame('SET-1', $lines[0]['reference']);
+        $this->assertSame('Rez. potwierdzona', $lines[0]['status_label']);
+    }
 }

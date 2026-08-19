@@ -66,6 +66,9 @@ final class UpdateSettlementCostPlanAction
 
             $plan->update($payload);
 
+            app(\App\Services\SyncReservationDepositFromCostPayment::class)
+                ->syncDueDateFromPlan($plan->fresh());
+
             $settlement = $plan->settlement;
             if ($settlement) {
                 ($this->recalculateSettlement)(new RecalculateSettlementTotalsData(

@@ -39,6 +39,9 @@ final class DeleteSettlementCostPaymentAction
                     app(\App\Services\SettlementPaymentHealthService::class)
                         ->syncPlanPaymentStatus($plan, $freshSettlement->costs);
                 }
+
+                app(\App\Services\SyncReservationDepositFromCostPayment::class)
+                    ->refreshAfterPaymentsChanged($plan->fresh());
             }
 
             ($this->recalculateSettlement)(new RecalculateSettlementTotalsData(

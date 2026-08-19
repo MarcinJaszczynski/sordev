@@ -95,6 +95,13 @@ class Reservation extends Model
             ReservationHistoryLogger::logUpdated($reservation);
         });
 
+        static::deleting(function (self $reservation): void {
+            // Unikalny nr potwierdzenia musi wrócić do puli — inaczej nie da się wpisać tej samej rezerwacji na właściwy punkt.
+            if ($reservation->booking_reference !== null) {
+                $reservation->forceFill(['booking_reference' => null])->saveQuietly();
+            }
+        });
+
         static::deleted(function (self $reservation): void {
             ReservationHistoryLogger::logDeleted($reservation);
             app(ReservationTaskSyncService::class)->retireAll($reservation);
@@ -149,7 +156,8 @@ class Reservation extends Model
                     $reservation->forceFill($updates)->saveQuietly();
                 }
 
-                $reservation->loadMissing('settlementCost');
+                $reservation->unsetRelation('settlementCost');
+                $reservation->load('settlementCost');
             }
 
             $reservation->syncSettlementDepositState();
@@ -260,6 +268,21 @@ class Reservation extends Model
         return $this->morphMany(Task::class, 'taskable');
     }
 
+    public function hotelStays(): HasMany
+    {
+        return $this->hasMany(EventHotelStay::class);
+    }
+
+    public function linkedProgramPoints(): HasMany
+    {
+        return $this->hasMany(EventProgramPoint::class, 'reservation_id');
+    }
+
+    public function settlementPayments(): HasMany
+    {
+        return $this->hasMany(EventSettlementCost::class, 'reservation_id');
+    }
+
     public function isActiveBooking(): bool
     {
         return ! in_array($this->status, ['cancelled', 'not_required'], true);
@@ -267,29 +290,8 @@ class Reservation extends Model
 
     public function syncSettlementDepositState(): void
     {
-        $cost = $this->settlementCost;
-
-        if (! $cost || ! filled($this->deposit_paid_at)) {
-            return;
-        }
-
-        $paidAt = $this->deposit_paid_at instanceof Carbon
-            ? $this->deposit_paid_at
-            : Carbon::parse($this->deposit_paid_at);
-
-        $updates = [];
-
-        if (! $cost->paid_at || $cost->paid_at->toDateString() !== $paidAt->toDateString()) {
-            $updates['paid_at'] = $paidAt;
-        }
-
-        if (! in_array($cost->payment_status, ['advance_paid', 'paid'], true)) {
-            $updates['payment_status'] = 'advance_paid';
-        }
-
-        if ($updates !== []) {
-            $cost->forceFill($updates)->saveQuietly();
-        }
+        app(\App\Services\SyncReservationDepositFromCostPayment::class)
+            ->syncFromReservation($this);
     }
 
     public function getIsExpiredAttribute(): bool

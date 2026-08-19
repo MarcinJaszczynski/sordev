@@ -8,6 +8,8 @@ use App\Data\UpsertReservationData;
 use App\Filament\Forms\ReservationFormFields;
 use App\Models\EventProgramPoint;
 use App\Models\Reservation;
+use App\Services\HotelStayReservationSync;
+use App\Services\ProgramPointReservationSync;
 use App\Services\ReservationTaskSyncService;
 use Illuminate\Support\Facades\DB;
 
@@ -72,6 +74,10 @@ final class UpsertReservationAction
                 'programPoint.templatePoint',
                 'contractor',
             ]));
+
+            $fresh = $reservation->fresh();
+            app(ProgramPointReservationSync::class)->linkPoints($fresh, $programPoint);
+            app(HotelStayReservationSync::class)->attachMatchingStays($fresh);
 
             return $reservation->fresh([
                 'event',

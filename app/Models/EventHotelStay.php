@@ -14,6 +14,7 @@ class EventHotelStay extends Model
         'contractor_id',
         'contractor_location_id',
         'event_program_point_id',
+        'reservation_id',
         'offer_notes',
         'notes',
         'same_as_day',
@@ -48,6 +49,11 @@ class EventHotelStay extends Model
     public function programPoint(): BelongsTo
     {
         return $this->belongsTo(EventProgramPoint::class, 'event_program_point_id');
+    }
+
+    public function reservation(): BelongsTo
+    {
+        return $this->belongsTo(Reservation::class);
     }
 
     public function roomLines(): HasMany

@@ -150,7 +150,24 @@ final class ReservationFormFields
         $data['participant_scope'] = (string) ($data['participant_scope'] ?? 'all');
         $data['convert_to_pln'] = (bool) ($data['convert_to_pln'] ?? true);
 
-        unset($data['pending_attachments']);
+        unset($data['pending_attachments'], $data['reservation_id']);
+
+        foreach ([
+            'booking_reference',
+            'office_notes',
+            'notes',
+            'confirm_by',
+            'confirmed_at',
+            'deposit_due_at',
+            'deposit_paid_at',
+            'expires_at',
+            'reserved_at',
+            'reserved_amount',
+        ] as $field) {
+            if (array_key_exists($field, $data) && blank($data[$field])) {
+                $data[$field] = null;
+            }
+        }
 
         return $data;
     }
@@ -325,8 +342,33 @@ final class ReservationFormFields
                 ->options(fn (Get $get): array => self::programPointOptions($options->eventId ?? (($id = $get('event_id')) ? (int) $id : null)))
                 ->searchable()
                 ->default($options->defaultProgramPointId)
-                ->nullable()
-                ->live();
+                ->required(fn (Get $get): bool => filled($options->eventId) || filled($get('event_id')))
+                ->helperText('Bez punktu rezerwacja nie pojawi się w programie imprezy.')
+                ->live()
+                ->afterStateUpdated(function ($state, Forms\Set $set): void {
+                    if (! filled($state)) {
+                        return;
+                    }
+
+                    $point = EventProgramPoint::query()->with(['event', 'currency'])->find((int) $state);
+                    if (! $point) {
+                        return;
+                    }
+
+                    $defaults = \App\Support\Reservations\ReservationFormDefaults::forProgramPoint($point);
+                    if ($defaults['reserved_amount'] !== null) {
+                        $set('reserved_amount', $defaults['reserved_amount']);
+                    }
+                    if ($defaults['participant_count'] > 0) {
+                        $set('participant_count', $defaults['participant_count']);
+                    }
+                    if ($defaults['currency_id']) {
+                        $set('currency_id', $defaults['currency_id']);
+                    }
+                    if ($defaults['deposit_due_at']) {
+                        $set('deposit_due_at', $defaults['deposit_due_at']);
+                    }
+                });
         }
 
         if ($options->showSettlementCost) {

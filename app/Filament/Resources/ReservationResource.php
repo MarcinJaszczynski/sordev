@@ -62,55 +62,69 @@ class ReservationResource extends Resource
             ]);
     }
 
+    /**
+     * Te same kolumny na liście globalnej i w Operacje → Rezerwacje.
+     *
+     * @return array<int, Tables\Columns\Column>
+     */
+    public static function sharedTableColumns(bool $includeEvent = true): array
+    {
+        $columns = [
+            Tables\Columns\TextColumn::make('booking_reference')
+                ->label('Rezerwacja')
+                ->sortable()
+                ->html()
+                ->state(fn (Reservation $record): string => static::reservationSummaryColumnHtml($record)),
+        ];
+
+        if ($includeEvent) {
+            $columns[] = Tables\Columns\TextColumn::make('event.name')
+                ->label('Impreza')
+                ->sortable()
+                ->html()
+                ->state(fn (Reservation $record): string => static::reservationEventColumnHtml($record))
+                ->url(fn (Reservation $record) => $record->event_id
+                    ? EventResource::getUrl('edit', ['record' => $record->event_id])
+                    : null);
+        }
+
+        $columns[] = Tables\Columns\TextColumn::make('program_point_id')
+            ->label('Punkt programu')
+            ->html()
+            ->state(fn (Reservation $record): string => static::reservationProgramPointColumnHtml($record));
+
+        $columns[] = Tables\Columns\TextColumn::make('contractor.name')
+            ->label('Kontrahent')
+            ->sortable()
+            ->html()
+            ->state(fn (Reservation $record): string => static::reservationContractorColumnHtml($record));
+
+        $columns[] = Tables\Columns\TextColumn::make('reserved_at')
+            ->label('Terminy')
+            ->sortable()
+            ->html()
+            ->state(fn (Reservation $record): string => static::reservationDatesColumnHtml($record));
+
+        $columns[] = Tables\Columns\TextColumn::make('notes')
+            ->label('Uwagi')
+            ->visibleFrom('lg')
+            ->html()
+            ->state(fn (Reservation $record): string => static::reservationNotesColumnHtml($record))
+            ->wrap();
+
+        $columns[] = Tables\Columns\TextColumn::make('created_at')
+            ->label('Utworzono')
+            ->dateTime('d.m.Y H:i')
+            ->sortable()
+            ->toggleable(isToggledHiddenByDefault: true);
+
+        return $columns;
+    }
+
     public static function table(Table $table): Table
     {
         return $table
-            ->columns([
-                Tables\Columns\TextColumn::make('booking_reference')
-                    ->label('Rezerwacja')
-                    ->sortable()
-                    ->html()
-                    ->state(fn (Reservation $record): string => static::reservationSummaryColumnHtml($record)),
-
-                Tables\Columns\TextColumn::make('event.name')
-                    ->label('Impreza')
-                    ->sortable()
-                    ->html()
-                    ->state(fn (Reservation $record): string => static::reservationEventColumnHtml($record))
-                    ->url(fn (Reservation $record) => $record->event_id
-                        ? EventResource::getUrl('edit', ['record' => $record->event_id])
-                        : null),
-
-                Tables\Columns\TextColumn::make('program_point_id')
-                    ->label('Punkt programu')
-                    ->html()
-                    ->state(fn (Reservation $record): string => static::reservationProgramPointColumnHtml($record)),
-
-                Tables\Columns\TextColumn::make('contractor.name')
-                    ->label('Kontrahent')
-                    ->sortable()
-                    ->html()
-                    ->state(fn (Reservation $record): string => static::reservationContractorColumnHtml($record)),
-
-                Tables\Columns\TextColumn::make('reserved_at')
-                    ->label('Terminy')
-                    ->sortable()
-                    ->html()
-                    ->state(fn (Reservation $record): string => static::reservationDatesColumnHtml($record)),
-
-                Tables\Columns\TextColumn::make('notes')
-                    ->label('Uwagi')
-                    ->visibleFrom('lg')
-                    ->html()
-                    ->state(fn (Reservation $record): string => static::reservationNotesColumnHtml($record))
-                    ->wrap(),
-
-                Tables\Columns\TextColumn::make('created_at')
-                    ->label('Utworzono')
-                    ->dateTime('d.m.Y H:i')
-                    ->sortable()
-                    ->toggleable(isToggledHiddenByDefault: true),
-            ])
+            ->columns(static::sharedTableColumns())
             ->searchPlaceholder('Szukaj: nr rezerwacji, kod imprezy, kontrahent, punkt programu, daty, uwagi…')
             ->filters([
                 Tables\Filters\SelectFilter::make('status')
@@ -433,7 +447,7 @@ class ReservationResource extends Resource
         return "<span class='admin-table-pill' style='background:{$bg};color:{$fg}'>{$label}</span>";
     }
 
-    private static function reservationSummaryColumnHtml(Reservation $record): string
+    public static function reservationSummaryColumnHtml(Reservation $record): string
     {
         $reference = filled($record->booking_reference)
             ? e($record->booking_reference)
@@ -450,7 +464,7 @@ class ReservationResource extends Resource
             .'</div>';
     }
 
-    private static function reservationEventColumnHtml(Reservation $record): string
+    public static function reservationEventColumnHtml(Reservation $record): string
     {
         $name = e($record->event?->name ?? '—');
         $code = filled($record->event?->code) ? e($record->event->code) : null;
@@ -475,7 +489,7 @@ class ReservationResource extends Resource
         return $point->templatePoint?->name ?? $point->name ?? ('Punkt #'.$point->id);
     }
 
-    private static function reservationProgramPointColumnHtml(Reservation $record): string
+    public static function reservationProgramPointColumnHtml(Reservation $record): string
     {
         $point = $record->programPoint;
 
@@ -529,7 +543,7 @@ class ReservationResource extends Resource
             .'</div>';
     }
 
-    private static function reservationContractorColumnHtml(Reservation $record): string
+    public static function reservationContractorColumnHtml(Reservation $record): string
     {
         $name = e($record->contractor?->name ?? '—');
         $phone = filled($record->contractor?->phone) ? e($record->contractor->phone) : null;
@@ -546,7 +560,7 @@ class ReservationResource extends Resource
         return "<div class='admin-table-stack admin-table-stack-compact'>".implode('', $lines).'</div>';
     }
 
-    private static function reservationDatesColumnHtml(Reservation $record): string
+    public static function reservationDatesColumnHtml(Reservation $record): string
     {
         $confirmBy = $record->confirm_by
             ? \App\Support\Reservations\ReservationWorkflowDisplay::formatDate($record->confirm_by)
@@ -587,7 +601,7 @@ class ReservationResource extends Resource
         return $value->format('H:i:s') === '00:00:00';
     }
 
-    private static function reservationNotesColumnHtml(Reservation $record): string
+    public static function reservationNotesColumnHtml(Reservation $record): string
     {
         $plain = trim(preg_replace('/\s+/u', ' ', strip_tags((string) ($record->office_notes ?? $record->notes ?? ''))) ?? '');
 

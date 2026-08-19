@@ -187,4 +187,88 @@ class RecordSettlementCostPaymentActionTest extends TestCase
         $this->assertNull(EventSettlementCost::query()->find($payment->id));
         $this->assertSame('advance_required', $plan->fresh()->payment_status);
     }
+
+    public function test_advance_payment_marks_linked_reservation_deposit_as_paid(): void
+    {
+        Role::findOrCreate('admin');
+        $user = User::factory()->create(['status' => 'active']);
+        $user->assignRole('admin');
+        $this->actingAs($user);
+
+        $event = Event::factory()->create();
+        $point = \App\Models\EventProgramPoint::factory()->create([
+            'event_id' => $event->id,
+            'name' => 'Hotel',
+            'planned_price' => 4000,
+        ]);
+        $settlement = EventSettlement::findOrCreateActiveForEvent($event);
+        $plan = $settlement->upsertCostFromProgramPoint($point->fresh(['templatePoint', 'currency', 'event', 'reservations']));
+
+        $reservation = \App\Models\Reservation::query()->create([
+            'event_id' => $event->id,
+            'program_point_id' => $point->id,
+            'settlement_cost_id' => $plan->id,
+            'status' => 'pending',
+            'deposit_due_at' => now()->toDateString(),
+            'reserved_at' => now(),
+            'participant_count' => 10,
+            'created_by' => $user->id,
+        ]);
+
+        $this->assertSame('pending', \App\Support\Reservations\ReservationWorkflowDisplay::depositStatus($reservation));
+        $this->assertSame('Zaliczka do dziś', \App\Support\Reservations\ReservationWorkflowDisplay::depositStatusLabel($reservation));
+
+        app(RecordSettlementCostPaymentAction::class)(new RecordSettlementCostPaymentData(
+            planCost: $plan->fresh(),
+            amountPln: 1200,
+            paymentMethod: 'transfer',
+            paidBy: 'office',
+            advanceType: 'advance',
+            paidAt: now(),
+        ));
+
+        $reservation->refresh();
+        $this->assertNotNull($reservation->deposit_paid_at);
+        $this->assertSame(now()->toDateString(), $reservation->deposit_paid_at->toDateString());
+        $this->assertEqualsWithDelta(1200.0, (float) $reservation->reserved_amount, 0.01);
+        $this->assertSame('paid', \App\Support\Reservations\ReservationWorkflowDisplay::depositStatus($reservation));
+
+        $payment = EventSettlementCost::query()
+            ->where('source_type', 'program_point_payment')
+            ->where('source_id', $point->id)
+            ->first();
+        $this->assertNotNull($payment);
+        if (\Illuminate\Support\Facades\Schema::hasColumn('event_settlement_costs', 'reservation_id')) {
+            $this->assertSame($reservation->id, (int) $payment->reservation_id);
+        }
+
+        $second = app(RecordSettlementCostPaymentAction::class)(new RecordSettlementCostPaymentData(
+            planCost: $plan->fresh(),
+            amountPln: 800,
+            paymentMethod: 'transfer',
+            paidBy: 'office',
+            advanceType: 'advance',
+            paidAt: now(),
+            reservationId: $reservation->id,
+        ));
+
+        $this->assertNotSame($payment->id, $second->id);
+        $this->assertEquals(
+            2,
+            EventSettlementCost::query()
+                ->where('source_type', 'program_point_payment')
+                ->where('source_id', $point->id)
+                ->count()
+        );
+
+        $eval = app(SettlementPaymentHealthService::class)
+            ->evaluatePlanCost($plan->fresh(), $settlement->fresh()->costs()->get());
+        $this->assertEqualsWithDelta(2000.0, $eval['paid_pln'], 0.01);
+        $this->assertGreaterThan(0.01, $eval['remaining_pln']);
+        $this->assertEqualsWithDelta(
+            round((float) $eval['planned_pln'] - 2000.0, 2),
+            (float) $eval['remaining_pln'],
+            0.01
+        );
+    }
 }

@@ -134,9 +134,8 @@ class UpsertReservationActionTest extends TestCase
             ->whereHas('status', fn ($q) => $q->where('name', '!=', 'Zakończone'))
             ->get();
 
-        $this->assertGreaterThanOrEqual(2, $openTasks->count());
-        $this->assertTrue($openTasks->contains(fn (Task $task) => str_contains((string) $task->description, '[reservation-task:'.$reservation->id.':confirm]')));
-        $this->assertTrue($openTasks->contains(fn (Task $task) => str_contains((string) $task->description, '[reservation-task:'.$reservation->id.':deposit]')));
+        // Auto-taski rezerwacji wyłączone (SystemTaskPolicy) — nie zaśmiecamy skrzynki.
+        $this->assertCount(0, $openTasks);
 
         app(UpsertReservationAction::class)(new UpsertReservationData(
             attributes: [
@@ -255,6 +254,22 @@ class UpsertReservationActionTest extends TestCase
             createdBy: $user->id,
         ));
 
+        // Auto-create wyłączone — seedujemy legacy task, żeby sprawdzić retireAll przy delete.
+        $fingerprint = '[reservation-task:'.$reservation->id.':confirm]';
+        Task::create([
+            'title' => 'Potwierdź rezerwację',
+            'description' => "Termin.\n\n{$fingerprint}",
+            'due_date' => now()->addDay(),
+            'status_id' => Task::getDefaultStatusId(),
+            'priority' => 'urgent',
+            'source' => 'system',
+            'author_id' => $user->id,
+            'assignee_id' => $user->id,
+            'taskable_type' => Reservation::class,
+            'taskable_id' => $reservation->id,
+            'order' => 1,
+        ]);
+
         $this->assertGreaterThan(0, Task::query()
             ->where('taskable_type', Reservation::class)
             ->where('taskable_id', $reservation->id)
@@ -268,5 +283,132 @@ class UpsertReservationActionTest extends TestCase
             ->where('taskable_id', $reservation->id)
             ->whereHas('status', fn ($q) => $q->where('name', '!=', 'Zakończone'))
             ->count());
+    }
+
+    public function test_blank_form_fields_are_saved_as_null(): void
+    {
+        $user = User::factory()->create();
+        $this->actingAs($user);
+
+        $template = EventTemplate::factory()->create();
+        $event = Event::create([
+            'event_template_id' => $template->id,
+            'name' => 'Impreza puste pola',
+            'client_name' => 'Klient',
+            'start_date' => now()->toDateString(),
+            'end_date' => now()->addDay()->toDateString(),
+            'participant_count' => 5,
+            'total_cost' => 100,
+            'status' => 'confirmed',
+            'created_by' => $user->id,
+            'assigned_to' => $user->id,
+        ]);
+
+        $point = EventProgramPoint::create([
+            'event_id' => $event->id,
+            'name' => 'Punkt',
+            'day' => 1,
+            'order' => 1,
+            'total_price' => 50,
+        ]);
+
+        $reservation = app(UpsertReservationAction::class)(UpsertReservationData::fromForm(
+            formData: [
+                'booking_reference' => 'REF-CLEAR',
+                'status' => 'pending',
+                'confirm_by' => now()->addDay()->toDateString(),
+                'deposit_due_at' => now()->addDays(2)->toDateString(),
+                'office_notes' => 'notatka',
+                'participant_count' => 5,
+                'reserved_amount' => 50,
+            ],
+            programPoint: $point,
+            createdBy: $user->id,
+        ));
+
+        $updated = app(UpsertReservationAction::class)(UpsertReservationData::fromForm(
+            formData: [
+                'booking_reference' => '',
+                'status' => 'pending',
+                'confirm_by' => '',
+                'confirmed_at' => '',
+                'deposit_due_at' => '',
+                'deposit_paid_at' => '',
+                'office_notes' => '',
+                'participant_count' => 5,
+                'reserved_amount' => 50,
+            ],
+            reservation: $reservation,
+            programPoint: $point,
+            createdBy: $user->id,
+        ));
+
+        $this->assertNull($updated->booking_reference);
+        $this->assertNull($updated->confirm_by);
+        $this->assertNull($updated->deposit_due_at);
+        $this->assertNull($updated->office_notes);
+    }
+
+    public function test_booking_reference_can_be_reused_after_delete(): void
+    {
+        $user = User::factory()->create();
+        $this->actingAs($user);
+
+        $template = EventTemplate::factory()->create();
+        $event = Event::create([
+            'event_template_id' => $template->id,
+            'name' => 'Impreza reuse',
+            'client_name' => 'Klient',
+            'start_date' => now()->toDateString(),
+            'end_date' => now()->addDay()->toDateString(),
+            'participant_count' => 5,
+            'total_cost' => 100,
+            'status' => 'confirmed',
+            'created_by' => $user->id,
+            'assigned_to' => $user->id,
+        ]);
+
+        $wrongPoint = EventProgramPoint::create([
+            'event_id' => $event->id,
+            'name' => 'Zły punkt',
+            'day' => 1,
+            'order' => 1,
+            'total_price' => 50,
+        ]);
+        $rightPoint = EventProgramPoint::create([
+            'event_id' => $event->id,
+            'name' => 'Właściwy punkt',
+            'day' => 1,
+            'order' => 2,
+            'total_price' => 50,
+        ]);
+
+        $wrong = app(UpsertReservationAction::class)(UpsertReservationData::fromForm(
+            formData: [
+                'booking_reference' => 'HTL-MOVE',
+                'status' => 'pending',
+                'participant_count' => 5,
+                'reserved_amount' => 50,
+            ],
+            programPoint: $wrongPoint,
+            createdBy: $user->id,
+        ));
+
+        $wrong->delete();
+
+        $moved = app(UpsertReservationAction::class)(UpsertReservationData::fromForm(
+            formData: [
+                'booking_reference' => 'HTL-MOVE',
+                'status' => 'pending',
+                'participant_count' => 5,
+                'reserved_amount' => 50,
+            ],
+            programPoint: $rightPoint,
+            createdBy: $user->id,
+        ));
+
+        $this->assertSame('HTL-MOVE', $moved->booking_reference);
+        $this->assertSame($rightPoint->id, $moved->program_point_id);
+        $this->assertSoftDeleted($wrong);
     }
 }
