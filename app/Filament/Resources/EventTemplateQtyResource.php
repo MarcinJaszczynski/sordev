@@ -48,7 +48,7 @@ class EventTemplateQtyResource extends Resource
                 ->required()
                 ->numeric(),
             Forms\Components\TextInput::make('gratis')
-                ->label('Opiekun/Inne (opieka)')
+                ->label(\App\Support\EventParticipantGroupLabels::GRATIS)
                 ->numeric()
                 ->default(fn ($record) => $record?->gratis ?? null)
                 ->helperText('Domyślnie: zaokrąglone w górę qty/15')
@@ -76,7 +76,7 @@ class EventTemplateQtyResource extends Resource
                 ->label('Ilość uczestników')
                 ->sortable(),
             Tables\Columns\TextColumn::make('gratis')
-                ->label('Opiekun/Inne (opieka)')
+                ->label(\App\Support\EventParticipantGroupLabels::GRATIS)
                 ->sortable(),
             Tables\Columns\TextColumn::make('staff')
                 ->label('Obsługa')

@@ -3,6 +3,7 @@
 namespace App\Filament\Concerns;
 
 use App\Models\Task;
+use App\Services\NotificationService;
 use Filament\Actions\Action;
 use Filament\Tables;
 use Illuminate\Contracts\View\View;
@@ -10,41 +11,80 @@ use Livewire\Attributes\On;
 
 trait InteractsWithTaskEditModal
 {
+    use DispatchesTopbarNotificationRefresh;
+    use EnsuresFilamentActionModalVisible;
+
     public ?int $editingTaskId = null;
 
     public ?int $editingTaskActiveRelationManager = null;
 
+    /** @var array<string, mixed> */
+    public array $pendingCreateFormData = [];
+
+    public ?string $pendingCreateDueDate = null;
+
     public function bootInteractsWithTaskEditModal(): void
     {
         $this->cacheAction($this->makeEditTaskAction());
+        $this->cacheAction($this->makeCreateTaskAction(
+            defaultDueDate: fn (): mixed => $this->createTaskDefaultDueDate(),
+            defaultFormData: fn (): array => array_merge(
+                $this->createTaskDefaultFormData(),
+                $this->pendingCreateFormData,
+            ),
+        ));
     }
 
     public function mountInteractsWithTaskEditModal(): void
     {
         $this->openDeepLinkedTaskIfPresent();
+        $this->openDeepLinkedCreateTaskIfPresent();
     }
 
     public function openEditTaskModal(int $taskId, ?int $activeRelationManager = null): void
     {
         $this->editingTaskId = $taskId;
         $this->editingTaskActiveRelationManager = $activeRelationManager;
+        $this->clearConflictingMountedTableAction();
         $this->mountAction('editTask');
+        $this->ensureMountedActionModalVisible();
+    }
+
+    public function openCreateTaskModal(array $defaultFormData = [], ?string $defaultDueDate = null): void
+    {
+        $this->pendingCreateFormData = $defaultFormData;
+        $this->pendingCreateDueDate = $defaultDueDate;
+        $this->clearConflictingMountedTableAction();
+        $this->mountAction('createTask');
+        $this->ensureMountedActionModalVisible();
+    }
+
+    protected function clearConflictingMountedTableAction(): void
+    {
+        if (! method_exists($this, 'unmountTableAction')) {
+            return;
+        }
+
+        if (! empty($this->mountedTableActions ?? [])) {
+            $this->unmountTableAction(shouldCancelParentActions: false, shouldCloseModal: false);
+        }
     }
 
     #[On('task-full-editor-saved')]
+    #[On('task-full-editor-updated')]
     public function handleTaskFullEditorSaved(int $taskId): void
     {
-        $this->editingTaskId = null;
-        $this->editingTaskActiveRelationManager = null;
-
         $task = Task::query()->find($taskId);
 
         if ($task) {
             $this->afterTaskModalSaved($task);
         }
+    }
 
-        $this->unmountAction('editTask');
-        $this->unmountAction('createTask');
+    #[On('comment-added')]
+    public function handleTaskCommentAddedForTopbar(): void
+    {
+        $this->dispatchTopbarNotificationRefresh();
     }
 
     protected function openDeepLinkedTaskIfPresent(): void
@@ -59,7 +99,71 @@ trait InteractsWithTaskEditModal
             ? (int) request()->query('activeRelationManager')
             : null;
 
+        // mountAction() w mount() dispatchuje open-modal zanim Alpine zdąży
+        // zarejestrować listener → modal zostaje w DOM z isShown=false.
+        // W przeglądarce otwieramy po hydracji; w testach Livewire od razu.
+        if ($this->shouldDeferTaskModalDeepLink()) {
+            $this->editingTaskId = $taskId;
+            $this->editingTaskActiveRelationManager = $activeRelationManager;
+            $armJs = $activeRelationManager === null ? 'null' : (string) $activeRelationManager;
+            $this->js("queueMicrotask(() => \$wire.call('openEditTaskModal', {$taskId}, {$armJs}))");
+
+            return;
+        }
+
         $this->openEditTaskModal($taskId, $activeRelationManager);
+    }
+
+    protected function openDeepLinkedCreateTaskIfPresent(): void
+    {
+        if (! request()->boolean('createTask')) {
+            return;
+        }
+
+        $this->pendingCreateFormData = array_filter([
+            'taskable_type' => request()->query('taskable_type'),
+            'taskable_id' => request()->has('taskable_id') ? (int) request()->query('taskable_id') : null,
+        ], fn ($value): bool => $value !== null && $value !== '');
+
+        $this->pendingCreateDueDate = request()->query('dueDate');
+
+        if ($this->shouldDeferTaskModalDeepLink()) {
+            // Nie wołaj openCreateTaskModal() — nadpisałoby pending* pustymi defaultami.
+            $this->js("queueMicrotask(() => \$wire.call('mountDeferredCreateTaskModal'))");
+
+            return;
+        }
+
+        $this->clearConflictingMountedTableAction();
+        $this->mountAction('createTask');
+    }
+
+    public function mountDeferredCreateTaskModal(): void
+    {
+        $this->clearConflictingMountedTableAction();
+        $this->mountAction('createTask');
+        $this->ensureMountedActionModalVisible();
+    }
+
+    /**
+     * Livewire Feature/Unit nie wykonuje JS z $this->js() — tam montujemy synchronicznie.
+     */
+    protected function shouldDeferTaskModalDeepLink(): bool
+    {
+        return ! app()->runningUnitTests();
+    }
+
+    /**
+     * @return array<string, mixed>
+     */
+    protected function createTaskDefaultFormData(): array
+    {
+        return [];
+    }
+
+    protected function createTaskDefaultDueDate(): mixed
+    {
+        return $this->pendingCreateDueDate;
     }
 
     protected function afterTaskModalSaved(Task $task): void
@@ -76,7 +180,11 @@ trait InteractsWithTaskEditModal
             ->modalWidth('7xl')
             ->modalContent(fn (): View => $this->createTaskModalView($defaultDueDate, $defaultFormData))
             ->modalSubmitAction(false)
-            ->modalCancelActionLabel('Zamknij');
+            ->modalCancelActionLabel('Zamknij')
+            ->after(function (): void {
+                $this->pendingCreateFormData = [];
+                $this->pendingCreateDueDate = null;
+            });
     }
 
     protected function makeCreateTaskTableAction(?callable $defaultDueDate = null, ?callable $defaultFormData = null): Tables\Actions\Action
@@ -84,11 +192,7 @@ trait InteractsWithTaskEditModal
         return Tables\Actions\Action::make('createTask')
             ->label('Dodaj zadanie')
             ->icon('heroicon-m-plus')
-            ->modalHeading('Nowe zadanie')
-            ->modalWidth('7xl')
-            ->modalContent(fn (): View => $this->createTaskModalView($defaultDueDate, $defaultFormData))
-            ->modalSubmitAction(false)
-            ->modalCancelActionLabel('Zamknij');
+            ->action(fn () => $this->mountAction('createTask'));
     }
 
     /**
@@ -102,7 +206,7 @@ trait InteractsWithTaskEditModal
 
         return view('filament.tasks.full-editor-modal', [
             'taskId' => null,
-            'defaultDueDate' => $dueDate?->format('Y-m-d H:i:s'),
+            'defaultDueDate' => is_string($dueDate) ? $dueDate : $dueDate?->format('Y-m-d H:i:s'),
             'defaultFormData' => $formDefaults,
             'activeRelationManager' => null,
         ]);
@@ -123,8 +227,17 @@ trait InteractsWithTaskEditModal
             ->modalSubmitAction(false)
             ->modalCancelActionLabel('Zamknij')
             ->action(function (): void {
+                if ($userId = auth()->id()) {
+                    $taskId = $this->editingTaskId;
+
+                    if ($taskId) {
+                        NotificationService::markTaskCommentNotificationsAsRead($userId, $taskId);
+                    }
+                }
+
                 $this->editingTaskId = null;
                 $this->editingTaskActiveRelationManager = null;
+                $this->dispatchTopbarNotificationRefresh();
             });
     }
 }

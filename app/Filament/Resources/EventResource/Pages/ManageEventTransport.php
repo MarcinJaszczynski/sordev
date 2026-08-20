@@ -4,6 +4,7 @@ namespace App\Filament\Resources\EventResource\Pages;
 
 use App\Filament\Resources\EventResource;
 use App\Filament\Resources\EventResource\Concerns\HasEventWorkflowContext;
+use App\Filament\Forms\EventProgramDayRouteFields;
 use App\Models\Contractor;
 use Filament\Actions;
 use Filament\Forms;
@@ -58,6 +59,7 @@ class ManageEventTransport extends EditRecord
                             ]);
                         }),
                 ]),
+            EventProgramDayRouteFields::section(),
             EventResource::carrierAndDriverSection(),
         ]);
     }
@@ -107,6 +109,25 @@ class ManageEventTransport extends EditRecord
 
     protected function afterSave(): void
     {
+        try {
+            (new \App\Services\EventPriceCalculator)->calculateForEvent($this->record->fresh(['bus']));
+
+            $fresh = $this->record->fresh(['bus']);
+            if ($fresh) {
+                $calc = \App\Services\EventCostCalculator::for($fresh)->calculate(
+                    max(1, (int) ($fresh->participant_count ?? 1))
+                );
+
+                if (isset($calc['base_pln'])) {
+                    $fresh->updateQuietly([
+                        'total_cost' => round((float) $calc['base_pln'], 2),
+                    ]);
+                }
+            }
+        } catch (\Throwable $e) {
+            report($e);
+        }
+
         try {
             $this->record->refreshActiveSettlementCosts();
         } catch (\Throwable $e) {

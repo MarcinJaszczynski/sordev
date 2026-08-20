@@ -150,7 +150,7 @@ class LegacyEventResource extends Resource
                     Infolists\Components\TextEntry::make('duration_days')->label('Dni'),
                     Infolists\Components\TextEntry::make('participant_count')->label('Uczestnicy'),
                     Infolists\Components\TextEntry::make('guardians_count')->label('Opiekunowie'),
-                    Infolists\Components\TextEntry::make('free_count')->label('Gratis'),
+                    Infolists\Components\TextEntry::make('free_count')->label(\App\Support\EventParticipantGroupLabels::GRATIS),
                 ]),
 
             Infolists\Components\Section::make('Klient / Zamawiający')

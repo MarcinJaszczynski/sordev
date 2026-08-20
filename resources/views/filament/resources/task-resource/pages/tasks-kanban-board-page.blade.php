@@ -46,7 +46,7 @@
                     <select wire:model.live="priorityFilter" class="block w-full border-gray-300 dark:border-gray-600 dark:bg-gray-800 dark:text-gray-200 rounded-md shadow-sm focus:ring-primary-500 focus:border-primary-500 sm:text-sm">
                         <option value="">Wszystkie priorytety</option>
                         <option value="urgent">Pilne</option>
-                        <option value="normal">Domyślny</option>
+                        <option value="normal">Zwykły</option>
                     </select>
                 </div>
                 <div>
@@ -272,7 +272,7 @@
 
                                     $priorityLabel = match (\App\Enums\TaskPriority::normalize($task->priority)) {
                                         'urgent' => 'Pilne',
-                                        default => 'Domyślny',
+                                        default => 'Zwykły',
                                     };
                                     $priorityStyles = match (\App\Enums\TaskPriority::normalize($task->priority)) {
                                         'urgent' => 'background-color:#b91c1c;color:#ffffff;border-color:#7f1d1d;',
@@ -531,7 +531,7 @@
                         wire:model.live.debounce.500ms="quickTaskPriority"
                         class="block w-full border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-gray-200 rounded-md shadow-sm focus:ring-primary-500 focus:border-primary-500 sm:text-sm"
                     >
-                        <option value="normal">Domyślny</option>
+                        <option value="normal">Zwykły</option>
                         <option value="urgent">Pilne</option>
                     </select>
                     @error('quickTaskPriority') <span class="text-red-500 text-sm">{{ $message }}</span> @enderror
@@ -657,7 +657,7 @@
                 document.addEventListener('keydown', (e) => {
                     if (e.ctrlKey && e.key === 'n') {
                         e.preventDefault();
-                        window.location.href = '{{ \App\Filament\Resources\TaskResource::getUrl("create") }}';
+                        window.location.href = '{{ \App\Support\Tasks\TaskNavigation::createUrl($eventFilter ? \App\Models\Event::class : null, $eventFilter) }}';
                     } else if (e.key === 'r' && !e.ctrlKey && !e.altKey) {
                         e.preventDefault();
                         @this.refreshBoard();

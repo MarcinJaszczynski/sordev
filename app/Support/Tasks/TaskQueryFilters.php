@@ -15,40 +15,48 @@ class TaskQueryFilters
 
     public const ARCHIVED_STATUS_NAMES = ['Zarchiwizowane'];
 
+    /** @var array<int, int>|null */
+    private static ?array $finishedStatusIdsCache = null;
+
+    /** @var array<int, int>|null */
+    private static ?array $archivedStatusIdsCache = null;
+
     /** @return array<int, int> */
     public static function finishedStatusIds(): array
     {
-        static $ids = null;
-
-        if (is_array($ids)) {
-            return $ids;
+        if (is_array(self::$finishedStatusIdsCache)) {
+            return self::$finishedStatusIdsCache;
         }
 
-        $ids = TaskStatus::query()
+        self::$finishedStatusIdsCache = TaskStatus::query()
             ->whereIn('name', self::FINISHED_STATUS_NAMES)
             ->pluck('id')
             ->map(fn ($id): int => (int) $id)
             ->all();
 
-        return $ids;
+        return self::$finishedStatusIdsCache;
     }
 
     /** @return array<int, int> */
     public static function archivedStatusIds(): array
     {
-        static $ids = null;
-
-        if (is_array($ids)) {
-            return $ids;
+        if (is_array(self::$archivedStatusIdsCache)) {
+            return self::$archivedStatusIdsCache;
         }
 
-        $ids = TaskStatus::query()
+        self::$archivedStatusIdsCache = TaskStatus::query()
             ->whereIn('name', self::ARCHIVED_STATUS_NAMES)
             ->pluck('id')
             ->map(fn ($id): int => (int) $id)
             ->all();
 
-        return $ids;
+        return self::$archivedStatusIdsCache;
+    }
+
+    public static function clearStatusIdCaches(): void
+    {
+        self::$finishedStatusIdsCache = null;
+        self::$archivedStatusIdsCache = null;
     }
 
     public static function archivedStatusId(): ?int
@@ -270,8 +278,9 @@ class TaskQueryFilters
             'author',
             'taskable',
             'parent',
+            'attachments' => fn ($attachments) => $attachments->orderBy('created_at'),
             'comments' => fn ($comments) => $comments->latest()->limit(1)->with('author'),
-        ])->withCount('attachments');
+        ])->withCount(['attachments', 'comments']);
     }
 
     public static function changedSince(Builder $query, Carbon $since): Builder

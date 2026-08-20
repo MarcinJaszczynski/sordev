@@ -19,6 +19,7 @@ use App\Services\EventPaymentScheduleService;
 use App\Support\EventProgramPointPaymentDueColumn;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Schema;
+use Spatie\Permission\Models\Role;
 use Tests\TestCase;
 
 class EventPaymentScheduleTest extends TestCase
@@ -30,11 +31,20 @@ class EventPaymentScheduleTest extends TestCase
         parent::setUp();
 
         $this->seed(\Database\Seeders\TaskStatusSeeder::class);
+        Role::firstOrCreate(['name' => 'admin', 'guard_name' => 'web']);
+    }
+
+    protected function createOfficeUser(): User
+    {
+        $user = User::factory()->create();
+        $user->assignRole('admin');
+
+        return $user;
     }
 
     public function test_advance_in_eur_with_convert_shows_pln_equivalent_in_schedule_and_task(): void
     {
-        $user = User::factory()->create();
+        $user = $this->createOfficeUser();
         $eur = Currency::create([
             'name' => 'Euro',
             'symbol' => 'EUR',
@@ -107,7 +117,7 @@ class EventPaymentScheduleTest extends TestCase
 
     public function test_advance_in_eur_without_convert_omits_pln_equivalent(): void
     {
-        $user = User::factory()->create();
+        $user = $this->createOfficeUser();
         $eur = Currency::create([
             'name' => 'Euro',
             'symbol' => 'EUR',
@@ -162,7 +172,7 @@ class EventPaymentScheduleTest extends TestCase
             $this->markTestSkipped('vendor_invoices table not available.');
         }
 
-        $user = User::factory()->create();
+        $user = $this->createOfficeUser();
         $event = Event::factory()->create(['assigned_to' => $user->id]);
 
         $point = EventProgramPoint::create([
@@ -235,7 +245,7 @@ class EventPaymentScheduleTest extends TestCase
 
     public function test_paid_status_retires_active_payment_reminder_task(): void
     {
-        $user = User::factory()->create();
+        $user = $this->createOfficeUser();
         $event = Event::factory()->create(['assigned_to' => $user->id]);
         $settlement = EventSettlement::create([
             'event_id' => $event->id,
@@ -287,7 +297,7 @@ class EventPaymentScheduleTest extends TestCase
             $this->markTestSkipped('contract_payment_schedules table not available.');
         }
 
-        $user = User::factory()->create();
+        $user = $this->createOfficeUser();
         $event = Event::factory()->create(['code' => 'CAL-01']);
         $dueDate = now()->addDays(12);
 
@@ -324,7 +334,7 @@ class EventPaymentScheduleTest extends TestCase
 
     public function test_reminder_sync_service_upserts_without_duplicates(): void
     {
-        $user = User::factory()->create();
+        $user = $this->createOfficeUser();
         $event = Event::factory()->create(['assigned_to' => $user->id, 'name' => 'Test impreza']);
         $settlement = EventSettlement::create([
             'event_id' => $event->id,
@@ -348,5 +358,170 @@ class EventPaymentScheduleTest extends TestCase
         app(EventPaymentReminderSyncService::class)->syncSettlementCost($cost->fresh());
 
         $this->assertSame(1, Task::query()->where('description', 'like', '%[payment-reminder:settlement_cost:'.$cost->id.':advance]%')->count());
+    }
+
+    public function test_contract_installment_reminders_are_aggregated_per_event_and_label(): void
+    {
+        if (! Schema::hasTable('contract_payment_schedules')) {
+            $this->markTestSkipped('contract_payment_schedules table not available.');
+        }
+
+        $user = $this->createOfficeUser();
+        $event = Event::factory()->create([
+            'name' => 'Paryż agregacja',
+            'assigned_to' => $user->id,
+        ]);
+
+        $labels = [
+            ['sort_order' => 0, 'label' => 'Zaliczka (10%)', 'amount' => 300.50, 'due' => '2026-08-11'],
+            ['sort_order' => 1, 'label' => 'Dopłata (90%)', 'amount' => 2704.50, 'due' => '2026-08-27'],
+            ['sort_order' => 2, 'label' => 'Waluta u pilota', 'amount' => 0, 'due' => '2026-09-10'],
+        ];
+
+        for ($i = 1; $i <= 3; $i++) {
+            $contract = Contract::create([
+                'event_id' => $event->id,
+                'contract_type' => Contract::TYPE_INDIVIDUAL,
+                'title' => 'Umowa uczestnika '.$i,
+                'contract_date' => now()->toDateString(),
+                'total_price' => 3005,
+                'amount_due' => 3005,
+                'amount_paid' => 0,
+                'currency' => 'PLN',
+                'status' => 'sent',
+                'payment_status' => 'pending',
+                'created_by' => $user->id,
+            ]);
+
+            foreach ($labels as $row) {
+                ContractPaymentSchedule::create([
+                    'contract_id' => $contract->id,
+                    'sort_order' => $row['sort_order'],
+                    'label' => $row['label'],
+                    'amount' => $row['amount'],
+                    'due_date' => $row['due'],
+                ]);
+            }
+        }
+
+        app(EventPaymentReminderSyncService::class)->syncEventContractInstallmentReminders($event->fresh());
+
+        $completedStatusId = TaskStatus::query()->where('name', 'Zakończone')->value('id');
+
+        $this->assertSame(
+            0,
+            Task::query()
+                ->where('description', 'like', '%[payment-reminder:contract_schedule:%')
+                ->where('status_id', '!=', $completedStatusId)
+                ->count(),
+        );
+
+        $grouped = Task::query()
+            ->where('description', 'like', '%[payment-reminder:event_contract_installment:'.$event->id.':%')
+            ->where('status_id', '!=', $completedStatusId)
+            ->get();
+
+        $this->assertCount(3, $grouped);
+        $this->assertTrue($grouped->every(fn (Task $task): bool => str_contains((string) $task->description, 'Zapłaciło 0 z 3')));
+        $this->assertTrue($grouped->contains(fn (Task $task): bool => str_contains((string) $task->title, 'Zaliczka (10%)')));
+        $this->assertTrue($grouped->contains(fn (Task $task): bool => str_contains((string) $task->title, 'Dopłata (90%)')));
+        $this->assertTrue($grouped->contains(fn (Task $task): bool => str_contains((string) $task->title, 'Waluta u pilota')));
+    }
+
+    public function test_aggregated_contract_reminder_retires_when_all_paid(): void
+    {
+        if (! Schema::hasTable('contract_payment_schedules')) {
+            $this->markTestSkipped('contract_payment_schedules table not available.');
+        }
+
+        $user = $this->createOfficeUser();
+        $event = Event::factory()->create([
+            'name' => 'Paryż paid',
+            'assigned_to' => $user->id,
+        ]);
+
+        $contracts = collect();
+
+        for ($i = 1; $i <= 2; $i++) {
+            $contract = Contract::create([
+                'event_id' => $event->id,
+                'contract_type' => Contract::TYPE_INDIVIDUAL,
+                'title' => 'Umowa '.$i,
+                'contract_date' => now()->toDateString(),
+                'total_price' => 1000,
+                'amount_due' => 1000,
+                'amount_paid' => 0,
+                'currency' => 'PLN',
+                'status' => 'sent',
+                'payment_status' => 'pending',
+                'created_by' => $user->id,
+            ]);
+            $contracts->push($contract);
+
+            ContractPaymentSchedule::create([
+                'contract_id' => $contract->id,
+                'sort_order' => 0,
+                'label' => 'Zaliczka (10%)',
+                'amount' => 1000,
+                'due_date' => now()->addDays(5),
+            ]);
+        }
+
+        app(EventPaymentReminderSyncService::class)->syncEventContractInstallmentReminders($event->fresh());
+
+        $activeBefore = Task::query()
+            ->where('description', 'like', '%[payment-reminder:event_contract_installment:'.$event->id.':%')
+            ->whereHas('status', fn ($q) => $q->where('name', '!=', 'Zakończone'))
+            ->count();
+        $this->assertSame(1, $activeBefore);
+
+        foreach ($contracts as $contract) {
+            $contract->update([
+                'payment_status' => 'paid',
+                'amount_paid' => 1000,
+            ]);
+        }
+
+        app(EventPaymentReminderSyncService::class)->syncEventContractInstallmentReminders($event->fresh());
+
+        $this->assertSame(
+            0,
+            Task::query()
+                ->where('description', 'like', '%[payment-reminder:event_contract_installment:'.$event->id.':%')
+                ->whereHas('status', fn ($q) => $q->where('name', '!=', 'Zakończone'))
+                ->count(),
+        );
+    }
+
+    public function test_retire_legacy_payment_reminders_command_closes_per_schedule_tasks(): void
+    {
+        if (! Schema::hasTable('contract_payment_schedules')) {
+            $this->markTestSkipped('contract_payment_schedules table not available.');
+        }
+
+        $user = $this->createOfficeUser();
+        $event = Event::factory()->create(['assigned_to' => $user->id, 'name' => 'Legacy cleanup']);
+        $statusId = Task::getDefaultStatusId();
+
+        $legacy = Task::create([
+            'title' => 'Termin raty kontraktu: Zaliczka (legacy)',
+            'description' => "Kwota: 100 PLN.\n\n[payment-reminder:contract_schedule:99999:schedule]",
+            'due_date' => now()->addDays(2),
+            'status_id' => $statusId,
+            'priority' => 'urgent',
+            'source' => 'system',
+            'author_id' => $user->id,
+            'assignee_id' => $user->id,
+            'taskable_type' => Event::class,
+            'taskable_id' => $event->id,
+            'order' => 1,
+        ]);
+
+        $this->artisan('tasks:retire-legacy-payment-reminders', ['--no-resync' => true])
+            ->assertSuccessful();
+
+        $legacy->refresh();
+        $completedStatusId = TaskStatus::query()->where('name', 'Zakończone')->value('id');
+        $this->assertSame($completedStatusId, (int) $legacy->status_id);
     }
 }

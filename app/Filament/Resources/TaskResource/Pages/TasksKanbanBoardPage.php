@@ -127,12 +127,24 @@ class TasksKanbanBoardPage extends Page implements HasForms
             ->url(TaskResource::getUrl('index'));
 
         $actions[] = $this->makeCreateTaskAction(
-            defaultFormData: fn (): array => $this->eventFilter
-                ? ['taskable_type' => Event::class, 'taskable_id' => $this->eventFilter]
-                : [],
+            defaultDueDate: fn (): mixed => $this->createTaskDefaultDueDate(),
+            defaultFormData: fn (): array => array_merge(
+                $this->createTaskDefaultFormData(),
+                $this->pendingCreateFormData,
+            ),
         );
 
         return $actions;
+    }
+
+    /**
+     * @return array<string, mixed>
+     */
+    protected function createTaskDefaultFormData(): array
+    {
+        return $this->eventFilter
+            ? ['taskable_type' => Event::class, 'taskable_id' => $this->eventFilter]
+            : [];
     }
 
     protected function afterTaskModalSaved(Task $task): void

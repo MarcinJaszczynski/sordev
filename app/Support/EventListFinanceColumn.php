@@ -3,9 +3,15 @@
 namespace App\Support;
 
 use App\Models\Event;
+use App\Services\ParticipantPaymentBalanceService;
+use App\Services\SettlementPaymentHealthService;
+use Illuminate\Support\Collection;
 
 final class EventListFinanceColumn
 {
+    /** @var array<int, bool> */
+    private static array $overdueByEventId = [];
+
     public static function resolveCurrencyCode(mixed $livewire): string
     {
         if (! is_object($livewire) || ! property_exists($livewire, 'tableFilters')) {
@@ -21,6 +27,43 @@ final class EventListFinanceColumn
         return strtoupper($code);
     }
 
+    /**
+     * Wstępne wyliczenie overdue dla strony listy — jedno przejście zamiast N+1 przy renderze.
+     *
+     * @param  Collection<int, Event>|iterable<Event>  $records
+     */
+    public static function warmForPage(iterable $records): void
+    {
+        $events = Collection::make($records)->filter(fn ($record) => $record instanceof Event);
+
+        if ($events->isEmpty()) {
+            return;
+        }
+
+        $service = app(ParticipantPaymentBalanceService::class);
+
+        foreach ($events as $event) {
+            $eventId = (int) $event->getKey();
+
+            if (array_key_exists($eventId, self::$overdueByEventId)) {
+                continue;
+            }
+
+            try {
+                $aggregate = $service->eventAggregate($event);
+                self::$overdueByEventId[$eventId] = ($aggregate['count'] ?? 0) > 0
+                    && ($aggregate['coverage_status'] ?? '') === SettlementPaymentHealthService::STATUS_OVERDUE;
+            } catch (\Throwable) {
+                self::$overdueByEventId[$eventId] = false;
+            }
+        }
+    }
+
+    public static function resetWarmCache(): void
+    {
+        self::$overdueByEventId = [];
+    }
+
     public static function html(Event $record, string $currencyCode = 'PLN'): string
     {
         $currencyCode = strtoupper($currencyCode);
@@ -33,78 +76,53 @@ final class EventListFinanceColumn
             : 0.0;
 
         $paidAmount = self::resolvePaidAmount($record, $currencyCode);
-
-        $totalCount = (int) ($record->participant_count ?? 0);
-        $paidCount = (int) ($record->paid_participants_count ?? 0);
-        $brakuje = max(0.0, $dueAmount - $paidAmount);
-
-        $dayInsuranceCount = (int) ($record->day_insurances_count ?? -1);
-        $insuranceRequired = $dayInsuranceCount >= 0
-            ? $dayInsuranceCount > 0
-            : $record->requiresInsuranceWorkflow();
-        $insuranceReady = $record->isInsuranceCompleted();
-        $insuranceColor = $insuranceRequired
-            ? ($insuranceReady ? '#047857' : '#dc2626')
-            : '#6b7280';
-        $insuranceLabel = $insuranceRequired
-            ? ($insuranceReady ? 'OK' : 'Do zrobienia')
-            : 'Brak wymogu';
+        $paymentsColor = self::resolveClientPaymentsColor($record, $paidAmount, $dueAmount);
+        $paymentsDisplay = $fmt($paidAmount).' / '.$fmt($dueAmount);
 
         $row = fn (string $label, string $value, string $vColor = '#111827') => '<tr>'
             .'<td style="padding:1px 8px 1px 0;color:#9ca3af;font-size:0.72rem;white-space:nowrap">'.$label.'</td>'
             .'<td style="color:'.$vColor.';font-size:0.78rem;font-weight:600;white-space:nowrap">'.$value.'</td>'
             .'</tr>';
 
-        $paidDisplay = $fmt($paidAmount);
-        if ($totalCount > 0) {
-            $paidDisplay .= ' <span style="color:#9ca3af;font-weight:400;font-size:0.7rem">('
-                .$paidCount.'/'.$totalCount.')</span>';
-        }
-
-        $brakujeColor = $brakuje > 0.001 ? '#dc2626' : '#047857';
-
-        $vendorHealth = self::resolveVendorCostHealth($record);
-        $vendorRow = '';
-        if ($vendorHealth !== null) {
-            [$bg, $fg] = \App\Services\SettlementPaymentHealthService::$statusColors[$vendorHealth['status']] ?? ['#f3f4f6', '#374151'];
-            $vendorLabel = e($vendorHealth['label']);
-            $vendorRemaining = e(MoneyFormatter::format($vendorHealth['remaining_pln'], 'PLN'));
-            $vendorRow = '<tr>'
-                .'<td style="padding:1px 8px 1px 0;color:#9ca3af;font-size:0.72rem;white-space:nowrap">Koszty wykonawców:</td>'
-                .'<td style="font-size:0.78rem;font-weight:600;white-space:nowrap">'
-                .'<span style="color:'.$fg.'">'.$vendorLabel.'</span>'
-                .($vendorHealth['remaining_pln'] > 0 ? ' <span style="color:#9ca3af;font-weight:400">('.$vendorRemaining.')</span>' : '')
-                .'</td></tr>';
-        }
-
         return '<table style="border-collapse:collapse" title="Szczegóły kalkulacji na karcie finansów imprezy">'
-            .$row('Klient:', e($record->client_name ?: '—'))
-            .$row('Do zapłaty (łącznie):', $fmt($dueAmount))
+            .$row('Wpłaty klienta:', $paymentsDisplay, $paymentsColor)
             .$row('Cena za os.:', e(MoneyFormatter::format($pricePerPerson, $currencyCode)), '#1f2937')
-            .'<tr>'
-            .'<td style="padding:1px 8px 1px 0;color:#9ca3af;font-size:0.72rem;white-space:nowrap">Zapłacono:</td>'
-            .'<td style="color:#047857;font-size:0.78rem;font-weight:600;white-space:nowrap">'.$paidDisplay.'</td>'
-            .'</tr>'
-            .$row('Brakuje:', $fmt($brakuje), $brakujeColor)
-            .$vendorRow
-            .$row('Ubezpieczenie:', e($insuranceLabel), $insuranceColor)
             .'</table>';
     }
 
-    /**
-     * @return array{status: string, label: string, remaining_pln: float}|null
-     */
-    private static function resolveVendorCostHealth(Event $record): ?array
+    private static function resolveClientPaymentsColor(Event $record, float $paidAmount, float $dueAmount): string
     {
-        try {
-            $settlement = $record->relationLoaded('activeSettlement')
-                ? $record->activeSettlement
-                : $record->activeSettlement()->first();
+        $tolerance = SettlementPaymentHealthService::TOLERANCE;
 
-            return app(\App\Services\SettlementPayerBreakdownService::class)->miniSummaryForSettlement($settlement);
-        } catch (\Throwable) {
-            return null;
+        if ($dueAmount <= $tolerance || $paidAmount >= $dueAmount - $tolerance) {
+            return '#047857';
         }
+
+        if (self::isClientPaymentsOverdue($record)) {
+            return '#dc2626';
+        }
+
+        return '#2563eb';
+    }
+
+    private static function isClientPaymentsOverdue(Event $record): bool
+    {
+        $eventId = (int) $record->getKey();
+
+        if (array_key_exists($eventId, self::$overdueByEventId)) {
+            return self::$overdueByEventId[$eventId];
+        }
+
+        try {
+            $aggregate = app(ParticipantPaymentBalanceService::class)->eventAggregate($record);
+
+            self::$overdueByEventId[$eventId] = ($aggregate['count'] ?? 0) > 0
+                && ($aggregate['coverage_status'] ?? '') === SettlementPaymentHealthService::STATUS_OVERDUE;
+        } catch (\Throwable) {
+            self::$overdueByEventId[$eventId] = false;
+        }
+
+        return self::$overdueByEventId[$eventId];
     }
 
     private static function resolvePaidAmount(Event $record, string $currencyCode): float

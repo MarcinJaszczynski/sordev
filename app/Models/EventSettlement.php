@@ -226,6 +226,13 @@ class EventSettlement extends Model
             return (float) $cost->actual_amount_pln;
         }
 
+        if (in_array($cost->payment_status, ['advance_paid', 'partially_paid'], true)
+            && (float) ($cost->advance_amount ?? 0) > 0) {
+            $rate = (float) ($cost->actual_rate ?? $cost->planned_rate ?? 1);
+
+            return (float) $cost->advance_amount * $rate;
+        }
+
         return 0.0;
     }
 
@@ -386,6 +393,25 @@ class EventSettlement extends Model
                 fn ($query) => $query
             )
             ->delete();
+
+        $softDeletedProgramPointIds = EventProgramPoint::query()
+            ->onlyTrashed()
+            ->where('event_id', $event->id)
+            ->pluck('id')
+            ->map(fn ($id): int => (int) $id)
+            ->all();
+
+        if ($softDeletedProgramPointIds !== []) {
+            $this->costs()
+                ->where('source_type', 'program_point')
+                ->whereIn('source_id', $softDeletedProgramPointIds)
+                ->delete();
+
+            $this->costs()
+                ->where('source_type', 'program_point_payment')
+                ->whereIn('source_id', $softDeletedProgramPointIds)
+                ->delete();
+        }
 
         $this->costs()
             ->where('source_type', 'program_point_payment')

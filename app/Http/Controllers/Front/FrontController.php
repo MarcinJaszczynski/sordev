@@ -1594,17 +1594,6 @@ class FrontController extends Controller
 
         $priceRanges = collect($this->buildPriceRangesForPlace($eventTemplate->pricesPerPerson, $startPlaceId));
 
-        $eventExtraInfo = null;
-        if (\Illuminate\Support\Facades\Schema::hasColumn('events', 'www_extra_info')) {
-            $eventExtraInfo = \App\Models\Event::query()
-                ->where('event_template_id', $eventTemplate->id)
-                ->whereNotNull('www_extra_info')
-                ->where('www_extra_info', '!=', '')
-                ->whereIn('status', [\App\Models\Event::STATUS_CONFIRMED, \App\Models\Event::STATUS_OFFER, \App\Models\Event::STATUS_PROVISIONAL_RESERVATION])
-                ->latest('updated_at')
-                ->value('www_extra_info');
-        }
-
         return view('front.package', [
             'eventTemplate' => $eventTemplate,
             'item' => $eventTemplate,
@@ -1612,7 +1601,6 @@ class FrontController extends Controller
             'prevPackage' => $prevPackage,
             'nextPackage' => $nextPackage,
             'priceRanges' => $priceRanges,
-            'eventExtraInfo' => $eventExtraInfo,
         ]);
     }
 
@@ -1878,7 +1866,7 @@ class FrontController extends Controller
                 'przewodników lokalnych',
                 'ubezpieczenie NNW uczestników wycieczki do kwoty 10 000 zł/osoba',
                 'podatek VAT',
-                'miejsca gratis dla opiekunów (1 opiekun na 15 uczestników)',
+                'miejsca dla opiekunów/dodatkowych (1 opiekun na 15 uczestników)',
             ];
             foreach ($defaultIncludes as $line) {
                 $section->addListItem($this->sanitizeWordText($line));

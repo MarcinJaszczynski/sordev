@@ -109,15 +109,15 @@
 <div class="space-y-4">
     @if(!$startPlaceId)
         <div class="rounded border border-yellow-300 bg-yellow-50 p-3 text-sm text-yellow-800">
-            Wybierz miejsce wyjazdu oraz podaj liczbę uczestników i gratisów, aby obliczyć cenę.
+            Wybierz miejsce wyjazdu oraz podaj liczbę uczestników i opiekunów/dodatkowych, aby obliczyć cenę.
         </div>
     @elseif(!empty($detailedCalculations))
         <div class="rounded border border-blue-200 bg-blue-50 p-3 text-xs text-blue-900">
             <b>Grupa bieżąca:</b>
             @if($currentVariant)
-                {{ $currentVariant['qty'] }} uczestników + {{ $currentVariant['gratis'] }} gratis
+                {{ $currentVariant['qty'] }} uczestników + {{ $currentVariant['gratis'] }} opiek./dod.
             @else
-                {{ $participantCount }} uczestników + {{ $gratisCount }} gratis
+                {{ $participantCount }} uczestników + {{ $gratisCount }} opiek./dod.
             @endif
             @if(!empty($nearestVariants))
                 <br><b>Najbliższe predefiniowane:</b>
@@ -140,7 +140,7 @@
 
             <div class="mb-6 rounded-lg border p-4 {{ $isCurrentVariant ? 'border-primary-500 bg-blue-50/30' : 'border-gray-200' }}">
                 <h5 class="mb-3 font-medium text-gray-800">
-                    Wariant: {{ $variant['qty'] }} uczestników (plus {{ $variant['gratis'] }} gratis, {{ $variant['staff'] }} obsługa, {{ $variant['driver'] }} kierowców), razem: {{ $totalAll }} osób
+                    Wariant: {{ $variant['qty'] }} uczestników (plus {{ $variant['gratis'] }} opiekunów/dodatkowych, {{ $variant['staff'] }} obsługa, {{ $variant['driver'] }} kierowców), razem: {{ $totalAll }} osób
                     @if($isCurrentVariant)
                         <span class="ml-2 text-xs text-primary-700">(bieżąca grupa)</span>
                     @endif
@@ -158,7 +158,7 @@
                                             <tr class="bg-green-100">
                                                 <th class="border-b px-3 py-2 text-left">Pokój</th>
                                                 <th class="border-b px-3 py-2 text-right">Uczestnicy</th>
-                                                <th class="border-b px-3 py-2 text-right">Gratis</th>
+                                                <th class="border-b px-3 py-2 text-right">{{ \App\Support\EventParticipantGroupLabels::GRATIS }}</th>
                                                 <th class="border-b px-3 py-2 text-right">Obsługa</th>
                                                 <th class="border-b px-3 py-2 text-right">Kierowcy</th>
                                                 <th class="border-b px-3 py-2 text-right">Cena (za pokój)</th>

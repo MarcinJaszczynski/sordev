@@ -363,10 +363,10 @@ class DocumentsRelationManager extends RelationManager
                     ->label('Dodaj zadanie')
                     ->icon('heroicon-o-clipboard-document-list')
                     ->color('primary')
-                    ->url(fn (EventDocument $record): string => TaskResource::getUrl('create', [
-                        'taskable_type' => EventDocument::class,
-                        'taskable_id' => $record->getKey(),
-                    ]))
+                    ->url(fn (EventDocument $record): string => \App\Support\Tasks\TaskNavigation::createUrl(
+                        \App\Models\EventDocument::class,
+                        $record->getKey(),
+                    ))
                     ->openUrlInNewTab(),
 
                 Tables\Actions\Action::make('approve')

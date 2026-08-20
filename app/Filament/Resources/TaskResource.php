@@ -10,20 +10,23 @@ use App\Models\TaskStatus;
 use App\Services\Tasks\TaskInboxService;
 use App\Support\FilamentNavigation;
 use App\Support\Tasks\TaskAuthorization;
+use App\Support\Tasks\TaskListColumn;
 use App\Support\Tasks\TaskNavigation;
 use App\Support\Tasks\TaskQueryFilters;
+use App\Services\NotificationService;
 use Filament\Forms;
 use Filament\Forms\Form;
 use Filament\Forms\Get;
 use Filament\Forms\Set;
 use Filament\Navigation\NavigationItem;
+use Filament\Notifications\Notification;
 use Filament\Resources\Resource;
 use Filament\Tables;
 use Filament\Tables\Table;
+use Illuminate\Contracts\View\View;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Collection;
 use Illuminate\Database\Eloquent\SoftDeletingScope;
-use Filament\Notifications\Notification;
 use Illuminate\Support\Str;
 
 class TaskResource extends Resource
@@ -66,20 +69,96 @@ class TaskResource extends Resource
 
     public static function modalEditTableAction(): Tables\Actions\Action
     {
+        // Page/RM action `editTask` ma pełny edytor. Klik w przycisk idzie przez Alpine
+        // (bez mountTableAction) — cykl table-action + Livewire morph zostawiał x-cloak
+        // na wrapperze modala (isOpen=true, ale display:none). action() zostaje dla
+        // recordAction / testów wołających mountTableAction.
         return Tables\Actions\Action::make('edit')
             ->label('Edytuj')
             ->icon('heroicon-o-pencil-square')
-            ->action(function (Task $record, Tables\Actions\Action $action): void {
-                $livewire = $action->getLivewire();
-
-                if (method_exists($livewire, 'openEditTaskModal')) {
-                    $livewire->openEditTaskModal($record->id);
-
+            ->alpineClickHandler(
+                fn (Task $record): string => '$wire.openEditTaskModal('.(int) $record->id.')',
+            )
+            ->action(function (Task $record, $livewire): void {
+                if (! is_object($livewire) || ! method_exists($livewire, 'openEditTaskModal')) {
                     return;
                 }
 
-                redirect(static::getUrl('edit', ['record' => $record]));
+                $livewire->openEditTaskModal((int) $record->id);
             });
+    }
+
+    public static function modalEditorForm(Form $form): Form
+    {
+        return $form
+            ->schema([
+                Forms\Components\TextInput::make('title')
+                    ->label('Tytuł')
+                    ->required()
+                    ->maxLength(255)
+                    ->columnSpanFull(),
+                Forms\Components\Grid::make(3)
+                    ->schema([
+                        Forms\Components\DateTimePicker::make('due_date')
+                            ->label('Termin'),
+                        Forms\Components\Select::make('status_id')
+                            ->label('Status')
+                            ->relationship('status', 'name')
+                            ->default(fn () => Task::getDefaultStatusId())
+                            ->searchable()
+                            ->preload()
+                            ->required(),
+                        Forms\Components\Select::make('priority')
+                            ->label('Priorytet')
+                            ->options(TaskPriority::options())
+                            ->default(TaskPriority::Normal->value)
+                            ->required(),
+                    ]),
+                Forms\Components\Grid::make(3)
+                    ->schema([
+                        Forms\Components\Select::make('assignee_id')
+                            ->label('Przypisane do')
+                            ->relationship('assignee', 'name')
+                            ->searchable()
+                            ->preload(),
+                        Forms\Components\Select::make('parent_id')
+                            ->label('Zadanie nadrzędne')
+                            ->relationship('parent', 'title', modifyQueryUsing: fn (Builder $query) => $query->whereNull('parent_id'))
+                            ->searchable()
+                            ->preload(),
+                        Forms\Components\Select::make('taskable_type')
+                            ->label('Kontekst zadania')
+                            ->options(Task::getTaskableTypeOptions())
+                            ->default(fn () => request()->query('taskable_type'))
+                            ->native(false)
+                            ->live()
+                            ->afterStateUpdated(function (Set $set): void {
+                                $set('taskable_id', null);
+                            }),
+                    ]),
+                Forms\Components\Select::make('taskable_id')
+                    ->label('Powiązany rekord')
+                    ->options(fn (Get $get): array => Task::getTaskableRecordOptions($get('taskable_type')))
+                    ->default(fn () => request()->query('taskable_id'))
+                    ->searchable()
+                    ->preload()
+                    ->visible(fn (Get $get): bool => filled($get('taskable_type')))
+                    ->required(fn (Get $get): bool => filled($get('taskable_type')))
+                    ->columnSpanFull(),
+                \FilamentTiptapEditor\TiptapEditor::make('description')
+                    ->label('Treść')
+                    ->columnSpanFull(),
+                Forms\Components\ViewField::make('context_navigation')
+                    ->label('Przejdź do')
+                    ->view('filament.pages.partials.calendar-entry-links')
+                    ->viewData(fn (?Task $record): array => [
+                        'links' => \App\Support\Tasks\TaskContextRegistry::linksForTask($record),
+                        'openInNewTab' => true,
+                    ])
+                    ->visible(fn (?Task $record): bool => filled($record?->taskable_type))
+                    ->columnSpanFull(),
+            ])
+            ->columns(1);
     }
 
     public static function form(Form $form): Form
@@ -187,6 +266,66 @@ class TaskResource extends Resource
                 false: fn (Builder $query): Builder => TaskQueryFilters::excludeArchived($query),
                 blank: fn (Builder $query): Builder => TaskQueryFilters::excludeArchived($query),
             );
+    }
+
+    /**
+     * @return array<int, Tables\Columns\Column>
+     */
+    public static function adminListTableColumns(bool $showContextColumn = true, bool $showSourceColumn = false): array
+    {
+        $columns = [
+            Tables\Columns\ViewColumn::make('task_summary')
+                ->label('Zadanie')
+                ->searchable(['title', 'description'])
+                ->sortable(['title'])
+                ->view('filament.tasks.list-task-cell'),
+        ];
+
+        if ($showContextColumn) {
+            $columns[] = Tables\Columns\ViewColumn::make('context_summary')
+                ->label('Kontekst')
+                ->view('filament.tasks.list-task-context-cell');
+        } else {
+            $columns[] = Tables\Columns\ViewColumn::make('context_summary')
+                ->label('Kontekst')
+                ->view('filament.tasks.list-task-context-cell')
+                ->viewData(['showContextRecord' => false]);
+
+            if ($showSourceColumn) {
+                $columns[] = Tables\Columns\TextColumn::make('source')
+                    ->label('Źródło')
+                    ->badge()
+                    ->formatStateUsing(fn ($state) => match ($state instanceof \App\Enums\TaskSource ? $state->value : (string) $state) {
+                        \App\Enums\TaskSource::PilotChecklist->value => 'Checklista pilota',
+                        default => 'Biuro',
+                    })
+                    ->color(fn ($state) => ($state instanceof \App\Enums\TaskSource ? $state->value : (string) $state) === \App\Enums\TaskSource::PilotChecklist->value
+                        ? 'info'
+                        : 'gray');
+            }
+        }
+
+        return array_merge($columns, [
+            Tables\Columns\SelectColumn::make('status_id')
+                ->label('Status')
+                ->options(fn (): array => TaskStatus::query()->orderBy('order')->pluck('name', 'id')->all())
+                ->sortable()
+                ->selectablePlaceholder(false),
+            Tables\Columns\TextColumn::make('due_date')
+                ->label('Termin / Priorytet')
+                ->html()
+                ->state(fn (Task $record): string => TaskListColumn::duePriorityCellHtml($record))
+                ->sortable(),
+            Tables\Columns\TextColumn::make('modified_at')
+                ->label('Modyfikacja')
+                ->html()
+                ->state(fn (Task $record): string => TaskListColumn::modificationCellHtml($record))
+                ->sortable(query: function (Builder $query, string $direction): Builder {
+                    $dir = strtolower($direction) === 'asc' ? 'asc' : 'desc';
+
+                    return $query->orderByRaw('COALESCE(updated_at, created_at) '.$dir);
+                }),
+        ]);
     }
 
     /**
@@ -375,6 +514,42 @@ class TaskResource extends Resource
         return $filters;
     }
 
+    public static function configureAdminTaskListTable(
+        Table $table,
+        bool $officeOnly = true,
+        bool $showContextColumn = true,
+        bool $showSourceColumn = false,
+        bool $includeTrashed = false,
+        ?\Closure $additionalQueryModifier = null,
+    ): Table {
+        return $table
+            ->modifyQueryUsing(function (Builder $query) use ($officeOnly, $additionalQueryModifier): Builder {
+                TaskQueryFilters::applyDefaultListScopes($query, $officeOnly);
+
+                $query = TaskQueryFilters::orderByHierarchyThenLatestActivityDesc($query);
+
+                if ($additionalQueryModifier) {
+                    $query = $additionalQueryModifier($query);
+                }
+
+                return $query;
+            })
+            ->defaultSort('latest_activity_at', 'desc')
+            ->columns(static::adminListTableColumns($showContextColumn, $showSourceColumn))
+            ->filters(static::sharedTableFilters($includeTrashed))
+            ->recordUrl(null)
+            ->recordAction(null)
+            ->actionsColumnLabel('Działanie')
+            ->actions([
+                static::modalEditTableAction(),
+                Tables\Actions\DeleteAction::make()
+                    ->visible(fn (Task $record): bool => TaskAuthorization::canDelete(auth()->user(), $record)),
+            ])
+            ->bulkActions([
+                Tables\Actions\BulkActionGroup::make(static::tableBulkActions()),
+            ]);
+    }
+
     public static function configureSharedTable(
         Table $table,
         bool $officeOnly = true,
@@ -425,7 +600,7 @@ class TaskResource extends Resource
 
     public static function table(Table $table): Table
     {
-        return static::configureSharedTable($table, officeOnly: true, showContext: true, includeTrashed: true)
+        return static::configureAdminTaskListTable($table, officeOnly: true, includeTrashed: true)
             ->filters(array_merge(static::sharedTableFilters(true), [
                 Tables\Filters\SelectFilter::make('taskable_type')
                     ->label('Kontekst')

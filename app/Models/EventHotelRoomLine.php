@@ -14,7 +14,7 @@ class EventHotelRoomLine extends Model
 
     public const ROLES = [
         'qty' => 'Uczestnicy',
-        'gratis' => 'Gratis',
+        'gratis' => \App\Support\EventParticipantGroupLabels::GRATIS,
         'staff' => 'Obsługa',
         'driver' => 'Kierowca',
     ];

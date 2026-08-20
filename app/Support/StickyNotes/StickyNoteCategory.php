@@ -21,7 +21,7 @@ class StickyNoteCategory
         return [
             self::GENERAL => 'Ogólne',
             self::HOTEL => 'Hotel / nocleg',
-            self::GRATIS => 'Opiekun/Inne',
+            self::GRATIS => \App\Support\EventParticipantGroupLabels::GRATIS,
             self::PICKUP => 'Podjazd / zbiórka',
             self::TRANSPORT => 'Transport',
             self::FINANCE => 'Finanse',

@@ -28,7 +28,7 @@
             <thead class="bg-gray-50">
                 <tr>
                     <th class="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-gray-500">Nocleg</th>
-                    @foreach (['qty' => 'Uczestnicy', 'gratis' => 'Gratis', 'staff' => 'Obsługa', 'driver' => 'Kierowca'] as $role => $label)
+                    @foreach (\App\Support\EventParticipantGroupLabels::hotelRoleLabels() as $role => $label)
                         <th class="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-gray-500">{{ $label }}</th>
                     @endforeach
                     <th class="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-gray-500">Notatka</th>

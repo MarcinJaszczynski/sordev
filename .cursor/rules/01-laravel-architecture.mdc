@@ -1,0 +1,49 @@
+---
+description: Laravel 12 architecture rules
+globs:
+    - "**/*.php"
+---
+
+# Laravel Architecture
+
+Stosuj standardową architekturę Laravel.
+
+Preferuj:
+
+Models
+↓
+Services
+↓
+Actions
+↓
+Controllers / Filament Resources
+
+Nie umieszczaj dużej logiki biznesowej:
+
+- w kontrolerach
+- w Resource Filament
+- w Blade
+
+Dla skomplikowanych procesów twórz:
+
+app/Services
+
+lub
+
+app/Actions
+
+Każda metoda powinna robić jedną rzecz.
+
+Używaj:
+
+- Dependency Injection
+- Form Requests
+- Policies
+- Events
+- Jobs
+
+Unikaj:
+
+- masowych update bez walidacji
+- surowego SQL
+- logiki w migration

@@ -142,11 +142,6 @@
                     <div class="description">
                         {!! $item->event_description !!}
                     </div>
-                    @if (! empty($eventExtraInfo ?? null))
-                        <div class="description event-www-extra mt-4 rounded-lg border border-amber-200 bg-amber-50 p-4 text-sm">
-                            {!! $eventExtraInfo !!}
-                        </div>
-                    @endif
                 </div>
                 <div class="specifics">
                     <div class="length-section">
@@ -530,7 +525,7 @@
                                 <li>przewodników lokalnych</li>
                                 <li>ubezpieczenie NNW uczestników wycieczki do kwoty 10 000 zł/osoba</li>
                                 <li>podatek VAT</li>
-                                <li>miejsca gratis dla opiekunów (1 opiekun na 15 uczestników)</li>
+                                <li>miejsca dla opiekunów/dodatkowych (1 opiekun na 15 uczestników)</li>
                             </ul>
                             <b>Cena nie zawiera:</b>
                             <ul>

@@ -3,6 +3,7 @@
 namespace App\Filament\Resources\TaskResource\Pages;
 
 use App\Filament\Concerns\InteractsWithTaskEditModal;
+use App\Filament\Concerns\InteractsWithTaskListQuickActions;
 use App\Filament\Concerns\InteractsWithTaskOwnershipScope;
 use App\Filament\Concerns\MarksTaskInboxAsSeen;
 use App\Filament\Resources\TaskResource;
@@ -17,6 +18,7 @@ use Illuminate\Database\Eloquent\Builder;
 class ListTasks extends ListRecords
 {
     use InteractsWithTaskEditModal;
+    use InteractsWithTaskListQuickActions;
     use InteractsWithTaskOwnershipScope;
     use MarksTaskInboxAsSeen;
 
@@ -80,7 +82,15 @@ class ListTasks extends ListRecords
     protected function getHeaderActions(): array
     {
         return [
-            $this->makeCreateTaskAction(),
+            // Musi być pełna akcja z modalem — stub z mountAction() nadpisywał
+            // cacheAction(createTask) z traita i modal przestawał się otwierać.
+            $this->makeCreateTaskAction(
+                defaultDueDate: fn (): mixed => $this->createTaskDefaultDueDate(),
+                defaultFormData: fn (): array => array_merge(
+                    $this->createTaskDefaultFormData(),
+                    $this->pendingCreateFormData,
+                ),
+            ),
             Actions\Action::make('board')
                 ->label('Widok Tablicy (Kanban)')
                 ->icon('heroicon-m-view-columns')

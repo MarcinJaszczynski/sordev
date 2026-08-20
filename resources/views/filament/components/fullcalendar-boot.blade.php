@@ -1,4 +1,6 @@
-@vite('resources/js/filament-calendar.js')
+@if (\App\Support\ViteAssetResolver::manifestExists())
+    @vite('resources/js/filament-calendar.js')
+@endif
 
 @push('scripts')
     <script>

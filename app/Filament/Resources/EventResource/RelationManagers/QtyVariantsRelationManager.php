@@ -18,7 +18,7 @@ class QtyVariantsRelationManager extends RelationManager
     {
         return $form->schema([
             TextInput::make('qty')->label('Ilość')->numeric()->required(),
-            Toggle::make('gratis')->label('Gratis')->default(false),
+            Toggle::make('gratis')->label(\App\Support\EventParticipantGroupLabels::GRATIS)->default(false),
             Toggle::make('staff')->label('Personel')->default(false),
             Toggle::make('driver')->label('Kierowca')->default(false),
         ]);
@@ -28,7 +28,7 @@ class QtyVariantsRelationManager extends RelationManager
     {
         return $table->columns([
             Tables\Columns\TextColumn::make('qty')->label('Ilość'),
-            Tables\Columns\IconColumn::make('gratis')->label('Gratis')->boolean(),
+            Tables\Columns\IconColumn::make('gratis')->label(\App\Support\EventParticipantGroupLabels::GRATIS)->boolean(),
             Tables\Columns\IconColumn::make('staff')->label('Personel')->boolean(),
             Tables\Columns\IconColumn::make('driver')->label('Kierowca')->boolean(),
         ])->filters([])->headerActions([])->actions([

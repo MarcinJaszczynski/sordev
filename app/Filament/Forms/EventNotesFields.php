@@ -68,12 +68,4 @@ class EventNotesFields
             ->columnSpanFull()
             ->rows(3);
     }
-
-    public static function wwwExtraInfo(): TiptapEditor
-    {
-        return self::editor('www_extra_info')
-            ->label('Informacje WWW (per impreza)')
-            ->visible(fn (): bool => Schema::hasColumn('events', 'www_extra_info'))
-            ->helperText('Treść wyświetlana na publicznej stronie oferty — nadpisuje domyślny blok informacji.');
-    }
 }

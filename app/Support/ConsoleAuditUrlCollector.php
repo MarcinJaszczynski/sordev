@@ -249,7 +249,8 @@ class ConsoleAuditUrlCollector
             }
         }
 
-        return $events->first();
+        // Nie podawaj zarchiwizowanej imprezy — strony trip dają 403 (viewPilotDetails).
+        return null;
     }
 
     /**

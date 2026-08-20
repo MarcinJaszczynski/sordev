@@ -7,6 +7,7 @@ use App\Models\EventAgreement;
 use App\Models\EventParticipantResignation;
 use App\Models\EventProgramPoint;
 use App\Services\ParticipantResignationSettlementSync;
+use App\Support\EventParticipantGroupLabels;
 use Filament\Forms;
 use Filament\Forms\Form;
 use Filament\Forms\Get;
@@ -127,7 +128,7 @@ class ResignationsRelationManager extends RelationManager
 
                             $paying = max(1, $total - $gratis);
 
-                            return "Uczestnicy: {$total}, gratis: {$gratis}, płacących (szacunek): {$paying}. Cena za osobę dotyczy zwykle płacących uczestników.";
+                            return "Uczestnicy: {$total}, ".EventParticipantGroupLabels::GRATIS.": {$gratis}, płacących (szacunek): {$paying}. Cena za osobę dotyczy zwykle płacących uczestników.";
                         })
                         ->columnSpanFull(),
 

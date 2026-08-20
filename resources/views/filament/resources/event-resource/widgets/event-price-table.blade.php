@@ -27,7 +27,7 @@
                 <span class="text-sm font-semibold text-gray-900 dark:text-gray-100">Ustal ręcznie cenę za płacącego uczestnika</span>
             </label>
             <p class="mt-1 text-xs text-gray-600 dark:text-gray-400">
-                Cena dotyczy uczestników płacących (bez gratisów, pilota i obsługi). Działa analogicznie do ręcznego kosztu transportu —
+                Cena dotyczy uczestników płacących (bez opiekunów/dodatkowych, pilota i obsługi). Działa analogicznie do ręcznego kosztu transportu —
                 wpisana kwota zastępuje cenę z kalkulacji i nie zostanie nadpisana przy „Przelicz”.
                 @if(!empty($authoritativeCalc['current']['paying']))
                     Liczba płacących w bieżącej kalkulacji: <strong>{{ (int) $authoritativeCalc['current']['paying'] }}</strong>.
@@ -60,7 +60,7 @@
         <div class="mb-4 p-3 bg-blue-50 border border-blue-200 rounded text-xs text-blue-900">
             <b>Grupa bieżąca:</b>
             @if($currentVariant)
-                {{ $currentVariant['qty'] }} uczestników + {{ $currentVariant['gratis'] }} gratis
+                {{ $currentVariant['qty'] }} uczestników + {{ $currentVariant['gratis'] }} opiek./dod.
             @else
                 {{ (int) ($record->participant_count ?? 0) }} uczestników
             @endif
@@ -96,7 +96,7 @@
 
                     <div class="mb-6 border rounded-lg p-4 {{ $isCurrentVariant ? 'border-primary-500 bg-blue-50/30' : 'border-gray-200' }}">
                         <h5 class="font-medium text-gray-800 mb-3">
-                            Wariant: {{ $variant['qty'] }} uczestników (plus {{ $variant['gratis'] }} gratis, {{ $variant['staff'] }} obsługa, {{ $variant['driver'] }} kierowców), razem: {{ $totalAll }} osób
+                            Wariant: {{ $variant['qty'] }} uczestników (plus {{ $variant['gratis'] }} opiekunów/dodatkowych, {{ $variant['staff'] }} obsługa, {{ $variant['driver'] }} kierowców), razem: {{ $totalAll }} osób
                             @if($isCurrentVariant)
                                 <span class="ml-2 text-xs text-primary-700">(bieżąca grupa imprezy)</span>
                             @endif
@@ -116,7 +116,7 @@
                                                     <tr class="bg-green-100">
                                                         <th class="px-3 py-2 border-b text-left">Pokój</th>
                                                         <th class="px-3 py-2 border-b text-right">Pokoje (ucz.)</th>
-                                                        <th class="px-3 py-2 border-b text-right">Pokoje (gratis)</th>
+                                                        <th class="px-3 py-2 border-b text-right">Pokoje (opiek./dod.)</th>
                                                         <th class="px-3 py-2 border-b text-right">Pokoje (obsługa)</th>
                                                         <th class="px-3 py-2 border-b text-right">Pokoje (kier.)</th>
                                                         <th class="px-3 py-2 border-b text-right">Cena (za pokój)</th>

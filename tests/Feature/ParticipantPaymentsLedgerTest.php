@@ -54,6 +54,7 @@ class ParticipantPaymentsLedgerTest extends TestCase
             ->callAction('addEntry', data: [
                 'paid_at' => '2026-07-05 10:00:00',
                 'amount_pln' => 150,
+                'payer_name' => 'Susan Dale',
                 'payment_method' => 'transfer',
             ], arguments: ['paymentId' => $payment->id])
             ->assertHasNoErrors();
@@ -99,6 +100,7 @@ class ParticipantPaymentsLedgerTest extends TestCase
             ->callAction('addEntry', data: [
                 'paid_at' => '2026-07-05 10:00:00',
                 'amount_pln' => 100,
+                'payer_name' => 'Obcy uczestnik',
                 'payment_method' => 'transfer',
             ], arguments: ['paymentId' => $paymentB->id]);
     }

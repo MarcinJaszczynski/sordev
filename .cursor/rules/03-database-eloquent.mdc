@@ -1,0 +1,49 @@
+---
+description: Database and Eloquent rules
+globs:
+    - "**/Models/**/*.php"
+---
+
+# Database Rules
+
+Przed zmianą modelu:
+
+sprawdź:
+
+- migrację
+- relacje
+- użycie modelu
+
+Relacje muszą być jawne:
+
+belongsTo()
+hasMany()
+belongsMany()
+
+Nazwy:
+
+modele:
+Singular
+
+Tour
+Pilot
+Invoice
+
+tabele:
+plural
+
+tours
+pilots
+invoices
+
+Każda tabela:
+
+- timestamps
+- foreign keys
+- indeksy
+
+Nie zapisuj danych bez:
+
+fillable
+casts
+validation

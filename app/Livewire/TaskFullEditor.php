@@ -4,21 +4,27 @@ namespace App\Livewire;
 
 use App\Enums\TaskPriority;
 use App\Filament\Resources\TaskResource;
+use App\Filament\Resources\TaskResource\RelationManagers;
 use App\Models\Task;
+use App\Models\TaskComment;
 use App\Support\Tasks\TaskAttachmentStore;
 use App\Support\Tasks\TaskContextRegistry;
+use App\Filament\Concerns\DispatchesTopbarNotificationRefresh;
+use App\Services\NotificationService;
 use Filament\Forms\Concerns\InteractsWithForms;
 use Filament\Forms\Contracts\HasForms;
 use Filament\Forms\Form;
 use Filament\Notifications\Notification;
 use Filament\Resources\Pages\Concerns\HasRelationManagers;
-use Filament\Resources\Pages\ContentTabPosition;
 use Illuminate\Contracts\View\View;
+use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\Auth;
+use Livewire\Attributes\Computed;
 use Livewire\Component;
 
 class TaskFullEditor extends Component implements HasForms
 {
+    use DispatchesTopbarNotificationRefresh;
     use HasRelationManagers;
     use InteractsWithForms;
 
@@ -33,6 +39,10 @@ class TaskFullEditor extends Component implements HasForms
 
     public ?string $activeRelationManager = null;
 
+    public bool $showCommentComposer = false;
+
+    public string $newCommentContent = '';
+
     public function mount(
         ?int $taskId = null,
         ?string $defaultDueDate = null,
@@ -45,7 +55,7 @@ class TaskFullEditor extends Component implements HasForms
 
         if ($taskId) {
             $this->record = Task::query()
-                ->with(['taskable', 'parent', 'status', 'assignee'])
+                ->with(['taskable', 'parent', 'status', 'assignee', 'comments.author'])
                 ->findOrFail($taskId);
             $this->form->fill($this->record->attributesToArray());
 
@@ -65,7 +75,7 @@ class TaskFullEditor extends Component implements HasForms
 
     public function form(Form $form): Form
     {
-        return TaskResource::form(
+        return TaskResource::modalEditorForm(
             $form
                 ->model($this->record)
                 ->statePath('data')
@@ -84,17 +94,79 @@ class TaskFullEditor extends Component implements HasForms
 
     public function hasCombinedRelationManagerTabsWithContent(): bool
     {
-        return $this->record->exists;
+        return false;
     }
 
-    public function getContentTabLabel(): ?string
+    /**
+     * @return array<int, class-string>
+     */
+    public function getInlineRelationManagers(): array
     {
-        return 'Szczegóły zadania';
+        if (! $this->record->exists) {
+            return [];
+        }
+
+        return [
+            RelationManagers\AttachmentsRelationManager::class,
+            RelationManagers\SubtasksRelationManager::class,
+        ];
     }
 
-    public function getContentTabPosition(): ?ContentTabPosition
+    #[Computed]
+    public function comments(): Collection
     {
-        return ContentTabPosition::Before;
+        if (! $this->record->exists) {
+            return collect();
+        }
+
+        return $this->record
+            ->comments()
+            ->with('author')
+            ->orderBy('created_at')
+            ->get();
+    }
+
+    public function toggleCommentComposer(): void
+    {
+        $this->showCommentComposer = ! $this->showCommentComposer;
+
+        if (! $this->showCommentComposer) {
+            $this->newCommentContent = '';
+            $this->resetErrorBag('newCommentContent');
+        }
+    }
+
+    public function addComment(): void
+    {
+        if (! $this->record->exists) {
+            return;
+        }
+
+        $validated = $this->validate([
+            'newCommentContent' => ['required', 'string', 'max:10000'],
+        ]);
+
+        $comment = TaskComment::query()->create([
+            'task_id' => $this->record->id,
+            'content' => trim($validated['newCommentContent']),
+            'user_id' => Auth::id(),
+        ]);
+
+        NotificationService::clearCacheForTaskCommentStakeholders($comment);
+
+        $this->newCommentContent = '';
+        $this->showCommentComposer = false;
+        $this->record->load(['comments.author']);
+        unset($this->comments);
+
+        Notification::make()
+            ->title('Komentarz dodany')
+            ->success()
+            ->send();
+
+        $this->dispatch('task-full-editor-updated', taskId: $this->record->id);
+        $this->dispatch('comment-added');
+        $this->dispatchTopbarNotificationRefresh();
     }
 
     /**
@@ -129,7 +201,7 @@ class TaskFullEditor extends Component implements HasForms
             $this->form->fill($this->record->attributesToArray());
             $message = count(array_filter($pendingAttachments)) > 0
                 ? 'Zadanie utworzone wraz z załącznikami'
-                : 'Zadanie utworzone — możesz dodać załączniki w zakładce poniżej';
+                : 'Zadanie utworzone — możesz dodać podzadania, pliki i komentarze poniżej';
         }
 
         $userId = Auth::id();
@@ -142,8 +214,8 @@ class TaskFullEditor extends Component implements HasForms
             ->success()
             ->send();
 
-        $this->dispatch('task-full-editor-saved', taskId: $this->record->id);
-        $this->dispatch('refresh-notifications');
+        $this->dispatch('task-full-editor-updated', taskId: $this->record->id);
+        $this->dispatchTopbarNotificationRefresh();
     }
 
     public function updatedDataStatusId($value): void
@@ -160,8 +232,8 @@ class TaskFullEditor extends Component implements HasForms
             ->success()
             ->send();
 
-        $this->dispatch('task-full-editor-saved', taskId: $this->record->id);
-        $this->dispatch('refresh-notifications');
+        $this->dispatch('task-full-editor-updated', taskId: $this->record->id);
+        $this->dispatchTopbarNotificationRefresh();
     }
 
     public function render(): View

@@ -37,7 +37,7 @@ class VendorInvoiceModuleTest extends TestCase
 
     public function test_csv_importer_groups_multiline_invoice_rows(): void
     {
-        $csv = file_get_contents(base_path('pliki/ksef/CSV.csv'));
+        $csv = file_get_contents(base_path('tests/Fixtures/ksef/CSV.csv'));
         $parsed = app(KsefCsvImporter::class)->parse($csv);
 
         $this->assertGreaterThanOrEqual(17, count($parsed));
@@ -50,7 +50,7 @@ class VendorInvoiceModuleTest extends TestCase
 
     public function test_xml_importer_uses_buyer_as_cost_vendor(): void
     {
-        $xml = file_get_contents(base_path('pliki/ksef/xml.xml'));
+        $xml = file_get_contents(base_path('tests/Fixtures/ksef/xml.xml'));
         $parsed = app(KsefXmlImporter::class)->parse($xml);
 
         $first = $parsed[0];
@@ -62,7 +62,7 @@ class VendorInvoiceModuleTest extends TestCase
 
     public function test_import_is_idempotent_by_ksef_number(): void
     {
-        $csv = file_get_contents(base_path('pliki/ksef/CSV.csv'));
+        $csv = file_get_contents(base_path('tests/Fixtures/ksef/CSV.csv'));
         $service = app(VendorInvoiceImportService::class);
 
         $first = $service->importFromContent($csv, 'csv', 'CSV.csv');
@@ -210,11 +210,11 @@ class VendorInvoiceModuleTest extends TestCase
     {
         Storage::disk('public')->put(
             'vendor-invoices/test-bulk.pdf',
-            file_get_contents(base_path('pliki/ksef/Faktury pdf w jednym pliku.pdf'))
+            file_get_contents(base_path('tests/Fixtures/ksef/bulk-invoices.pdf'))
         );
 
         app(VendorInvoiceImportService::class)->importFromContent(
-            file_get_contents(base_path('pliki/ksef/CSV.csv')),
+            file_get_contents(base_path('tests/Fixtures/ksef/CSV.csv')),
             'csv',
             'CSV.csv'
         );
@@ -229,8 +229,8 @@ class VendorInvoiceModuleTest extends TestCase
 
     public function test_batch_import_processes_csv_and_xml_together(): void
     {
-        $csv = base_path('pliki/ksef/CSV.csv');
-        $xml = base_path('pliki/ksef/xml.xml');
+        $csv = base_path('tests/Fixtures/ksef/CSV.csv');
+        $xml = base_path('tests/Fixtures/ksef/xml.xml');
 
         $result = app(VendorInvoiceBatchImportService::class)->import(
             csvPath: $csv,

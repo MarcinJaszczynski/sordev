@@ -4,10 +4,21 @@ namespace App\Support\Tasks;
 
 use App\Enums\TaskSource;
 use App\Filament\Pilot\Pages\PilotChecklistPage;
+use App\Filament\Resources\ContractorResource;
 use App\Filament\Resources\EventResource;
+use App\Filament\Resources\EventTemplateProgramPointResource;
+use App\Filament\Resources\EventTemplateResource;
 use App\Filament\Resources\TaskResource;
+use App\Models\Contractor;
 use App\Models\Event;
+use App\Models\EventDocument;
 use App\Models\EventProgramPoint;
+use App\Models\EventSettlementCost;
+use App\Models\EventSettlementDocument;
+use App\Models\EventSettlementParticipantPayment;
+use App\Models\EventTemplate;
+use App\Models\EventTemplateProgramPoint;
+use App\Models\PilotCashPreparation;
 use App\Models\Task;
 use Illuminate\Database\Eloquent\Model;
 
@@ -29,15 +40,21 @@ final class TaskNavigation
 
     public static function editUrl(Task|int|null $task): string
     {
-        if (! $task instanceof Task) {
-            $task = $task ? Task::query()->find($task) : null;
-        }
+        return self::fullViewUrl($task);
+    }
 
-        if (! $task) {
-            return TaskResource::getUrl('index');
-        }
+    public static function createUrl(?string $taskableType = null, ?int $taskableId = null, ?string $dueDate = null): string
+    {
+        $baseUrl = self::listUrlForTaskable($taskableType, $taskableId);
 
-        return TaskResource::getUrl('edit', ['record' => $task->getKey()]);
+        $query = array_filter([
+            'createTask' => 1,
+            'taskable_type' => $taskableType,
+            'taskable_id' => $taskableId,
+            'dueDate' => $dueDate,
+        ], fn ($value): bool => $value !== null && $value !== '');
+
+        return $baseUrl.'?'.http_build_query($query);
     }
 
     public static function fullViewUrl(Task|int|null $task, ?int $activeRelationManager = null): string
@@ -97,14 +114,66 @@ final class TaskNavigation
         };
     }
 
-    private static function resolveEventFromSettlementRecord(?Model $record): ?Event
+    public static function listUrlForTaskable(?string $taskableType, ?int $taskableId): string
     {
-        if (! $record || ! method_exists($record, 'settlement')) {
+        if (! filled($taskableType) || ! filled($taskableId)) {
+            return TaskResource::getUrl('index');
+        }
+
+        if ($event = self::resolveEventFromTaskable($taskableType, (int) $taskableId)) {
+            return EventResource::getUrl('tasks', ['record' => $event->getKey()]);
+        }
+
+        return match ($taskableType) {
+            Contractor::class => ContractorResource::getUrl('edit', ['record' => $taskableId]),
+            EventTemplate::class => EventTemplateResource::getUrl('edit', ['record' => $taskableId]),
+            EventTemplateProgramPoint::class => EventTemplateProgramPointResource::getUrl('edit', ['record' => $taskableId]),
+            default => TaskResource::getUrl('index'),
+        };
+    }
+
+    public static function resolveEventFromTaskable(?string $taskableType, ?int $taskableId): ?Event
+    {
+        if (! filled($taskableType) || ! filled($taskableId)) {
             return null;
         }
 
-        $record->loadMissing('settlement.event');
+        /** @var Model|null $record */
+        $record = $taskableType::query()->find($taskableId);
 
-        return $record->settlement?->event;
+        if (! $record) {
+            return null;
+        }
+
+        return match (true) {
+            $record instanceof Event => $record,
+            $record instanceof EventProgramPoint => $record->event,
+            $record instanceof EventDocument => $record->event,
+            default => self::resolveEventFromSettlementRecord($record),
+        };
+    }
+
+    private static function resolveEventFromSettlementRecord(?Model $record): ?Event
+    {
+        if (! $record) {
+            return null;
+        }
+
+        if ($record instanceof EventSettlementCost
+            || $record instanceof EventSettlementDocument
+            || $record instanceof EventSettlementParticipantPayment
+            || $record instanceof PilotCashPreparation) {
+            $record->loadMissing('settlement.event');
+
+            return $record->settlement?->event;
+        }
+
+        if (method_exists($record, 'settlement')) {
+            $record->loadMissing('settlement.event');
+
+            return $record->settlement?->event;
+        }
+
+        return null;
     }
 }

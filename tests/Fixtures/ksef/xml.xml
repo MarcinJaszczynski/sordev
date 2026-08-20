@@ -1,0 +1,183 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<invoices type="array">
+  <invoice>
+    <id type="integer">516262286</id>
+    <user-id type="integer">2831968</user-id>
+    <app nil="true"/>
+    <number>FV/26/375/1</number>
+    <place nil="true"/>
+    <sell-date>2026-06-12</sell-date>
+    <payment-type>transfer</payment-type>
+    <price-net type="decimal">488.89</price-net>
+    <price-gross type="decimal">528.0</price-gross>
+    <currency>PLN</currency>
+    <status>received</status>
+    <description nil="true"/>
+    <seller-name>BIURO PODRÓŻY RAFA - Rafał Latos</seller-name>
+    <seller-tax-no>7162508761</seller-tax-no>
+    <seller-street>ul. Marii Konopnickiej 6</seller-street>
+    <seller-post-code>00-491</seller-post-code>
+    <seller-city>Warszawa</seller-city>
+    <seller-country>PL</seller-country>
+    <seller-email>rafa@bprafa.pl</seller-email>
+    <seller-phone>+ 48 606 102 243</seller-phone>
+    <seller-fax></seller-fax>
+    <seller-www></seller-www>
+    <seller-person nil="true"/>
+    <seller-bank>Bank Millennium S.A.</seller-bank>
+    <seller-bank-account>PL10 1160 2202 0000 0002 0065 6958</seller-bank-account>
+    <buyer-name>ARCHIDIECEZJA GNIEŹNIEŃSKA -
+MUZEUM ARCHIDIECEZJI GNIEŹNIEŃSKIEJ</buyer-name>
+    <buyer-tax-no>7840006416</buyer-tax-no>
+    <buyer-post-code>62-200</buyer-post-code>
+    <buyer-city>GNIEZNO</buyer-city>
+    <buyer-street>KANCLERZA J. ŁASKIEGO 7</buyer-street>
+    <buyer-first-name nil="true"/>
+    <buyer-country>PL</buyer-country>
+    <created-at type="dateTime">2026-06-12T09:15:31+02:00</created-at>
+    <updated-at type="dateTime">2026-06-12T09:31:51+02:00</updated-at>
+    <token>U70qwHH80Yubyz8hjVPr</token>
+    <buyer-email>biuro@muzeumag.com</buyer-email>
+    <buyer-www nil="true"/>
+    <buyer-fax nil="true"/>
+    <buyer-phone nil="true"/>
+    <kind>vat</kind>
+    <pattern>nr-m/mm/yyyy</pattern>
+    <pattern-nr type="integer" nil="true"/>
+    <pattern-nr-m type="integer" nil="true"/>
+    <pattern-nr-d type="integer" nil="true"/>
+    <client-id type="integer">256540814</client-id>
+    <payment-to type="date">2026-06-19</payment-to>
+    <paid type="decimal">0.0</paid>
+    <seller-bank-account-id type="integer" nil="true"/>
+    <lang>pl</lang>
+    <issue-date type="date">2026-06-12</issue-date>
+    <price-tax type="decimal">39.11</price-tax>
+    <department-id type="integer">1615708</department-id>
+    <correction nil="true"/>
+    <buyer-note nil="true"/>
+    <additional-info-desc>GTIN</additional-info-desc>
+    <additional-info type="boolean">true</additional-info>
+    <product-cache>DRZWI UG</product-cache>
+    <buyer-last-name nil="true"/>
+    <from-invoice-id type="integer" nil="true"/>
+    <oid nil="true"/>
+    <discount type="decimal" nil="true"/>
+    <show-discount type="boolean">false</show-discount>
+    <sent-time type="dateTime" nil="true"/>
+    <print-time type="dateTime">2026-06-12T09:31:51+02:00</print-time>
+    <recurring-id type="integer" nil="true"/>
+    <tax2-visible type="boolean" nil="true"/>
+    <warehouse-id type="integer" nil="true"/>
+    <paid-date type="date" nil="true"/>
+    <product-id type="integer" nil="true"/>
+    <issue-year type="integer" nil="true"/>
+    <internal-note nil="true"/>
+    <invoice-id type="integer" nil="true"/>
+    <invoice-template-id type="integer">1</invoice-template-id>
+    <description-long nil="true"/>
+    <buyer-tax-no-kind nil="true"/>
+    <seller-tax-no-kind nil="true"/>
+    <description-footer nil="true"/>
+    <sell-date-kind nil="true"/>
+    <payment-to-kind>other_date</payment-to-kind>
+    <exchange-currency nil="true"/>
+    <discount-kind></discount-kind>
+    <income type="boolean">false</income>
+    <from-api type="boolean">true</from-api>
+    <category-id type="integer" nil="true"/>
+    <warehouse-document-id type="integer" nil="true"/>
+    <exchange-kind>nbp</exchange-kind>
+    <exchange-rate type="decimal">1.0</exchange-rate>
+    <use-delivery-address type="boolean">false</use-delivery-address>
+    <delivery-address nil="true"/>
+    <accounting-kind nil="true"/>
+    <buyer-person></buyer-person>
+    <buyer-bank-account>27102040270000190212049716</buyer-bank-account>
+    <buyer-bank>PKO Bank Polski</buyer-bank>
+    <buyer-mass-payment-code nil="true"/>
+    <exchange-note></exchange-note>
+    <buyer-company type="boolean">true</buyer-company>
+    <show-attachments type="boolean">false</show-attachments>
+    <exchange-currency-rate type="decimal" nil="true"/>
+    <has-attachments type="boolean">true</has-attachments>
+    <exchange-date type="date" nil="true"/>
+    <attachments-count type="integer">1</attachments-count>
+    <delivery-date type="date">2026-06-12</delivery-date>
+    <fiscal-status nil="true"/>
+    <use-moss type="boolean">false</use-moss>
+    <transaction-date type="date">2026-06-12</transaction-date>
+    <email-status nil="true"/>
+    <exclude-from-stock-level type="boolean">false</exclude-from-stock-level>
+    <exclude-from-accounting type="boolean">false</exclude-from-accounting>
+    <exchange-rate-den type="decimal">1.0</exchange-rate-den>
+    <exchange-currency-rate-den type="decimal">1.0</exchange-currency-rate-den>
+    <accounting-scheme nil="true"/>
+    <exchange-difference type="decimal">0.0</exchange-difference>
+    <not-cost type="boolean">false</not-cost>
+    <reverse-charge type="boolean">false</reverse-charge>
+    <issuer nil="true"/>
+    <use-issuer type="boolean">false</use-issuer>
+    <cancelled type="boolean">false</cancelled>
+    <recipient-id type="integer" nil="true"/>
+    <recipient-name></recipient-name>
+    <test type="boolean">false</test>
+    <discount-net type="decimal" nil="true"/>
+    <approval-status>received</approval-status>
+    <accounting-vat-tax-date type="date">2026-06-12</accounting-vat-tax-date>
+    <accounting-income-tax-date type="date">2026-06-12</accounting-income-tax-date>
+    <accounting-other-tax-date type="date" nil="true"/>
+    <accounting-status nil="true"/>
+    <normalized-number nil="true"/>
+    <na-tax-kind nil="true"/>
+    <issued-to-receipt type="boolean">false</issued-to-receipt>
+    <gov-id>7840006416-20260612-405F68C00002-0A</gov-id>
+    <gov-kind>ksef</gov-kind>
+    <gov-status>ok</gov-status>
+    <buyer-mobile-phone nil="true"/>
+    <split-payment type="integer">0</split-payment>
+    <gtu-codes type="array"/>
+    <procedure-designations type="array"/>
+    <gov-sell-date nil="true"/>
+    <gov-send-date nil="true"/>
+    <positions type="array">
+      <position type="InvoicePosition">
+        <id type="integer">1264362224</id>
+        <invoice-id type="integer">516262286</invoice-id>
+        <name>DRZWI UG</name>
+        <description nil="true"/>
+        <price-net type="decimal">11.11111</price-net>
+        <quantity type="decimal">44.0</quantity>
+        <total-price-gross type="decimal">528.0</total-price-gross>
+        <total-price-net type="decimal">488.88889</total-price-net>
+        <account-id type="integer">2219208</account-id>
+        <created-at type="dateTime">2026-06-12T09:15:31+02:00</created-at>
+        <updated-at type="dateTime">2026-06-12T09:15:31+02:00</updated-at>
+        <additional-info>12</additional-info>
+        <quantity-unit>szt</quantity-unit>
+        <tax>8</tax>
+        <price-gross type="decimal">12.0</price-gross>
+        <price-tax type="decimal">0.0</price-tax>
+        <total-price-tax type="decimal">39.11111</total-price-tax>
+        <kind nil="true"/>
+        <invoice-position-id type="integer" nil="true"/>
+        <product-id type="integer">8845149524940</product-id>
+        <discount type="decimal" nil="true"/>
+        <discount-percent type="decimal" nil="true"/>
+        <tax2>0</tax2>
+        <exchange-rate type="decimal">1.0</exchange-rate>
+        <accounting-tax-kind nil="true"/>
+        <code>12</code>
+        <discount-net type="decimal" nil="true"/>
+        <price-net-with-discount type="decimal">11.11111</price-net-with-discount>
+        <price-gross-with-discount type="decimal">12.0</price-gross-with-discount>
+        <total-price-gross-with-discount type="decimal">528.0</total-price-gross-with-discount>
+        <total-price-net-with-discount type="decimal">488.88889</total-price-net-with-discount>
+        <total-price-tax-with-discount type="decimal">39.11111</total-price-tax-with-discount>
+        <gtu-code nil="true"/>
+        <service type="boolean">false</service>
+      </position>
+    </positions>
+    <descriptions type="array"/>
+  </invoice>
+</invoices>

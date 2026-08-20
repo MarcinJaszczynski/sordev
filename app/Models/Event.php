@@ -59,6 +59,7 @@ class Event extends Model
         'end_date',
         'duration_days',
         'program_day_start_times',
+        'program_day_routes',
         'transfer_km',
         'program_km',
         'bus_id',
@@ -67,8 +68,8 @@ class Event extends Model
         'markup_id',
         'participant_count',
         'diet_info',
-        'www_extra_info',
         'return_time',
+        'substitution_time',
         'total_cost',
         'status',
         'notes',
@@ -140,6 +141,7 @@ class Event extends Model
         'driver_pickup_info_sent_at' => 'datetime',
         'hotel_flat_stay_convert_to_pln' => 'boolean',
         'program_day_start_times' => 'array',
+        'program_day_routes' => 'array',
     ];
 
     public const DEFAULT_PROGRAM_DAY_START = '08:00';
@@ -189,6 +191,71 @@ class Event extends Model
         $times = is_array($this->program_day_start_times) ? $this->program_day_start_times : [];
         $times[(string) $day] = substr($this->normalizeProgramDayStartTime($time), 0, 5);
         $this->program_day_start_times = $times;
+    }
+
+    public function programDayRoute(int $day): ?string
+    {
+        if (! Schema::hasColumn('events', 'program_day_routes')) {
+            return null;
+        }
+
+        $routes = is_array($this->program_day_routes) ? $this->program_day_routes : [];
+        $raw = $routes[(string) $day] ?? $routes[$day] ?? null;
+
+        if (! is_string($raw)) {
+            return null;
+        }
+
+        $normalized = trim($raw);
+
+        return $normalized !== '' ? $normalized : null;
+    }
+
+    /**
+     * @return array<string, string>
+     */
+    public function programDayRoutes(): array
+    {
+        if (! Schema::hasColumn('events', 'program_day_routes')) {
+            return [];
+        }
+
+        $routes = is_array($this->program_day_routes) ? $this->program_day_routes : [];
+        $normalized = [];
+
+        foreach ($routes as $day => $route) {
+            if (! is_string($route)) {
+                continue;
+            }
+
+            $value = trim($route);
+
+            if ($value !== '') {
+                $normalized[(string) $day] = $value;
+            }
+        }
+
+        ksort($normalized, SORT_NUMERIC);
+
+        return $normalized;
+    }
+
+    public function setProgramDayRoute(int $day, ?string $route): void
+    {
+        if (! Schema::hasColumn('events', 'program_day_routes')) {
+            return;
+        }
+
+        $routes = is_array($this->program_day_routes) ? $this->program_day_routes : [];
+        $route = is_string($route) ? trim($route) : null;
+
+        if ($route === null || $route === '') {
+            unset($routes[(string) $day], $routes[$day]);
+        } else {
+            $routes[(string) $day] = mb_substr($route, 0, 500);
+        }
+
+        $this->program_day_routes = $routes !== [] ? $routes : null;
     }
 
     protected function normalizeProgramDayStartTime(string $time): string
@@ -480,9 +547,7 @@ class Event extends Model
                         ->all()
                     : [];
 
-                $contactsById = $contactIds !== []
-                    ? \App\Models\Contact::query()->whereIn('id', $contactIds)->get()->keyBy('id')
-                    : collect();
+                $contactsById = self::contactsByIdsCached($contactIds);
 
                 return $this->orderingContractors
                     ->map(function (Contractor $contractor) use ($service, $hasContactPivot, $hasDepartmentPivot, $contactsById): string {
@@ -501,6 +566,37 @@ class Event extends Model
         }
 
         return (string) ($this->client_name ?? '—');
+    }
+
+    /**
+     * Cache Contact w ramach requestu — unika N+1 na liście imprez.
+     *
+     * @param  array<int, int>  $contactIds
+     * @return \Illuminate\Support\Collection<int, \App\Models\Contact>
+     */
+    private static function contactsByIdsCached(array $contactIds): \Illuminate\Support\Collection
+    {
+        if ($contactIds === []) {
+            return collect();
+        }
+
+        /** @var array<int, \App\Models\Contact> $cache */
+        static $cache = [];
+
+        $missing = array_values(array_filter(
+            $contactIds,
+            fn (int $id): bool => ! array_key_exists($id, $cache)
+        ));
+
+        if ($missing !== []) {
+            foreach (\App\Models\Contact::query()->whereIn('id', $missing)->get() as $contact) {
+                $cache[(int) $contact->id] = $contact;
+            }
+        }
+
+        return collect($contactIds)
+            ->mapWithKeys(fn (int $id) => [$id => $cache[$id] ?? null])
+            ->filter();
     }
 
     /**
@@ -796,11 +892,29 @@ class Event extends Model
         $count = max(1, (int) ($participantCount ?? $this->participant_count ?? 1));
 
         if ($this->relationLoaded('qtyVariants')) {
+            $exactVariant = $this->qtyVariants
+                ->where('qty', $count)
+                ->sortBy('id')
+                ->first();
+
+            if ($exactVariant) {
+                return max(0, (int) ($exactVariant->gratis ?? 0));
+            }
+
             $variant = $this->qtyVariants
                 ->sortBy(fn ($variant) => abs(((int) ($variant->qty ?? 0)) - $count))
                 ->first();
 
-            return max(0, (int) ($variant->gratis ?? 0));
+            return max(0, (int) ($variant?->gratis ?? 0));
+        }
+
+        $exactVariant = $this->qtyVariants()
+            ->where('qty', $count)
+            ->orderBy('id')
+            ->first();
+
+        if ($exactVariant) {
+            return max(0, (int) ($exactVariant->gratis ?? 0));
         }
 
         $variant = $this->qtyVariants()

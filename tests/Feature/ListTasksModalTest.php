@@ -61,4 +61,31 @@ class ListTasksModalTest extends TestCase
             ->assertSet('editingTaskId', $task->id)
             ->assertSet('mountedActions', ['editTask']);
     }
+
+    public function test_edit_modal_with_subtasks_renders_without_nested_full_editor(): void
+    {
+        $user = User::factory()->create();
+        $user->assignRole('admin');
+
+        $parent = Task::create([
+            'title' => 'Rodzic z podzadaniami',
+            'status_id' => Task::getDefaultStatusId(),
+            'priority' => 'normal',
+            'author_id' => $user->id,
+        ]);
+
+        Task::create([
+            'title' => 'Podzadanie w modalu',
+            'status_id' => Task::getDefaultStatusId(),
+            'priority' => 'normal',
+            'author_id' => $user->id,
+            'parent_id' => $parent->id,
+        ]);
+
+        Livewire::actingAs($user)
+            ->test(ListTasks::class)
+            ->call('openEditTaskModal', $parent->id)
+            ->assertSee('Podzadanie w modalu')
+            ->assertSee('Podzadania');
+    }
 }

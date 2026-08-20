@@ -1,0 +1,29 @@
+---
+description: Testing and debugging rules
+alwaysApply: false
+---
+
+# Testing
+
+Przy większych zmianach:
+
+dodaj test.
+
+Przed zakończeniem:
+
+sprawdź:
+
+php artisan test
+
+Przy błędzie:
+
+Nie zgaduj.
+
+Analizuj:
+
+1. stack trace
+2. logi Laravel
+3. SQL
+4. dane wejściowe
+
+Nie maskuj błędów try/catch bez powodu.

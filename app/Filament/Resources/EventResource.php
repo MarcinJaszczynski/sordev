@@ -55,12 +55,6 @@ class EventResource extends Resource
                 ...EventKeyInfoFields::identitySection(),
                 ...EventKeyInfoFields::basicSection(),
                 ...EventReadinessFields::officeSection(),
-                Forms\Components\Section::make('Strona WWW')
-                    ->icon('heroicon-o-globe-alt')
-                    ->collapsed()
-                    ->schema([
-                        EventNotesFields::wwwExtraInfo(),
-                    ]),
             ]);
     }
 
@@ -282,7 +276,7 @@ class EventResource extends Resource
                             }
                         }
 
-                        static::refreshTotalCostFromTemplateState($set, $get);
+                        static::refreshTotalCostFromTemplateState($set, $get, $record);
                     }),
 
                 Forms\Components\Select::make('program_start_place_id')
@@ -320,8 +314,8 @@ class EventResource extends Resource
                     ->minValue(0)
                     ->default(0)
                     ->live(onBlur: true)
-                    ->afterStateUpdated(fn ($livewire, callable $get, callable $set) => [
-                        static::refreshTotalCostFromTemplateState($set, $get),
+                    ->afterStateUpdated(fn ($livewire, callable $get, callable $set, ?Event $record) => [
+                        static::refreshTotalCostFromTemplateState($set, $get, $record),
                         method_exists($livewire, 'dispatch') ? $livewire->dispatch('event-price-table-refresh') : null,
                     ]),
 
@@ -443,11 +437,25 @@ class EventResource extends Resource
             ]);
     }
 
-    public static function refreshTotalCostFromTemplateState(callable $set, callable $get): void
+    public static function syncGratisCountFromQtyVariant(callable $set, callable $get, Event $record): void
+    {
+        $participantCount = max(1, (int) ($get('participant_count') ?? 1));
+
+        $exactVariant = $record->qtyVariants()
+            ->where('qty', $participantCount)
+            ->orderBy('id')
+            ->first();
+
+        if ($exactVariant) {
+            $set('gratis_count', max(0, (int) ($exactVariant->gratis ?? 0)));
+        }
+    }
+
+    public static function refreshTotalCostFromTemplateState(callable $set, callable $get, ?Event $record = null): void
     {
         $templateId = (int) ($get('event_template_id') ?? $record?->event_template_id ?? 0);
-        $startPlaceId = (int) ($get('start_place_id') ?? 0);
-        $participantCount = max(1, (int) ($get('participant_count') ?? 1));
+        $startPlaceId = (int) ($get('start_place_id') ?? $record?->start_place_id ?? 0);
+        $participantCount = max(1, (int) ($get('participant_count') ?? $record?->participant_count ?? 1));
         $gratisCount = max(0, (int) ($get('gratis_count') ?? 0));
 
         if (! $templateId || ! $startPlaceId || $participantCount < 1) {
@@ -582,7 +590,7 @@ class EventResource extends Resource
                 // --- Termin + Nazwa + Szablon ---
                 Tables\Columns\TextColumn::make('name')
                     ->label('Termin / Impreza')
-                    ->searchable()
+                    ->searchable(['name', 'code'])
                     ->sortable(query: function (Builder $query, string $direction): Builder {
                         return $query->orderBy('start_date', $direction)->orderBy('name', $direction);
                     })
@@ -621,6 +629,15 @@ class EventResource extends Resource
                     ->options(Event::getStatusOptions())
                     ->sortable()
                     ->selectablePlaceholder(false)
+                    ->updateStateUsing(function (Event $record, ?string $state): string {
+                        if ($state === null || $state === $record->status) {
+                            return (string) $record->status;
+                        }
+
+                        $record->changeStatus($state);
+
+                        return (string) $record->fresh()->status;
+                    })
                     ->extraCellAttributes(fn (Event $record): array => [
                         'class' => Event::statusListCellClass($record->status),
                     ]),
@@ -767,17 +784,25 @@ class EventResource extends Resource
                                 return 'Dz.'.$day.' '.$name;
                             })->implode('<br>');
 
-                        $parts = [];
-                        $parts[] = '<strong>Pilot:</strong> '.$pilot;
-                        $parts[] = '<strong>Transport:</strong> '.$transportCompany;
+                        $row = fn (string $label, string $value): string => '<tr>'
+                            .'<td style="padding:1px 8px 1px 0;color:#9ca3af;font-size:0.72rem;white-space:nowrap;vertical-align:top">'.$label.'</td>'
+                            .'<td style="color:#111827;font-size:0.78rem;font-weight:600;line-height:1.25">'.$value.'</td>'
+                            .'</tr>';
+
+                        $transportValue = $transportCompany;
                         if ($transportExtra && $transportExtra !== '—') {
-                            $parts[] = '<span style="color:#9ca3af">'.$transportExtra.'</span>';
-                        }
-                        if ($hotelsLine && $hotelsLine !== '—') {
-                            $parts[] = '<span style="color:#6b7280">Hotele: '.$hotelsLine.'</span>';
+                            $transportValue .= '<br><span style="color:#9ca3af;font-weight:400;font-size:0.72rem">'.$transportExtra.'</span>';
                         }
 
-                        return '<div style="font-size:0.85rem;line-height:1.1">'.implode(' · ', $parts).'</div>';
+                        $hotelsValue = $hotelsLine !== '—'
+                            ? $hotelsLine
+                            : '—';
+
+                        return '<table style="border-collapse:collapse">'
+                            .$row('Pilot:', $pilot)
+                            .$row('Transport:', $transportValue)
+                            .$row('Hotele:', $hotelsValue)
+                            .'</table>';
                     })
                     ->wrap(),
 
@@ -791,10 +816,25 @@ class EventResource extends Resource
                     ->extraCellAttributes(['class' => 'event-readiness-cell']),
 
                 // --- Ukryte domyślnie ---
+                Tables\Columns\TextColumn::make('substitution_time')
+                    ->label('Godz. podstawienia')
+                    ->state(fn ($record) => $record->substitution_time
+                        ? substr((string) $record->substitution_time, 0, 5)
+                        : '—')
+                    ->visible(fn (): bool => Schema::hasColumn('events', 'substitution_time')),
                 Tables\Columns\TextColumn::make('departure_time')
-                    ->label('Godzina podstawienia')
-                    ->state(fn ($record) => $record->departure_time ?: '—')
+                    ->label('Godz. wyjazdu')
+                    ->state(fn ($record) => $record->departure_time
+                        ? substr((string) $record->departure_time, 0, 5)
+                        : '—')
                     ->visible(fn (): bool => Schema::hasColumn('events', 'departure_time')),
+                Tables\Columns\TextColumn::make('return_time')
+                    ->label('Godz. powrotu')
+                    ->state(fn ($record) => $record->return_time
+                        ? substr((string) $record->return_time, 0, 5)
+                        : '—')
+                    ->toggleable(isToggledHiddenByDefault: true)
+                    ->visible(fn (): bool => Schema::hasColumn('events', 'return_time')),
 
                 Tables\Columns\TextColumn::make('created_at')
                     ->label('Utworzono')
@@ -935,9 +975,72 @@ class EventResource extends Resource
                     }),
             ])
             ->actions([
-                Tables\Actions\EditAction::make(),
-                Tables\Actions\DeleteAction::make()
-                    ->visible(fn (Event $record) => $record->status === Event::STATUS_INQUIRY),
+                Tables\Actions\ActionGroup::make([
+                    Tables\Actions\Action::make('open_program')
+                        ->label('Program')
+                        ->icon('heroicon-o-list-bullet')
+                        ->url(fn (Event $record): string => static::getUrl('edit-program', ['record' => $record])),
+                    Tables\Actions\Action::make('open_participants')
+                        ->label('Uczestnicy')
+                        ->icon('heroicon-o-users')
+                        ->url(fn (Event $record): string => static::getUrl('participants', ['record' => $record]))
+                        ->visible(fn (): bool => Schema::hasTable('event_participants')),
+                    Tables\Actions\Action::make('open_finance')
+                        ->label('Finanse')
+                        ->icon('heroicon-o-banknotes')
+                        ->url(fn (Event $record): string => static::getUrl('calculation', ['record' => $record])),
+                    Tables\Actions\Action::make('open_pilot')
+                        ->label('Pilot')
+                        ->icon('heroicon-o-user-circle')
+                        ->url(fn (Event $record): string => static::getUrl('pilot', ['record' => $record])),
+                    Tables\Actions\Action::make('quick_pilot')
+                        ->label('Szybki pilot')
+                        ->icon('heroicon-o-pencil-square')
+                        ->slideOver()
+                        ->modalHeading('Przypisz pilota')
+                        ->modalWidth('md')
+                        ->fillForm(fn (Event $record): array => [
+                            'assigned_to' => $record->assigned_to,
+                            'shared_with_pilot' => (bool) ($record->shared_with_pilot ?? false),
+                        ])
+                        ->form([
+                            Forms\Components\Select::make('assigned_to')
+                                ->label('Pilot / opiekun')
+                                ->relationship('assignedUser', 'name')
+                                ->searchable()
+                                ->preload()
+                                ->nullable(),
+                            Forms\Components\Toggle::make('shared_with_pilot')
+                                ->label('Udostępnij w panelu pilota')
+                                ->helperText('Impreza widoczna u pilota dopiero po udostępnieniu.')
+                                ->visible(fn (): bool => Schema::hasColumn('events', 'shared_with_pilot')),
+                        ])
+                        ->action(function (Event $record, array $data): void {
+                            $payload = [
+                                'assigned_to' => $data['assigned_to'] ?? null,
+                            ];
+
+                            if (Schema::hasColumn('events', 'shared_with_pilot')) {
+                                $payload['shared_with_pilot'] = (bool) ($data['shared_with_pilot'] ?? false);
+                            }
+
+                            $previousPilot = $record->assigned_to;
+                            $record->fill($payload);
+
+                            if (
+                                Schema::hasColumn('events', 'shared_with_pilot')
+                                && $previousPilot
+                                && (int) $previousPilot !== (int) ($payload['assigned_to'] ?? 0)
+                            ) {
+                                $record->shared_with_pilot = false;
+                            }
+
+                            $record->save();
+                        }),
+                    Tables\Actions\EditAction::make(),
+                    Tables\Actions\DeleteAction::make()
+                        ->visible(fn (Event $record) => $record->status === Event::STATUS_INQUIRY),
+                ]),
             ])
             ->bulkActions([
                 Tables\Actions\BulkActionGroup::make([
@@ -1062,7 +1165,7 @@ class EventResource extends Resource
                 'assignedUser',
                 'transportContractor',
                 'hotelProgramPoints',
-                'activeSettlement',
+                'activeSettlement.participantPayments',
                 'bus:id,name',
                 'markup:id,percent',
             ];
@@ -1100,7 +1203,7 @@ class EventResource extends Resource
             'assignedUser',
             'transportContractor',
             'hotelProgramPoints',
-            'activeSettlement',
+            'activeSettlement.participantPayments',
             'bus:id,name',
             'markup:id,percent',
         ];

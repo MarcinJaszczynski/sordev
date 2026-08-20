@@ -136,7 +136,7 @@
                 <div>ID imprezy: <span class="value">#{{ $event->id }}</span></div>
                 <div>Status: <span class="value">{{ $event->status ?? '—' }}</span></div>
                 <div>Klient: <span class="value">{{ $event->client_name ?: '—' }}</span></div>
-                <div>Uczestnicy: <span class="value">{{ $participantCount }}</span> + gratisy: <span class="value">{{ $gratisCount }}</span></div>
+                <div>Uczestnicy: <span class="value">{{ $participantCount }}</span> + {{ \App\Support\EventParticipantGroupLabels::GRATIS_GENITIVE }}: <span class="value">{{ $gratisCount }}</span></div>
                 <div>Obsługa: <span class="value">{{ $staffCount }}</span> | Kierowcy: <span class="value">{{ $driverCount }}</span></div>
             </td>
             <td class="card" style="width:50%;">
@@ -151,12 +151,23 @@
     </table>
 
     @if(in_array($audience, ['pilot', 'driver', 'folder'], true))
+        @php
+            $programDayRoutes = $programDayRoutes ?? $event->programDayRoutes();
+        @endphp
         <div class="section-title">Program imprezy</div>
         @foreach($programByDay as $day => $points)
+            @php
+                $dayRoute = $programDayRoutes[(string) $day] ?? $programDayRoutes[$day] ?? null;
+            @endphp
             <table class="table">
                 <thead>
                     <tr>
-                        <th colspan="5">Dzień {{ $day }}</th>
+                        <th colspan="5">
+                            Dzień {{ $day }}
+                            @if(filled($dayRoute))
+                                — Trasa: {{ $dayRoute }}
+                            @endif
+                        </th>
                     </tr>
                     <tr>
                         <th style="width:12%;">Godziny</th>
@@ -229,7 +240,7 @@
                     </tr>
                     <tr>
                         <th style="width:25%;">Uczestnicy</th>
-                        <th style="width:25%;">Gratisy</th>
+                        <th style="width:25%;">{{ \App\Support\EventParticipantGroupLabels::GRATIS }}</th>
                         <th style="width:25%;">Obsługa</th>
                         <th style="width:25%;">Kierowca</th>
                     </tr>
@@ -293,6 +304,14 @@
                     <div>Nr rejestracyjny: <span class="value">{{ $event->vehicle_registration ?: '—' }}</span></div>
                     <div>KM transferu: <span class="value">{{ (int) ($event->transfer_km ?? 0) }}</span></div>
                     <div>KM programu: <span class="value">{{ (int) ($event->program_km ?? 0) }}</span></div>
+                    @if(!empty($programDayRoutes))
+                        <div style="margin-top:8px;">
+                            <strong>Trasy dzienne:</strong>
+                            @foreach($programDayRoutes as $routeDay => $routeLabel)
+                                <div>Dzień {{ $routeDay }}: <span class="value">{{ $routeLabel }}</span></div>
+                            @endforeach
+                        </div>
+                    @endif
                 </td>
                 <td class="card" style="width:50%;">
                     <h3>Kontakty</h3>

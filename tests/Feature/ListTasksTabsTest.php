@@ -24,7 +24,7 @@ class ListTasksTabsTest extends TestCase
         Role::firstOrCreate(['name' => 'admin', 'guard_name' => 'web']);
     }
 
-    public function test_default_scope_is_assigned_and_excludes_unrelated_tasks(): void
+    public function test_default_scope_is_assigned_and_includes_assignee_or_author(): void
     {
         $user = User::factory()->create();
         $user->assignRole('admin');
@@ -38,7 +38,7 @@ class ListTasksTabsTest extends TestCase
             'assignee_id' => $user->id,
         ]);
 
-        Task::create([
+        $authored = Task::create([
             'title' => 'Zlecone przeze mnie',
             'status_id' => Task::getDefaultStatusId(),
             'priority' => 'normal',
@@ -46,12 +46,20 @@ class ListTasksTabsTest extends TestCase
             'assignee_id' => $other->id,
         ]);
 
+        Task::create([
+            'title' => 'Obce zadanie',
+            'status_id' => Task::getDefaultStatusId(),
+            'priority' => 'normal',
+            'author_id' => $other->id,
+            'assignee_id' => $other->id,
+        ]);
+
         Livewire::actingAs($user)
             ->test(ListTasks::class)
             ->assertSet('activeTab', 'active')
             ->assertSet('tasksScope', 'assigned')
-            ->assertCanSeeTableRecords([$assigned])
-            ->assertCountTableRecords(1);
+            ->assertCanSeeTableRecords([$assigned, $authored])
+            ->assertCountTableRecords(2);
     }
 
     public function test_list_can_show_all_tasks_when_scope_is_all(): void

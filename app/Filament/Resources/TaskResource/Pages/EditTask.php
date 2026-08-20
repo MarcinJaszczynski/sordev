@@ -5,11 +5,12 @@ namespace App\Filament\Resources\TaskResource\Pages;
 use App\Filament\Concerns\MarksTaskInboxAsSeen;
 use App\Filament\Resources\TaskResource;
 use App\Models\Task;
-use App\Services\NotificationService;
+use App\Support\Tasks\TaskNavigation;
 use App\Support\Tasks\TaskAuthorization;
 use App\Support\Tasks\TaskContextRegistry;
 use Filament\Actions;
 use Filament\Resources\Pages\EditRecord;
+use Illuminate\Database\Eloquent\Model;
 use Illuminate\Support\Str;
 
 class EditTask extends EditRecord
@@ -18,14 +19,26 @@ class EditTask extends EditRecord
 
     protected static string $resource = TaskResource::class;
 
+    /**
+     * Trait mountCanAuthorizeAccess odpala się PRZED mount() — wtedy $record to jeszcze klucz trasy.
+     * Bez resolve EditTask pada TypeError (string/int zamiast Model) przy deep linkach / smoke.
+     */
+    public function mountCanAuthorizeAccess(): void
+    {
+        if (! $this->record instanceof Model) {
+            $this->record = $this->resolveRecord($this->record);
+        }
+
+        abort_unless(static::canAccess(['record' => $this->getRecord()]), 403);
+    }
+
     public function mount(int | string $record): void
     {
-        parent::mount($record);
-
-        $userId = auth()->id();
-        if ($userId) {
-            NotificationService::markTaskAsRead($userId, $this->getRecord());
+        if (! $this->record instanceof Model) {
+            $this->record = $this->resolveRecord($record);
         }
+
+        $this->redirect(TaskNavigation::fullViewUrl((int) $this->record->getKey()));
     }
 
     public function getBreadcrumbs(): array

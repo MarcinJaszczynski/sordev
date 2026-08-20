@@ -11,6 +11,7 @@ use App\Models\Task;
 use App\Models\TaskComment;
 use App\Models\User;
 use App\Models\UserNotificationRead;
+use App\Support\Tasks\TaskListColumn;
 use App\Support\Tasks\TaskNavigation;
 use App\Support\Tasks\TaskQueryFilters;
 use Illuminate\Support\Collection;
@@ -58,6 +59,8 @@ class NotificationService
                 'confirmed_events' => 0,
                 'pending_cancellation_events' => 0,
                 'invoice_requests' => 0,
+                'work' => 0,
+                'events' => 0,
                 'total_unread' => 0,
             ],
             'items' => [],
@@ -69,6 +72,11 @@ class NotificationService
                 'pending_cancellation_event' => [],
                 'invoice_request' => [],
                 'message' => [],
+            ],
+            'items_by_group' => [
+                'work' => [],
+                'events' => [],
+                'messages' => [],
             ],
         ];
     }
@@ -98,10 +106,12 @@ class NotificationService
     {
         $startDate = $event->start_date ? $event->start_date->format('d.m.Y') : 'bez daty';
 
+        // Osobna revision — ten sam event+type=event co potwierdzenie nie może mieć tego samego fingerprint
+        // (Alpine x-for pada na zduplikowanych :key).
         return [
             'type' => 'event',
             'id' => (int) $event->id,
-            'revision' => (string) (optional($event->updated_at)?->timestamp ?? now()->timestamp),
+            'revision' => 'insurance:'.(string) (optional($event->updated_at)?->timestamp ?? now()->timestamp),
             'title' => 'Ubezpieczenie do domknięcia: '.Str::limit($event->name ?? ('Impreza #'.$event->id), 42),
             'meta' => 'Brak kompletu danych/płatności ubezpieczenia | Start: '.$startDate,
             'time' => optional($event->updated_at)->diffForHumans() ?? 'teraz',
@@ -244,10 +254,10 @@ class NotificationService
                     'task_id' => (int) $comment->task_id,
                     'revision' => (string) ($comment->created_at?->timestamp ?? 0),
                     'title' => 'Nowy komentarz: '.$taskTitle,
-                    'meta' => ($comment->author?->name ?? 'Użytkownik').': '.Str::limit($comment->content ?? '', 70),
+                    'meta' => ($comment->author?->name ?? 'Użytkownik').': '.TaskListColumn::sanitizeTaskText($comment->content ?? '', 70),
                     'time' => optional($comment->created_at)->diffForHumans() ?? 'teraz',
                     'url' => $comment->task
-                        ? TaskNavigation::fullViewUrl($comment->task, TaskNavigation::commentsRelationManagerIndex())
+                        ? TaskNavigation::fullViewUrl($comment->task)
                         : TaskResource::getUrl('index'),
                     'at' => optional($comment->created_at)?->timestamp ?? now()->timestamp,
                     'color' => 'sky',
@@ -394,7 +404,7 @@ class NotificationService
                 $queryLimit = max($limitPerType, min(50, $combinedLimit));
 
                 $taskItems = static::finalizeItems(static::taskNotificationsFor($user, $taskQueryLimit), $userId);
-                $commentItems = static::finalizeItems(static::commentNotificationsFor($user, $queryLimit), $userId);
+                $commentItems = static::finalizeItems(static::commentNotificationsFor($user, $taskQueryLimit), $userId);
                 $newEventItems = static::finalizeItems(
                     static::eventNotificationsFor($user, Event::STATUS_INQUIRY, 'new_event', 'Nowa impreza', $queryLimit),
                     $userId,
@@ -448,13 +458,29 @@ class NotificationService
                     ->values()
                     ->all();
 
-                $totalUnread = $tasksCount
-                    + $commentsCount
-                    + $newEventsCount
+                $workCount = $tasksCount + $commentsCount;
+                $eventsGroupCount = $newEventsCount
                     + $confirmedEventsCount
                     + $pendingCancellationEventsCount
-                    + $invoiceRequestsCount
+                    + $invoiceRequestsCount;
+
+                $totalUnread = $workCount
+                    + $eventsGroupCount
                     + $unreadMessagesCount;
+
+                $itemsByGroup = [
+                    'work' => static::sortNewestFirst(array_merge(
+                        $itemsByType['task'],
+                        $itemsByType['comment'],
+                    )),
+                    'events' => static::sortNewestFirst(array_merge(
+                        $itemsByType['new_event'],
+                        $itemsByType['event'],
+                        $itemsByType['pending_cancellation_event'],
+                        $itemsByType['invoice_request'],
+                    )),
+                    'messages' => $itemsByType['message'],
+                ];
 
                 return [
                     'counts' => [
@@ -465,10 +491,13 @@ class NotificationService
                         'confirmed_events' => $confirmedEventsCount,
                         'pending_cancellation_events' => $pendingCancellationEventsCount,
                         'invoice_requests' => $invoiceRequestsCount,
+                        'work' => $workCount,
+                        'events' => $eventsGroupCount,
                         'total_unread' => $totalUnread,
                     ],
                     'items' => $items,
                     'items_by_type' => $itemsByType,
+                    'items_by_group' => $itemsByGroup,
                 ];
             });
         } catch (\Throwable $e) {
@@ -487,6 +516,60 @@ class NotificationService
             'id' => (int) $task->id,
             'revision' => (string) ($task->updated_at?->timestamp ?? 0),
         ]));
+    }
+
+    public static function markTaskCommentNotificationsAsRead(int $userId, int $taskId): void
+    {
+        if (! Schema::hasTable('user_notification_reads') || ! Schema::hasTable('task_comments')) {
+            return;
+        }
+
+        $now = now();
+        $marked = false;
+
+        TaskComment::query()
+            ->where('task_id', $taskId)
+            ->where('user_id', '!=', $userId)
+            ->orderBy('id')
+            ->get(['id', 'created_at'])
+            ->each(function (TaskComment $comment) use ($userId, $now, &$marked): void {
+                UserNotificationRead::query()->updateOrCreate(
+                    [
+                        'user_id' => $userId,
+                        'fingerprint' => UserNotificationRead::fingerprintFor([
+                            'type' => 'comment',
+                            'id' => (int) $comment->id,
+                            'revision' => (string) ($comment->created_at?->timestamp ?? 0),
+                        ]),
+                    ],
+                    [
+                        'read_at' => $now,
+                    ],
+                );
+
+                $marked = true;
+            });
+
+        if ($marked) {
+            static::clearCacheForUser($userId);
+        }
+    }
+
+    public static function clearCacheForTaskCommentStakeholders(TaskComment $comment): void
+    {
+        $comment->loadMissing('task');
+
+        $task = $comment->task;
+
+        if (! $task) {
+            return;
+        }
+
+        collect([$task->assignee_id, $task->author_id])
+            ->filter()
+            ->unique()
+            ->reject(fn (int $userId): bool => $userId === (int) $comment->user_id)
+            ->each(fn (int $userId) => static::clearCacheForUser($userId));
     }
 
     public static function markAsRead(int $userId, string $fingerprint): void
@@ -595,6 +678,14 @@ class NotificationService
 
     public static function clearCacheForUser(int $userId): void
     {
+        Cache::forget(sprintf(
+            'user_notifications_%d_%d_%d_%d',
+            $userId,
+            self::TOPBAR_LIMIT_PER_TYPE,
+            self::TOPBAR_COMBINED_LIMIT,
+            self::TOPBAR_TASK_QUERY_LIMIT,
+        ));
+
         foreach ([[4, 10, 30], [15, 15, 30], [50, 200, 30]] as [$perType, $combined, $taskQueryLimit]) {
             Cache::forget("user_notifications_{$userId}_{$perType}_{$combined}_{$taskQueryLimit}");
         }

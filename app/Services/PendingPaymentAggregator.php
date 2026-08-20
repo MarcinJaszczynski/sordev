@@ -16,11 +16,34 @@ use Illuminate\Support\Facades\Schema;
 
 class PendingPaymentAggregator
 {
+    public const LIMIT_SETTLEMENT_COSTS = 400;
+
+    public const LIMIT_VENDOR_INVOICES = 200;
+
+    public const LIMIT_CONTRACT_SCHEDULES = 200;
+
+    public const LIMIT_AGREEMENT_SCHEDULES = 200;
+
+    /** @var array<string, bool> */
+    protected array $truncated = [];
+
+    /** @return array<string, bool> */
+    public function lastTruncation(): array
+    {
+        return $this->truncated;
+    }
+
+    public function wasTruncated(): bool
+    {
+        return in_array(true, $this->truncated, true);
+    }
+
     /** @return Collection<int, array<string, mixed>> */
     public function collect(?Carbon $from = null, ?Carbon $to = null): Collection
     {
         $from ??= now()->subMonths(1)->startOfDay();
         $to ??= now()->addMonths(6)->endOfDay();
+        $this->truncated = [];
 
         return $this->settlementCosts($from, $to)
             ->merge($this->vendorInvoices($from, $to))
@@ -37,13 +60,18 @@ class PendingPaymentAggregator
     /** @return Collection<int, array<string, mixed>> */
     protected function settlementCosts(Carbon $from, Carbon $to): Collection
     {
+        $rows = EventSettlementCost::query()
+            ->pendingPaymentInbox()
+            ->whereBetween('advance_due_date', [$from, $to])
+            ->with(['settlement.event', 'plannedCurrency'])
+            ->limit(self::LIMIT_SETTLEMENT_COSTS + 1)
+            ->get();
+
+        $this->truncated['settlement_costs'] = $rows->count() > self::LIMIT_SETTLEMENT_COSTS;
+        $rows = $rows->take(self::LIMIT_SETTLEMENT_COSTS);
+
         return collect(
-            EventSettlementCost::query()
-                ->pendingPaymentInbox()
-                ->whereBetween('advance_due_date', [$from, $to])
-                ->with(['settlement.event', 'plannedCurrency'])
-                ->limit(400)
-                ->get()
+            $rows
                 ->map(function (EventSettlementCost $cost): array {
                     $isProgramPayment = $cost->source_type === 'program_point_payment';
 
@@ -80,14 +108,19 @@ class PendingPaymentAggregator
             return collect();
         }
 
+        $rows = VendorInvoice::query()
+            ->whereIn('payment_status', ['due', 'partial'])
+            ->whereNotNull('due_date')
+            ->whereBetween('due_date', [$from, $to])
+            ->with(['event'])
+            ->limit(self::LIMIT_VENDOR_INVOICES + 1)
+            ->get();
+
+        $this->truncated['vendor_invoices'] = $rows->count() > self::LIMIT_VENDOR_INVOICES;
+        $rows = $rows->take(self::LIMIT_VENDOR_INVOICES);
+
         return collect(
-            VendorInvoice::query()
-                ->whereIn('payment_status', ['due', 'partial'])
-                ->whereNotNull('due_date')
-                ->whereBetween('due_date', [$from, $to])
-                ->with(['event'])
-                ->limit(200)
-                ->get()
+            $rows
                 ->map(function (VendorInvoice $invoice): array {
                     $gross = (float) ($invoice->gross_amount ?? 0);
                     $paid = (float) ($invoice->paid_amount ?? 0);
@@ -123,13 +156,18 @@ class PendingPaymentAggregator
             return collect();
         }
 
+        $rows = ContractPaymentSchedule::query()
+            ->whereNotNull('due_date')
+            ->whereBetween('due_date', [$from, $to])
+            ->with(['contract.event', 'contract.paymentSchedules'])
+            ->limit(self::LIMIT_CONTRACT_SCHEDULES + 1)
+            ->get();
+
+        $this->truncated['contract_schedules'] = $rows->count() > self::LIMIT_CONTRACT_SCHEDULES;
+        $rows = $rows->take(self::LIMIT_CONTRACT_SCHEDULES);
+
         return collect(
-            ContractPaymentSchedule::query()
-                ->whereNotNull('due_date')
-                ->whereBetween('due_date', [$from, $to])
-                ->with(['contract.event', 'contract.paymentSchedules'])
-                ->limit(200)
-                ->get()
+            $rows
                 ->filter(fn (ContractPaymentSchedule $row): bool => $this->isScheduleOutstanding(
                     $row,
                     $row->contract,
@@ -165,13 +203,18 @@ class PendingPaymentAggregator
             return collect();
         }
 
+        $rows = EventAgreementPaymentSchedule::query()
+            ->whereNotNull('due_date')
+            ->whereBetween('due_date', [$from, $to])
+            ->with(['eventAgreement.event', 'eventAgreement.paymentSchedules'])
+            ->limit(self::LIMIT_AGREEMENT_SCHEDULES + 1)
+            ->get();
+
+        $this->truncated['agreement_schedules'] = $rows->count() > self::LIMIT_AGREEMENT_SCHEDULES;
+        $rows = $rows->take(self::LIMIT_AGREEMENT_SCHEDULES);
+
         return collect(
-            EventAgreementPaymentSchedule::query()
-                ->whereNotNull('due_date')
-                ->whereBetween('due_date', [$from, $to])
-                ->with(['eventAgreement.event', 'eventAgreement.paymentSchedules'])
-                ->limit(200)
-                ->get()
+            $rows
                 ->filter(fn (EventAgreementPaymentSchedule $row): bool => $this->isScheduleOutstanding(
                     $row,
                     $row->eventAgreement,

@@ -14,6 +14,7 @@ use App\Models\User;
 use App\Services\EventPaymentReminderSyncService;
 use App\Services\ProgramPointSettlementDocumentSync;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Spatie\Permission\Models\Role;
 use Tests\TestCase;
 
 class ProgramPointSettlementFinanceTest extends TestCase
@@ -25,6 +26,15 @@ class ProgramPointSettlementFinanceTest extends TestCase
         parent::setUp();
 
         $this->seed(\Database\Seeders\TaskStatusSeeder::class);
+        Role::firstOrCreate(['name' => 'admin', 'guard_name' => 'web']);
+    }
+
+    protected function createOfficeUser(): User
+    {
+        $user = User::factory()->create();
+        $user->assignRole('admin');
+
+        return $user;
     }
 
     public function test_upsert_cost_from_eur_point_without_convert_keeps_null_pln(): void
@@ -103,7 +113,7 @@ class ProgramPointSettlementFinanceTest extends TestCase
 
     public function test_plan_payable_until_creates_task_reminder(): void
     {
-        $user = User::factory()->create();
+        $user = $this->createOfficeUser();
         $eur = $this->createEurCurrency();
 
         $event = Event::factory()->create(['assigned_to' => $user->id]);
@@ -322,7 +332,7 @@ class ProgramPointSettlementFinanceTest extends TestCase
     {
         $this->seed(\Database\Seeders\TaskStatusSeeder::class);
 
-        $user = User::factory()->create();
+        $user = $this->createOfficeUser();
         $pln = Currency::factory()->pln()->create();
 
         $event = Event::factory()->create(['assigned_to' => $user->id]);
@@ -373,7 +383,7 @@ class ProgramPointSettlementFinanceTest extends TestCase
     {
         $this->seed(\Database\Seeders\TaskStatusSeeder::class);
 
-        $user = User::factory()->create();
+        $user = $this->createOfficeUser();
         $pln = Currency::factory()->pln()->create();
 
         $event = Event::factory()->create(['assigned_to' => $user->id]);

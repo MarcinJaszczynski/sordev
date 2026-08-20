@@ -34,7 +34,7 @@ class EventHotelPdfViewTest extends TestCase
             'staffCount' => 2,
             'driverCount' => 1,
             'gratisCount' => 3,
-            'participantSummaryLine' => '30 uczestników + 3 gratisów; obsługa: 2; kierowca(y): 1',
+            'participantSummaryLine' => '30 uczestników + 3 opiekunów/dodatkowych; obsługa: 2; kierowca(y): 1',
             'travelLegends' => [
                 'departure' => '—',
                 'destination' => '—',

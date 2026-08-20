@@ -18,6 +18,17 @@ class AttachmentsRelationManager extends RelationManager
 
     protected static ?string $title = 'Załączniki';
 
+    public bool $panelMode = false;
+
+    protected function dispatchPanelUpdated(): void
+    {
+        if (! $this->panelMode) {
+            return;
+        }
+
+        $this->dispatch('task-full-editor-updated', taskId: $this->getOwnerRecord()->getKey());
+    }
+
     public function form(Form $form): Form
     {
         return $form
@@ -34,24 +45,37 @@ class AttachmentsRelationManager extends RelationManager
 
     public function table(Table $table): Table
     {
-        return $table->columns([
+        return $table
+            ->heading($this->panelMode ? static::$title : null)
+            ->paginated($this->panelMode ? false : true)
+            ->searchable(! $this->panelMode)
+            ->columns([
             Tables\Columns\TextColumn::make('name')
-                ->label('Nazwa pliku')
-                ->searchable(),
-            Tables\Columns\TextColumn::make('user.name')
-                ->label('Dodane przez'),
+                ->label('Plik')
+                ->searchable(! $this->panelMode)
+                ->wrap(),
             Tables\Columns\TextColumn::make('readable_size')
-                ->label('Rozmiar')
-                ->placeholder('—'),
+                ->label('Rozm.')
+                ->placeholder('—')
+                ->toggleable(isToggledHiddenByDefault: ! $this->panelMode),
+            Tables\Columns\TextColumn::make('user.name')
+                ->label('Dodane przez')
+                ->toggleable(isToggledHiddenByDefault: true),
             Tables\Columns\TextColumn::make('created_at')
                 ->label('Data dodania')
-                ->dateTime(),
+                ->dateTime()
+                ->toggleable(isToggledHiddenByDefault: true),
         ])
             ->filters([
                 //
             ])
             ->headerActions([
                 Tables\Actions\CreateAction::make()
+                    ->when($this->panelMode, fn (Tables\Actions\CreateAction $action) => $action
+                        ->label('Dodaj plik')
+                        ->icon('heroicon-o-plus')
+                        ->iconButton())
+                    ->modalHeading('Dodaj załącznik')
                     ->mutateFormDataUsing(function (array $data): array {
                         $disk = Storage::disk('public');
                         $path = $data['file_path'] ?? null;
@@ -62,16 +86,18 @@ class AttachmentsRelationManager extends RelationManager
                         $data['name'] = $data['name'] ?? basename((string) $path);
 
                         return $data;
-                    }),
+                    })
+                    ->after(fn () => $this->dispatchPanelUpdated()),
             ])->actions([
                 Tables\Actions\Action::make('download')
                     ->label('Pobierz')
                     ->icon('heroicon-o-arrow-down-tray')
                     ->url(fn ($record) => $record->download_url)
                     ->openUrlInNewTab(),
-                Tables\Actions\DeleteAction::make(),
+                Tables\Actions\DeleteAction::make()
+                    ->after(fn () => $this->dispatchPanelUpdated()),
             ])
-            ->bulkActions([
+            ->bulkActions($this->panelMode ? [] : [
                 Tables\Actions\BulkActionGroup::make([
                     Tables\Actions\DeleteBulkAction::make(),
                 ]),

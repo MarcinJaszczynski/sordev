@@ -153,13 +153,14 @@ class CreateEvent extends CreateRecord
                         ->required(),
 
                     Forms\Components\TextInput::make('gratis_count')
-                        ->label('Liczba gratisów')
+                        ->label(\App\Support\EventParticipantGroupLabels::GRATIS)
                         ->numeric()
                         ->minValue(0)
                         ->default(0)
                         ->dehydrated()
                         ->live(onBlur: true)
-                        ->afterStateUpdated(fn (callable $get, callable $set) => $this->refreshTotalCostFromTemplateState($set, $get)),
+                        ->afterStateUpdated(fn (callable $get, callable $set) => $this->refreshTotalCostFromTemplateState($set, $get))
+                        ->helperText('Osoby jadące w grupie bez opłaty za siebie. Uwzględniane w kalkulacji kosztów i zapisywane w wariancie ilościowym grupy.'),
 
                     Forms\Components\Select::make('start_place_id')
                         ->label('Miejsce wyjazdu (podstawienia)')
@@ -253,12 +254,7 @@ class CreateEvent extends CreateRecord
                 ->collapsible()
                 ->collapsed()
                 ->schema([
-                    Forms\Components\TimePicker::make('departure_time')
-                        ->label('Godzina podstawienia')
-                        ->seconds(false)
-                        ->native(false)
-                        ->nullable()
-                        ->visible(fn (): bool => Schema::hasColumn('events', 'departure_time')),
+                    ...EventTransportFields::transportTimeFields(),
 
                     Forms\Components\TextInput::make('transport_company_name')
                         ->label('Firma transportowa')

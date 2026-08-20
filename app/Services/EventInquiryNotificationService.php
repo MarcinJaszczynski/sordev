@@ -8,6 +8,7 @@ use App\Filament\Resources\EventResource;
 use App\Models\Event;
 use App\Models\Task;
 use App\Models\User;
+use App\Support\Tasks\OfficeTaskRecipients;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\Auth;
 
@@ -25,13 +26,12 @@ class EventInquiryNotificationService
             return;
         }
 
-        $recipients = $this->resolveOfficeRecipients();
+        $recipients = OfficeTaskRecipients::users();
 
         if ($recipients->isEmpty()) {
             return;
         }
 
-        $authorId = $author?->id ?? Auth::id() ?? $recipients->first()->id;
         $title = $this->buildTitle($event);
         $description = $this->buildDescription($event);
         $eventUrl = EventResource::getUrl('edit', ['record' => $event]);
@@ -45,7 +45,7 @@ class EventInquiryNotificationService
                 'status_id' => $statusId,
                 'priority' => TaskPriority::Urgent->value,
                 'source' => TaskSource::System->value,
-                'author_id' => $authorId,
+                'author_id' => $recipient->id,
                 'assignee_id' => $recipient->id,
                 'taskable_type' => Event::class,
                 'taskable_id' => $event->id,
@@ -59,7 +59,7 @@ class EventInquiryNotificationService
      */
     public function resolveOfficeRecipients(): Collection
     {
-        return User::role(['admin', 'super_admin', 'biuro'])->get();
+        return OfficeTaskRecipients::users();
     }
 
     private function buildTitle(Event $event): string

@@ -174,7 +174,7 @@
                     <thead>
                     <tr>
                         <th style="width:25%; text-align:center; font-size:9px; color:#6b7280;">Uczestnicy</th>
-                        <th style="width:25%; text-align:center; font-size:9px; color:#6b7280;">Gratisy</th>
+                        <th style="width:25%; text-align:center; font-size:9px; color:#6b7280;">{{ \App\Support\EventParticipantGroupLabels::GRATIS }}</th>
                         <th style="width:25%; text-align:center; font-size:9px; color:#6b7280;">Obsługa</th>
                         <th style="width:25%; text-align:center; font-size:9px; color:#6b7280;">Kierowca</th>
                     </tr>

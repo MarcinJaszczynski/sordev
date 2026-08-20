@@ -7,7 +7,6 @@ use App\Models\Contractor;
 use App\Models\Task;
 use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
-use Illuminate\Support\Facades\Storage;
 use Livewire\Livewire;
 use Tests\TestCase;
 
@@ -55,7 +54,7 @@ class TaskFullEditorTest extends TestCase
             ->set('data.status_id', Task::getDefaultStatusId())
             ->set('data.priority', 'normal')
             ->call('save')
-            ->assertDispatched('task-full-editor-saved');
+            ->assertDispatched('task-full-editor-updated');
 
         $this->assertDatabaseHas('tasks', [
             'title' => 'Nowe z pełnego modala',
@@ -63,35 +62,26 @@ class TaskFullEditorTest extends TestCase
         ]);
     }
 
-    public function test_full_editor_can_create_task_with_attachments(): void
+    public function test_full_editor_can_create_task_and_show_inline_sections(): void
     {
-        Storage::fake('local');
         $user = User::factory()->create();
-
-        $path = 'task-attachments/plan.pdf';
-        Storage::put($path, 'pdf-content');
 
         Livewire::actingAs($user)
             ->test(TaskFullEditor::class)
-            ->set('data.title', 'Zadanie z plikiem')
+            ->set('data.title', 'Zadanie z sekcjami')
             ->set('data.status_id', Task::getDefaultStatusId())
             ->set('data.priority', 'normal')
-            ->set('data.pending_attachments', [$path])
             ->call('save')
-            ->assertDispatched('task-full-editor-saved');
+            ->assertDispatched('task-full-editor-updated')
+            ->assertSee('Komentarze');
 
-        $task = Task::query()->where('title', 'Zadanie z plikiem')->first();
+        $task = Task::query()->where('title', 'Zadanie z sekcjami')->first();
 
         $this->assertNotNull($task);
-        $this->assertDatabaseHas('task_attachments', [
-            'task_id' => $task->id,
-            'user_id' => $user->id,
-            'name' => 'plan.pdf',
-        ]);
-        $this->assertCount(3, Livewire::actingAs($user)
+        $this->assertCount(2, Livewire::actingAs($user)
             ->test(TaskFullEditor::class, ['taskId' => $task->id])
             ->instance()
-            ->getRelationManagers());
+            ->getInlineRelationManagers());
     }
 
     public function test_full_editor_can_update_status_for_existing_task(): void
@@ -113,11 +103,82 @@ class TaskFullEditorTest extends TestCase
             ->test(TaskFullEditor::class, ['taskId' => $task->id])
             ->set('data.status_id', $newStatusId)
             ->call('save')
-            ->assertDispatched('task-full-editor-saved');
+            ->assertDispatched('task-full-editor-updated');
 
         $this->assertDatabaseHas('tasks', [
             'id' => $task->id,
             'status_id' => $newStatusId,
         ]);
+    }
+
+    public function test_full_editor_renders_inline_sections_without_tabs(): void
+    {
+        $user = User::factory()->create();
+        $task = Task::create([
+            'title' => 'Sekcje inline',
+            'status_id' => Task::getDefaultStatusId(),
+            'priority' => 'normal',
+            'author_id' => $user->id,
+        ]);
+
+        $component = Livewire::actingAs($user)
+            ->test(TaskFullEditor::class, ['taskId' => $task->id])
+            ->assertSee('Komentarze')
+            ->assertDontSee('Szczegóły zadania');
+
+        $this->assertSame([
+            \App\Filament\Resources\TaskResource\RelationManagers\AttachmentsRelationManager::class,
+            \App\Filament\Resources\TaskResource\RelationManagers\SubtasksRelationManager::class,
+        ], $component->instance()->getInlineRelationManagers());
+    }
+
+    public function test_full_editor_can_add_comment(): void
+    {
+        $user = User::factory()->create();
+        $task = Task::create([
+            'title' => 'Komentarz test',
+            'status_id' => Task::getDefaultStatusId(),
+            'priority' => 'normal',
+            'author_id' => $user->id,
+        ]);
+
+        Livewire::actingAs($user)
+            ->test(TaskFullEditor::class, ['taskId' => $task->id])
+            ->call('toggleCommentComposer')
+            ->set('newCommentContent', 'Nowy komentarz z modala')
+            ->call('addComment')
+            ->assertDispatched('task-full-editor-updated')
+            ->assertSee('Nowy komentarz z modala');
+
+        $this->assertDatabaseHas('task_comments', [
+            'task_id' => $task->id,
+            'user_id' => $user->id,
+            'content' => 'Nowy komentarz z modala',
+        ]);
+    }
+
+    public function test_full_editor_with_subtasks_does_not_register_nested_edit_modal(): void
+    {
+        $user = User::factory()->create();
+
+        $parent = Task::create([
+            'title' => 'Zadanie nadrzędne',
+            'status_id' => Task::getDefaultStatusId(),
+            'priority' => 'normal',
+            'author_id' => $user->id,
+        ]);
+
+        Task::create([
+            'title' => 'Podzadanie',
+            'status_id' => Task::getDefaultStatusId(),
+            'priority' => 'normal',
+            'author_id' => $user->id,
+            'parent_id' => $parent->id,
+        ]);
+
+        Livewire::actingAs($user)
+            ->test(TaskFullEditor::class, ['taskId' => $parent->id])
+            ->assertSee('Podzadanie')
+            ->assertSee('Podzadania');
     }
 }

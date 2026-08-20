@@ -10,6 +10,7 @@ use App\Models\EventAgreementPaymentSchedule;
 use App\Models\EventParticipantResignation;
 use App\Models\EventSettlementCost;
 use App\Models\Place;
+use App\Models\TaskComment;
 use App\Models\VendorInvoice;
 use App\Observers\ClientInvoiceRequestObserver;
 use App\Observers\ContractPaymentScheduleObserver;
@@ -18,6 +19,7 @@ use App\Observers\EventObserver;
 use App\Observers\EventParticipantResignationObserver;
 use App\Observers\EventSettlementCostObserver;
 use App\Observers\PlaceObserver;
+use App\Observers\TaskCommentObserver;
 use App\Observers\VendorInvoiceObserver;
 use Illuminate\Support\Facades\Schema;
 use App\Services\Tfg\HttpTfgFeedClient;
@@ -109,6 +111,10 @@ class AppServiceProvider extends ServiceProvider
 
         if (Schema::hasTable('client_invoice_requests')) {
             ClientInvoiceRequest::observe(ClientInvoiceRequestObserver::class);
+        }
+
+        if (Schema::hasTable('task_comments')) {
+            TaskComment::observe(TaskCommentObserver::class);
         }
 
         // Backward-compatible alias: stara ścieżka komponentu po przeprowadzce klasy

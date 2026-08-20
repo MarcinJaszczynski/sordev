@@ -85,21 +85,7 @@ class EventReadinessFields
     public static function driverFields(): array
     {
         return [
-            Forms\Components\TimePicker::make('departure_time')
-                ->label('Godzina podstawienia')
-                ->seconds(false)
-                ->native(false)
-                ->nullable()
-                ->visible(fn (): bool => Schema::hasColumn('events', 'departure_time'))
-                ->helperText('Godzina zbiórki / podstawienia autokaru.'),
-
-            Forms\Components\TimePicker::make('return_time')
-                ->label('Godzina powrotu')
-                ->seconds(false)
-                ->native(false)
-                ->nullable()
-                ->visible(fn (): bool => Schema::hasColumn('events', 'return_time'))
-                ->helperText('Godzina planowanego powrotu autokaru.'),
+            ...EventTransportFields::transportTimeFields(),
 
             Forms\Components\TextInput::make('driver_name')
                 ->label('Kierowca')
@@ -117,7 +103,6 @@ class EventReadinessFields
 
             \FilamentTiptapEditor\TiptapEditor::make('pickup_place_details')
                 ->label('Szczegóły miejsca podstawienia')
-                
                 ->columnSpanFull()
                 ->visible(fn (): bool => Schema::hasColumn('events', 'pickup_place_details'))
                 ->helperText('Np. dokładny adres, brama, punkt orientacyjny.'),
@@ -193,7 +178,9 @@ class EventReadinessFields
             'insurance_paid_at' => $event->insurance_paid_at,
             'insurance_document_path' => $event->insurance_document_path,
             'insurance_terms' => $event->insurance_terms,
+            'substitution_time' => $event->substitution_time,
             'departure_time' => $event->departure_time,
+            'return_time' => $event->return_time,
             'driver_name' => $event->driver_name,
             'driver_phone' => $event->driver_phone,
             'vehicle_registration' => $event->vehicle_registration,
@@ -228,7 +215,15 @@ class EventReadinessFields
             }
         }
 
-        foreach (['departure_time', 'driver_name', 'driver_phone', 'vehicle_registration', 'pickup_place_details'] as $field) {
+        foreach ([
+            'substitution_time',
+            'departure_time',
+            'return_time',
+            'driver_name',
+            'driver_phone',
+            'vehicle_registration',
+            'pickup_place_details',
+        ] as $field) {
             if (Schema::hasColumn('events', $field) && array_key_exists($field, $data)) {
                 $payload[$field] = $data[$field];
             }

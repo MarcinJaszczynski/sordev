@@ -8,7 +8,6 @@ use App\Models\User;
 use App\Support\PilotIdentityValidation;
 use Filament\Forms;
 use Filament\Forms\Get;
-use Illuminate\Support\Facades\Schema;
 
 class EventKeyInfoFields
 {
@@ -27,16 +26,8 @@ class EventKeyInfoFields
             Forms\Components\Section::make('Impreza')
                 ->icon('heroicon-o-calendar-days')
                 ->description('Nazwa, kod identyfikacyjny i termin wyjazdu.')
-                ->columns(2)
+                ->columns(3)
                 ->schema([
-                    Forms\Components\TextInput::make('code')
-                        ->label('Kod imprezy')
-                        ->readOnly()
-                        ->disabled()
-                        ->dehydrated(false)
-                        ->hiddenOn('create')
-                        ->helperText('Unikalny kod identyfikacyjny — generowany automatycznie.'),
-
                     Forms\Components\TextInput::make('name')
                         ->label('Nazwa imprezy')
                         ->required()
@@ -44,38 +35,77 @@ class EventKeyInfoFields
                         ->columnSpanFull()
                         ->helperText('Nazwa widoczna dla klienta i w dokumentach.'),
 
-                    Forms\Components\TextInput::make('duration_days')
-                        ->label('Liczba dni')
-                        ->numeric()
-                        ->minValue(1)
-                        ->default(1)
-                        ->live()
-                        ->afterStateUpdated(function ($state, Get $get, callable $set): void {
-                            if (empty($get('start_date'))) {
-                                return;
-                            }
+                    Forms\Components\TextInput::make('code')
+                        ->label('Kod imprezy')
+                        ->readOnly()
+                        ->disabled()
+                        ->dehydrated(false)
+                        ->hiddenOn('create')
+                        ->columnSpanFull()
+                        ->helperText('Unikalny kod identyfikacyjny — generowany automatycznie.'),
 
-                            $days = max(1, (int) ($state ?? 1));
-                            $start = \Carbon\Carbon::parse($get('start_date'));
-                            $set('end_date', $start->copy()->addDays($days - 1)->toDateString());
-                        })
-                        ->helperText('Obliczana z dat lub kopiowana z szablonu.'),
+                    Forms\Components\Group::make([
+                        Forms\Components\TextInput::make('duration_days')
+                            ->label('Liczba dni')
+                            ->numeric()
+                            ->minValue(1)
+                            ->default(1)
+                            ->live()
+                            ->afterStateUpdated(function ($state, Get $get, callable $set): void {
+                                if (empty($get('start_date'))) {
+                                    return;
+                                }
 
-                    Forms\Components\DatePicker::make('start_date')
-                        ->label('Data rozpoczęcia')
-                        ->required()
-                        ->native(false)
-                        ->live()
-                        ->afterStateUpdated(function ($state, Get $get, callable $set): void {
-                            if (empty($state)) {
-                                return;
-                            }
+                                $days = max(1, (int) ($state ?? 1));
+                                $start = \Carbon\Carbon::parse($get('start_date'));
+                                $set('end_date', $start->copy()->addDays($days - 1)->toDateString());
+                            })
+                            ->helperText('Obliczana z dat lub kopiowana z szablonu.'),
 
-                            $start = \Carbon\Carbon::parse($state);
-                            $endDate = $get('end_date');
+                        Forms\Components\DatePicker::make('start_date')
+                            ->label('Data rozpoczęcia')
+                            ->required()
+                            ->native(false)
+                            ->live()
+                            ->afterStateUpdated(function ($state, Get $get, callable $set): void {
+                                if (empty($state)) {
+                                    return;
+                                }
 
-                            if (! empty($endDate)) {
-                                $end = \Carbon\Carbon::parse($endDate);
+                                $start = \Carbon\Carbon::parse($state);
+                                $endDate = $get('end_date');
+
+                                if (! empty($endDate)) {
+                                    $end = \Carbon\Carbon::parse($endDate);
+                                    if ($end->lt($start)) {
+                                        $set('end_date', $start->toDateString());
+                                        $set('duration_days', 1);
+
+                                        return;
+                                    }
+
+                                    $set('duration_days', max(1, $start->diffInDays($end) + 1));
+
+                                    return;
+                                }
+
+                                $duration = max(1, (int) ($get('duration_days') ?? 1));
+                                $set('end_date', $start->copy()->addDays($duration - 1)->toDateString());
+                            }),
+
+                        Forms\Components\DatePicker::make('end_date')
+                            ->label('Data zakończenia')
+                            ->native(false)
+                            ->minDate(fn (Get $get) => $get('start_date'))
+                            ->live()
+                            ->afterStateUpdated(function ($state, Get $get, callable $set): void {
+                                if (empty($state) || empty($get('start_date'))) {
+                                    return;
+                                }
+
+                                $start = \Carbon\Carbon::parse($get('start_date'));
+                                $end = \Carbon\Carbon::parse($state);
+
                                 if ($end->lt($start)) {
                                     $set('end_date', $start->toDateString());
                                     $set('duration_days', 1);
@@ -84,36 +114,17 @@ class EventKeyInfoFields
                                 }
 
                                 $set('duration_days', max(1, $start->diffInDays($end) + 1));
+                            }),
+                    ])
+                        ->columns(3)
+                        ->columnSpanFull(),
 
-                                return;
-                            }
+                    Forms\Components\Group::make([
+                        ...EventTransportFields::transportTimeFields(),
+                    ])
+                        ->columns(3)
+                        ->columnSpanFull(),
 
-                            $duration = max(1, (int) ($get('duration_days') ?? 1));
-                            $set('end_date', $start->copy()->addDays($duration - 1)->toDateString());
-                        }),
-
-                    Forms\Components\DatePicker::make('end_date')
-                        ->label('Data zakończenia')
-                        ->native(false)
-                        ->minDate(fn (Get $get) => $get('start_date'))
-                        ->live()
-                        ->afterStateUpdated(function ($state, Get $get, callable $set): void {
-                            if (empty($state) || empty($get('start_date'))) {
-                                return;
-                            }
-
-                            $start = \Carbon\Carbon::parse($get('start_date'));
-                            $end = \Carbon\Carbon::parse($state);
-
-                            if ($end->lt($start)) {
-                                $set('end_date', $start->toDateString());
-                                $set('duration_days', 1);
-
-                                return;
-                            }
-
-                            $set('duration_days', max(1, $start->diffInDays($end) + 1));
-                        }),
                 ]),
         ];
     }
@@ -138,7 +149,7 @@ class EventKeyInfoFields
                         ->placeholder('Bez szablonu (impreza czysta)')
                         ->nullable()
                         ->reactive()
-                        ->afterStateUpdated(fn (callable $get, callable $set) => \App\Filament\Resources\EventResource::refreshTotalCostFromTemplateState($set, $get))
+                        ->afterStateUpdated(fn (callable $get, callable $set, ?Event $record) => \App\Filament\Resources\EventResource::refreshTotalCostFromTemplateState($set, $get, $record))
                         ->disabledOn('edit')
                         ->dehydrated()
                         ->hintAction(
@@ -152,85 +163,111 @@ class EventKeyInfoFields
                         ->helperText(fn (string $operation): ?string => $operation === 'create' ? 'Szablon programu i kalkulacji.' : 'Brak możliwości zmiany szablonu po utworzeniu imprezy.')
                         ->columnSpanFull(),
 
-                    Forms\Components\Select::make('status')
-                        ->label('Status imprezy')
-                        ->options(Event::getStatusOptions())
-                        ->default(Event::STATUS_INQUIRY)
-                        ->required(),
+                    Forms\Components\Group::make([
+                        Forms\Components\Select::make('status')
+                            ->label('Status imprezy')
+                            ->options(Event::getStatusOptions())
+                            ->default(Event::STATUS_INQUIRY)
+                            ->required(),
 
-                    Forms\Components\TextInput::make('participant_count')
-                        ->label('Liczba uczestników')
-                        ->numeric()
-                        ->minValue(1)
-                        ->default(1)
-                        ->live(onBlur: true)
-                        ->afterStateUpdated(fn (callable $get, callable $set) => \App\Filament\Resources\EventResource::refreshTotalCostFromTemplateState($set, $get))
-                        ->required(),
+                        Forms\Components\TextInput::make('participant_count')
+                            ->label('Liczba uczestników')
+                            ->numeric()
+                            ->minValue(1)
+                            ->default(1)
+                            ->live(onBlur: true)
+                            ->afterStateUpdated(function (callable $get, callable $set, $livewire): void {
+                                $record = (isset($livewire->record) && $livewire->record instanceof Event)
+                                    ? $livewire->record
+                                    : null;
 
-                    Forms\Components\TextInput::make('gratis_count')
-                        ->label('Liczba gratisów')
-                        ->numeric()
-                        ->minValue(0)
-                        ->default(0)
-                        ->live(onBlur: true)
-                        ->afterStateUpdated(fn (callable $get, callable $set) => \App\Filament\Resources\EventResource::refreshTotalCostFromTemplateState($set, $get))
-                        ->helperText('Pole pomocnicze do kalkulacji (nie jest zapisywane w bazie).'),
+                                if ($record) {
+                                    \App\Filament\Resources\EventResource::syncGratisCountFromQtyVariant($set, $get, $record);
+                                }
+
+                                \App\Filament\Resources\EventResource::refreshTotalCostFromTemplateState($set, $get, $record);
+                            })
+                            ->required(),
+
+                        Forms\Components\TextInput::make('gratis_count')
+                            ->label(\App\Support\EventParticipantGroupLabels::GRATIS)
+                            ->numeric()
+                            ->minValue(0)
+                            ->default(0)
+                            ->dehydrated()
+                            ->live(onBlur: true)
+                            ->afterStateUpdated(fn (callable $get, callable $set, ?Event $record) => \App\Filament\Resources\EventResource::refreshTotalCostFromTemplateState($set, $get, $record))
+                            ->helperText('Osoby jadące w grupie bez opłaty za siebie. Uwzględniane w kalkulacji kosztów i zapisywane w wariancie ilościowym grupy.'),
+                    ])
+                        ->columns(3)
+                        ->columnSpanFull(),
 
                     EventNotesFields::dietInfo(),
 
-                    Forms\Components\Select::make('start_place_id')
-                        ->label('Miejsce startu (podstawienia)')
-                        ->options(fn (callable $get) => \App\Models\Place::startingPlaceSelectOptionsForTemplate(
-                            (int) ($get('event_template_id') ?? 0) ?: null,
-                            (int) ($get('start_place_id') ?? 0) ?: null,
-                        ))
-                        ->searchable()
-                        ->nullable()
-                        ->reactive()
-                        ->afterStateUpdated(function (callable $get, callable $set): void {
-                            $templateId = (int) ($get('event_template_id') ?? 0);
-                            $startPlaceId = (int) ($get('start_place_id') ?? 0);
-                            $currentTransfer = (float) ($get('transfer_km') ?? 0);
+                    Forms\Components\Group::make([
+                        Forms\Components\Select::make('start_place_id')
+                            ->label('Miejsce startu (podstawienia)')
+                            ->options(fn (callable $get) => \App\Models\Place::startingPlaceSelectOptionsForTemplate(
+                                (int) ($get('event_template_id') ?? 0) ?: null,
+                                (int) ($get('start_place_id') ?? 0) ?: null,
+                            ))
+                            ->searchable()
+                            ->nullable()
+                            ->reactive()
+                            ->afterStateUpdated(function (callable $get, callable $set, $livewire, ?Event $record): void {
+                                $templateId = (int) ($get('event_template_id') ?? $record?->event_template_id ?? 0);
+                                $startPlaceId = (int) ($get('start_place_id') ?? 0);
+                                $currentTransfer = (float) ($get('transfer_km') ?? 0);
 
-                            if (class_exists(\App\Filament\Resources\EventResource::class)) {
-                                $set('transfer_km', \App\Filament\Resources\EventResource::resolveTransferKmFromTemplateState(
-                                    $templateId,
-                                    $startPlaceId,
-                                    $currentTransfer
-                                ));
-                                \App\Filament\Resources\EventResource::refreshTotalCostFromTemplateState($set, $get);
-                            }
-                        })
-                        ->helperText(fn (callable $get): string => filled($get('event_template_id'))
-                            ? 'Punkty startowe dostępne dla wybranego szablonu.'
-                            : 'Tylko punkty startowe (podstawienia autokaru) — wymagane do obliczenia transferu i ceny z szablonu.'),
+                                if (class_exists(\App\Filament\Resources\EventResource::class)) {
+                                    $set('transfer_km', \App\Filament\Resources\EventResource::resolveTransferKmFromTemplateState(
+                                        $templateId,
+                                        $startPlaceId,
+                                        $currentTransfer
+                                    ));
+                                    \App\Filament\Resources\EventResource::refreshTotalCostFromTemplateState($set, $get, $record);
+                                }
 
-                    Forms\Components\TextInput::make('program_km')
-                        ->label('Kilometry programu')
-                        ->numeric()
-                        ->minValue(0)
-                        ->default(0)
-                        ->live(onBlur: true)
-                        ->afterStateUpdated(function (callable $get, callable $set, $livewire): void {
-                            if (class_exists(\App\Filament\Resources\EventResource::class)) {
-                                \App\Filament\Resources\EventResource::refreshTotalCostFromTemplateState($set, $get);
-                            }
-                            if (method_exists($livewire, 'dispatch')) {
-                                $livewire->dispatch('event-price-table-refresh');
-                            }
-                        }),
+                                if (method_exists($livewire, 'dispatch')) {
+                                    $livewire->dispatch('event-price-table-refresh');
+                                }
+                            })
+                            ->helperText(fn (callable $get): string => filled($get('event_template_id'))
+                                ? 'Punkty startowe dostępne dla wybranego szablonu.'
+                                : 'Tylko punkty startowe (podstawienia autokaru) — wymagane do obliczenia transferu i ceny z szablonu.'),
 
-                    Forms\Components\TextInput::make('transfer_km')
-                        ->label('Kilometry transferu')
-                        ->numeric()
-                        ->minValue(0)
-                        ->default(0)
-                        ->live(onBlur: true)
-                        ->afterStateUpdated(function (callable $get, callable $set, $livewire): void {
-                            if (method_exists($livewire, 'dispatch')) {
-                                $livewire->dispatch('event-price-table-refresh');
-                            }
-                        }),
+                        Forms\Components\TextInput::make('program_km')
+                            ->label('Kilometry programu')
+                            ->numeric()
+                            ->minValue(0)
+                            ->default(0)
+                            ->live(onBlur: true)
+                            ->afterStateUpdated(function (callable $get, callable $set, $livewire, ?Event $record): void {
+                                if (class_exists(\App\Filament\Resources\EventResource::class)) {
+                                    \App\Filament\Resources\EventResource::refreshTotalCostFromTemplateState($set, $get, $record);
+                                }
+                                if (method_exists($livewire, 'dispatch')) {
+                                    $livewire->dispatch('event-price-table-refresh');
+                                }
+                            }),
+
+                        Forms\Components\TextInput::make('transfer_km')
+                            ->label('Kilometry transferu')
+                            ->numeric()
+                            ->minValue(0)
+                            ->default(0)
+                            ->live(onBlur: true)
+                            ->afterStateUpdated(function (callable $get, callable $set, $livewire, ?Event $record): void {
+                                if (class_exists(\App\Filament\Resources\EventResource::class)) {
+                                    \App\Filament\Resources\EventResource::refreshTotalCostFromTemplateState($set, $get, $record);
+                                }
+                                if (method_exists($livewire, 'dispatch')) {
+                                    $livewire->dispatch('event-price-table-refresh');
+                                }
+                            }),
+                    ])
+                        ->columns(3)
+                        ->columnSpanFull(),
 
                     ...\App\Filament\Forms\EventPricePerPersonFields::manualPriceFields(),
 
