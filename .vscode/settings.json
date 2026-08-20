@@ -11,11 +11,10 @@
   "files.associations": {
     "*.blade.php": "blade"
   },
-  "php.validate.executablePath": "/usr/bin/php84",
+  "php.validate.executablePath": "C:\\Users\\aleks\\AppData\\Roaming\\Herd\\bin\\php84\\php.exe",
   "intelephense.environment.phpVersion": "8.4.0",
   "intelephense.files.maxSize": 5000000,
   "intelephense.files.exclude": [
-    "**/vendor/**",
     "**/node_modules/**",
     "**/storage/**"
   ],
