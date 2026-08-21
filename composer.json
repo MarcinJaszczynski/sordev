@@ -10,6 +10,7 @@
         "awcodes/filament-tiptap-editor": "^3.5",
         "barryvdh/laravel-dompdf": "^3.1",
         "bezhansalleh/filament-shield": "^3.3",
+        "blaspsoft/doxswap": "^1.0",
         "doctrine/dbal": "^4.3",
         "filament/filament": "^3.3",
         "intervention/image": "^3.11",

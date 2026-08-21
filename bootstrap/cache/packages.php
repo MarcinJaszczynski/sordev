@@ -68,6 +68,28 @@
       0 => 'BladeUI\\Icons\\BladeIconsServiceProvider',
     ),
   ),
+  'blaspsoft/doxswap' => 
+  array (
+    'aliases' => 
+    array (
+      'Doxswap' => 'Blaspsoft\\Doxswap\\Facades\\Doxswap',
+    ),
+    'providers' => 
+    array (
+      0 => 'Blaspsoft\\Doxswap\\DoxswapServiceProvider',
+    ),
+  ),
+  'blaspsoft/onym' => 
+  array (
+    'aliases' => 
+    array (
+      'Onym' => 'Blaspsoft\\Onym\\Facades\\Onym',
+    ),
+    'providers' => 
+    array (
+      0 => 'Blaspsoft\\Onym\\OnymServiceProvider',
+    ),
+  ),
   'filament/actions' => 
   array (
     'providers' => 

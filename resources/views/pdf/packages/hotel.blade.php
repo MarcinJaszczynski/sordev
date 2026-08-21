@@ -5,14 +5,8 @@
     <title>Informacje dla Hotelu — {{ $event->name }}</title>
     @include('pdf.packages._styles')
     <style>
-        /* Single @page declaration for paper size and printable printable margin */
-        @page {
-            size: A4 portrait;
-            margin: 18mm 16mm 20mm 16mm;
-        }
-
         body {
-            margin: 0;
+            margin: 20mm 16mm 22mm 16mm;
             padding: 0;
             background-color: #ffffff;
             font-family: DejaVu Sans, sans-serif; /* Recommended for Dompdf Unicode support */
