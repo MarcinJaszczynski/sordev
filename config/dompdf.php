@@ -24,7 +24,7 @@ return [
         'log_output_file' => null,
         'enable_font_subsetting' => false,
         'pdf_backend' => 'CPDF',
-        'default_media_type' => 'screen',
+        'default_media_type' => 'print', // Changed from 'screen' to 'print'
         'default_paper_size' => 'a4',
         'default_paper_orientation' => 'portrait',
         'default_font' => 'DejaVu Sans',

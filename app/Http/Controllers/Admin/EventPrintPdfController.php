@@ -22,7 +22,7 @@ class EventPrintPdfController extends Controller
 {
     private const AUDIENCES = [
         'pilot' => 'Pakiet dla pilota',
-        'hotel' => 'Pakiet dla hotelu',
+        'hotel' => 'Informacje dla Hotelu',
         'driver' => 'Pakiet dla kierowcy',
         'folder' => 'Teczka imprezy',
         'all' => 'Komplet pakietów',
@@ -282,6 +282,7 @@ class EventPrintPdfController extends Controller
             'driverCount' => $driverCount,
             'gratisCount' => $gratisCount,
             'hotelNotes' => trim(strip_tags((string) ($event->hotel_notes ?? ''))),
+            'dietInfoLines' => $this->parseDietInfoLines($event),
             'hotelProgramPoints' => $event->hotelProgramPoints,
             'programByDay' => $programByDay,
             'pilotSetFinanceCards' => $pilotSetFinanceCards,
@@ -312,6 +313,21 @@ class EventPrintPdfController extends Controller
             ->values()
             ->groupBy(fn ($point) => (int) ($point->day ?? 1))
             ->sortKeys();
+    }
+
+    /**
+     * @return list<string>
+     */
+    private function parseDietInfoLines(Event $event): array
+    {
+        $raw = trim((string) ($event->diet_info ?? ''));
+        if ($raw === '') {
+            return [];
+        }
+
+        $lines = preg_split('/\r\n|\r|\n/', $raw) ?: [];
+
+        return array_values(array_filter(array_map('trim', $lines), fn (string $line): bool => $line !== ''));
     }
 
     /**

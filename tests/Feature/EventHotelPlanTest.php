@@ -193,7 +193,7 @@ class EventHotelPlanTest extends TestCase
 
         $this->assertStringContainsString('Śniadanie bufet + parking', $html);
         $this->assertStringContainsString('Apartament', $html);
-        $this->assertStringContainsString('Plan pokoi (impreza)', $html);
+        $this->assertStringContainsString('Pokoje', $html);
     }
 
     public function test_import_occupants_from_spreadsheet(): void
