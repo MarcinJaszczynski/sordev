@@ -14,6 +14,7 @@ class EventHotelPdfViewTest extends TestCase
             'id' => 77,
             'name' => 'Impreza hotelowa',
             'client_name' => 'Klient PDF',
+            'diet_info' => '1 x dieta bezglutenowa',
             'start_date' => Carbon::parse('2026-04-15'),
             'end_date' => Carbon::parse('2026-04-16'),
             'status' => Event::STATUS_CONFIRMED,
@@ -21,7 +22,7 @@ class EventHotelPdfViewTest extends TestCase
 
         $html = view('pdf.packages.hotel', [
             'audience' => 'hotel',
-            'audienceLabel' => 'Pakiet dla hotelu',
+            'audienceLabel' => 'Informacje dla Hotelu',
             'event' => $event,
             'company' => [
                 'name' => 'BP Rafa',
@@ -42,6 +43,7 @@ class EventHotelPdfViewTest extends TestCase
                 'return_place' => '—',
             ],
             'hotelNotes' => 'Późny check-in dla części grupy.',
+            'dietInfoLines' => ['1 x dieta bezglutenowa'],
             'programByDay' => collect(),
             'hotelProgramPoints' => collect(),
             'hotelPlan' => collect([
@@ -71,9 +73,13 @@ class EventHotelPdfViewTest extends TestCase
             'attachedFiles' => collect(),
         ])->render();
 
-        $this->assertStringContainsString('Uwagi dla hotelu', $html);
+        $this->assertStringContainsString('Informacje dla Hotelu', $html);
+        $this->assertStringContainsString('notatki dla hotelu', $html);
         $this->assertStringContainsString('Późny check-in dla części grupy.', $html);
-        $this->assertStringContainsString('Pakiet dla hotelu', $html);
+        $this->assertStringContainsString('Dane grupy', $html);
+        $this->assertStringContainsString('Diety', $html);
+        $this->assertStringContainsString('1 x dieta bezglutenowa', $html);
+        $this->assertStringContainsString('Pokoje', $html);
     }
 
     public function test_pilot_package_view_contains_program_section(): void

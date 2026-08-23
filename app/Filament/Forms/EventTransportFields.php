@@ -35,6 +35,20 @@ class EventTransportFields
                 ->live(onBlur: true)
                 ->afterStateUpdated(fn ($livewire) => $livewire->dispatch('event-price-table-refresh'))
                 ->helperText('Ta kwota trafia do kalkulacji imprezy zamiast automatycznego liczenia z autokaru.'),
+
+            Forms\Components\Textarea::make('adress_transport_start')
+                ->label('Adres podstawienia')
+                ->rows(3)
+                ->columnSpanFull()
+                ->visible(fn (): bool => Schema::hasColumn('events', 'adress_transport_start'))
+                ->helperText('Wpisz adres miejsca, z którego startuje transport.'),
+
+            Forms\Components\Textarea::make('adress_transport_end')
+                ->label('Adres docelowy')
+                ->rows(3)
+                ->columnSpanFull()
+                ->visible(fn (): bool => Schema::hasColumn('events', 'adress_transport_end'))
+                ->helperText('Wpisz adres miejsca docelowego transportu.'),
         ];
     }
 

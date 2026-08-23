@@ -10,6 +10,7 @@
         "awcodes/filament-tiptap-editor": "^3.5",
         "barryvdh/laravel-dompdf": "^3.1",
         "bezhansalleh/filament-shield": "^3.3",
+        "blaspsoft/doxswap": "^1.0",
         "doctrine/dbal": "^4.3",
         "filament/filament": "^3.3",
         "intervention/image": "^3.11",
@@ -29,6 +30,7 @@
     },
     "require-dev": {
         "barryvdh/laravel-debugbar": "^4.0",
+        "barryvdh/laravel-ide-helper": "^3.7",
         "fakerphp/faker": "^1.23",
         "laravel/pail": "^1.2.2",
         "laravel/pint": "^1.13",

@@ -48,6 +48,9 @@
 !/.vscode/extensions.json
 !/.vscode/settings.json
 /.cursor/mcp.json
+/_ide_helper.php
+/_ide_helper_models.php
+/_ide_helper.meta.php
 
 # OS / archive artifacts
 .DS_Store
