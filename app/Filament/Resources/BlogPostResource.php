@@ -56,6 +56,19 @@ class BlogPostResource extends Resource
                         ->helperText('Fragment adresu wpisu, generowany z tytułu.')
                         ->required()
                         ->unique(ignorable: fn ($record) => $record),
+                    Forms\Components\Select::make('content_type')
+                        ->label('Typ treści')
+                        ->options([
+                            'aktualnosci' => 'Aktualności',
+                            'poradnik' => 'Poradnik turystyczny',
+                        ])
+                        ->default('aktualnosci')
+                        ->required(),
+                    Forms\Components\TextInput::make('guide_category')
+                        ->label('Kategoria poradnika')
+                        ->helperText('Np. wycieczki-szkolne, wyjazdy-firmowe')
+                        ->maxLength(100)
+                        ->visible(fn ($get) => $get('content_type') === 'poradnik'),
                     Forms\Components\TextInput::make('excerpt')
                         ->label('Krótki opis')
                         ->maxLength(500),
@@ -100,6 +113,10 @@ class BlogPostResource extends Resource
                             ];
                         })
                         ->nullable(),
+                    Forms\Components\TextInput::make('featured_image_alt')
+                        ->label('Tekst alternatywny zdjęcia (alt)')
+                        ->maxLength(255)
+                        ->columnSpanFull(),
                     Forms\Components\FileUpload::make('gallery')
                         ->label('Galeria')
                         ->image()

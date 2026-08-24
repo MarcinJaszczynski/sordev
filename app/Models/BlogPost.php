@@ -60,6 +60,24 @@ class BlogPost extends Model
             });
     }
 
+    public function scopeNews($query)
+    {
+        return $query->where(function ($q) {
+            $q->where('content_type', 'aktualnosci')
+                ->orWhereNull('content_type');
+        });
+    }
+
+    public function scopeGuide($query)
+    {
+        return $query->where('content_type', 'poradnik');
+    }
+
+    public function isGuide(): bool
+    {
+        return $this->content_type === 'poradnik';
+    }
+
     public function tags()
     {
         return $this->belongsToMany(\App\Models\Tag::class, 'blog_post_tag');

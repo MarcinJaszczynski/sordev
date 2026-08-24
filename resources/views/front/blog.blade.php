@@ -1,10 +1,23 @@
 @extends('front.layout.master')
 
 @section('head')
-    @include('front.partials.seo')
+    @include('front.partials.seo', ($guideMode ?? false) ? [
+        'pageTitle' => 'Poradnik turystyczny – wycieczki szkolne i wyjazdy firmowe | Biuro Podróży RAFA',
+        'pageDescription' => 'Praktyczne porady dla nauczycieli, opiekunów i firm: jak zaplanować wycieczkę szkolną, wyjazd integracyjny, transport autokarowy i formalności.',
+        'canonical' => route('guide.global'),
+    ] : [])
 @endsection
 
 @section('main_content')
+@php
+    $isGuide = $guideMode ?? false;
+    $listRoute = $isGuide ? route('guide.global') : route('blog.global');
+    $pageHeading = $isGuide ? 'Poradnik turystyczny' : 'Aktualności';
+    $pageLead = $isGuide
+        ? 'Praktyczna wiedza o organizacji wycieczek szkolnych i wyjazdów firmowych.'
+        : 'Najnowsze wpisy, porady i aktualizacje z naszej działalności.';
+    $breadcrumbLabel = $isGuide ? 'Poradnik' : 'Aktualności';
+@endphp
 <!-- BLOG PAGE RENDER: {{ now()->format('Y-m-d H:i:s') }} | Posts: {{ isset($posts) ? $posts->count() : 0 }} -->
 
 <div class="page-top">
@@ -12,7 +25,7 @@
         <div class="breadcrumb-container">
             <ol class="breadcrumb">
                 <li class="breadcrumb-item"><a href="{{ route('home') }}">Start</a></li>
-                <li class="breadcrumb-item active">Aktualności</li>
+                <li class="breadcrumb-item active">{{ $breadcrumbLabel }}</li>
             </ol>
         </div>
     </div>
@@ -24,8 +37,8 @@
             <div class="insurance-picture" style="background-image: linear-gradient(to left, rgba(0,0,0,0.45) 20%, rgba(0,0,0,0.08) 60%), url({{ asset('storage/dokumenty.jpg') }});">
                 <div class="insurance-picture-space">
                     <div class="insurance-text-ad">
-                        <p class="big">Aktualności</p>
-                        <p class="small hide-mobile">Najnowsze wpisy, porady i aktualizacje z naszej działalności.</p>
+                        <p class="big">{{ $pageHeading }}</p>
+                        <p class="small hide-mobile">{{ $pageLead }}</p>
                         <p class="sub">Wszystko w jednym miejscu.</p>
                     </div>
                 </div>
@@ -39,7 +52,7 @@
             <div class="col-lg-8">
                 <div class="card border-0 shadow-sm">
                     <div class="card-body">
-                        <form method="get" action="{{ route('blog.global') }}" class="row g-3 align-items-end">
+                        <form method="get" action="{{ $listRoute }}" class="row g-3 align-items-end">
                             <div class="col-md-6">
                                 <label class="form-label small text-muted mb-1">Szukaj w artykułach</label>
                                 <input type="search" name="q" value="{{ $search ?? request('q') }}" class="form-control" placeholder="Wpisz szukane słowo...">

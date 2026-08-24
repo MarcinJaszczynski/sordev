@@ -62,6 +62,9 @@
                             <a href="{{ route('about.global') }}" class="nav-link">O nas</a>
                         </li>
                         <li class="nav-item">
+                            <a href="{{ route('guide.global') }}" class="nav-link">Poradnik</a>
+                        </li>
+                        <li class="nav-item">
                             <a href="{{ route('blog.global') }}" class="nav-link">Aktualności</a>
                         </li>
                         <li class="nav-item {{ \Illuminate\Support\Facades\Route::is('insurance') ? 'active' : '' }}">

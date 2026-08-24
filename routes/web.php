@@ -114,6 +114,7 @@ Route::get('/llms.txt', function () {
         '',
         $base.'/o-nas',
         $base.'/blog',
+        $base.'/poradnik',
         $base.route('faq', ['regionSlug' => 'warszawa'], false),
         $base.route('packages', ['regionSlug' => 'warszawa'], false),
         $base.route('contact', ['regionSlug' => 'warszawa'], false),
@@ -121,6 +122,7 @@ Route::get('/llms.txt', function () {
 
     return response(implode("\n", $lines), 200, ['Content-Type' => 'text/plain; charset=UTF-8']);
 })->name('llms.txt');
+Route::get('/poradnik', [FrontController::class, 'guide'])->name('guide.global');
 Route::get('/blog', [FrontController::class, 'blog'])->name('blog.global');
 Route::get('/blog/{slug}', [FrontController::class, 'blogPost'])->name('blog.post.global');
 // Global documents routes (no region slug)

@@ -305,7 +305,7 @@ class FrontController extends Controller
         $featuredPosts = collect();
 
         // Base query for posts listing
-        $postsQuery = BlogPost::published();
+        $postsQuery = BlogPost::published()->news();
 
         if (! empty($search)) {
             $postsQuery->where(function ($q) use ($search) {
@@ -315,7 +315,7 @@ class FrontController extends Controller
             });
         } else {
             // Featured posts (max 3) only when not searching
-            $featuredPosts = BlogPost::published()
+            $featuredPosts = BlogPost::published()->news()
                 ->where('is_featured', true)
                 ->orderByDesc($orderExpression)
                 ->orderByDesc('id')
@@ -344,6 +344,45 @@ class FrontController extends Controller
         $posts = $postsQuery->paginate(12)->withQueryString();
 
         return view('front.blog', compact('posts', 'featuredPosts', 'search', 'sort'));
+    }
+
+    public function guide(Request $request)
+    {
+        $orderExpression = DB::raw('COALESCE(published_at, created_at)');
+        $search = trim((string) $request->query('q', ''));
+        $sort = $request->query('sort', 'newest');
+
+        $postsQuery = BlogPost::published()->guide();
+
+        if ($search !== '') {
+            $postsQuery->where(function ($q) use ($search) {
+                $q->where('title', 'like', "%{$search}%")
+                    ->orWhere('excerpt', 'like', "%{$search}%")
+                    ->orWhere('content', 'like', "%{$search}%");
+            });
+        }
+
+        switch ($sort) {
+            case 'oldest':
+                $postsQuery->orderBy($orderExpression, 'asc')->orderBy('id', 'asc');
+                break;
+            case 'title_asc':
+                $postsQuery->orderBy('title', 'asc');
+                break;
+            case 'title_desc':
+                $postsQuery->orderBy('title', 'desc');
+                break;
+            default:
+                $postsQuery->orderByDesc($orderExpression)->orderByDesc('id');
+                break;
+        }
+
+        $posts = $postsQuery->paginate(12)->withQueryString();
+        $featuredPosts = collect();
+
+        return view('front.blog', compact('posts', 'featuredPosts', 'search', 'sort') + [
+            'guideMode' => true,
+        ]);
     }
 
     public function blogPost($slug)
@@ -2583,7 +2622,22 @@ class FrontController extends Controller
 
     public function faq()
     {
-        return view('front.faq');
+        $faqService = app(\App\Services\FaqQueryService::class);
+        $allFaqs = $faqService->forFaqPage();
+        $groupedFaqs = $faqService->groupedForFaqPage();
+
+        return view('front.faq', [
+            'groupedFaqs' => $groupedFaqs,
+            'faqSchema' => \App\Support\Seo\SchemaBuilder::faqPage($allFaqs),
+        ]);
+    }
+
+    public function about()
+    {
+        $faqService = app(\App\Services\FaqQueryService::class);
+        $faqs = $faqService->forAbout();
+
+        return view('front.about', compact('faqs'));
     }
 
     public function sendEmail(Request $request)

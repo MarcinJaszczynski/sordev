@@ -109,6 +109,12 @@ class GenerateSitemap extends Command
             ->setChangeFrequency(Url::CHANGE_FREQUENCY_DAILY)
             ->setPriority(0.7));
 
+        // Poradnik
+        $sitemap->add(Url::create(route('guide.global'))
+            ->setLastModificationDate(now())
+            ->setChangeFrequency(Url::CHANGE_FREQUENCY_WEEKLY)
+            ->setPriority(0.75));
+
         // O nas
         $sitemap->add(Url::create(route('about.global'))
             ->setLastModificationDate(now())
