@@ -3,12 +3,15 @@
 
 @section('head')
     @include('front.partials.seo')
+    @if(isset($homeFaqs) && $homeFaqs->isNotEmpty())
+        <x-seo.json-ld :schemas="[\App\Support\Seo\SchemaBuilder::faqPage($homeFaqs)]" />
+    @endif
 @endsection
 
 @section('main_content')
     <div class="container package-page-layout package-page-border pt_80">
         <div class="destination">
-            <h2 class="destination_question">Wyszukaj swoją wycieczkę szkolną!</h2>
+            <h1 class="destination_question">Wyszukaj swoją wycieczkę szkolną!</h1>
             {{-- TODO: Convert back to dynamic form with action="{{ route('packages') }}" method="get" --}}
             <form class="destination_search" action="{{ route('packages') }}" method="get">
                 <div class="layout">
@@ -581,7 +584,7 @@
                 <div class="intro">
                     <div class="intro-1"> Wycieczki Szkolne i Wyjazdy Grupowe</div><div class="intro-2">&nbsp;z całej Polski</div>
                 </div>
-                <div class="intro-a"><p><div style="font-size: larger"><b>Witamy na stronie Biura Podróży RAFA – profesjonalnego organizatora wycieczek szkolnych, wyjazdów integracyjnych i wycieczek edukacyjnych w Polsce i za granicą.</b></div><p><br> Jako doświadczony lider w branży turystycznej, oferujemy kompleksową obsługę wycieczek ze wszystkich województw.<br>Z nami każda podróż staje się niezapomnianą przygodą!</p></div>
+                <div class="intro-a"><p><div style="font-size: larger"><b>Witamy na stronie Biura Podróży RAFA – profesjonalnego organizatora wycieczek szkolnych, wyjazdów integracyjnych i wycieczek edukacyjnych w Polsce i za granicą.</b></div><p><br> Jako doświadczony lider w branży turystycznej, oferujemy kompleksową obsługę wycieczek ze wszystkich województw.<br>Z nami każda podróż staje się niezapomnianą przygodą! <a href="{{ route('about.global') }}">Poznaj nas bliżej →</a></p></div>
             </div>
             <div class="illustration" >
                 <img src="{{ asset('uploads/description-illustration.svg')}}" alt=""> </div>
@@ -629,6 +632,13 @@
                     Zapraszamy do kontaktu z Biurem Podróży RAFA. Nasz zespół z chęcią pomoże w zaplanowaniu Twojej wymarzonej wycieczki szkolnej! Zadzwoń lub wyślij zapytanie, a my przygotujemy ofertę dopasowaną do Twoich potrzeb.<br><br><b>Zarezerwuj wycieczkę już dziś i twórz wspomnienia na całe życie!</b></p>
                 <div class="link"><a href="{{ route('contact') }}"> <i class="fas fa-arrow-circle-right"></i></a></div></div>
         </div>
+
+        @if(isset($homeFaqs) && $homeFaqs->isNotEmpty())
+            <div class="container pt_50 pb_50">
+                <x-seo.faq-section :faqs="$homeFaqs" title="Najczęstsze pytania o wycieczki szkolne" idPrefix="home-faq" />
+                <p class="text-center mt-3"><a href="{{ route('faq') }}">Zobacz wszystkie pytania FAQ →</a></p>
+            </div>
+        @endif
     </div>
     </div>
 @endsection

@@ -420,6 +420,11 @@ class EventTemplateResource extends Resource
                             Forms\Components\TextInput::make('seo_keywords')
                                 ->label('Słowa kluczowe')
                                 ->helperText('Oddziel przecinkami'),
+                            Forms\Components\TextInput::make('featured_image_alt')
+                                ->label('Tekst alternatywny zdjęcia (alt)')
+                                ->helperText('Opis zdjęcia dla wyszukiwarek i czytników ekranu')
+                                ->maxLength(255)
+                                ->columnSpanFull(),
                         ]),
                 ]),
         ]);

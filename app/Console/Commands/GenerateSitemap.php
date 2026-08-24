@@ -109,6 +109,12 @@ class GenerateSitemap extends Command
             ->setChangeFrequency(Url::CHANGE_FREQUENCY_DAILY)
             ->setPriority(0.7));
 
+        // O nas
+        $sitemap->add(Url::create(route('about.global'))
+            ->setLastModificationDate(now())
+            ->setChangeFrequency(Url::CHANGE_FREQUENCY_MONTHLY)
+            ->setPriority(0.8));
+
         // Dodaj szablony wycieczek (oferty)
         $eventTemplates = EventTemplate::limit(200)->get(); // Limit 200 szablonów
         foreach ($eventTemplates as $template) {

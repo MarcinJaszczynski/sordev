@@ -2,7 +2,7 @@
     <!-- Mobile fixed bar: logo left, hamburger right -->
     <div class="mobile-bar d-lg-none">
         <a href="{{ route('home') }}" class="logo">
-            <img src="{{ asset('uploads/logo.png') }}" alt="">
+            <img src="{{ asset('uploads/logo.png') }}" alt="Biuro Podróży RAFA – wycieczki szkolne">
         </a>
         <button class="mobile-toggle" aria-controls="mobileMenuContainer" aria-expanded="false" type="button">
             <span class="hamburger" aria-hidden="true"></span>
@@ -16,7 +16,7 @@
     <!-- legacy mobile-nav (kept hidden when mobile-bar is present) -->
     <div class="mobile-nav" style="display:none;">
         <a href="{{ route('home') }}" class="logo">
-            <img src="{{ asset('uploads/logo.png') }}" alt="">
+            <img src="{{ asset('uploads/logo.png') }}" alt="Biuro Podróży RAFA – wycieczki szkolne">
         </a>
     </div>
 
@@ -25,7 +25,7 @@
         <div class="container">
             <nav class="navbar navbar-expand-md navbar-light">
                 <a class="navbar-brand" href="{{ route('home') }}">
-                    <img src="{{ asset('uploads/logo.png') }}" alt="">
+                    <img src="{{ asset('uploads/logo.png') }}" alt="Biuro Podróży RAFA – wycieczki szkolne">
                 </a>
                 <div class="collapse navbar-collapse mean-menu" id="navbarSupportedContent">
                     <ul class="navbar-nav">
@@ -58,6 +58,9 @@
                                 </ul>
                             </li>
                         </div>
+                        <li class="nav-item">
+                            <a href="{{ route('about.global') }}" class="nav-link">O nas</a>
+                        </li>
                         <li class="nav-item">
                             <a href="{{ route('blog.global') }}" class="nav-link">Aktualności</a>
                         </li>

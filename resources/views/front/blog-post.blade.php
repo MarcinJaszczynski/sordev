@@ -2,6 +2,7 @@
 
 @section('head')
     @include('front.partials.seo')
+    <x-seo.json-ld :schemas="[\App\Support\Seo\SchemaBuilder::article($blogPost, route('blog.post.global', $blogPost->slug))]" />
 @endsection
 
 @section('main_content')

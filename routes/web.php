@@ -104,6 +104,23 @@ Route::get('/sitemap.xml', function () {
 })->name('sitemap');
 
 // Global blog routes (no region slug) for canonical blog URLs
+Route::get('/o-nas', [FrontController::class, 'about'])->name('about.global');
+Route::get('/llms.txt', function () {
+    $base = rtrim((string) (config('app.public_url') ?: config('app.url')), '/');
+
+    $lines = [
+        '# Biuro Podróży RAFA',
+        '# Specjalizacja: wycieczki szkolne, zielone szkoły, wyjazdy firmowe',
+        '',
+        $base.'/o-nas',
+        $base.'/blog',
+        $base.route('faq', ['regionSlug' => 'warszawa'], false),
+        $base.route('packages', ['regionSlug' => 'warszawa'], false),
+        $base.route('contact', ['regionSlug' => 'warszawa'], false),
+    ];
+
+    return response(implode("\n", $lines), 200, ['Content-Type' => 'text/plain; charset=UTF-8']);
+})->name('llms.txt');
 Route::get('/blog', [FrontController::class, 'blog'])->name('blog.global');
 Route::get('/blog/{slug}', [FrontController::class, 'blogPost'])->name('blog.post.global');
 // Global documents routes (no region slug)

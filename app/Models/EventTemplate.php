@@ -398,6 +398,11 @@ class EventTemplate extends Model
     /**
      * Relacja wiele-do-wielu z tagami
      */
+    public function faqEntries()
+    {
+        return $this->hasMany(FaqEntry::class)->orderBy('sort_order');
+    }
+
     public function tags()
     {
         return $this->belongsToMany(Tag::class, 'event_template_tag');
@@ -504,6 +509,7 @@ class EventTemplate extends Model
         'start_place_id',
         'end_place_id',
         'transport_notes',
+        'featured_image_alt',
         'seo_title',
         'seo_description',
         'seo_keywords',

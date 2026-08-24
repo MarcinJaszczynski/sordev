@@ -831,6 +831,7 @@ class FrontController extends Controller
             'eventTypes' => $eventTypes,
             'countries' => $countries,
             'trip_types' => $eventTypes,
+            'homeFaqs' => app(\App\Services\FaqQueryService::class)->forHome(),
             // Ensure view has sliders variable even if slider section is commented out or feature disabled
             'sliders' => collect(),
         ]);
@@ -1601,6 +1602,26 @@ class FrontController extends Controller
             'prevPackage' => $prevPackage,
             'nextPackage' => $nextPackage,
             'priceRanges' => $priceRanges,
+            'packageFaqs' => app(\App\Services\FaqQueryService::class)->forPackage($eventTemplate->id),
+            'schemaGraph' => [
+                \App\Support\Seo\SchemaBuilder::breadcrumbList([
+                    ['name' => 'Start', 'url' => route('home', ['regionSlug' => $regionSlug])],
+                    ['name' => 'Wycieczki szkolne', 'url' => route('packages', ['regionSlug' => $regionSlug])],
+                    ['name' => $eventTemplate->duration_days.'-dniowe', 'url' => route('packages', ['regionSlug' => $regionSlug, 'length_id' => $eventTemplate->duration_days])],
+                    ['name' => $eventTemplate->name, 'url' => $eventTemplate->prettyUrl($startPlaceId ? (int) $startPlaceId : null)],
+                ]),
+                \App\Support\Seo\SchemaBuilder::touristTrip(
+                    $eventTemplate,
+                    $eventTemplate->prettyUrl($startPlaceId ? (int) $startPlaceId : null),
+                    $eventTemplate->computed_price
+                ),
+                \App\Support\Seo\SchemaBuilder::product(
+                    $eventTemplate,
+                    $eventTemplate->computed_price,
+                    $eventTemplate->prettyUrl($startPlaceId ? (int) $startPlaceId : null)
+                ),
+                \App\Support\Seo\SchemaBuilder::faqPage(app(\App\Services\FaqQueryService::class)->forPackage($eventTemplate->id)),
+            ],
         ]);
     }
 

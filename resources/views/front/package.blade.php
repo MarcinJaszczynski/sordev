@@ -1,7 +1,10 @@
 @extends('front.layout.master')
 
 @section('head')
-    @include('front.partials.seo')
+    @include('front.partials.seo', ['start_place_id' => $start_place_id ?? null, 'og_type' => 'product'])
+    @if(!empty($schemaGraph))
+        <x-seo.json-ld :schemas="$schemaGraph" />
+    @endif
 @endsection
 
 @section('main_content')
@@ -73,16 +76,16 @@
             <div class="column-left">
                 @php
                     $photoPath = $item->full_image_url ?: asset('uploads/default.png');
-                    $photoAlt = $item->name ?: 'Zdjęcie oferty';
+                    $photoAlt = $item->featured_image_alt ?: ($item->name ?: 'Zdjęcie oferty wycieczki szkolnej');
                 @endphp
                 <div class="display-photo" style="min-height: 300px; aspect-ratio: 16 / 10; overflow: hidden; border-radius: 6px;">
                     <img src="{{ $photoPath }}" alt="{{ $photoAlt }}" style="width: 100%; height: 100%; object-fit: cover; object-position: center; display: block;" fetchpriority="high" decoding="async">
                 </div></div>
             <div class="column-right">
                 <div class="title-section">
-                    <div class="title">
+                    <h1 class="title">
                         {{ $item->name }}
-                    </div>
+                    </h1>
                     <div class="length">
                         {{ $item->subtitle }}
                     </div>
@@ -651,6 +654,12 @@
             </div>
         </div>
         </div>
+
+        @if(isset($packageFaqs) && $packageFaqs->isNotEmpty())
+            <div class="container pb_50">
+                <x-seo.faq-section :faqs="$packageFaqs" title="Pytania o tę wycieczkę" idPrefix="package-faq" />
+            </div>
+        @endif
 
     <script>
         document.addEventListener("DOMContentLoaded", function () {

@@ -34,8 +34,8 @@
         })(window,document,'script','dataLayer','GTM-WNP7LFQC');</script>
         <!-- End Google Tag Manager -->
     @php
-        $defaultTitle = 'Biuro Podróży RAFA – wycieczki szkolne i wyjazdy firmowe';
-        $defaultDescription = 'Biuro Podróży RAFA organizuje wycieczki szkolne, zielone szkoły i wyjazdy integracyjne dla firm w całej Polsce i Europie. Sprawdź ofertę turystyki szkolnej i wyjazdów na zamówienie.';
+        $defaultTitle = \App\Models\SeoSetting::organization()['default_title'] ?? 'Biuro Podróży RAFA – wycieczki szkolne i wyjazdy firmowe';
+        $defaultDescription = \App\Models\SeoSetting::organization()['default_description'] ?? 'Biuro Podróży RAFA organizuje wycieczki szkolne, zielone szkoły i wyjazdy integracyjne dla firm w całej Polsce i Europie.';
         $baseKeywords = [
             'biuro podróży rafa',
             'wycieczki szkolne',
@@ -47,41 +47,9 @@
         ];
         $defaultKeywords = implode(', ', $baseKeywords);
         $defaultCanonical = request()->getUri();
-        $defaultOgImage = asset('uploads/logo.png');
-        $siteUrl = config('app.url') ?: request()->getSchemeAndHttpHost();
-        $organizationSchema = [
-            '@context' => 'https://schema.org',
-            '@type' => 'TravelAgency',
-            'name' => 'Biuro Podróży RAFA',
-            'url' => $siteUrl,
-            'sameAs' => [
-                'https://bprafa.pl',
-                'https://www.facebook.com/biuropodrozyrafa/',
-                'https://www.instagram.com/biuropodrozyrafa/'
-            ],
-            'logo' => $defaultOgImage,
-            'description' => $defaultDescription,
-            'telephone' => '+48 606 102 243',
-            'email' => 'mailto:rafa@bprafa.pl',
-            'address' => [
-                '@type' => 'PostalAddress',
-                'streetAddress' => 'Marii Konopnickiej 6',
-                'addressLocality' => 'Warszawa',
-                'postalCode' => '00-491',
-                'addressCountry' => 'PL'
-            ],
-            'areaServed' => [
-                ['@type' => 'AdministrativeArea', 'name' => 'Polska']
-            ],
-            'openingHoursSpecification' => [
-                [
-                    '@type' => 'OpeningHoursSpecification',
-                    'dayOfWeek' => ['Monday','Tuesday','Wednesday','Thursday','Friday'],
-                    'opens' => '09:00',
-                    'closes' => '17:00'
-                ]
-            ]
-        ];
+        $defaultOgImage = asset(\App\Models\SeoSetting::organization()['og_image'] ?? 'uploads/logo.png');
+        $organizationSchema = \App\Support\Seo\SchemaBuilder::travelAgency();
+        $websiteSchema = \App\Support\Seo\SchemaBuilder::webSite();
     @endphp
 
     @hasSection('head')
@@ -104,6 +72,9 @@
 
     <script type="application/ld+json">
         {!! json_encode($organizationSchema, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES | JSON_PRETTY_PRINT) !!}
+    </script>
+    <script type="application/ld+json">
+        {!! json_encode($websiteSchema, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES | JSON_PRETTY_PRINT) !!}
     </script>
 
 
@@ -263,6 +234,7 @@
                     <h2 class="heading">Na skróty:</h2>
                     <ul class="useful-links">
                         <li><a href="{{ route('home')}}"><i class="fas fa-angle-right"></i> Strona główna</a></li>
+                        <li><a href="{{ route('about.global')}}"><i class="fas fa-angle-right"></i> O nas</a></li>
                         <li><a href="{{ route('packages') }}"><i class="fas fa-angle-right"></i> Pełna oferta wycieczek 2025/2026</a></li>
                         <li><a href="{{ route('blog.global')}}"><i class="fas fa-angle-right"></i> Aktualności</a></li>
                     </ul>
