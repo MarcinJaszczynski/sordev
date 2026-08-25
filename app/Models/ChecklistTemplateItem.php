@@ -11,7 +11,15 @@ class ChecklistTemplateItem extends Model
         'checklist_template_id',
         'title',
         'description',
+        'input_type',
+        'input_label',
+        'input_required',
+        'input_unit',
         'sort_order',
+    ];
+
+    protected $casts = [
+        'input_required' => 'boolean',
     ];
 
     public function template(): BelongsTo

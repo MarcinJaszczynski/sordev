@@ -34,14 +34,6 @@ class TasksRelationManager extends RelationManager
 
     protected static ?string $title = 'Zadania';
 
-    public function mount(): void
-    {
-        $this->mountInteractsWithTaskEditModal();
-        if (method_exists($this, 'bootInteractsWithTaskListQuickActions')) {
-            $this->bootInteractsWithTaskListQuickActions();
-        }
-    }
-
     public function table(Table $table): Table
     {
         return $table

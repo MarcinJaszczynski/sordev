@@ -4,6 +4,7 @@ namespace App\Models;
 
 use App\Models\Concerns\HasStickyNotes;
 use App\Models\Concerns\HasTasks;
+use App\Support\CurrencyAmountDisplay;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
@@ -87,6 +88,8 @@ class EventSettlementCost extends Model
         'manual' => 'Nieprzewidziany',
         'transport' => 'Transport',
         'accommodation' => 'Nocleg',
+        'accommodation_hotel' => 'Nocleg (hotel)',
+        'accommodation_hotel_stay' => 'Nocleg (noc)',
         'insurance_day' => 'Ubezpieczenie',
     ];
 
@@ -293,7 +296,7 @@ class EventSettlementCost extends Model
             return false;
         }
 
-        return in_array($sourceType, ['program_point', 'transport', 'accommodation', 'insurance_day', 'manual'], true);
+        return in_array($sourceType, ['program_point', 'transport', 'accommodation', 'accommodation_hotel', 'accommodation_hotel_stay', 'insurance_day', 'manual'], true);
     }
 
     public static function isManualPaymentRow(self $cost): bool
@@ -354,6 +357,21 @@ class EventSettlementCost extends Model
             $plan = static::query()
                 ->where('settlement_id', $settlementId)
                 ->where('source_type', $planType)
+                ->whereNull('deleted_at')
+                ->orderBy('id')
+                ->first();
+
+            if ($plan) {
+                return $plan;
+            }
+        }
+
+        if (in_array($this->source_type, ['accommodation_hotel_payment', 'accommodation_hotel_stay_payment'], true) && $this->source_id) {
+            $planType = str_replace('_payment', '', $this->source_type);
+            $plan = static::query()
+                ->where('settlement_id', $settlementId)
+                ->where('source_type', $planType)
+                ->where('source_id', (int) $this->source_id)
                 ->whereNull('deleted_at')
                 ->orderBy('id')
                 ->first();
@@ -489,9 +507,14 @@ class EventSettlementCost extends Model
     {
         static::saving(function (self $model) {
             // auto-przelicz PLN przy zmianie kwoty lub kursu
-            if ($model->isDirty(['actual_amount', 'actual_rate']) && $model->actual_amount !== null) {
-                $rate = $model->actual_rate ?? $model->planned_rate ?? 1;
-                $model->actual_amount_pln = $model->actual_amount * $rate;
+            if ($model->isDirty(['actual_amount', 'actual_rate', 'actual_currency_id', 'planned_convert_to_pln']) && $model->actual_amount !== null) {
+                $isForeign = CurrencyAmountDisplay::isForeignCurrency($model->actual_currency_id);
+                if ($isForeign && ! (bool) ($model->planned_convert_to_pln ?? true)) {
+                    $model->actual_amount_pln = null;
+                } else {
+                    $rate = $model->actual_rate ?? $model->planned_rate ?? 1;
+                    $model->actual_amount_pln = $model->actual_amount * $rate;
+                }
             }
             if ($model->isDirty(['planned_amount', 'planned_rate', 'planned_convert_to_pln', 'planned_currency_id'])) {
                 $model->planned_amount_pln = $model->resolvePlannedAmountPln();

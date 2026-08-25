@@ -10,7 +10,7 @@ use Illuminate\Support\Facades\Schema;
 class EventOrderingPartyService
 {
     /**
-     * @return array<int, array{contact_id: int|null, contractor_id: int|null, department_label: string|null, notes: string|null}>
+     * @return array<int, array{contact_id: int|null, contractor_id: int|null, department_label: string|null, notes: string|null, goes_on_trip: bool}>
      */
     public function partiesToFormState(Event $event): array
     {
@@ -33,6 +33,9 @@ class EventOrderingPartyService
                     'notes' => Schema::hasColumn('event_contractor', 'notes')
                         ? ($contractor->pivot->notes ?: null)
                         : null,
+                    'goes_on_trip' => Schema::hasColumn('event_contractor', 'goes_on_trip')
+                        ? (bool) ($contractor->pivot->goes_on_trip ?? false)
+                        : false,
                 ])
                 ->values()
                 ->all();
@@ -44,6 +47,7 @@ class EventOrderingPartyService
                 'contractor_id' => $event->contractor_id ? (int) $event->contractor_id : null,
                 'department_label' => null,
                 'notes' => null,
+                'goes_on_trip' => true,
             ]];
         }
 
@@ -80,10 +84,78 @@ class EventOrderingPartyService
                 $pivot['notes'] = $party['notes'];
             }
 
+            if (Schema::hasColumn('event_contractor', 'goes_on_trip')) {
+                $pivot['goes_on_trip'] = (bool) ($party['goes_on_trip'] ?? false);
+            }
+
             $event->orderingContractors()->attach($party['contractor_id'], $pivot);
         }
 
+        $this->ensureSingleTripContactFlag($event);
+
         $event->syncPrimaryClientFromOrderingParties();
+    }
+
+    /**
+     * Dokładnie jeden zamawiający z flagą „jedzie na wyjazd” (domyślnie pierwszy).
+     */
+    public function ensureSingleTripContactFlag(Event $event): void
+    {
+        if (! Schema::hasTable('event_contractor') || ! Schema::hasColumn('event_contractor', 'goes_on_trip')) {
+            return;
+        }
+
+        $rows = $event->orderingContractors()->orderByPivot('sort_order')->get();
+        if ($rows->isEmpty()) {
+            return;
+        }
+
+        $marked = $rows->filter(fn (Contractor $c): bool => (bool) ($c->pivot->goes_on_trip ?? false));
+
+        $targetId = $marked->count() === 1
+            ? (int) $marked->first()->id
+            : (int) $rows->first()->id;
+
+        foreach ($rows as $contractor) {
+            $should = (int) $contractor->id === $targetId;
+            if ((bool) ($contractor->pivot->goes_on_trip ?? false) !== $should) {
+                $event->orderingContractors()->updateExistingPivot($contractor->id, [
+                    'goes_on_trip' => $should,
+                ]);
+            }
+        }
+    }
+
+    /**
+     * Zamawiający oznaczony jako kontakt na wyjeździe (dla pilota).
+     *
+     * @return array{contractor: Contractor, contact: ?Contact}|null
+     */
+    public function tripContactForEvent(Event $event): ?array
+    {
+        if (! Schema::hasTable('event_contractor')) {
+            return null;
+        }
+
+        $event->loadMissing('orderingContractors');
+
+        if ($event->orderingContractors->isEmpty()) {
+            return null;
+        }
+
+        $contractor = $event->orderingContractors
+            ->first(fn (Contractor $c): bool => (bool) ($c->pivot->goes_on_trip ?? false))
+            ?? $event->orderingContractors->first();
+
+        $contactId = Schema::hasColumn('event_contractor', 'contact_id')
+            ? (int) ($contractor->pivot->contact_id ?? 0)
+            : 0;
+        $contact = $contactId > 0 ? Contact::query()->find($contactId) : null;
+
+        return [
+            'contractor' => $contractor,
+            'contact' => $contact,
+        ];
     }
 
     /**
@@ -348,11 +420,11 @@ class EventOrderingPartyService
 
     /**
      * @param  array<int, array<string, mixed>>|null  $parties
-     * @return array<int, array{contact_id: int|null, contractor_id: int, department_label: string|null, notes: string|null}>
+     * @return array<int, array{contact_id: int|null, contractor_id: int, department_label: string|null, notes: string|null, goes_on_trip: bool}>
      */
     public function normalizeParties(?array $parties): array
     {
-        return collect($parties ?? [])
+        $normalized = collect($parties ?? [])
             ->map(function (array $party): ?array {
                 $contractorId = isset($party['contractor_id']) ? (int) $party['contractor_id'] : null;
 
@@ -369,11 +441,29 @@ class EventOrderingPartyService
                     'notes' => filled($party['notes'] ?? null)
                         ? trim((string) $party['notes'])
                         : null,
+                    'goes_on_trip' => (bool) ($party['goes_on_trip'] ?? false),
                 ];
             })
             ->filter()
             ->values()
             ->all();
+
+        if ($normalized === []) {
+            return [];
+        }
+
+        $tripIndexes = collect($normalized)
+            ->keys()
+            ->filter(fn (int $index): bool => (bool) ($normalized[$index]['goes_on_trip'] ?? false))
+            ->values();
+
+        $tripIndex = $tripIndexes->count() === 1 ? (int) $tripIndexes->first() : 0;
+
+        foreach (array_keys($normalized) as $index) {
+            $normalized[$index]['goes_on_trip'] = $index === $tripIndex;
+        }
+
+        return $normalized;
     }
 
     /**

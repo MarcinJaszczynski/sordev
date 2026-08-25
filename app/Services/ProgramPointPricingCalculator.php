@@ -207,8 +207,8 @@ final class ProgramPointPricingCalculator
 
         if ($breakdown['currency_code'] !== 'PLN') {
             $lines[] = (bool) ($breakdown['convert_to_pln'] ?? false)
-                ? 'W kalkulacji PLN: tak (kurs × kwota)'
-                : 'W kalkulacji PLN: nie (kwota tylko w '.$breakdown['currency_code'].')';
+                ? 'W szablonie PLN: tak (kurs × kwota)'
+                : 'W szablonie PLN: nie (kwota tylko w '.$breakdown['currency_code'].')';
         }
 
         return implode("\n", $lines);

@@ -2,7 +2,9 @@
 
 namespace App\Http\Middleware;
 
+use App\Models\Event;
 use App\Models\User;
+use App\Services\PilotContractorAssignmentService;
 use Closure;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
@@ -23,8 +25,11 @@ class PilotPreviewMiddleware
         if ($canPreview && $request->boolean('preview')) {
             session([self::SESSION_MODE => true]);
 
-            if ($request->filled('pilot')) {
-                $pilotId = (int) $request->query('pilot');
+            $pilotId = $request->filled('pilot')
+                ? (int) $request->query('pilot')
+                : $this->resolvePilotIdFromRoute($request);
+
+            if ($pilotId) {
                 $pilot = User::query()->find($pilotId);
                 if ($pilot && $pilot->hasRole('pilot')) {
                     session([self::SESSION_USER_ID => $pilot->id]);
@@ -32,7 +37,12 @@ class PilotPreviewMiddleware
                         'staff_user_id' => $user->id,
                         'pilot_user_id' => $pilot->id,
                     ]);
+                } else {
+                    session()->forget(self::SESSION_USER_ID);
                 }
+            } else {
+                // Bez ?pilot= nie trzymaj poprzedniego pilota z innej imprezy / sesji.
+                session()->forget(self::SESSION_USER_ID);
             }
         }
 
@@ -55,6 +65,31 @@ class PilotPreviewMiddleware
         }
 
         return $next($request);
+    }
+
+    /**
+     * Gdy ?preview=1 bez ?pilot=, spróbuj wyciągnąć pilota z imprezy w URL
+     * (np. /pilot/pilot-events/{record}?preview=1).
+     */
+    private function resolvePilotIdFromRoute(Request $request): ?int
+    {
+        foreach (['record', 'event'] as $param) {
+            $value = $request->route($param);
+            if ($value instanceof Event) {
+                return app(PilotContractorAssignmentService::class)
+                    ->resolvePortalUserIdForEvent($value);
+            }
+
+            if (is_numeric($value)) {
+                $event = Event::query()->find((int) $value);
+
+                return $event
+                    ? app(PilotContractorAssignmentService::class)->resolvePortalUserIdForEvent($event)
+                    : null;
+            }
+        }
+
+        return null;
     }
 
     public static function isActive(): bool

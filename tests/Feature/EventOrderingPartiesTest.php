@@ -343,4 +343,71 @@ class EventOrderingPartiesTest extends TestCase
         $ids = array_map('strval', array_keys($withSearch));
         $this->assertSame((string) $linked->id, $ids[0], 'Kontakt firmy powinien być pierwszy.');
     }
+
+    public function test_only_one_ordering_party_can_be_marked_as_trip_contact(): void
+    {
+        if (! Schema::hasTable('event_contractor') || ! Schema::hasColumn('event_contractor', 'goes_on_trip')) {
+            $this->markTestSkipped('Kolumna goes_on_trip nie istnieje w tym środowisku testowym.');
+        }
+
+        $user = User::factory()->create();
+        $template = EventTemplate::factory()->create();
+
+        $primary = Contractor::create(['name' => 'Szkoła główna', 'status' => 'active']);
+        $secondary = Contractor::create(['name' => 'Rodzic na wyjeździe', 'status' => 'active']);
+
+        $primaryContact = Contact::create([
+            'first_name' => 'Anna',
+            'last_name' => 'Nauczyciel',
+            'phone' => '111111111',
+        ]);
+        $secondaryContact = Contact::create([
+            'first_name' => 'Jan',
+            'last_name' => 'Rodzic',
+            'phone' => '222222222',
+        ]);
+
+        $event = Event::create([
+            'event_template_id' => $template->id,
+            'name' => 'Wycieczka z kontaktem',
+            'client_name' => 'Anna Nauczyciel',
+            'start_date' => now()->toDateString(),
+            'end_date' => now()->addDay()->toDateString(),
+            'participant_count' => 30,
+            'total_cost' => 1000,
+            'status' => 'confirmed',
+            'created_by' => $user->id,
+        ]);
+
+        $service = app(EventOrderingPartyService::class);
+        $service->syncForEvent($event, [
+            [
+                'contractor_id' => $primary->id,
+                'contact_id' => $primaryContact->id,
+                'department_label' => null,
+                'notes' => null,
+                'goes_on_trip' => false,
+            ],
+            [
+                'contractor_id' => $secondary->id,
+                'contact_id' => $secondaryContact->id,
+                'department_label' => null,
+                'notes' => 'Rodzic jadący',
+                'goes_on_trip' => true,
+            ],
+        ]);
+
+        $event->refresh()->load('orderingContractors');
+
+        $marked = $event->orderingContractors->filter(
+            fn (Contractor $contractor): bool => (bool) ($contractor->pivot->goes_on_trip ?? false)
+        );
+        $this->assertCount(1, $marked);
+        $this->assertSame($secondary->id, $marked->first()->id);
+
+        $tripContact = $service->tripContactForEvent($event);
+        $this->assertNotNull($tripContact);
+        $this->assertSame($secondary->id, $tripContact['contractor']->id);
+        $this->assertSame($secondaryContact->id, $tripContact['contact']?->id);
+    }
 }

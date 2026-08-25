@@ -208,7 +208,7 @@ class PendingPaymentsInboxPage extends Page
         $plan = $cost->resolvePlanCostForPayment();
         if (EventSettlementCost::isPaymentSourceType($plan->source_type)) {
             Notification::make()
-                ->title('Brak pozycji planu do zaksięgowania wpłaty')
+                ->title('Brak kosztu do zaksięgowania wpłaty')
                 ->body('Otwórz Finanse imprezy i dodaj wpłatę ręcznie.')
                 ->warning()
                 ->send();

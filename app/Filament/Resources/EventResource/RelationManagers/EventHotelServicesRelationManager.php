@@ -60,6 +60,7 @@ class EventHotelServicesRelationManager extends RelationManager
         $this->settlementCostCache = null;
         $this->programPointFinanceViewDataCache = [];
         $this->resetTable();
+        $this->dispatchSettlementFinanceChanged();
     }
 
     protected function settlementCosts(): ProgramPointSettlementCostCache
@@ -171,7 +172,7 @@ class EventHotelServicesRelationManager extends RelationManager
                 ]),
 
                 Forms\Components\Toggle::make('include_in_program')
-                    ->label('Pokaż w programie')
+                    ->label('W programie')
                     ->helperText('Czy ta usługa ma być widoczna w programie imprezy.')
                     ->default(true)
                     ->inline(false),
@@ -336,7 +337,7 @@ class EventHotelServicesRelationManager extends RelationManager
                     ->after(fn () => $this->afterPersist()),
             ])
             ->emptyStateHeading('Brak dodatkowych usług hotelu')
-            ->emptyStateDescription('Dodaj usługi takie jak bankiet, obiad czy DJ — zostaną policzone w kalkulacji i przypisane do hotelu.')
+            ->emptyStateDescription('Dodaj usługi takie jak bankiet, obiad czy DJ — zostaną policzone w kosztach i przypisane do hotelu.')
             ->emptyStateIcon('heroicon-o-sparkles');
     }
 

@@ -4,7 +4,7 @@
         'kicker' => 'Informacje',
     ])
 
-    <div class="client-portal-section">
-        {{ $this->infolist }}
-    </div>
+    @include('filament.pilot.partials.trip-info-cards', [
+        'event' => $this->record,
+    ])
 </x-filament-panels::page>

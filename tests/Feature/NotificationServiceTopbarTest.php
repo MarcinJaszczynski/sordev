@@ -589,14 +589,14 @@ class NotificationServiceTopbarTest extends TestCase
         $before = NotificationService::getTopbarDataForUser($assignee->id, fresh: true);
         $this->assertSame(1, $before['counts']['comments']);
 
+        // Otwarcie modala (z dowolnego poziomu) od razu czyści powiadomienia.
         Livewire::actingAs($assignee)
             ->test(\App\Filament\Resources\TaskResource\Pages\ListTasks::class)
-            ->call('openEditTaskModal', $task->id)
-            ->call('callMountedAction');
+            ->call('openEditTaskModal', $task->id);
 
-        $afterClose = NotificationService::getTopbarDataForUser($assignee->id, fresh: true);
-        $this->assertSame(0, $afterClose['counts']['comments']);
-        $this->assertSame([], $afterClose['items_by_type']['comment']);
+        $afterOpen = NotificationService::getTopbarDataForUser($assignee->id, fresh: true);
+        $this->assertSame(0, $afterOpen['counts']['comments']);
+        $this->assertSame([], $afterOpen['items_by_type']['comment']);
     }
 
     public function test_invoice_request_for_finance_roles(): void

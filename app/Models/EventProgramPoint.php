@@ -393,6 +393,14 @@ class EventProgramPoint extends Model
             return $fromStay;
         }
 
+        if (
+            $this->relationLoaded('reservations')
+            && $this->relationLoaded('hotelStays')
+            && ($this->relationLoaded('sharedReservation') || ! filled($this->reservation_id))
+        ) {
+            return null;
+        }
+
         return app(\App\Services\ProgramPointReservationSync::class)->findForPoint($this);
     }
 

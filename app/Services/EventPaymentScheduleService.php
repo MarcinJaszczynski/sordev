@@ -435,7 +435,7 @@ class EventPaymentScheduleService
             return null;
         }
 
-        $amountKind = $kind === 'plan' ? 'advance' : $kind;
+        $amountKind = 'advance_paid';
         $remaining = $this->remainingAfterAdvance($cost);
         $remainingLabel = $remaining > 0.009
             ? CurrencyAmountDisplay::format(
@@ -469,11 +469,8 @@ class EventPaymentScheduleService
     private function remainingAfterAdvance(EventSettlementCost $cost): float
     {
         $planned = round((float) ($cost->planned_amount ?? 0), 2);
-        $paid = round((float) ($cost->advance_amount ?? 0), 2);
-
-        if ($paid <= 0.009) {
-            $paid = round((float) ($cost->actual_amount ?? 0), 2);
-        }
+        // Tylko zaksięgowana kwota — planowana zaliczka (advance_amount) nie jest wpłatą.
+        $paid = round((float) ($cost->actual_amount ?? 0), 2);
 
         return max(0.0, round($planned - $paid, 2));
     }
@@ -495,13 +492,20 @@ class EventPaymentScheduleService
             || in_array($cost->payment_status, ['advance_required', 'reserved', 'advance_paid'], true);
     }
 
+    /**
+     * Zaliczka jest „zapłacona” tylko gdy jest zaksięgowana kwota (actual),
+     * nie na podstawie samej flagi payment_status / paid_at.
+     */
     private function isAdvanceMarkedPaid(EventSettlementCost $cost): bool
     {
-        if (in_array($cost->payment_status, ['advance_paid'], true)) {
-            return true;
+        $booked = round((float) ($cost->actual_amount ?? 0), 2);
+
+        if ($booked <= 0.009) {
+            return false;
         }
 
-        return filled($cost->paid_at) && $this->looksLikeDeposit($cost);
+        return SettlementPaymentHealthService::isBookedPaymentStatus($cost->payment_status)
+            || filled($cost->paid_at);
     }
 
     /**
@@ -630,12 +634,18 @@ class EventPaymentScheduleService
 
     private function isSettlementCostOutstanding(EventSettlementCost $cost, string $kind): bool
     {
-        if (in_array($cost->payment_status, ['paid', 'cancelled'], true)) {
+        if (in_array($cost->payment_status, ['cancelled'], true)) {
             return false;
         }
 
         if ($kind === 'advance') {
-            if (filled($cost->paid_at) || in_array($cost->payment_status, ['advance_paid', 'paid'], true)) {
+            // Flaga advance_paid bez actual ≠ zapłacone — wiersz ma zostać jako „do zapłaty”.
+            if ($this->isAdvanceMarkedPaid($cost)) {
+                return false;
+            }
+
+            if (in_array($cost->payment_status, ['paid'], true)
+                && round((float) ($cost->actual_amount ?? 0), 2) > 0.009) {
                 return false;
             }
         }
@@ -646,13 +656,21 @@ class EventPaymentScheduleService
             }
         }
 
+        if ($kind === 'plan' && in_array($cost->payment_status, ['paid'], true)
+            && round((float) ($cost->actual_amount ?? 0), 2) > 0.009) {
+            return false;
+        }
+
         return true;
     }
 
     private function formatSettlementCostAmount(EventSettlementCost $cost, string $kind): string
     {
         $amount = match ($kind) {
-            'advance', 'advance_paid' => (float) ($cost->advance_amount ?? 0) > 0.009
+            'advance_paid' => (float) ($cost->actual_amount ?? 0) > 0.009
+                ? (float) $cost->actual_amount
+                : (float) ($cost->advance_amount ?? 0),
+            'advance' => (float) ($cost->advance_amount ?? 0) > 0.009
                 ? (float) $cost->advance_amount
                 : (float) ($cost->planned_amount ?? 0),
             default => (float) ($cost->planned_amount ?? $cost->advance_amount ?? 0),

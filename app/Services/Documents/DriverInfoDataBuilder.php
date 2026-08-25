@@ -79,13 +79,13 @@ final class DriverInfoDataBuilder
             'pickup' => $this->pickupBlock($event),
             'departure' => $this->departureBlock($event),
             'return' => $this->returnBlock($event),
-            'passengerSummary' => sprintf(
-                '%d + %d pilot',
-                $participantCount + $gratis + $staff,
-                $event->assigned_to ? 1 : 0
-            ),
+            // Format operacyjny dla kierowcy: „16+1” = uczestnicy + opiekunowie/gratis.
+            'passengerSummary' => sprintf('%d+%d', $participantCount, $gratis),
+            'participantCompactLine' => sprintf('%d+%d', $participantCount, $gratis),
             'participantSummaryLine' => sprintf(
-                '%d uczestników + %d %s; obsługa: %d; kierowca(y): %d',
+                '%d+%d os. (%d uczestn. + %d %s; obsługa: %d; kierowca: %d)',
+                $participantCount,
+                $gratis,
                 $participantCount,
                 $gratis,
                 mb_strtolower(EventParticipantGroupLabels::GRATIS_GENITIVE),

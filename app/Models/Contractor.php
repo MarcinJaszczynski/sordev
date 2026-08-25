@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use App\Enums\ContractorSettlementForm;
 use App\Models\Concerns\HasStickyNotes;
 use App\Models\Concerns\HasTasks;
 use Illuminate\Database\Eloquent\Builder;
@@ -43,6 +44,8 @@ class Contractor extends Model
         'email',
         'phone',
         'nip',
+        'bank_account',
+        'settlement_form',
         'www',
         'street',
         'house_number',
@@ -61,6 +64,7 @@ class Contractor extends Model
     protected $casts = [
         'birth_date' => 'date',
         'uses_business_locations' => 'boolean',
+        'settlement_form' => ContractorSettlementForm::class,
     ];
 
     /**
@@ -152,6 +156,14 @@ class Contractor extends Model
     }
 
     /**
+     * Noclegi hotelowe przypisane do tego kontrahenta
+     */
+    public function hotelStays(): HasMany
+    {
+        return $this->hasMany(EventHotelStay::class);
+    }
+
+    /**
      * Imprezy, w których kontrahent jest zamawiającym
      */
     public function orderingEvents()
@@ -159,6 +171,29 @@ class Contractor extends Model
         return $this->belongsToMany(Event::class, 'event_contractor')
             ->withPivot('sort_order')
             ->withTimestamps();
+    }
+
+    /**
+     * Imprezy z legacy FK events.contractor_id (główny klient)
+     */
+    public function clientEvents(): HasMany
+    {
+        return $this->hasMany(Event::class, 'contractor_id');
+    }
+
+    public function transportEvents(): HasMany
+    {
+        return $this->hasMany(Event::class, 'transport_contractor_id');
+    }
+
+    public function driverEvents(): HasMany
+    {
+        return $this->hasMany(Event::class, 'driver_contractor_id');
+    }
+
+    public function pilotEvents(): HasMany
+    {
+        return $this->hasMany(Event::class, 'pilot_contractor_id');
     }
 
     /**
@@ -172,6 +207,11 @@ class Contractor extends Model
     public function vendorInvoices()
     {
         return $this->hasMany(VendorInvoice::class);
+    }
+
+    public function vehicles(): HasMany
+    {
+        return $this->hasMany(Vehicle::class)->orderBy('registration_number');
     }
 
     public function locations(): HasMany

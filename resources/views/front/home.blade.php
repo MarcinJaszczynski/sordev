@@ -584,7 +584,7 @@
                 <div class="intro">
                     <div class="intro-1"> Wycieczki Szkolne i Wyjazdy Grupowe</div><div class="intro-2">&nbsp;z całej Polski</div>
                 </div>
-                <div class="intro-a"><p><div style="font-size: larger"><b>Witamy na stronie Biura Podróży RAFA – profesjonalnego organizatora wycieczek szkolnych, wyjazdów integracyjnych i wycieczek edukacyjnych w Polsce i za granicą.</b></div><p><br> Jako doświadczony lider w branży turystycznej, oferujemy kompleksową obsługę wycieczek ze wszystkich województw.<br>Z nami każda podróż staje się niezapomnianą przygodą! <a href="{{ route('about.global') }}">Poznaj nas bliżej →</a></p></div>
+                <div class="intro-a"><p><div style="font-size: larger"><b>Witamy na stronie Biura Podróży RAFA – profesjonalnego organizatora wycieczek szkolnych, wyjazdów integracyjnych i wycieczek edukacyjnych w Polsce i za granicą.</b></div><p><br> Jako doświadczony lider w branży turystycznej, oferujemy kompleksową obsługę wycieczek ze wszystkich województw.<br>Z nami każda podróż staje się niezapomnianą przygodą! <a href="{{ route('about.global') }}">Poznaj nas bliżej →</a> · <a href="{{ route('guide.global') }}">Poradnik przed wyjazdem →</a></p></div>
             </div>
             <div class="illustration" >
                 <img src="{{ asset('uploads/description-illustration.svg')}}" alt=""> </div>
@@ -593,37 +593,32 @@
 
         <div class="second-box">
             <div class="offer">
-                <div style="font-size: larger"><b>Nasza oferta obejmuje szeroką gamę wyjazdów szkolnych, które łączą edukację z rozrywką.</b></div>
-                <p>Proponujemy wycieczki krajowe 1-dniowe, 2-dniowe, 3-dniowe, 4-dniowe oraz 5-dniowe, a także zagraniczne wycieczki szkolne do popularnych europejskich destynacji, takich jak Praga, Rzym, Berlin, Wiedeń czy Paryż. Organizujemy wyjazdy dla grup z całej Polski.</p>
-                <h5 class="mb-2"><b>Nasza oferta</b></h5>
+                <div style="font-size: larger"><b>Organizujemy wycieczki szkolne i wyjazdy grupowe w całej Polsce i Europie.</b></div>
+                <p>
+                    Przygotowujemy programy 1–5 dniowe oraz wyjazdy dłuższe, dopasowane do wieku uczestników, budżetu i celu wyjazdu.
+                    Realizujemy zarówno klasyczne wycieczki edukacyjne, jak i zielone szkoły oraz wyjazdy integracyjne dla firm.
+                </p>
                 <ul>
-                    <li><b>Wycieczki szkolne w Polsce</b> – odkryj piękno kraju z Biurem Podróży RAFA! Organizujemy wyjazdy edukacyjne i krajoznawcze do wszystkich regionów Polski – od górskich szlaków w Bieszczadach, Tatrach i Sudetach, przez malownicze parki narodowe, po nadmorskie kurorty Bałtyku. W naszej ofercie znajdują się zarówno wycieczki do najpiękniejszych polskich miast – Krakowa, Warszawy, Wrocławia, Gdańska czy Poznania – jak i wyprawy do miejsc pełnych natury, legend i historii. Z nami każda szkoła może odkrywać Polskę na nowo, w sposób ciekawy, bezpieczny i dopasowany do wieku oraz potrzeb uczniów.</li>
-                    <li><b>Wycieczki zagraniczne</b> – odkrywaj Europę z Biurem Podróży RAFA! Organizujemy szkolne wyjazdy do najpiękniejszych europejskich stolic i miast pełnych historii, kultury i atrakcji turystycznych. W naszej ofercie znajdują się wycieczki do Pragi, Berlina, Paryża, Londynu czy Rzymu, a także wielu innych miejsc w całej Europie. Podczas podróży uczniowie poznają najciekawsze zabytki, odkryją lokalne legendy i kulturę oraz przeżyją niezapomniane chwile w międzynarodowej atmosferze. Z nami każde zwiedzanie staje się fascynującą lekcją historii i geografii w terenie.</li>
-                    <li><b>Wycieczki tematyczne</b> – ucz się i baw z Biurem Podróży RAFA! Oprócz klasycznych programów oferujemy wyjątkowe wyjazdy tematyczne, które łączą naukę, aktywność i zabawę. Organizujemy wycieczki edukacyjne, podczas których uczniowie poszerzają wiedzę w praktyce, wyjazdy integracyjne budujące współpracę i przyjaźnie, a także pełne emocji spływy kajakowe i rajdy rowerowe. W programach nie brakuje także wizyt w parkach rozrywki i parkach tematycznych, które dostarczają niezapomnianych emocji i integrują grupę w atmosferze beztroskiej zabawy.</li>
+                    <li><b>Wycieczki szkolne krajowe i zagraniczne</b> z pełną organizacją transportu, noclegów i programu.</li>
+                    <li><b>Wyjazdy firmowe i integracyjne</b> z indywidualnym scenariuszem i opieką koordynatora.</li>
+                    <li><b>Programy szyte na miarę</b> — od zapytania po realizację i wsparcie dokumentacyjne.</li>
                 </ul>
-                <div class="link"><a href="{{ route('packages') }}"> <i class="fas fa-arrow-circle-right"></i></a></div>
+                <p>
+                    Zobacz szczegółowe informacje o naszym doświadczeniu, standardach bezpieczeństwa i modelu współpracy na stronie
+                    <a href="{{ route('about.global') }}"><b>O nas</b></a>.
+                </p>
+                <div class="link"><a href="{{ route('about.global') }}"> <i class="fas fa-arrow-circle-right"></i></a></div>
             </div>
             <div class="why">
                 <div style="font-size: larger">
-                    <b>Dlaczego warto wybrać Biuro Podróży RAFA?</b>
+                    <b>Dlaczego szkoły i firmy wybierają RAFA?</b>
                 </div>
-                <p>Biuro Podróży RAFA to gwarancja udanej, bezpiecznej i perfekcyjnie zorganizowanej wycieczki. Od lat specjalizujemy się w organizacji wyjazdów szkolnych, integracyjnych oraz turystycznych po Polsce i Europie, dzięki czemu zyskaliśmy zaufanie setek szkół, instytucji i grup zorganizowanych. Naszą misją jest tworzenie podróży, które łączą edukację, rozrywkę i niezapomniane przygody.</p>
-                <h6><b>Kompleksowa organizacja wycieczek</b></h6>
-                <p>Z nami nie musisz martwić się o szczegóły. Zapewniamy wygodny transport, sprawdzone zakwaterowanie oraz doświadczonych przewodników i pilotów, którzy zadbają o każdy etap programu. Każda wycieczka przygotowywana jest kompleksowo – od planowania trasy, przez rezerwacje, aż po realizację.</p>
-                <h6><b>Bezpieczeństwo i opieka</b></h6>
-                <p>Dbamy o komfort i bezpieczeństwo uczestników. Współpracujemy wyłącznie z zaufanymi przewoźnikami i korzystamy z usług doświadczonych pilotów, którzy czuwają nad przebiegiem podróży. Dzięki temu nauczyciele i opiekunowie mogą w pełni cieszyć się wyjazdem razem z grupą.</p>
-                <h6><b>Atrakcyjne ceny</b></h6>
-                <p>W RAFA wierzymy, że podróżowanie powinno być dostępne dla każdego. Dlatego nasze programy dostosowujemy do różnych budżetów, zachowując przy tym wysoki standard usług. Oferujemy wycieczki, które łączą atrakcyjny program z korzystną ceną, co czyni naszą ofertę konkurencyjną i wyjątkowo korzystną.</p>
-                <h6><b>Indywidualne podejście</b></h6>
-                <p>Każda grupa jest inna, dlatego dopasowujemy program wycieczki do oczekiwań uczestników. Chcesz, aby wyjazd miał charakter edukacyjny, przyrodniczy, integracyjny, a może pełen rozrywki? Przygotujemy propozycję „szytą na miarę”, tak aby każdy uczestnik wrócił z wyjazdu z pięknymi wspomnieniami.</p>
-                <h6><b>Główne korzyści z wyboru Biura Podróży RAFA</b></h6>
                 <ul>
-                    <li><b>Edukacja i rozrywka w jednym</b> – nasze wycieczki łączą poznawanie historii, kultury i przyrody z aktywną zabawą i integracją.</li>
-                    <li><b>Doświadczenie i pasja</b> – od lat organizujemy podróże po całej Polsce i Europie. Kochamy to, co robimy, a nasza pasja do turystyki przekłada się na zadowolenie uczestników.</li>
-                    <li><b>Łatwa rezerwacja</b> – wystarczy jeden telefon lub szybki kontakt online, aby zarezerwować wycieczkę. Proces rezerwacji jest prosty, szybki i przyjazny.</li>
-                    <li><b>Wyjątkowe kierunki</b> – organizujemy wyjazdy do miast, gór, nad morze, do parków narodowych, parków rozrywki i tematycznych – wszędzie tam, gdzie czeka na Was przygoda.</li>
+                    <li><b>Kompleksowa obsługa</b> — jeden partner za transport, zakwaterowanie, program i formalności.</li>
+                    <li><b>Bezpieczeństwo</b> — sprawdzeni przewoźnicy, doświadczeni piloci i przejrzyste warunki.</li>
+                    <li><b>Elastyczność</b> — program dopasowany do grupy, celu wyjazdu i budżetu.</li>
+                    <li><b>Specjalizacja</b> — wycieczki szkolne, zielone szkoły i zorganizowane wyjazdy firmowe.</li>
                 </ul>
-                <p>Biuro Podróży RAFA to więcej niż organizator – to partner w podróżowaniu. Naszym celem jest nie tylko zapewnienie atrakcyjnego programu, ale także stworzenie wyjątkowej atmosfery, dzięki której każda wycieczka staje się niezapomnianym doświadczeniem. Wybierając RAFA, wybierasz sprawdzoną jakość, bezpieczeństwo i wspomnienia, które zostają na lata.</p>
             </div>
         </div>
 

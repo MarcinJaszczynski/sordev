@@ -772,7 +772,7 @@ class ProgramPointListFinanceDisplayTest extends TestCase
         $this->assertStringNotContainsString('do ', (string) ($summary['remainingLine']['text'] ?? ''));
     }
 
-    public function test_program_points_table_renders_pilot_and_advance_hints_next_to_price(): void
+    public function test_program_points_table_renders_compact_amounts_payer_and_payment_status(): void
     {
         \Spatie\Permission\Models\Role::firstOrCreate(['name' => 'admin', 'guard_name' => 'web']);
         $user = User::factory()->create();
@@ -803,6 +803,24 @@ class ProgramPointListFinanceDisplayTest extends TestCase
             'paid_by' => 'pilot',
         ]);
 
+        EventSettlementCost::query()->create([
+            'settlement_id' => $settlement->id,
+            'source_type' => 'program_point_payment',
+            'source_id' => $point->id,
+            'name' => $point->name.' • zaliczka #1',
+            'planned_currency_id' => $pln->id,
+            'advance_type' => 'advance',
+            'advance_amount' => 200,
+            'actual_amount' => 200,
+            'actual_currency_id' => $pln->id,
+            'actual_rate' => 1,
+            'actual_amount_pln' => 200,
+            'payment_status' => 'advance_paid',
+            'paid_by' => 'office',
+            'paid_at' => now(),
+            'order' => 2,
+        ]);
+
         \Livewire\Livewire::actingAs($user)
             ->test(
                 \App\Filament\Resources\EventResource\RelationManagers\ProgramPointsRelationManager::class,
@@ -811,9 +829,10 @@ class ProgramPointListFinanceDisplayTest extends TestCase
                     'pageClass' => \App\Filament\Resources\EventResource\Pages\EditEventProgram::class,
                 ]
             )
-            ->assertSee('Zaliczka')
+            ->assertSee('Płatnik')
             ->assertSee('Pilot')
             ->assertSee('200,00 PLN')
+            ->assertSee('Częściowo')
             ->assertDontSee('Zaliczka wpłacona');
     }
 

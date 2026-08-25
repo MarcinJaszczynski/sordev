@@ -271,4 +271,92 @@ class RecordSettlementCostPaymentActionTest extends TestCase
             0.01
         );
     }
+
+    public function test_payment_can_use_currency_different_from_plan(): void
+    {
+        Role::findOrCreate('admin');
+        $user = User::factory()->create(['status' => 'active']);
+        $user->assignRole('admin');
+        $this->actingAs($user);
+
+        $pln = Currency::factory()->pln()->create();
+        $eur = Currency::factory()->eur()->create(['exchange_rate' => 4.2]);
+        $event = Event::factory()->create();
+        $settlement = EventSettlement::findOrCreateActiveForEvent($event);
+
+        $plan = $settlement->costs()->create([
+            'source_type' => 'manual',
+            'name' => 'Hotel PLN',
+            'planned_amount' => 1000,
+            'planned_amount_pln' => 1000,
+            'planned_currency_id' => $pln->id,
+            'planned_convert_to_pln' => true,
+            'paid_by' => 'office',
+            'payment_status' => 'planned',
+            'order' => 1,
+        ]);
+
+        $payment = app(RecordSettlementCostPaymentAction::class)(new RecordSettlementCostPaymentData(
+            planCost: $plan->fresh(['plannedCurrency']),
+            amountPln: 210,
+            paymentMethod: 'transfer',
+            paidBy: 'office',
+            advanceType: 'advance',
+            amount: 50,
+            rate: 4.2,
+            currencyId: $eur->id,
+            convertToPln: true,
+        ));
+
+        $this->assertSame($eur->id, (int) $payment->actual_currency_id);
+        $this->assertEqualsWithDelta(50.0, (float) $payment->actual_amount, 0.01);
+        $this->assertEqualsWithDelta(210.0, (float) $payment->actual_amount_pln, 0.01);
+        $this->assertTrue((bool) $payment->planned_convert_to_pln);
+    }
+
+    public function test_foreign_payment_without_convert_skips_pln_total(): void
+    {
+        Role::findOrCreate('admin');
+        $user = User::factory()->create(['status' => 'active']);
+        $user->assignRole('admin');
+        $this->actingAs($user);
+
+        $eur = Currency::factory()->eur()->create(['exchange_rate' => 4.2]);
+        $event = Event::factory()->create();
+        $settlement = EventSettlement::findOrCreateActiveForEvent($event);
+
+        $plan = $settlement->costs()->create([
+            'source_type' => 'manual',
+            'name' => 'Bilety EUR',
+            'planned_amount' => 100,
+            'planned_amount_pln' => 420,
+            'planned_currency_id' => $eur->id,
+            'planned_convert_to_pln' => true,
+            'planned_rate' => 4.2,
+            'paid_by' => 'office',
+            'payment_status' => 'planned',
+            'order' => 1,
+        ]);
+
+        $payment = app(RecordSettlementCostPaymentAction::class)(new RecordSettlementCostPaymentData(
+            planCost: $plan->fresh(['plannedCurrency']),
+            amountPln: 0,
+            paymentMethod: 'transfer',
+            paidBy: 'office',
+            advanceType: 'advance',
+            amount: 40,
+            rate: 4.2,
+            currencyId: $eur->id,
+            convertToPln: false,
+        ));
+
+        $this->assertSame($eur->id, (int) $payment->actual_currency_id);
+        $this->assertEqualsWithDelta(40.0, (float) $payment->actual_amount, 0.01);
+        $this->assertNull($payment->actual_amount_pln);
+        $this->assertFalse((bool) $payment->planned_convert_to_pln);
+
+        $eval = app(SettlementPaymentHealthService::class)
+            ->evaluatePlanCost($plan->fresh(), $settlement->fresh()->costs()->get());
+        $this->assertEqualsWithDelta(0.0, $eval['paid_pln'], 0.01);
+    }
 }

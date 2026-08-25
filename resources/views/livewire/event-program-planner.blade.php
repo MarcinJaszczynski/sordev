@@ -1,6 +1,7 @@
 <div class="space-y-3">
     <div class="rounded-lg border border-amber-200 bg-amber-50 p-3 text-xs text-amber-900">
-        Planer służy do <b>ustawiania godzin</b>: przeciągaj i rozciągaj bloki albo <b>kliknij blok</b>, aby wpisać godziny ręcznie.
+        Planer służy do <b>ustawiania godzin pojedynczego bloku</b>: przeciągaj i rozciągaj albo <b>kliknij blok</b>, aby wpisać godziny ręcznie.
+        Inne punkty zostają na swoich godzinach — nie są automatycznie spinane.
         Pełną edycję punktów (nazwa, opis, notatki, cena) robisz w zakładce <b>Lista</b> lub <b>Dzień</b>.
         Pokazuje wyłącznie punkty <b>uwzględnione w programie</b>.
     </div>
@@ -237,6 +238,17 @@
         };
 
         const buildEventContent = (event) => {
+            if (Boolean(event.extendedProps?.isPaymentDue)) {
+                const title = escapeHtml(event.title || 'Termin płatności');
+                const amount = escapeHtml(event.extendedProps?.amountLabel || '');
+                const tooltip = escapeHtml(event.extendedProps?.tooltip || title);
+
+                return `<div class="event-program-payment-due flex h-full w-full flex-col justify-center overflow-hidden px-2 py-1" title="${tooltip}">
+                    <div class="truncate text-[12px] font-bold leading-4 text-white">${title}</div>
+                    ${amount ? `<div class="truncate text-[11px] font-semibold leading-4 text-white/95">${amount}</div>` : ''}
+                </div>`;
+            }
+
             const isChild = Boolean(event.extendedProps?.isChild);
             const title = escapeHtml(event.title || 'Punkt programu');
             const notesPreview = escapeHtml(event.extendedProps?.notesPreview || '');
@@ -307,16 +319,18 @@
             eventStartEditable: true,
             eventDurationEditable: true,
             eventResizableFromStart: true,
-            nowIndicator: true,
+            nowIndicator: false,
             selectable: false,
             selectMirror: false,
             slotMinTime: '00:00:00',
             slotMaxTime: '24:00:00',
             slotDuration: '00:30:00',
             snapDuration: '00:15:00',
+            slotEventOverlap: true,
+            eventOverlap: true,
             height: 'auto',
             validRange: {
-                start: plannerData.initialDate,
+                start: plannerData.rangeStart || plannerData.initialDate,
                 end: plannerData.maxDate,
             },
             headerToolbar: {
@@ -341,6 +355,10 @@
             eventDrop: (info) => syncEvent(info.event),
             eventResize: (info) => syncEvent(info.event),
             eventClick: (info) => {
+                if (info.event.extendedProps?.isPaymentDue) {
+                    return;
+                }
+
                 const component = window.Livewire?.find(componentId);
                 if (!component) {
                     return;
@@ -383,9 +401,6 @@
 
             const existing = window.__eventProgramPlannerRegistry[componentId];
             if (existing) {
-                existing.removeAllEvents();
-                existing.addEventSource(plannerData.events || []);
-                existing.render();
                 existing.updateSize();
             } else {
                 const calendar = createCalendar(el);
@@ -402,15 +417,36 @@
                 window.__eventProgramPlannerListeners[componentId] = true;
                 window.Livewire.on('planner-data-updated-' + componentId, (payload) => {
                     const data = Array.isArray(payload) ? (payload[0] || {}) : (payload || {});
-                    const events = data.events || [];
+                    const plannerPayload = data.plannerData || data;
+                    const events = plannerPayload.events || data.events || [];
                     const instance = window.__eventProgramPlannerRegistry[componentId];
 
                     if (!instance) {
                         return;
                     }
 
-                    instance.removeAllEvents();
-                    instance.addEventSource(events);
+                    instance.setOption('events', events);
+
+                    if (plannerPayload.rangeStart && plannerPayload.maxDate) {
+                        instance.setOption('validRange', {
+                            start: plannerPayload.rangeStart,
+                            end: plannerPayload.maxDate,
+                        });
+                    }
+
+                    if (plannerPayload.durationDays) {
+                        instance.setOption('views', {
+                            programTimeGrid: {
+                                type: 'timeGrid',
+                                duration: { days: plannerPayload.durationDays },
+                                buttonText: 'Plan imprezy',
+                            },
+                        });
+                    }
+
+                    if (plannerPayload.initialDate) {
+                        instance.gotoDate(plannerPayload.initialDate);
+                    }
                 });
             }
 
@@ -449,7 +485,8 @@
             let attempts = 0;
             const interval = setInterval(() => {
                 attempts++;
-                if (renderOrUpdate() || attempts > 80) {
+                const hasCalendar = Boolean(window.__eventProgramPlannerRegistry[componentId]);
+                if (hasCalendar || renderOrUpdate() || attempts > 25) {
                     clearInterval(interval);
                 }
             }, 100);

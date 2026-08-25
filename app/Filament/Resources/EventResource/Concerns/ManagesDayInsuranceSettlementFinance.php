@@ -110,7 +110,7 @@ trait ManagesDayInsuranceSettlementFinance
                 ->alignEnd(),
 
             Tables\Columns\TextColumn::make('finance_paid')
-                ->label('Zapłacone')
+                ->label('Zapłacono')
                 ->state(function (EventDayInsurance $record): string {
                     $snap = $this->dayInsuranceFinanceSnapshot($record);
                     if (! $snap['plan']) {
@@ -122,7 +122,7 @@ trait ManagesDayInsuranceSettlementFinance
                 ->alignEnd(),
 
             Tables\Columns\TextColumn::make('finance_status')
-                ->label('Status')
+                ->label('Płatność')
                 ->badge()
                 ->state(function (EventDayInsurance $record): string {
                     $snap = $this->dayInsuranceFinanceSnapshot($record);
@@ -130,7 +130,7 @@ trait ManagesDayInsuranceSettlementFinance
 
                     return $status
                         ? (EventSettlementCost::$paymentStatuses[$status] ?? $status)
-                        : 'Brak w kosztorysie';
+                        : 'Brak w rozliczeniu';
                 })
                 ->color(function (EventDayInsurance $record): string {
                     $status = $this->dayInsuranceFinanceSnapshot($record)['status'] ?? null;
@@ -146,10 +146,24 @@ trait ManagesDayInsuranceSettlementFinance
             Tables\Columns\TextColumn::make('finance_docs')
                 ->label('Dok.')
                 ->state(function (EventDayInsurance $record): string {
-                    $count = $this->dayInsuranceFinanceSnapshot($record)['docs'];
+                    $snap = $this->dayInsuranceFinanceSnapshot($record);
+                    $count = (int) ($snap['docs'] ?? 0);
+                    if ($count <= 0) {
+                        return '—';
+                    }
 
-                    return $count > 0 ? (string) $count : '—';
+                    return $count === 1 ? '📎 Polisa' : '📎 '.$count.' pl.';
                 })
+                ->tooltip(function (EventDayInsurance $record): ?string {
+                    $count = (int) ($this->dayInsuranceFinanceSnapshot($record)['docs'] ?? 0);
+
+                    return $count > 0
+                        ? 'Załącznik polisy wgrany ('.$count.')'
+                        : 'Brak wgranego pliku polisy';
+                })
+                ->color(fn (EventDayInsurance $record): string => ((int) ($this->dayInsuranceFinanceSnapshot($record)['docs'] ?? 0)) > 0
+                    ? 'success'
+                    : 'gray')
                 ->alignCenter(),
         ];
     }
@@ -168,7 +182,7 @@ trait ManagesDayInsuranceSettlementFinance
                     $plan = $this->ensureDayInsurancePlanCost($record);
                     if (! $plan) {
                         Notification::make()
-                            ->title('Brak pozycji w kosztorysie')
+                            ->title('Brak pozycji w rozliczeniu')
                             ->body('Ubezpieczenie nie wygenerowało kosztu (sprawdź produkt i cenę).')
                             ->warning()
                             ->send();

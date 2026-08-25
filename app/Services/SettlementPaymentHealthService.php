@@ -38,7 +38,7 @@ final class SettlementPaymentHealthService
     ];
 
     public static array $statusLabels = [
-        self::STATUS_OK => 'Zapłacone',
+        self::STATUS_OK => 'Zapłacono',
         self::STATUS_NA => 'Brak kwoty',
         self::STATUS_SHORTFALL => 'Do zapłaty',
         self::STATUS_DUE => 'Do zapłaty',
@@ -252,7 +252,7 @@ final class SettlementPaymentHealthService
             return ! EventSettlementCost::isManualPaymentRow($cost);
         }
 
-        return in_array($cost->source_type, ['program_point', 'transport', 'accommodation', 'insurance_day'], true);
+        return in_array($cost->source_type, ['program_point', 'transport', 'accommodation', 'accommodation_hotel', 'accommodation_hotel_stay', 'insurance_day'], true);
     }
 
     public function paidPlnForPlanCost(EventSettlementCost $planCost, Collection $allCosts): float
@@ -327,6 +327,15 @@ final class SettlementPaymentHealthService
             return $allCosts->filter(
                 fn (EventSettlementCost $row): bool => $row->source_type === $paymentType
                     && $row->source_id === null,
+            )->values();
+        }
+
+        if (in_array($planCost->source_type, ['accommodation_hotel', 'accommodation_hotel_stay'], true)) {
+            $paymentType = $planCost->source_type.'_payment';
+
+            return $allCosts->filter(
+                fn (EventSettlementCost $row): bool => $row->source_type === $paymentType
+                    && (int) $row->source_id === (int) $planCost->source_id,
             )->values();
         }
 

@@ -36,8 +36,6 @@ class ListTasks extends ListRecords
         if (method_exists(get_parent_class($this), 'mount')) {
             parent::mount();
         }
-
-        $this->mountInteractsWithTaskEditModal();
     }
 
     public function getDefaultActiveTab(): string|int|null

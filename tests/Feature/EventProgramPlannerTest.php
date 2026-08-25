@@ -3,8 +3,10 @@
 namespace Tests\Feature;
 
 use App\Livewire\EventProgramPlanner;
+use App\Models\Currency;
 use App\Models\Event;
 use App\Models\EventProgramPoint;
+use App\Models\EventSettlement;
 use App\Models\EventTemplate;
 use App\Models\User;
 use App\Services\EventProgramPointOrderService;
@@ -251,6 +253,57 @@ class EventProgramPlannerTest extends TestCase
         );
         $this->assertSame('07:00', substr((string) $programList[0]->start_time, 0, 5));
         $this->assertLessThan((int) $breakfast->order, (int) $museum->order);
+        $this->assertSame('08:00', substr((string) $breakfast->start_time, 0, 5));
+        $this->assertSame('09:00', substr((string) $breakfast->end_time, 0, 5));
+    }
+
+    public function test_planner_does_not_cascade_following_points(): void
+    {
+        $user = User::factory()->create();
+        $this->actingAs($user);
+
+        $event = Event::factory()->create([
+            'duration_days' => 1,
+            'start_date' => '2026-09-10',
+        ]);
+
+        $first = EventProgramPoint::create([
+            'event_id' => $event->id,
+            'name' => 'Zbiórka',
+            'day' => 1,
+            'order' => 1,
+            'start_time' => '08:00',
+            'end_time' => '09:00',
+            'include_in_program' => true,
+            'include_in_calculation' => false,
+            'active' => true,
+            'event_template_program_point_id' => null,
+        ]);
+
+        $second = EventProgramPoint::create([
+            'event_id' => $event->id,
+            'name' => 'Zwiedzanie',
+            'day' => 1,
+            'order' => 2,
+            'start_time' => '09:00',
+            'end_time' => '11:00',
+            'include_in_program' => true,
+            'include_in_calculation' => false,
+            'active' => true,
+            'event_template_program_point_id' => null,
+        ]);
+
+        Livewire::test(EventProgramPlanner::class, ['eventId' => $event->id])
+            ->call('updatePointSchedule', $first->id, '2026-09-10T08:00:00', '2026-09-10T10:00:00')
+            ->assertHasNoErrors();
+
+        $first->refresh();
+        $second->refresh();
+
+        $this->assertSame('08:00', substr((string) $first->start_time, 0, 5));
+        $this->assertSame('10:00', substr((string) $first->end_time, 0, 5));
+        $this->assertSame('09:00', substr((string) $second->start_time, 0, 5), 'Planer nie może przesuwać innych punktów.');
+        $this->assertSame('11:00', substr((string) $second->end_time, 0, 5));
     }
 
     public function test_planner_day_move_is_visible_on_the_target_program_day(): void
@@ -319,5 +372,84 @@ class EventProgramPlannerTest extends TestCase
         $this->assertStringContainsString('Obiad', $events[0]['title'] ?? '');
         $this->assertStringContainsString('T18:00', $events[0]['start'] ?? '');
         $this->assertStringContainsString('T19:30', $events[0]['end'] ?? '');
+    }
+
+    public function test_planner_calendar_includes_unpaid_advance_due_date_before_trip(): void
+    {
+        $user = User::factory()->create();
+        $this->actingAs($user);
+
+        $pln = Currency::factory()->pln()->create();
+        $event = Event::factory()->create([
+            'duration_days' => 2,
+            'start_date' => '2026-09-01',
+        ]);
+
+        $point = EventProgramPoint::create([
+            'event_id' => $event->id,
+            'name' => 'Bilety Bałtów',
+            'day' => 1,
+            'order' => 1,
+            'start_time' => '10:00',
+            'end_time' => '11:00',
+            'include_in_program' => true,
+            'include_in_calculation' => true,
+            'active' => true,
+            'planned_price' => 2400,
+            'currency_id' => $pln->id,
+            'convert_to_pln' => true,
+            'event_template_program_point_id' => null,
+        ]);
+
+        $settlement = EventSettlement::findOrCreateActiveForEvent($event);
+        $settlement->upsertCostFromProgramPoint($point->fresh(['templatePoint', 'currency', 'event']));
+        $plan = $settlement->costs()->where('source_type', 'program_point')->firstOrFail();
+        $plan->forceFill([
+            'advance_amount' => 2400,
+            'advance_due_date' => '2026-08-24',
+            'payment_status' => 'planned',
+            'paid_by' => 'office',
+        ])->saveQuietly();
+
+        $component = Livewire::test(EventProgramPlanner::class, ['eventId' => $event->id]);
+        $plannerData = $component->instance()->render()->getData()['plannerData'];
+        $events = $plannerData['events'];
+
+        $this->assertSame('2026-08-24', $plannerData['rangeStart']);
+        $this->assertTrue(collect($events)->contains(
+            fn (array $row): bool => ($row['id'] ?? null) === 'payment-due-cost-'.$plan->id
+        ));
+        $this->assertTrue(collect($events)->contains(
+            fn (array $row): bool => str_contains((string) ($row['title'] ?? ''), 'Bilety Bałtów')
+                && str_starts_with((string) ($row['start'] ?? ''), '2026-08-24')
+        ));
+    }
+
+    public function test_planner_refresh_event_rebuilds_calendar_after_finance_change(): void
+    {
+        $user = User::factory()->create();
+        $this->actingAs($user);
+
+        $event = Event::factory()->create([
+            'duration_days' => 1,
+            'start_date' => '2026-09-01',
+        ]);
+
+        EventProgramPoint::create([
+            'event_id' => $event->id,
+            'name' => 'Muzeum',
+            'day' => 1,
+            'order' => 1,
+            'start_time' => '10:00',
+            'end_time' => '11:00',
+            'include_in_program' => true,
+            'include_in_calculation' => false,
+            'active' => true,
+            'event_template_program_point_id' => null,
+        ]);
+
+        Livewire::test(EventProgramPlanner::class, ['eventId' => $event->id])
+            ->call('refreshCalendarFromFinanceChange')
+            ->assertOk();
     }
 }

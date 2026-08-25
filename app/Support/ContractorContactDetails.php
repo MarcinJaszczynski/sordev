@@ -52,7 +52,7 @@ class ContractorContactDetails
     }
 
     /**
-     * @return array{address: ?string, phone: ?string, email: ?string}
+     * @return array{address: ?string, phone: ?string, email: ?string, bank_account: ?string}
      */
     public static function contractorMeta(?Contractor $contractor, ?Contact $contact = null): array
     {
@@ -62,6 +62,7 @@ class ContractorContactDetails
             'address' => self::formatAddress($contractor),
             'phone' => $contactMeta['phone'] ?? (filled($contractor?->phone) ? trim((string) $contractor->phone) : null),
             'email' => $contactMeta['email'] ?? (filled($contractor?->email) ? trim((string) $contractor->email) : null),
+            'bank_account' => filled($contractor?->bank_account) ? trim((string) $contractor->bank_account) : null,
         ];
     }
 
@@ -70,6 +71,7 @@ class ContractorContactDetails
      *     address: ?string,
      *     phone: ?string,
      *     email: ?string,
+     *     bank_account: ?string,
      *     branch_name: ?string,
      *     contact_name: ?string,
      *     company_name: ?string
@@ -80,6 +82,8 @@ class ContractorContactDetails
         ?ContractorLocation $location = null,
         ?Contact $contact = null,
     ): array {
+        $bankAccount = filled($contractor?->bank_account) ? trim((string) $contractor->bank_account) : null;
+
         if ($location) {
             return [
                 'address' => self::formatLocationAddress($location) ?? self::formatAddress($contractor),
@@ -89,6 +93,7 @@ class ContractorContactDetails
                 'email' => filled($location->email)
                     ? trim((string) $location->email)
                     : (filled($contractor?->email) ? trim((string) $contractor->email) : null),
+                'bank_account' => $bankAccount,
                 'branch_name' => filled($location->name) ? trim((string) $location->name) : null,
                 'contact_name' => $location->contactDisplayName(),
                 'company_name' => $contractor?->displayLabel(),
@@ -101,6 +106,7 @@ class ContractorContactDetails
             'address' => $meta['address'],
             'phone' => $meta['phone'],
             'email' => $meta['email'],
+            'bank_account' => $meta['bank_account'],
             'branch_name' => null,
             'contact_name' => $contact?->displayName(),
             'company_name' => $contractor?->displayLabel(),
@@ -150,6 +156,10 @@ class ContractorContactDetails
 
         if ($meta['email']) {
             $lines[] = $meta['email'];
+        }
+
+        if (filled($meta['bank_account'] ?? null)) {
+            $lines[] = 'konto '.$meta['bank_account'];
         }
 
         return $lines;

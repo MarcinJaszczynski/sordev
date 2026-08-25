@@ -48,7 +48,7 @@ class EventFinance extends Page
     #[Url]
     public string $groupFilter = 'all';
 
-    /** Domyślnie ukrywa pozycje z zerową kalkulacją, planem i zapłaconym. */
+    /** Domyślnie ukrywa pozycje z zerowym szablonem, planowanymi i zapłaconym. */
     #[Url]
     public bool $hideZero = true;
 
@@ -125,6 +125,7 @@ class EventFinance extends Page
     protected function invalidateSettlementCostCaches(): void
     {
         unset($this->financeOverview, $this->selectedRow);
+        $this->dispatchSettlementFinanceChanged();
     }
 
     /**

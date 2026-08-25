@@ -112,6 +112,7 @@ class Event extends Model
         'assigned_to',
         'office_caretaker_id',
         'pilot_contractor_id',
+        'pilot_settlement_form',
         'pilot_funds_paid',
         'pilot_funds_paid_at',
         'pilot_funds_paid_by',
@@ -123,6 +124,7 @@ class Event extends Model
         'pilot_advance_paid_comment',
         'pilot_portal_show_currency_exchange',
         'pilot_portal_show_bus_collections',
+        'pilot_portal_show_attendance',
         'shared_with_pilot',
         'shared_with_pilot_at',
         'shared_with_pilot_by',
@@ -143,12 +145,14 @@ class Event extends Model
         'insurance_paid_at' => 'datetime',
         'tfg_defaults' => 'array',
         'pilot_funds_paid' => 'boolean',
+        'pilot_settlement_form' => \App\Enums\ContractorSettlementForm::class,
         'pilot_funds_paid_at' => 'datetime',
         'pilot_advance_planned_amount' => 'decimal:2',
         'pilot_advance_planned_at' => 'datetime',
         'pilot_advance_paid_amount' => 'decimal:2',
         'pilot_portal_show_currency_exchange' => 'boolean',
         'pilot_portal_show_bus_collections' => 'boolean',
+        'pilot_portal_show_attendance' => 'boolean',
         'shared_with_pilot' => 'boolean',
         'shared_with_pilot_at' => 'datetime',
         'pilot_trip_email_sent_at' => 'datetime',
@@ -568,6 +572,10 @@ class Event extends Model
             $pivotColumns[] = 'notes';
         }
 
+        if (Schema::hasColumn('event_contractor', 'goes_on_trip')) {
+            $pivotColumns[] = 'goes_on_trip';
+        }
+
         return $relation->withPivot($pivotColumns);
     }
 
@@ -764,6 +772,34 @@ class Event extends Model
         return $this->belongsTo(Contractor::class, 'pilot_contractor_id');
     }
 
+    /**
+     * Forma rozliczenia pilota na imprezie — override albo domyślna z karty kontrahenta.
+     */
+    public function resolvePilotSettlementForm(): ?\App\Enums\ContractorSettlementForm
+    {
+        if ($this->pilot_settlement_form instanceof \App\Enums\ContractorSettlementForm) {
+            return $this->pilot_settlement_form;
+        }
+
+        $override = \App\Enums\ContractorSettlementForm::tryFromMixed($this->pilot_settlement_form);
+        if ($override) {
+            return $override;
+        }
+
+        $this->loadMissing('pilotContractor');
+
+        $fromContractor = $this->pilotContractor?->settlement_form;
+
+        return $fromContractor instanceof \App\Enums\ContractorSettlementForm
+            ? $fromContractor
+            : \App\Enums\ContractorSettlementForm::tryFromMixed($fromContractor);
+    }
+
+    public function resolvedPilotSettlementFormLabel(): ?string
+    {
+        return $this->resolvePilotSettlementForm()?->label();
+    }
+
     public function pilotAdvancePlannedByUser(): BelongsTo
     {
         return $this->belongsTo(User::class, 'pilot_advance_planned_by');
@@ -810,6 +846,15 @@ class Event extends Model
         }
 
         return (bool) ($this->pilot_portal_show_bus_collections ?? false);
+    }
+
+    public function showsPilotAttendance(): bool
+    {
+        if (! Schema::hasColumn('events', 'pilot_portal_show_attendance')) {
+            return false;
+        }
+
+        return (bool) ($this->pilot_portal_show_attendance ?? false);
     }
 
     public function pilotAdvanceLines(): HasMany
@@ -878,11 +923,13 @@ class Event extends Model
      */
     public function hotelProgramPoints(): HasMany
     {
-        return $this->hasMany(EventProgramPoint::class)
-            ->where('is_hotel', true)
-            ->with(['contractor', 'contractorLocation'])
-            ->orderBy('day')
-            ->orderBy('order');
+        return self::applyExcludeHotelTransferNames(
+            $this->hasMany(EventProgramPoint::class)
+                ->where('is_hotel', true)
+                ->with(['contractor', 'contractorLocation'])
+                ->orderBy('day')
+                ->orderBy('order')
+        );
     }
 
     /**
@@ -1098,6 +1145,24 @@ class Event extends Model
         return $this->resolveQtyFieldForParticipantCount('driver', $participantCount);
     }
 
+    public function resolveStaffCountForParticipantCount(?int $participantCount = null): int
+    {
+        return $this->resolveQtyFieldForParticipantCount('staff', $participantCount);
+    }
+
+    /**
+     * Osoby operacyjne na noc / rezerwację hotelu — niezależnie od tego, czy pilot/kierowca są już przypisani.
+     */
+    public function resolveOperationalHeadcountForParticipantCount(?int $participantCount = null): int
+    {
+        $paying = max(1, (int) ($participantCount ?? $this->participant_count ?? 1));
+
+        return $paying
+            + $this->resolveGratisCountForParticipantCount($paying)
+            + $this->resolveStaffCountForParticipantCount($paying)
+            + $this->resolveDriverCountForParticipantCount($paying);
+    }
+
     protected function resolveQtyFieldForParticipantCount(string $field, ?int $participantCount = null): int
     {
         $count = max(1, (int) ($participantCount ?? $this->participant_count ?? 1));
@@ -1209,6 +1274,11 @@ class Event extends Model
         return $this->hasMany(EventDayInsurance::class);
     }
 
+    public function insurancePolicies(): HasMany
+    {
+        return $this->hasMany(EventInsurancePolicy::class)->orderBy('id');
+    }
+
     public function requiresInsuranceWorkflow(): bool
     {
         if (! Schema::hasTable('event_day_insurance')) {
@@ -1227,14 +1297,23 @@ class Event extends Model
 
     public function isInsuranceCompleted(): bool
     {
-        // SSoT: formularz na danych imprezy — status „Gotowe” (bez „nie dotyczy”).
-        return ($this->insurance_status ?? 'pending') === 'completed';
+        return app(\App\Services\EventInsuranceOperationalSync::class)->isEventInsurancePaid($this);
     }
 
     public function hasInsuranceDataSaved(): bool
     {
         if (! $this->requiresInsuranceWorkflow()) {
             return true;
+        }
+
+        if (Schema::hasTable('event_insurance_policies')) {
+            $policies = $this->relationLoaded('insurancePolicies')
+                ? $this->insurancePolicies
+                : $this->insurancePolicies()->get();
+
+            if ($policies->contains(fn (EventInsurancePolicy $policy): bool => $policy->hasOperationalData())) {
+                return true;
+            }
         }
 
         return filled($this->insurance_policy_number)
@@ -1257,6 +1336,35 @@ class Event extends Model
             return 'Kompletne';
         }
 
+        $policies = Schema::hasTable('event_insurance_policies')
+            ? ($this->relationLoaded('insurancePolicies')
+                ? $this->insurancePolicies
+                : $this->insurancePolicies()->get())
+            : collect();
+
+        if ($policies->isNotEmpty()) {
+            $parts = $policies
+                ->filter(fn (EventInsurancePolicy $policy): bool => $policy->hasOperationalData())
+                ->map(function (EventInsurancePolicy $policy): ?string {
+                    return filled($policy->policy_number) ? 'polisa '.$policy->policy_number : null;
+                })
+                ->filter()
+                ->values()
+                ->all();
+
+            $docs = $policies->contains(fn (EventInsurancePolicy $p): bool => filled($p->document_path));
+            $lists = $policies->contains(fn (EventInsurancePolicy $p): bool => filled($p->insured_list_path));
+
+            $extra = array_filter([
+                $docs ? 'polisa wgrana' : null,
+                $lists ? 'lista ubezpieczonych' : null,
+            ]);
+
+            $parts = array_values(array_unique(array_merge($parts, $extra)));
+
+            return 'W trakcie'.($parts !== [] ? ' ('.implode(', ', $parts).')' : '');
+        }
+
         if (($this->insurance_status ?? 'pending') === 'in_progress' || $this->hasInsuranceDataSaved()) {
             $parts = array_filter([
                 filled($this->insurance_policy_number) ? 'polisa '.$this->insurance_policy_number : null,
@@ -1267,7 +1375,7 @@ class Event extends Model
             return 'W trakcie'.($parts !== [] ? ' ('.implode(', ', $parts).')' : '');
         }
 
-        return 'Do zrobienia — uzupełnij w Operacje → Ubezpieczenia i ustaw status „Gotowe”';
+        return 'Do zrobienia — uzupełnij polisę i opłać wszystkie pozycje w kosztach';
     }
 
     public static function normalizeInsuranceDocumentPath(mixed $path): ?string
@@ -1280,6 +1388,18 @@ class Event extends Model
     }
 
     /**
+     * Filament FileUpload trzyma stan jako tablicę — pojedynczy string z bazy powoduje błąd zapisu / podglądu (404).
+     *
+     * @return list<string>|null
+     */
+    public static function insuranceFileUploadState(mixed $path): ?array
+    {
+        $normalized = self::normalizeInsuranceDocumentPath($path);
+
+        return $normalized !== null ? [$normalized] : null;
+    }
+
+    /**
      * Pliki operacyjne ubezpieczenia widoczne dla pilota (panel + pakiet PDF).
      *
      * @return list<array{key: string, label: string, path: string}>
@@ -1287,6 +1407,39 @@ class Event extends Model
     public function insuranceFilesForPilot(): array
     {
         $files = [];
+
+        if (Schema::hasTable('event_insurance_policies')) {
+            $policies = $this->relationLoaded('insurancePolicies')
+                ? $this->insurancePolicies
+                : $this->insurancePolicies()->get();
+
+            foreach ($policies as $index => $policy) {
+                $suffix = $policies->count() > 1 ? ' #'.($index + 1) : '';
+                $number = filled($policy->policy_number) ? ' ('.$policy->policy_number.')' : '';
+
+                $policyPath = self::normalizeInsuranceDocumentPath($policy->document_path);
+                if (filled($policyPath)) {
+                    $files[] = [
+                        'key' => 'policy_'.$policy->id,
+                        'label' => 'Polisa ubezpieczeniowa'.$suffix.$number,
+                        'path' => (string) $policyPath,
+                    ];
+                }
+
+                $listPath = self::normalizeInsuranceDocumentPath($policy->insured_list_path);
+                if (filled($listPath)) {
+                    $files[] = [
+                        'key' => 'insured_list_'.$policy->id,
+                        'label' => 'Oryginalna lista ubezpieczonych'.$suffix.$number,
+                        'path' => (string) $listPath,
+                    ];
+                }
+            }
+
+            if ($files !== []) {
+                return $files;
+            }
+        }
 
         $policyPath = self::normalizeInsuranceDocumentPath($this->insurance_document_path);
         if (filled($policyPath)) {
@@ -1309,8 +1462,112 @@ class Event extends Model
         return $files;
     }
 
+    /**
+     * Lustro agregatu polis → kolumny events.insurance_* (kompatybilność wsteczna).
+     */
+    public function refreshInsuranceAggregateMirror(): void
+    {
+        if (! Schema::hasTable('event_insurance_policies')
+            || ! Schema::hasColumn('events', 'insurance_policy_number')) {
+            return;
+        }
+
+        $policies = $this->insurancePolicies()->orderBy('id')->get();
+
+        if ($policies->isEmpty()) {
+            $payload = [
+                'insurance_policy_number' => null,
+                'insurance_status' => 'pending',
+                'insurance_payment_status' => 'pending',
+                'insurance_amount' => null,
+                'insurance_paid_at' => null,
+                'insurance_document_path' => null,
+                'insurance_terms' => null,
+            ];
+
+            if (Schema::hasColumn('events', 'insurance_insured_list_path')) {
+                $payload['insurance_insured_list_path'] = null;
+            }
+
+            $this->forceFill($payload)->saveQuietly();
+
+            return;
+        }
+
+        $primary = $policies->first(
+            fn (EventInsurancePolicy $policy): bool => $policy->hasOperationalData()
+        ) ?? $policies->first();
+
+        $sync = app(\App\Services\EventInsuranceOperationalSync::class);
+        $aggregateState = $sync->resolvePaymentStateForDayIds(
+            $this,
+            $this->dayInsurances()
+                ->whereNotNull('insurance_id')
+                ->pluck('id')
+                ->map(fn ($id): int => (int) $id)
+                ->all(),
+        );
+
+        $payload = [
+            'insurance_policy_number' => $primary?->policy_number,
+            'insurance_status' => match ($aggregateState) {
+                'paid' => 'completed',
+                'partial' => 'in_progress',
+                default => $policies->contains(fn (EventInsurancePolicy $p) => $p->hasOperationalData())
+                    ? 'in_progress'
+                    : 'pending',
+            },
+            'insurance_payment_status' => match ($aggregateState) {
+                'paid' => 'paid',
+                'partial' => 'partial',
+                default => 'pending',
+            },
+            'insurance_amount' => $primary?->amount,
+            'insurance_paid_at' => $policies
+                ->filter(fn (EventInsurancePolicy $p): bool => filled($p->paid_at))
+                ->sortByDesc(fn (EventInsurancePolicy $p) => $p->paid_at?->timestamp ?? 0)
+                ->first()
+                ?->paid_at,
+            'insurance_document_path' => $policies
+                ->first(fn (EventInsurancePolicy $p): bool => filled($p->document_path))
+                ?->document_path,
+            'insurance_terms' => $primary?->terms,
+        ];
+
+        if (Schema::hasColumn('events', 'insurance_insured_list_path')) {
+            $payload['insurance_insured_list_path'] = $policies
+                ->first(fn (EventInsurancePolicy $p): bool => filled($p->insured_list_path))
+                ?->insured_list_path;
+        }
+
+        $this->forceFill($payload)->saveQuietly();
+        $this->unsetRelation('insurancePolicies');
+    }
+
     public function updateInsuranceFromFormData(array $data): void
     {
+        if (Schema::hasTable('event_insurance_policies')) {
+            $policy = $this->insurancePolicies()->orderBy('id')->first();
+
+            if ($policy) {
+                app(\App\Actions\Events\UpdateEventInsurancePolicyAction::class)(
+                    $policy,
+                    $data,
+                );
+            } else {
+                app(\App\Actions\Events\CreateEventInsurancePolicyAction::class)(
+                    $this,
+                    $data,
+                    day: null,
+                    insuranceIds: [],
+                );
+            }
+
+            $this->refresh();
+
+            return;
+        }
+
         $payload = [
             'insurance_policy_number' => $data['insurance_policy_number'] ?? null,
             'insurance_status' => $data['insurance_status'] ?? 'pending',
@@ -1329,7 +1586,6 @@ class Event extends Model
 
         $this->update($payload);
 
-        // Lustro do Finansów (EventSettlementDocument + koszty insurance_day) — tylko polisa.
         try {
             app(\App\Services\EventInsurancePolicySettlementSync::class)->sync($this->fresh() ?? $this);
         } catch (\Throwable $e) {
@@ -2052,6 +2308,43 @@ class Event extends Model
     }
 
     /**
+     * Flota operacyjna przypisana do imprezy (główny / wahadło / transfer).
+     */
+    public function eventVehicles(): HasMany
+    {
+        return $this->hasMany(EventVehicle::class)
+            ->orderBy('sort_order')
+            ->orderBy('id');
+    }
+
+    /**
+     * Ustaw events.vehicle_registration na nr rej. pojazdu z rolą „główny” (fallback: pierwszy).
+     */
+    public function syncVehicleRegistrationFromFleet(): void
+    {
+        if (! Schema::hasTable('event_vehicles') || ! Schema::hasColumn('events', 'vehicle_registration')) {
+            return;
+        }
+
+        $assignment = $this->eventVehicles()
+            ->with('vehicle')
+            ->get()
+            ->sortBy(fn (EventVehicle $row): array => [
+                $row->role?->value === \App\Enums\EventVehicleRole::Main->value ? 0 : 1,
+                (int) $row->sort_order,
+                (int) $row->id,
+            ])
+            ->first();
+
+        $registration = $assignment?->vehicle?->registration_number;
+        if (! filled($registration) || $this->vehicle_registration === $registration) {
+            return;
+        }
+
+        $this->forceFill(['vehicle_registration' => $registration])->saveQuietly();
+    }
+
+    /**
      * Markup przypisany do imprezy
      */
     public function markup(): BelongsTo
@@ -2268,5 +2561,29 @@ class Event extends Model
         }
 
         return false;
+    }
+
+    /**
+     * Punkt programu oznaczony jako hotel, ale nazwą wskazujący na dojazd — nie właściwy nocleg.
+     */
+    public static function isHotelTransferProgramPoint(EventProgramPoint $point): bool
+    {
+        return (bool) ($point->is_hotel ?? false)
+            && self::programPointNameLooksLikeHotelTransfer((string) ($point->name ?? ''));
+    }
+
+    /**
+     * Wyklucza punkty typu „Przejazd do hotelu” z zapytań o właściwy nocleg hotelowy.
+     *
+     * @param  \Illuminate\Database\Eloquent\Builder|\Illuminate\Database\Eloquent\Relations\Relation  $query
+     * @return \Illuminate\Database\Eloquent\Builder|\Illuminate\Database\Eloquent\Relations\Relation
+     */
+    public static function applyExcludeHotelTransferNames($query)
+    {
+        foreach (['przejazd', 'dojazd', 'transfer', 'powrót', 'powrot', 'wyjazd', 'odjazd', 'przyjazd'] as $needle) {
+            $query->whereRaw('LOWER(COALESCE(name, \'\')) NOT LIKE ?', ['%'.$needle.'%']);
+        }
+
+        return $query;
     }
 }

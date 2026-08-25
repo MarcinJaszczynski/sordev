@@ -303,15 +303,15 @@ class ParticipantPaymentsLedgerTest extends TestCase
         $this->assertEqualsWithDelta(1200.0, $aggregate['total_paid'], 0.01);
         $this->assertEqualsWithDelta(2500.0, $aggregate['ledger_due_pln'], 0.01);
         $this->assertEqualsWithDelta(1300.0, $aggregate['ledger_remaining_pln'], 0.01);
-        // Pojemność: 3 × 1000 = 3000, remaining = 3000 - 1200 = 1800
+        // Hybryda: ledger 2500 (z rabatem 1500) + 0 poza listą (3/3) = 2500
         if (Schema::hasTable('event_price_per_person')) {
             $this->assertSame(3, $aggregate['expected_count']);
             $this->assertEqualsWithDelta(1000.0, $aggregate['price_per_person'], 0.01);
-            $this->assertEqualsWithDelta(3000.0, $aggregate['expected_due_pln'], 0.01);
-            $this->assertEqualsWithDelta(3000.0, $aggregate['total_due'], 0.01);
-            $this->assertEqualsWithDelta(1800.0, $aggregate['capacity_remaining_pln'], 0.01);
-            $this->assertEqualsWithDelta(1800.0, $aggregate['total_remaining'], 0.01);
-            $this->assertSame(1, $aggregate['unregistered_count']); // 3 - 2 paying
+            $this->assertEqualsWithDelta(2500.0, $aggregate['expected_due_pln'], 0.01);
+            $this->assertEqualsWithDelta(2500.0, $aggregate['total_due'], 0.01);
+            $this->assertEqualsWithDelta(1300.0, $aggregate['capacity_remaining_pln'], 0.01);
+            $this->assertEqualsWithDelta(1300.0, $aggregate['total_remaining'], 0.01);
+            $this->assertSame(0, $aggregate['unregistered_count']); // lista kompletna względem N
         }
         $this->assertSame('shortfall', $aggregate['coverage_status']);
         $this->assertCount(1, $aggregate['attention']);
@@ -390,6 +390,77 @@ class ParticipantPaymentsLedgerTest extends TestCase
         $this->assertEqualsWithDelta(900.0, $doplata['expected'], 0.01);
         $this->assertEqualsWithDelta(0.0, $doplata['paid_toward'], 0.01);
         $this->assertEqualsWithDelta(900.0, $doplata['remaining'], 0.01);
+    }
+
+    public function test_event_aggregate_uses_ledger_discounts_plus_unregistered_contract_price(): void
+    {
+        if (! Schema::hasTable('event_settlement_participant_payments')) {
+            $this->markTestSkipped('Brak tabeli wpłat uczestników.');
+        }
+        if (! Schema::hasTable('contracts')) {
+            $this->markTestSkipped('Brak tabeli umów.');
+        }
+
+        $user = \App\Models\User::factory()->create();
+        $event = Event::factory()->create(['participant_count' => 5]);
+        $settlement = EventSettlement::findOrCreateActiveForEvent($event);
+
+        \App\Models\Contract::create([
+            'event_id' => $event->id,
+            'contract_type' => \App\Models\Contract::TYPE_GROUP,
+            'title' => 'Umowa',
+            'contract_date' => now()->toDateString(),
+            'participant_count' => 5,
+            'unit_price' => 3005,
+            'total_price' => 15025,
+            'payment_scheme' => \App\Models\Contract::PAYMENT_SCHEME_LUMP_SUM,
+            'currency' => 'PLN',
+            'status' => 'sent',
+            'payment_status' => 'pending',
+            'created_by' => $user->id,
+            'meta' => [
+                'unit_price_pln' => 3005,
+                'foreign_prices_per_person' => [
+                    ['currency' => 'EUR', 'price_per_person' => 128.47, 'label' => '128,47 EUR'],
+                ],
+            ],
+        ]);
+
+        // Sync umowy może założyć wiersze — zostawiamy kontrolowany ledger z rabatem.
+        $settlement->participantPayments()->delete();
+
+        EventSettlementParticipantPayment::query()->create([
+            'settlement_id' => $settlement->id,
+            'participant_name' => 'Pełna cena',
+            'due_amount_pln' => 3005,
+            'paid_amount_pln' => 1000,
+            'payment_status' => 'partial',
+        ]);
+        EventSettlementParticipantPayment::query()->create([
+            'settlement_id' => $settlement->id,
+            'participant_name' => 'Z rabatem',
+            'due_amount_pln' => 2600,
+            'paid_amount_pln' => 500,
+            'discount_amount_pln' => 405,
+            'payment_status' => 'partial',
+        ]);
+
+        $event->setRelation('activeSettlement', $settlement->load('participantPayments'));
+        $aggregate = app(ParticipantPaymentBalanceService::class)->eventAggregate($event);
+
+        // 2 na liście (3005+2600) + 3 poza listą × 3005 = 5605 + 9015 = 14620
+        $this->assertEqualsWithDelta(3005.0, $aggregate['price_per_person'], 0.01);
+        $this->assertEqualsWithDelta(5605.0, $aggregate['ledger_due_pln'], 0.01);
+        $this->assertSame(3, $aggregate['unregistered_count']);
+        $this->assertEqualsWithDelta(14620.0, $aggregate['expected_due_pln'], 0.01);
+        $this->assertEqualsWithDelta(1500.0, $aggregate['total_paid'], 0.01);
+        $this->assertEqualsWithDelta(13120.0, $aggregate['capacity_remaining_pln'], 0.01);
+
+        $eur = collect($aggregate['expected_foreign'])->firstWhere('currency', 'EUR');
+        $this->assertNotNull($eur);
+        // FX: 5 miejsc (2 na liście + 3 poza) × 128.47
+        $this->assertEqualsWithDelta(128.47, $eur['price_per_person'], 0.01);
+        $this->assertEqualsWithDelta(642.35, $eur['amount'], 0.01);
     }
 
     public function test_ledger_renders_gap_analysis_cards(): void

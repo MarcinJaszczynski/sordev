@@ -23,5 +23,6 @@ readonly class UpdateSettlementCostPaymentData
         public ?float $rate = null,
         public int|string|null $currencyId = null,
         public ?int $reservationId = null,
+        public bool $convertToPln = true,
     ) {}
 }

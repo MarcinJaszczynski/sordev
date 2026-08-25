@@ -142,7 +142,7 @@ class ExpensesAnalytics extends Page implements HasTable
                 ->icon('heroicon-o-calculator')
                 ->color('secondary'),
 
-            Stat::make('Zapłacone', $paid)
+            Stat::make('Zapłacono', $paid)
                 ->description('Pozycji')
                 ->icon('heroicon-o-check-circle')
                 ->color('success'),
@@ -189,7 +189,7 @@ class ExpensesAnalytics extends Page implements HasTable
                     ->placeholder('—'),
 
                 Tables\Columns\TextColumn::make('planned_amount_pln')
-                    ->label('Plan PLN')
+                    ->label('Planowane PLN')
                     ->money('PLN')
                     ->sortable()
                     ->alignEnd(),

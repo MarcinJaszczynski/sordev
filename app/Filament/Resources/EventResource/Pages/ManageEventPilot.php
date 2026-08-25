@@ -6,15 +6,17 @@ use App\Filament\Pilot\Resources\PilotEventResource;
 use App\Filament\Resources\EventResource;
 use App\Filament\Resources\EventResource\Concerns\HasEventOperationsSubNavigation;
 use App\Filament\Resources\EventResource\Concerns\HasEventWorkflowContext;
+use App\Models\Event;
 use App\Models\User;
 use App\Services\PilotAdvanceService;
+use App\Services\PilotChecklistService;
 use App\Services\PilotContractorAssignmentService;
-use Filament\Actions;
+use App\Services\PilotSettlementService;
+use App\Support\CurrencyAmountDisplay;
 use Filament\Forms;
 use Filament\Forms\Form;
 use Filament\Notifications\Notification;
 use Filament\Resources\Pages\EditRecord;
-use Illuminate\Contracts\View\View;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Schema;
 use Livewire\Attributes\On;
@@ -36,18 +38,189 @@ class ManageEventPilot extends EditRecord
 
     protected bool $pendingPilotPaymentApproval = false;
 
+    /** @var 'briefing'|'cash'|'checklist' */
+    public string $pilotTab = 'briefing';
+
+    public function setPilotTab(string $tab): void
+    {
+        if (! in_array($tab, ['briefing', 'cash', 'checklist'], true)) {
+            return;
+        }
+
+        $this->pilotTab = $tab;
+    }
+
+    /**
+     * Dane paska statusu, kafelków i stripu przepływu gotówki (tylko prezentacja).
+     *
+     * @return array{
+     *     pilot_name: string,
+     *     pilot_phone: ?string,
+     *     pilot_email: ?string,
+     *     pilot_settlement_form_label: ?string,
+     *     contractor_url: ?string,
+     *     participants_label: string,
+     *     shared: bool,
+     *     shared_at_label: ?string,
+     *     email_sent_label: ?string,
+     *     preview_url: string,
+     *     preview_label: string,
+     *     can_preview: bool,
+     *     check_in_label: string,
+     *     checklist_done: int,
+     *     checklist_total: int,
+     *     paid_label: string,
+     *     return_label: string,
+     *     return_danger: bool,
+     *     plan_label: string,
+     *     spent_label: string,
+     *     expense_count: int
+     * }
+     */
+    public function pilotPageSummary(): array
+    {
+        $event = $this->getRecord();
+        $event->loadMissing(['pilotContractor', 'assignedUser', 'sharedWithPilotByUser']);
+
+        $advance = app(PilotAdvanceService::class);
+        $checklist = app(PilotChecklistService::class)->progressFor($event);
+
+        $paying = max(0, (int) ($event->participant_count ?? 0));
+        $gratis = max(0, (int) $event->resolveGratisCountForParticipantCount($paying ?: null));
+        $participantsLabel = $gratis > 0
+            ? sprintf('%d + %d (płacący + opiekunowie)', $paying, $gratis)
+            : (string) $paying;
+
+        $checkInKey = $event->check_in_status ?? 'pending';
+        $checkInLabel = Event::getCheckInStatusOptions()[$checkInKey] ?? (string) $checkInKey;
+
+        $contractor = $event->pilotContractor;
+        $user = $event->assignedUser;
+        $pilotName = $contractor?->name ?? $user?->name ?? 'brak pilota';
+        $pilotPhone = $contractor?->phone ?: ($user?->phone ?: null);
+        $pilotEmail = $contractor?->email ?: ($user?->email ?: null);
+        $settlementFormLabel = $event->resolvedPilotSettlementFormLabel();
+
+
+        $contractorUrl = null;
+        if ($contractor && class_exists(\App\Filament\Resources\ContractorResource::class)) {
+            try {
+                $contractorUrl = \App\Filament\Resources\ContractorResource::getUrl('edit', [
+                    'record' => $contractor->getKey(),
+                ]);
+            } catch (\Throwable) {
+                $contractorUrl = null;
+            }
+        }
+
+        $previewName = app(PilotContractorAssignmentService::class)
+            ->pilotDisplayNameForEvent($event) ?? 'pilot';
+
+        $settlement = app(PilotSettlementService::class)->getOrCreateSettlement($event);
+        $rows = app(PilotSettlementService::class)->getCashReconciliation($settlement);
+        $expenseCount = app(PilotSettlementService::class)->getExpenseLines($settlement)->count();
+
+        $spentParts = [];
+        $returnParts = [];
+        $hasReturn = false;
+
+        foreach ($rows as $row) {
+            $code = (string) ($row->currency_code ?? '—');
+            $spent = (float) ($row->actual_spent ?? 0);
+            $toReturn = (float) ($row->to_return ?? 0);
+
+            if ($spent > 0.009) {
+                $spentParts[] = number_format($spent, 0, ',', ' ').' '.$code;
+            }
+
+            if ($toReturn > 0.009) {
+                $hasReturn = true;
+                $returnParts[] = number_format($toReturn, 0, ',', ' ').' '.$code;
+            }
+        }
+
+        $shared = Schema::hasColumn('events', 'shared_with_pilot') && (bool) $event->shared_with_pilot;
+        $sharedAtLabel = null;
+        if ($shared && $event->shared_with_pilot_at) {
+            $sharedAtLabel = $event->shared_with_pilot_at->format('d.m.Y H:i');
+            if ($event->sharedWithPilotByUser) {
+                $sharedAtLabel .= ' · '.$event->sharedWithPilotByUser->name;
+            }
+        }
+
+        $emailSentLabel = null;
+        if (Schema::hasColumn('events', 'pilot_trip_email_sent_at') && $event->pilot_trip_email_sent_at) {
+            $emailSentLabel = $event->pilot_trip_email_sent_at->format('d.m.Y H:i');
+        }
+
+        return [
+            'pilot_name' => $pilotName,
+            'pilot_phone' => $pilotPhone,
+            'pilot_email' => $pilotEmail,
+            'pilot_settlement_form_label' => $settlementFormLabel,
+            'contractor_url' => $contractorUrl,
+            'participants_label' => $participantsLabel,
+            'shared' => $shared,
+            'shared_at_label' => $sharedAtLabel,
+            'email_sent_label' => $emailSentLabel,
+            'preview_url' => $this->pilotPreviewUrl(),
+            'preview_label' => 'Podgląd jako '.$previewName,
+            'can_preview' => (bool) Auth::user()?->hasRole(['admin', 'super_admin', 'biuro']),
+            'check_in_label' => $checkInLabel,
+            'checklist_done' => (int) ($checklist['done'] ?? 0),
+            'checklist_total' => (int) ($checklist['total'] ?? 0),
+            'paid_label' => $advance->formatOfficePayoutLabel($event),
+            'return_label' => $returnParts !== [] ? implode(' / ', $returnParts) : '—',
+            'return_danger' => $hasReturn,
+            'plan_label' => $this->formatPlannedAdvanceLabel($event, $advance),
+            'spent_label' => $spentParts !== [] ? implode(' / ', $spentParts) : '—',
+            'expense_count' => $expenseCount,
+        ];
+    }
+
+    protected function formatPlannedAdvanceLabel(Event $event, PilotAdvanceService $advance): string
+    {
+        $lines = $advance->plannedLines($event);
+
+        if ($lines->isNotEmpty()) {
+            $parts = [];
+            foreach ($lines as $line) {
+                $amount = (float) $line->amount;
+                if ($amount <= 0.009) {
+                    continue;
+                }
+                $parts[] = CurrencyAmountDisplay::formatIndicative($amount, $line->currency);
+            }
+
+            return $parts !== [] ? implode(' + ', $parts) : '—';
+        }
+
+        if (filled($event->pilot_advance_planned_amount)) {
+            return CurrencyAmountDisplay::formatIndicative(
+                (float) $event->pilot_advance_planned_amount,
+                $event->pilotAdvancePaidCurrency,
+            );
+        }
+
+        return '—';
+    }
+
     public function form(Form $form): Form
     {
         return $form->schema([
-            Forms\Components\Placeholder::make('pilot_empty_state')
-                ->hiddenLabel()
-                ->visible(fn (): bool => blank($this->record->pilot_contractor_id) && blank($this->record->assigned_to))
-                ->content(new \Illuminate\Support\HtmlString(
-                    '<div class="rounded-lg border border-dashed border-gray-300 bg-gray-50 px-4 py-6 text-center dark:border-gray-600 dark:bg-gray-800/50">'
-                    .'<p class="text-sm font-medium text-gray-900 dark:text-gray-100">Brak przypisanego pilota</p>'
-                    .'<p class="mt-1 text-sm text-gray-500">Wybierz pilota w sekcji „Przypisanie” poniżej.</p>'
-                    .'</div>'
-                ))
+            Forms\Components\Group::make([
+                Forms\Components\Placeholder::make('pilot_empty_state')
+                    ->hiddenLabel()
+                    ->visible(fn (): bool => blank($this->record->pilot_contractor_id) && blank($this->record->assigned_to))
+                    ->content(new \Illuminate\Support\HtmlString(
+                        '<div class="rounded-lg border border-dashed border-gray-300 bg-gray-50 px-4 py-6 text-center dark:border-gray-600 dark:bg-gray-800/50">'
+                        .'<p class="text-sm font-medium text-gray-900 dark:text-gray-100">Brak przypisanego pilota</p>'
+                        .'<p class="mt-1 text-sm text-gray-500">Wybierz pilota w sekcji „Przypisanie pilota” poniżej.</p>'
+                        .'</div>'
+                    ))
+                    ->columnSpanFull(),
+            ])
+                ->extraAttributes(['class' => 'pilot-form-tab pilot-form-tab--briefing'])
                 ->columnSpanFull(),
 
             ...\App\Filament\Forms\EventReadinessFields::pilotPageSchema(),
@@ -62,8 +235,11 @@ class ManageEventPilot extends EditRecord
             panel: 'pilot',
         ).'?preview=1';
 
-        if (filled($this->record->assigned_to)) {
-            $url .= '&pilot='.(int) $this->record->assigned_to;
+        $pilotId = app(PilotContractorAssignmentService::class)
+            ->resolvePortalUserIdForEvent($this->record);
+
+        if ($pilotId) {
+            $url .= '&pilot='.$pilotId;
         }
 
         return $url;
@@ -180,6 +356,12 @@ class ManageEventPilot extends EditRecord
 
         unset($data['pilot_advance_planned_lines']);
 
+        if (Schema::hasColumn('events', 'pilot_settlement_form') && array_key_exists('pilot_settlement_form', $data)) {
+            $data['pilot_settlement_form'] = filled($data['pilot_settlement_form'] ?? null)
+                ? (string) $data['pilot_settlement_form']
+                : null;
+        }
+
         if (Schema::hasColumn('events', 'pilot_funds_paid')) {
             $this->pendingPilotPaymentApproval = ! empty($data['pilot_funds_paid']) && ! $this->record->pilot_funds_paid;
             unset($data['pilot_funds_paid']);
@@ -278,6 +460,22 @@ class ManageEventPilot extends EditRecord
         $this->record->refresh();
     }
 
+    #[On('pilot-checklist-updated')]
+    public function refreshPilotChecklistStats(): void
+    {
+        // Statystyki w pasku liczą się z bazy przy re-renderze.
+    }
+
+    public function scrollToPilotCashDesk(): void
+    {
+        $this->setPilotTab('cash');
+        $this->js(<<<'JS'
+            setTimeout(() => {
+                document.getElementById('pilot-cash-desk')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+            }, 50);
+        JS);
+    }
+
     /**
      * Cofa omyłkowo zatwierdzoną wypłatę gotówki (flaga + saldo „Od biura”).
      */
@@ -308,51 +506,7 @@ class ManageEventPilot extends EditRecord
 
     protected function getHeaderActions(): array
     {
-        return [
-            Actions\Action::make('currency_exchange')
-                ->label('Wymiana waluty')
-                ->icon('heroicon-o-arrows-right-left')
-                ->color('warning')
-                ->modalHeading('Wymiana waluty')
-                ->modalDescription('Zaksięguj wymianę gotówki pilota (np. PLN → EUR).')
-                ->modalWidth('3xl')
-                ->modalSubmitAction(false)
-                ->modalCancelActionLabel('Zamknij')
-                ->visible(fn (): bool => $this->getRecord()->showsPilotCurrencyExchange())
-                ->modalContent(fn (): View => view(
-                    'filament.resources.event-resource.pages.partials.pilot-currency-exchange-modal',
-                    ['event' => $this->getRecord()],
-                )),
-
-            Actions\Action::make('bus_collections')
-                ->label('Zbiórka w autokarze')
-                ->icon('heroicon-o-banknotes')
-                ->color('warning')
-                ->modalHeading('Zbiórka w autokarze')
-                ->modalDescription('Zapis zbiórki zaliczek od uczestników w gotówce.')
-                ->modalWidth('3xl')
-                ->modalSubmitAction(false)
-                ->modalCancelActionLabel('Zamknij')
-                ->visible(fn (): bool => $this->getRecord()->showsPilotBusCollections())
-                ->modalContent(fn (): View => view(
-                    'filament.resources.event-resource.pages.partials.pilot-bus-collections-modal',
-                    ['event' => $this->getRecord()],
-                )),
-
-            Actions\Action::make('preview_pilot_panel')
-                ->label('Podgląd portalu')
-                ->icon('heroicon-o-eye')
-                ->color('primary')
-                ->url(fn (): string => $this->pilotPreviewUrl())
-                ->openUrlInNewTab()
-                ->visible(fn (): bool => (bool) Auth::user()?->hasRole(['admin', 'super_admin', 'biuro'])),
-
-            Actions\Action::make('pdf_pilot')
-                ->label('PDF')
-                ->icon('heroicon-o-document-arrow-down')
-                ->color('gray')
-                ->url(fn () => route('admin.events.pdf', ['event' => $this->record->id, 'audience' => 'pilot']))
-                ->openUrlInNewTab(),
-        ];
+        // Wymiana / zbiórka / podgląd / PDF — w belce statusu i kolumnie rozliczenia, nie w headerze Filament.
+        return [];
     }
 }

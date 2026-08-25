@@ -62,7 +62,7 @@ final class ProgramPointCostPricing
         return self::applyIncludedExtras(
             $paying,
             $event->resolveGratisCountForParticipantCount($paying),
-            self::pilotCount($event),
+            self::pilotCount($event, $paying),
             $event->resolveDriverCountForParticipantCount($paying),
             $includeGratis,
             $includePilot,
@@ -87,9 +87,9 @@ final class ProgramPointCostPricing
         );
     }
 
-    public static function pilotCount(Event $event): int
+    public static function pilotCount(Event $event, ?int $payingParticipants = null): int
     {
-        return filled($event->assigned_to) ? 1 : 0;
+        return max(0, $event->resolveStaffCountForParticipantCount($payingParticipants));
     }
 
     /**
@@ -121,7 +121,7 @@ final class ProgramPointCostPricing
 
         $paying = max(1, (int) ($payingParticipants ?? $event->participant_count ?? 1));
         $gratisAvailable = max(0, $event->resolveGratisCountForParticipantCount($paying));
-        $pilotAvailable = self::pilotCount($event);
+        $pilotAvailable = self::pilotCount($event, $paying);
         $driverAvailable = max(0, $event->resolveDriverCountForParticipantCount($paying));
 
         $includeGratis = (bool) ($point->include_gratis_in_cost ?? false);

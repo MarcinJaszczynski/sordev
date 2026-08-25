@@ -239,7 +239,7 @@ final class PilotProgramPointFinanceDisplay
         if ($base && ($base->paid_by ?? 'office') === 'pilot') {
             $plannedAmount = (float) ($base->planned_amount ?? 0);
             if ($plannedAmount > 0) {
-                $lines[] = 'Plan: '.\App\Support\CurrencyAmountDisplay::format(
+                $lines[] = 'Planowane: '.\App\Support\CurrencyAmountDisplay::format(
                     $plannedAmount,
                     $base->plannedCurrency,
                     $convertToPln,

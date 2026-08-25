@@ -32,7 +32,7 @@ final class UpdateSettlementCostPaymentAction
 
         $plan = $this->resolvePlanCost($payment);
         if (! $plan) {
-            throw new InvalidArgumentException('Nie znaleziono pozycji planu dla tej wpłaty.');
+            throw new InvalidArgumentException('Nie znaleziono kosztu dla tej wpłaty.');
         }
 
         [$amount, $rate, $amountPln, $currencyId] = $this->resolveAmounts($data, $plan);
@@ -57,10 +57,11 @@ final class UpdateSettlementCostPaymentAction
             $settlement = $payment->settlement()->firstOrFail();
 
             $payment->update([
+                'planned_convert_to_pln' => $data->convertToPln,
                 'actual_amount' => $amount,
                 'actual_currency_id' => $currencyId,
                 'actual_rate' => $rate,
-                'actual_amount_pln' => $amountPln,
+                'actual_amount_pln' => $amountPln > 0 ? $amountPln : null,
                 'paid_by' => $paidBy,
                 'advance_type' => $advanceType,
                 'payment_method' => $method,
@@ -96,23 +97,25 @@ final class UpdateSettlementCostPaymentAction
      */
     private function resolveAmounts(UpdateSettlementCostPaymentData $data, EventSettlementCost $plan): array
     {
-        $currencyId = $data->currencyId ?? $plan->planned_currency_id;
+        $currencyId = $data->currencyId ?? $payment->actual_currency_id ?? $plan->planned_currency_id;
         $planCurrency = $plan->relationLoaded('plannedCurrency')
             ? $plan->plannedCurrency
             : $plan->plannedCurrency()->first();
-        $symbol = CurrencyAmountDisplay::symbol($planCurrency);
-        $defaultRate = (float) ($plan->planned_rate ?? ($planCurrency?->exchange_rate ?? 1));
+        $defaultRate = (float) ($data->rate ?? $payment->actual_rate ?? $plan->planned_rate ?? ($planCurrency?->exchange_rate ?? 1));
         if ($defaultRate <= 0) {
             $defaultRate = 1.0;
         }
 
-        $isForeign = $symbol !== 'PLN' && $currencyId;
+        $isForeign = CurrencyAmountDisplay::isForeignCurrency($currencyId);
 
         if ($isForeign && $data->amount !== null && $data->amount > 0) {
             $amount = round((float) $data->amount, 2);
             $rate = round((float) ($data->rate ?? $defaultRate), 6);
             if ($rate <= 0) {
                 $rate = $defaultRate;
+            }
+            if (! $data->convertToPln) {
+                return [$amount, $rate, 0.0, $currencyId];
             }
             $amountPln = $data->amountPln > 0
                 ? round($data->amountPln, 2)
@@ -145,7 +148,7 @@ final class UpdateSettlementCostPaymentAction
                 ->first();
         }
 
-        if (in_array($payment->source_type, ['transport_payment', 'accommodation_payment'], true)) {
+        if (in_array($payment->source_type, ['transport_payment', 'accommodation_payment', 'accommodation_hotel_payment', 'accommodation_hotel_stay_payment'], true)) {
             $planType = str_replace('_payment', '', $payment->source_type);
 
             return EventSettlementCost::query()
@@ -170,5 +173,9 @@ final class UpdateSettlementCostPaymentAction
     {
         app(\App\Services\SettlementPaymentHealthService::class)
             ->syncPlanPaymentStatus($plan, $settlement->costs);
+
+        if ($plan->source_type === 'insurance_day') {
+            app(\App\Services\EventInsuranceOperationalSync::class)->syncFromPlanCost($plan->fresh());
+        }
     }
 }

@@ -4,6 +4,7 @@ namespace App\Livewire;
 
 use App\Filament\Pilot\Resources\PilotEventResource;
 use App\Models\Event;
+use App\Services\PilotContractorAssignmentService;
 use App\Services\PilotOnboardingService;
 use Filament\Actions\Action;
 use Filament\Actions\Concerns\InteractsWithActions;
@@ -22,15 +23,24 @@ class PilotPortalSettingsToolbar extends Component implements HasActions, HasFor
 
     public int $eventId;
 
-    public function mount(int $eventId): void
+    /**
+     * full — cały pasek (testy / Finanse),
+     * share — udostępnianie + e-mail + podgląd (belka statusu),
+     * modules — przełączniki Portal: wymiana / zbiórka (przy rozliczeniu).
+     */
+    public string $variant = 'full';
+
+    public function mount(int $eventId, string $variant = 'full'): void
     {
         $this->eventId = $eventId;
+        $this->variant = in_array($variant, ['full', 'share', 'modules'], true) ? $variant : 'full';
     }
 
     public function render()
     {
         return view('livewire.pilot-portal-settings-toolbar', [
             'event' => $this->event(),
+            'variant' => $this->variant,
         ]);
     }
 
@@ -40,6 +50,7 @@ class PilotPortalSettingsToolbar extends Component implements HasActions, HasFor
             ->label('Udostępnij pilotowi')
             ->icon('heroicon-o-share')
             ->color('success')
+            ->size(fn (): string => $this->variant === 'share' ? 'sm' : 'md')
             ->requiresConfirmation()
             ->modalHeading('Udostępnić imprezę pilotowi?')
             ->modalDescription('Pilot zobaczy wycieczkę w swoim panelu. E-mail wyślesz osobnym przyciskiem po udostępnieniu.')
@@ -60,7 +71,7 @@ class PilotPortalSettingsToolbar extends Component implements HasActions, HasFor
                     ->success()
                     ->send();
 
-                $this->dispatch('$refresh');
+                $this->dispatchPortalVisibilityUpdated();
             });
     }
 
@@ -72,6 +83,7 @@ class PilotPortalSettingsToolbar extends Component implements HasActions, HasFor
                 : 'Wyślij e-mail do pilota')
             ->icon('heroicon-o-envelope')
             ->color('primary')
+            ->size(fn (): string => $this->variant === 'share' ? 'sm' : 'md')
             ->requiresConfirmation()
             ->modalHeading('Wysłać powiadomienie e-mail do pilota?')
             ->modalDescription('Pilot otrzyma wiadomość z informacją o wycieczce i linkiem do panelu.')
@@ -108,21 +120,28 @@ class PilotPortalSettingsToolbar extends Component implements HasActions, HasFor
                     ->success()
                     ->send();
 
-                $this->dispatch('$refresh');
+                $this->dispatchPortalVisibilityUpdated();
             });
     }
 
     public function sharedStatusAction(): Action
     {
         return Action::make('sharedStatus')
-            ->label(fn (): string => 'Udostępniona '.$this->event()->shared_with_pilot_at?->format('d.m.Y H:i'))
-            ->icon('heroicon-o-check-circle')
-            ->color('success')
+            ->label(fn (): string => $this->variant === 'share'
+                ? 'Cofnij udostępnienie'
+                : ('Udostępniona '.$this->event()->shared_with_pilot_at?->format('d.m.Y H:i')))
+            ->icon(fn (): string => $this->variant === 'share'
+                ? 'heroicon-o-x-circle'
+                : 'heroicon-o-check-circle')
+            ->color(fn (): string => $this->variant === 'share' ? 'danger' : 'success')
+            ->size(fn (): string => $this->variant === 'share' ? 'sm' : 'md')
             ->requiresConfirmation()
             ->modalHeading('Cofnąć udostępnienie pilotowi?')
-            ->modalDescription('Pilot przestanie widzieć tę wycieczkę w swoim panelu. Możesz udostępnić ją ponownie w każdej chwili.')
+            ->modalDescription('Pilot przestanie widzieć tę wycieczkę w swoim panelu. Możesz udostępnić ją ponownie w każdej chwili. Przy zmianie pilota udostępnienie i tak jest kasowane automatycznie.')
             ->modalSubmitActionLabel('Cofnij udostępnienie')
-            ->tooltip('Kliknij, aby cofnąć udostępnienie w panelu pilota.')
+            ->tooltip(fn (): string => 'Udostępniono '
+                .($this->event()->shared_with_pilot_at?->format('d.m.Y H:i') ?? '—')
+                .' — cofnij przy omyłce, poprawkach lub przed zmianą pilota.')
             ->visible(fn (): bool => Schema::hasColumn('events', 'shared_with_pilot')
                 && (bool) $this->event()->shared_with_pilot)
             ->action(function (): void {
@@ -151,7 +170,7 @@ class PilotPortalSettingsToolbar extends Component implements HasActions, HasFor
             ->success()
             ->send();
 
-        $this->dispatch('$refresh');
+        $this->dispatchPortalVisibilityUpdated();
     }
 
     public function toggleCurrencyExchangeAction(): Action
@@ -161,6 +180,7 @@ class PilotPortalSettingsToolbar extends Component implements HasActions, HasFor
             ->icon('heroicon-o-arrows-right-left')
             ->color(fn (): string => $this->event()->showsPilotCurrencyExchange() ? 'success' : 'gray')
             ->outlined(fn (): bool => ! $this->event()->showsPilotCurrencyExchange())
+            ->size('sm')
             ->tooltip('Widoczność formularza wymiany waluty w portalu pilota i poniżej na tej stronie.')
             ->visible(fn (): bool => Schema::hasColumn('events', 'pilot_portal_show_currency_exchange'))
             ->action(function (): void {
@@ -185,6 +205,7 @@ class PilotPortalSettingsToolbar extends Component implements HasActions, HasFor
             ->icon('heroicon-o-banknotes')
             ->color(fn (): string => $this->event()->showsPilotBusCollections() ? 'success' : 'gray')
             ->outlined(fn (): bool => ! $this->event()->showsPilotBusCollections())
+            ->size('sm')
             ->tooltip('Widoczność formularza zbiórki w autokarze w portalu pilota i poniżej na tej stronie.')
             ->visible(fn (): bool => Schema::hasColumn('events', 'pilot_portal_show_bus_collections'))
             ->action(function (): void {
@@ -195,6 +216,31 @@ class PilotPortalSettingsToolbar extends Component implements HasActions, HasFor
 
                 Notification::make()
                     ->title('Zapisano widoczność zbiórki w portalu')
+                    ->success()
+                    ->send();
+
+                $this->dispatchPortalVisibilityUpdated();
+            });
+    }
+
+    public function toggleAttendanceAction(): Action
+    {
+        return Action::make('toggleAttendance')
+            ->label('Portal: obecność')
+            ->icon('heroicon-o-clipboard-document-list')
+            ->color(fn (): string => $this->event()->showsPilotAttendance() ? 'success' : 'gray')
+            ->outlined(fn (): bool => ! $this->event()->showsPilotAttendance())
+            ->size('sm')
+            ->tooltip('Widoczność listy obecności w portalu pilota (domyślnie wyłączona).')
+            ->visible(fn (): bool => Schema::hasColumn('events', 'pilot_portal_show_attendance'))
+            ->action(function (): void {
+                $event = $this->event();
+                $event->update([
+                    'pilot_portal_show_attendance' => ! $event->showsPilotAttendance(),
+                ]);
+
+                Notification::make()
+                    ->title('Zapisano widoczność listy obecności')
                     ->success()
                     ->send();
 
@@ -215,7 +261,8 @@ class PilotPortalSettingsToolbar extends Component implements HasActions, HasFor
 
     public function previewAsPilotVisible(): bool
     {
-        return $this->canPreviewPortal() && filled($this->event()->assigned_to);
+        return $this->canPreviewPortal()
+            && app(PilotContractorAssignmentService::class)->eventHasAssignedPilot($this->event());
     }
 
     public function previewUrl(): string
@@ -226,9 +273,11 @@ class PilotPortalSettingsToolbar extends Component implements HasActions, HasFor
             panel: 'pilot',
         ).'?preview=1';
 
-        $pilotId = $this->event()->assigned_to;
-        if (filled($pilotId)) {
-            $url .= '&pilot='.(int) $pilotId;
+        $pilotId = app(PilotContractorAssignmentService::class)
+            ->resolvePortalUserIdForEvent($this->event());
+
+        if ($pilotId) {
+            $url .= '&pilot='.$pilotId;
         }
 
         return $url;
@@ -236,7 +285,8 @@ class PilotPortalSettingsToolbar extends Component implements HasActions, HasFor
 
     public function previewAsPilotLabel(): string
     {
-        $name = $this->event()->assignedUser?->name;
+        $name = app(PilotContractorAssignmentService::class)
+            ->pilotDisplayNameForEvent($this->event());
 
         return filled($name)
             ? 'Podgląd jako '.$name
@@ -246,7 +296,8 @@ class PilotPortalSettingsToolbar extends Component implements HasActions, HasFor
     public function migrationHintVisible(): bool
     {
         return ! Schema::hasColumn('events', 'pilot_portal_show_currency_exchange')
-            || ! Schema::hasColumn('events', 'pilot_portal_show_bus_collections');
+            || ! Schema::hasColumn('events', 'pilot_portal_show_bus_collections')
+            || ! Schema::hasColumn('events', 'pilot_portal_show_attendance');
     }
 
     protected function dispatchPortalVisibilityUpdated(): void
@@ -258,7 +309,7 @@ class PilotPortalSettingsToolbar extends Component implements HasActions, HasFor
     protected function event(): Event
     {
         return Event::query()
-            ->with(['assignedUser', 'sharedWithPilotByUser'])
+            ->with(['assignedUser', 'pilotContractor', 'sharedWithPilotByUser'])
             ->findOrFail($this->eventId);
     }
 }

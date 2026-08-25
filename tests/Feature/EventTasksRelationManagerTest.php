@@ -130,6 +130,57 @@ class EventTasksRelationManagerTest extends TestCase
             ->assertSet('mountedActions', ['editTask']);
     }
 
+    public function test_event_tasks_deep_link_mount_hook_is_idempotent(): void
+    {
+        $user = User::factory()->create();
+        $user->assignRole('admin');
+
+        $event = Event::factory()->create();
+        $task = Task::factory()->create([
+            'title' => 'Impreza potwierdzona — lista kontrolna',
+            'taskable_type' => Event::class,
+            'taskable_id' => $event->id,
+            'author_id' => $user->id,
+            'assignee_id' => $user->id,
+            'status_id' => Task::getDefaultStatusId(),
+        ]);
+
+        $component = Livewire::actingAs($user)
+            ->withQueryParams(['editTask' => $task->id])
+            ->test(TasksRelationManager::class, [
+                'ownerRecord' => $event,
+                'pageClass' => ManageEventTasks::class,
+            ]);
+
+        $component->instance()->mountInteractsWithTaskEditModal();
+
+        $component
+            ->assertSet('editingTaskId', $task->id)
+            ->assertSet('mountedActions', ['editTask']);
+    }
+
+    public function test_manage_event_tasks_page_does_not_open_duplicate_modal_from_page_component(): void
+    {
+        $user = User::factory()->create();
+        $user->assignRole('admin');
+
+        $event = Event::factory()->create();
+        $task = Task::factory()->create([
+            'title' => 'Impreza potwierdzona — lista kontrolna',
+            'taskable_type' => Event::class,
+            'taskable_id' => $event->id,
+            'author_id' => $user->id,
+            'assignee_id' => $user->id,
+            'status_id' => Task::getDefaultStatusId(),
+        ]);
+
+        Livewire::actingAs($user)
+            ->withQueryParams(['editTask' => $task->id])
+            ->test(ManageEventTasks::class, ['record' => $event->getKey()])
+            ->assertSet('mountedActions', [])
+            ->assertSet('editingTaskId', null);
+    }
+
     public function test_event_tasks_include_reservation_tasks_and_resolve_navigation(): void
     {
         $user = User::factory()->create();

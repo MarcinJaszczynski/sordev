@@ -4,6 +4,7 @@
 
     $editable = $editable ?? true;
     $compact = $compact ?? false;
+    $isPilotContext = ($this->context ?? 'admin') === 'pilot';
 @endphp
 
 <div class="space-y-3">
@@ -84,7 +85,7 @@
                     </div>
                   @elseif($planned > 0)
                     <p class="text-xs text-gray-600">
-                      Plan: {{ number_format($planned, 2, ',', ' ') }} {{ $symbol }}
+                      Planowane: {{ number_format($planned, 2, ',', ' ') }} {{ $symbol }}
                       @if($pilotDue > 0.009)
                         · do zapłaty: {{ number_format($pilotDue, 2, ',', ' ') }} {{ $symbol }}
                       @endif
@@ -158,7 +159,7 @@
                     @if($planned > 0.009)
                       <div class="text-teal-800 dark:text-teal-200">
                         plan {{ number_format($planned, 2, ',', ' ') }} {{ $symbol }}
-                        · <span class="font-semibold">dopłata {{ number_format($pilotDue, 2, ',', ' ') }} {{ $symbol }}</span>
+                        · <span class="font-semibold">{{ $isPilotContext ? 'pilot dopłaca' : 'dopłata' }} {{ number_format($pilotDue, 2, ',', ' ') }} {{ $symbol }}</span>
                       </div>
                     @endif
                   </div>

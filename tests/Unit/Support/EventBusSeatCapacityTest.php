@@ -7,6 +7,7 @@ namespace Tests\Unit\Support;
 use App\Models\Bus;
 use App\Models\Event;
 use App\Models\EventQty;
+use App\Models\Vehicle;
 use App\Support\EventBusSeatCapacity;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Tests\TestCase;
@@ -94,5 +95,66 @@ class EventBusSeatCapacityTest extends TestCase
                 default => null,
             }
         ));
+    }
+
+    public function test_resolve_fleet_message_uses_vehicle_passenger_capacity(): void
+    {
+        $vehicle = Vehicle::factory()->create([
+            'registration_number' => 'WW 12345',
+            'capacity' => 19,
+            'crew_seats' => 2,
+        ]);
+
+        $message = EventBusSeatCapacity::resolveFleetMessage(
+            fn (string $key) => match ($key) {
+                'main_fleet_vehicle_id' => $vehicle->id,
+                'participant_count' => 18,
+                'gratis_count' => 2,
+                default => null,
+            }
+        );
+
+        $this->assertNotNull($message);
+        $this->assertStringContainsString('WW 12345', $message);
+        $this->assertStringContainsString('19 miejsc', $message);
+        $this->assertStringContainsString('Brakuje 1 miejsce', $message);
+    }
+
+    public function test_resolve_fleet_message_null_when_within_capacity(): void
+    {
+        $vehicle = Vehicle::factory()->create([
+            'capacity' => 49,
+            'crew_seats' => 2,
+        ]);
+
+        $this->assertNull(EventBusSeatCapacity::resolveFleetMessage(
+            fn (string $key) => match ($key) {
+                'main_fleet_vehicle_id' => $vehicle->id,
+                'participant_count' => 40,
+                'gratis_count' => 5,
+                default => null,
+            }
+        ));
+    }
+
+    public function test_resolve_fleet_message_ignores_crew_seats(): void
+    {
+        $vehicle = Vehicle::factory()->create([
+            'capacity' => 49,
+            'crew_seats' => 2,
+        ]);
+
+        // 49+1 = 50 > 49 passenger seats; crew_seats must not inflate capacity.
+        $message = EventBusSeatCapacity::resolveFleetMessage(
+            fn (string $key) => match ($key) {
+                'main_fleet_vehicle_id' => $vehicle->id,
+                'participant_count' => 49,
+                'gratis_count' => 1,
+                default => null,
+            }
+        );
+
+        $this->assertNotNull($message);
+        $this->assertStringContainsString('49 miejsc', $message);
     }
 }

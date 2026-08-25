@@ -13,7 +13,7 @@ class NotifyEventMarginDiscrepancies extends Command
 {
     protected $signature = 'app:notify-margin-discrepancies {--threshold=5 : Próg różnicy w procentach}';
 
-    protected $description = 'Powiadom administratorów o imprezach z rozbieżnością kalkulacji vs rozliczenia';
+    protected $description = 'Powiadom administratorów o imprezach z rozbieżnością szablon vs planowane';
 
     public function handle(): int
     {

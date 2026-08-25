@@ -1,6 +1,13 @@
 <!-- Style przeniesione do public/dist-front/css/style.css -->
 @extends('front.layout.master')
 
+@section('head')
+    @include('front.partials.seo', [
+        'pageTitle' => 'Ubezpieczenia na wycieczki szkolne | Biuro Podróży RAFA',
+        'pageDescription' => 'Sprawdź ubezpieczenia dla wycieczek szkolnych i grupowych: NNW, KL i opcje dodatkowe. Biuro Podróży RAFA wspiera szkoły i organizatorów w doborze ochrony.',
+    ])
+@endsection
+
 @section('main_content')
     <div class="page-top">
         <div class="container">

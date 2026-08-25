@@ -4,7 +4,11 @@
     $contacts = $contacts ?? collect();
 @endphp
 
-<div class="space-y-3 rounded-lg border border-gray-200 bg-gray-50 px-3 py-3 text-sm dark:border-gray-700 dark:bg-gray-900/40">
+<div @class([
+    'transport-contractor-preview space-y-3 rounded-lg border px-3 py-3 text-sm',
+    'border-[#E5E3DA] bg-[#F1EFE8] text-[#2C2C2A]' => ($variant ?? null) === 'sidebar',
+    'border-gray-200 bg-gray-50 dark:border-gray-700 dark:bg-gray-900/40' => ($variant ?? null) !== 'sidebar',
+])>
     @if ($contractor)
         <div>
             <p class="text-xs font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400">Karta kontrahenta</p>

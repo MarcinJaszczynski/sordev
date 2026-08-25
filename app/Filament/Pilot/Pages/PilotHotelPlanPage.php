@@ -6,6 +6,7 @@ use App\Filament\Pilot\Concerns\AuthorizesPilotTrip;
 use App\Filament\Pilot\Concerns\HasPilotTripNav;
 use App\Models\Event;
 use App\Services\EventHotelPlanService;
+use App\Services\PilotAccessService;
 use Filament\Notifications\Notification;
 use Filament\Pages\Page;
 use Illuminate\Contracts\Support\Htmlable;
@@ -32,6 +33,9 @@ class PilotHotelPlanPage extends Page
     /** @var array<int, string> */
     public array $roomNumbers = [];
 
+    /** @var array<string, string> unit_id.bed_index => name */
+    public array $occupantNames = [];
+
     public function mount(Event $event): void
     {
         $this->authorizePilotTrip($event, requireFullAccess: true);
@@ -48,7 +52,7 @@ class PilotHotelPlanPage extends Page
 
     public function getTitle(): string|Htmlable
     {
-        return 'Hotele: '.$this->event->name;
+        return $this->event->name;
     }
 
     public function refreshPlan(): void
@@ -60,12 +64,20 @@ class PilotHotelPlanPage extends Page
             ->all();
 
         $this->roomNumbers = [];
+        $this->occupantNames = [];
         foreach ($this->plan as $night) {
             foreach (['qty', 'gratis', 'staff', 'driver'] as $role) {
                 foreach ($night[$role] ?? [] as $line) {
                     foreach ($line['units'] ?? [] as $unit) {
                         if (! empty($unit['id'])) {
-                            $this->roomNumbers[(int) $unit['id']] = (string) ($unit['room_number'] ?? '');
+                            $unitId = (int) $unit['id'];
+                            $this->roomNumbers[$unitId] = (string) ($unit['room_number'] ?? '');
+
+                            foreach ($unit['occupant_slots'] ?? [] as $slot) {
+                                $bedIndex = (int) ($slot['bed_index'] ?? 1);
+                                $slotKey = "{$unitId}.{$bedIndex}";
+                                $this->occupantNames[$slotKey] = (string) ($slot['name'] ?? '');
+                            }
                         }
                     }
                 }
@@ -77,7 +89,9 @@ class PilotHotelPlanPage extends Page
     {
         abort_unless($this->canEditRoomNumbers(), 403);
 
-        app(EventHotelPlanService::class)->updateUnitRoomNumbers($this->event, $this->roomNumbers);
+        $service = app(EventHotelPlanService::class);
+        $service->updateUnitRoomNumbers($this->event, $this->roomNumbers);
+        $service->updateUnitOccupantNames($this->event, $this->occupantNames);
         $this->refreshPlan();
 
         Notification::make()
@@ -88,6 +102,10 @@ class PilotHotelPlanPage extends Page
 
     public function canEditRoomNumbers(): bool
     {
+        if (app(PilotAccessService::class)->isPreviewReadOnly()) {
+            return false;
+        }
+
         $user = Auth::user();
         if (! $user) {
             return false;

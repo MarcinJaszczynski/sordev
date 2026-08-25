@@ -5,59 +5,53 @@
     ])
 
     @if(filled($archiveMessage))
-        <div class="mb-4 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">
+        <div class="portal-notice portal-notice--amber">
             {{ $archiveMessage }}
         </div>
     @endif
 
-    <div class="mb-4 flex flex-wrap items-end gap-3">
-        <div>
-            <label class="mb-1 block text-xs text-gray-600">Dzień wycieczki</label>
-            <select wire:model.live="day" class="fi-input rounded-lg border-gray-300 text-sm" @disabled($readOnly)>
-                @for($d = 1; $d <= $this->maxDay; $d++)
-                    <option value="{{ $d }}">Dzień {{ $d }}</option>
-                @endfor
-            </select>
+    <div class="portal-card mb-3">
+        <div class="flex flex-wrap items-end gap-3">
+            <div>
+                <label class="mb-1 block text-xs text-[#888780]">Dzień wycieczki</label>
+                <select wire:model.live="day" class="fi-input rounded-lg border-[#D3D1C7] text-sm" @disabled($readOnly)>
+                    @for($d = 1; $d <= $this->maxDay; $d++)
+                        <option value="{{ $d }}">Dzień {{ $d }}</option>
+                    @endfor
+                </select>
+            </div>
+            @unless($readOnly)
+                <button type="button" wire:click="save" class="portal-btn-primary">
+                    Zapisz obecność
+                </button>
+            @endunless
         </div>
-        @unless($readOnly)
-            <x-filament::button wire:click="save" color="primary" icon="heroicon-o-check">
-                Zapisz obecność
-            </x-filament::button>
-        @endunless
     </div>
 
     @if ($this->participants === [])
-        <div class="client-portal-section text-sm text-slate-600">
-            Brak uczestników na liście. Biuro musi uzupełnić listę uczestników.
+        <div class="portal-card">
+            <p class="portal-muted" style="margin:0;">Brak uczestników na liście. Biuro musi uzupełnić listę uczestników.</p>
         </div>
     @else
-        <div class="client-portal-section overflow-hidden !p-0">
-            <table class="min-w-full divide-y divide-slate-100 text-sm">
-                <thead class="bg-slate-50 text-left text-xs uppercase text-slate-500">
-                    <tr>
-                        <th class="px-4 py-2">Uczestnik</th>
-                        <th class="px-4 py-2">Status</th>
-                    </tr>
-                </thead>
-                <tbody class="divide-y divide-slate-100">
-                    @foreach ($this->participants as $participant)
-                        <tr wire:key="attendance-{{ $participant->id }}-{{ $day }}">
-                            <td class="px-4 py-2 font-medium">{{ $participant->fullName() }}</td>
-                            <td class="px-4 py-2">
-                                <select
-                                    wire:model="statuses.{{ $participant->id }}"
-                                    class="fi-input rounded-lg border-gray-300 text-sm"
-                                    @disabled($readOnly)
-                                >
-                                    <option value="present">Obecny</option>
-                                    <option value="absent">Nieobecny</option>
-                                    <option value="unknown">—</option>
-                                </select>
-                            </td>
-                        </tr>
-                    @endforeach
-                </tbody>
-            </table>
+        <div class="portal-card !p-0 overflow-hidden">
+            <div class="portal-card-title px-4 pt-4 pb-2">
+                <p>Lista obecności</p>
+            </div>
+            <ul class="divide-y divide-[#E5E3DA]">
+                @foreach ($this->participants as $participant)
+                    <li class="portal-attendance-row" wire:key="attendance-{{ $participant->id }}-{{ $day }}">
+                        <label class="portal-attendance-check">
+                            <input
+                                type="checkbox"
+                                wire:model.live="statuses.{{ $participant->id }}"
+                                @disabled($readOnly)
+                                aria-label="Obecny: {{ $participant->fullName() }}"
+                            />
+                            <span class="text-sm font-medium text-[#2C2C2A]">{{ $participant->fullName() }}</span>
+                        </label>
+                    </li>
+                @endforeach
+            </ul>
         </div>
     @endif
 </x-filament-panels::page>

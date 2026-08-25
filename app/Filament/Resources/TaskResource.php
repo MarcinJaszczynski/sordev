@@ -378,10 +378,10 @@ class TaskResource extends Resource
                 TaskSource::System->value => 'Systemowe',
                 'all' => 'Wszystkie',
             ])
-            ->default(TaskSource::Office->value)
+            ->default('all')
             ->selectablePlaceholder(false)
             ->query(function (Builder $query, array $data): Builder {
-                $value = $data['value'] ?? TaskSource::Office->value;
+                $value = $data['value'] ?? 'all';
 
                 if ($value === 'all' || $value === null || $value === '') {
                     return $query;

@@ -3,6 +3,7 @@
 namespace App\Filament\Client\Concerns;
 
 use App\Models\Event;
+use Illuminate\Contracts\Support\Htmlable;
 
 trait HasClientTripNav
 {
@@ -20,6 +21,17 @@ trait HasClientTripNav
     }
 
     public function getClientTripNavActiveTab(): ?string
+    {
+        return null;
+    }
+
+    /** Hero + pigułki zastępują nagłówek Filament. */
+    public function getHeading(): string|Htmlable
+    {
+        return '';
+    }
+
+    public function getSubheading(): ?string
     {
         return null;
     }

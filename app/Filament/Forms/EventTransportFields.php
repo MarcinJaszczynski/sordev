@@ -19,14 +19,17 @@ class EventTransportFields
 
         return [
             Forms\Components\Toggle::make('use_manual_transport_cost')
-                ->label('Ustal ręcznie koszt transportu (ryczałt)')
+                ->label('Ustal ręcznie koszt transportu')
                 ->default(false)
                 ->live()
                 ->afterStateUpdated(fn ($livewire) => $livewire->dispatch('event-price-table-refresh'))
-                ->helperText('Włącz, gdy koszt transportu jest ustalany indywidualnie za całą imprezę (np. różne ryczałty).'),
+                ->hintIcon(
+                    'heroicon-m-information-circle',
+                    tooltip: 'Włącz, gdy koszt transportu jest ustalany indywidualnie za całą imprezę (zamiast liczenia z autokaru).',
+                ),
 
             Forms\Components\TextInput::make('manual_transport_cost')
-                ->label('Koszt transportu (ryczałt za imprezę)')
+                ->label('Koszt transportu (kwota za imprezę)')
                 ->numeric()
                 ->minValue(0)
                 ->suffix('PLN')
@@ -34,14 +37,13 @@ class EventTransportFields
                 ->required(fn (Get $get): bool => (bool) $get('use_manual_transport_cost'))
                 ->live(onBlur: true)
                 ->afterStateUpdated(fn ($livewire) => $livewire->dispatch('event-price-table-refresh'))
-                ->helperText('Ta kwota trafia do kalkulacji imprezy zamiast automatycznego liczenia z autokaru.'),
+                ->hintIcon(
+                    'heroicon-m-information-circle',
+                    tooltip: 'Ta kwota trafia do kosztów imprezy zamiast automatycznego liczenia z autokaru.',
+                ),
 
-            Forms\Components\Textarea::make('adress_transport_start')
-                ->label('Adres podstawienia')
-                ->rows(3)
-                ->columnSpanFull()
-                ->visible(fn (): bool => Schema::hasColumn('events', 'adress_transport_start'))
-                ->helperText('Wpisz adres miejsca, z którego startuje transport.'),
+            // Adres podstawienia: jedno pole w sekcji kierowcy (pickup_place_details).
+            // adress_transport_start zostaje w DB (legacy / dokumenty), bez drugiego inputu w UI.
 
             Forms\Components\Textarea::make('adress_transport_end')
                 ->label('Adres docelowy')
@@ -56,26 +58,30 @@ class EventTransportFields
      * Jedyna definicja godzin transportu/imprezy — nie duplikować w innych sekcjach.
      * Native input + bez live(): Flatpickr + live datepickery obok powodowały „przeskakiwanie” wartości.
      *
+     * @return array{substitution: ?Forms\Components\TimePicker, departure: ?Forms\Components\TimePicker, return: ?Forms\Components\TimePicker}
+     */
+    public static function transportTimeFieldsKeyed(): array
+    {
+        return [
+            'substitution' => Schema::hasColumn('events', 'substitution_time')
+                ? self::stableTimePicker('substitution_time', 'Godzina podstawienia')
+                    ->hintIcon('heroicon-m-information-circle', tooltip: 'Zbiórka / podstawienie autokaru.')
+                : null,
+            'departure' => Schema::hasColumn('events', 'departure_time')
+                ? self::stableTimePicker('departure_time', 'Godzina odjazdu')
+                : null,
+            'return' => Schema::hasColumn('events', 'return_time')
+                ? self::stableTimePicker('return_time', 'Godzina powrotu')
+                : null,
+        ];
+    }
+
+    /**
      * @return array<int, Forms\Components\Component>
      */
     public static function transportTimeFields(): array
     {
-        $fields = [];
-
-        if (Schema::hasColumn('events', 'substitution_time')) {
-            $fields[] = self::stableTimePicker('substitution_time', 'Godzina podstawienia')
-                ->helperText('Zbiórka / podstawienie autokaru.');
-        }
-
-        if (Schema::hasColumn('events', 'departure_time')) {
-            $fields[] = self::stableTimePicker('departure_time', 'Godzina odjazdu');
-        }
-
-        if (Schema::hasColumn('events', 'return_time')) {
-            $fields[] = self::stableTimePicker('return_time', 'Godzina powrotu');
-        }
-
-        return $fields;
+        return array_values(array_filter(self::transportTimeFieldsKeyed()));
     }
 
     private static function stableTimePicker(string $name, string $label): Forms\Components\TimePicker

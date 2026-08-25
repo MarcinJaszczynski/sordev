@@ -51,7 +51,7 @@ class ProgramPointsRelationManager extends RelationManager
                     ->sortable(false)
                     ->formatStateUsing(fn ($state) => (bool) $state),
                 Tables\Columns\BooleanColumn::make('event_template_event_template_program_point.include_in_calculation')
-                    ->label('W kalkulacji')
+                    ->label('W kosztach')
                     ->sortable(false)
                     ->formatStateUsing(fn ($state) => (bool) $state),
                 Tables\Columns\BooleanColumn::make('event_template_event_template_program_point.active')
@@ -112,7 +112,7 @@ class ProgramPointsRelationManager extends RelationManager
                             ->default(false)
                             ->inline(false),
                         Forms\Components\Toggle::make('include_in_calculation')
-                            ->label('Uwzględniaj w kalkulacji')
+                            ->label('Uwzględniaj w kosztach')
                             ->default(false)
                             ->inline(false),
                         Forms\Components\Toggle::make('active')
@@ -195,7 +195,7 @@ class ProgramPointsRelationManager extends RelationManager
                             ->default(true)
                             ->inline(false),
                         Forms\Components\Toggle::make('include_in_calculation')
-                            ->label('Uwzględniaj w kalkulacji')
+                            ->label('Uwzględniaj w kosztach')
                             ->default(true)
                             ->inline(false),
                         Forms\Components\Toggle::make('active')

@@ -80,7 +80,7 @@
         {{-- Finanse — skrót do zakładki workflow --}}
         <x-filament::section>
             <x-slot name="heading">Finanse imprezy</x-slot>
-            <x-slot name="description">Koszty (wykonanie), wpłaty uczestników i kalkulacja (plan) — jeden hub.</x-slot>
+            <x-slot name="description">Koszty (szablon / planowane / zapłacono), wpłaty uczestników i kalkulacja oferty — jeden hub.</x-slot>
             <div class="flex flex-wrap items-center gap-3">
                 <x-filament::button
                     tag="a"
@@ -107,7 +107,7 @@
                     Kalkulacja
                 </x-filament::button>
                 <span class="text-sm text-gray-600 dark:text-gray-400">
-                    Plan: {{ $financials['calc'] }}
+                    Szablon: {{ $financials['calc'] }}
                     · Za osobę: {{ $financials['per_person'] }}
                     · Wpłaty klientów: {{ $financials['clients_paid'] }}
                 </span>

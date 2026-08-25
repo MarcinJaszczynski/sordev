@@ -86,22 +86,22 @@
         >
         {{-- Nagłówek: koszty + przychody klientów + gotówka pilota --}}
         <div class="grid w-full gap-3 sm:grid-cols-2 xl:grid-cols-4 2xl:grid-cols-8">
-            <div class="rounded-xl border border-gray-200 bg-white p-4 shadow-sm dark:border-gray-700 dark:bg-gray-900" title="Suma kosztów z kalkulacji programu / szablonu (ekwiwalent PLN, także pozycje bez przeliczenia).">
-                <div class="text-xs font-medium uppercase tracking-wide text-gray-500">Koszty (kalkulacja)</div>
+            <div class="rounded-xl border border-gray-200 bg-white p-4 shadow-sm dark:border-gray-700 dark:bg-gray-900" title="Suma kosztów ze szablonu / programu (ekwiwalent PLN, także pozycje bez przeliczenia).">
+                <div class="text-xs font-medium uppercase tracking-wide text-gray-500">Koszty (szablon)</div>
                 <div class="mt-1 text-xl font-bold leading-snug text-gray-900 dark:text-gray-100">{{ $totals['calculation_label'] ?? '—' }}</div>
                 <div class="mt-1 text-xs text-gray-500">z szablonu / programu</div>
             </div>
             <div class="rounded-xl border border-gray-200 bg-white p-4 shadow-sm dark:border-gray-700 dark:bg-gray-900" title="Planowane koszty do dostawców. Waluty bez przeliczenia pokazywane osobno (nie w sumie PLN).">
-                <div class="text-xs font-medium uppercase tracking-wide text-gray-500">Koszty (plan)</div>
+                <div class="text-xs font-medium uppercase tracking-wide text-gray-500">Koszty (planowane)</div>
                 <div class="mt-1 text-xl font-bold leading-snug text-gray-900 dark:text-gray-100">{{ $totals['planned_label'] ?? '—' }}</div>
                 <div class="mt-1 text-xs text-gray-500">ustalenia z podwykonawcami</div>
             </div>
             <div class="rounded-xl border border-gray-200 bg-white p-4 shadow-sm dark:border-gray-700 dark:bg-gray-900" title="Suma rzeczywistych wpłat kosztowych do dostawców.">
-                <div class="text-xs font-medium uppercase tracking-wide text-gray-500">Zapłacone dostawcom</div>
+                <div class="text-xs font-medium uppercase tracking-wide text-gray-500">Zapłacono</div>
                 <div class="mt-1 text-xl font-bold leading-snug text-emerald-700">{{ $totals['paid_label'] ?? '—' }}</div>
                 <div class="mt-1 text-xs text-gray-500">zaliczki i płatności końcowe</div>
             </div>
-            <div class="rounded-xl border border-rose-200 bg-rose-50/50 p-4 shadow-sm dark:border-rose-900/40 dark:bg-rose-950/20" title="Plan PLN + waluty bez przeliczenia − już zapłacone dostawcom.">
+            <div class="rounded-xl border border-rose-200 bg-rose-50/50 p-4 shadow-sm dark:border-rose-900/40 dark:bg-rose-950/20" title="Planowane PLN + waluty bez przeliczenia − już zapłacone dostawcom.">
                 <div class="text-xs font-medium uppercase tracking-wide text-rose-700">Do zapłaty dostawcom</div>
                 <div class="mt-1 text-xl font-bold leading-snug text-rose-700">{{ $totals['remaining_label'] ?? '—' }}</div>
                 <div class="mt-1 text-xs text-gray-600 dark:text-gray-400">
@@ -181,7 +181,7 @@
             <p class="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-900 dark:border-amber-900/40 dark:bg-amber-950/30 dark:text-amber-100">
                 {{ $totals['calc_plan_hint'] }}
                 @if (($totals['calc_plan_delta_pln'] ?? 0) > 0.01)
-                    · Różnica kalkulacja − plan PLN: {{ \App\Support\MoneyFormatter::format((float) $totals['calc_plan_delta_pln'], 'PLN') }}
+                    · Różnica szablon − planowane PLN: {{ \App\Support\MoneyFormatter::format((float) $totals['calc_plan_delta_pln'], 'PLN') }}
                 @endif
             </p>
         @endif
@@ -206,7 +206,7 @@
             <button
                 type="button"
                 wire:click="toggleHideZero"
-                title="Ukrywa pozycje z zerową kalkulacją, planem i zapłaconym (domyślnie włączone)."
+                title="Ukrywa pozycje z zerowym szablonem, planowanymi i zapłaconym (domyślnie włączone)."
                 @class([
                     'rounded-lg px-3 py-1.5 text-sm font-medium border transition',
                     'bg-slate-800 text-white border-slate-800' => $this->hideZero,
@@ -365,15 +365,15 @@
                         {{-- Podsumowanie finansowe grupy --}}
                         <div class="mt-3 grid gap-2 sm:grid-cols-2 lg:grid-cols-4">
                             <div class="rounded-lg border border-gray-200 bg-white px-3 py-2 dark:border-gray-700 dark:bg-gray-900">
-                                <div class="text-[10px] uppercase tracking-wide text-gray-500">Koszty (kalkulacja)</div>
+                                <div class="text-[10px] uppercase tracking-wide text-gray-500">Koszty (szablon)</div>
                                 <div class="text-sm font-bold tabular-nums leading-snug">{{ $group['calculation_label'] }}</div>
                             </div>
                             <div class="rounded-lg border border-gray-200 bg-white px-3 py-2 dark:border-gray-700 dark:bg-gray-900">
-                                <div class="text-[10px] uppercase tracking-wide text-gray-500">Koszty (plan)</div>
+                                <div class="text-[10px] uppercase tracking-wide text-gray-500">Koszty (planowane)</div>
                                 <div class="text-sm font-bold tabular-nums leading-snug">{{ $group['planned_label'] }}</div>
                             </div>
                             <div class="rounded-lg border border-emerald-200 bg-emerald-50/60 px-3 py-2 dark:border-emerald-900/40 dark:bg-emerald-950/20">
-                                <div class="text-[10px] uppercase tracking-wide text-emerald-700">Zapłacone dostawcom</div>
+                                <div class="text-[10px] uppercase tracking-wide text-emerald-700">Zapłacono</div>
                                 <div class="text-sm font-bold tabular-nums leading-snug text-emerald-800">{{ $group['paid_label'] }}</div>
                             </div>
                             <div class="rounded-lg border border-rose-200 bg-rose-50/60 px-3 py-2 dark:border-rose-900/40 dark:bg-rose-950/20">
@@ -432,10 +432,10 @@
                                             </th>
                                         @endforeach
                                         <th class="px-3 py-2">Płatnik</th>
-                                        <th class="px-3 py-2 text-right">Kalkulacja</th>
+                                        <th class="px-3 py-2 text-right">Szablon</th>
                                         @foreach ([
-                                            \App\Services\EventFinanceOverviewService::SORT_PLANNED => 'Plan',
-                                            \App\Services\EventFinanceOverviewService::SORT_PAID => 'Zapłacone',
+                                            \App\Services\EventFinanceOverviewService::SORT_PLANNED => 'Planowane',
+                                            \App\Services\EventFinanceOverviewService::SORT_PAID => 'Zapłacono',
                                             \App\Services\EventFinanceOverviewService::SORT_STATUS => 'Status',
                                             \App\Services\EventFinanceOverviewService::SORT_DUE => 'Termin',
                                         ] as $sortKey => $sortLabel)
@@ -555,7 +555,7 @@
                                                     </div>
                                                 @endif
                                                 @if (! empty($row['savings_label']))
-                                                    <div class="text-[11px] font-medium text-emerald-800 dark:text-emerald-200" title="Plan − zapłacona faktura">
+                                                    <div class="text-[11px] font-medium text-emerald-800 dark:text-emerald-200" title="Planowane − zapłacona faktura">
                                                         {{ $row['savings_label'] }}
                                                     </div>
                                                 @elseif (! empty($row['overpayment_label']))
@@ -589,24 +589,28 @@
                                                 />
                                             </td>
                                             <td class="px-3 py-2 text-center text-xs cursor-pointer" wire:click="openCost({{ (int) $row['cost_id'] }})" title="{{ $row['document_status_label'] ?? '' }}">
-                                                @if (! empty($row['has_uploaded_file']))
+                                                    @if (! empty($row['has_uploaded_file']))
                                                     @php
                                                         $docUrl = (string) ($row['document_first_url'] ?? '');
                                                         $docHint = (string) ($row['document_hint'] ?? 'Plik');
+                                                        $isPolicy = str_contains(mb_strtolower($docHint), 'polisa')
+                                                            || ($row['source_type'] ?? '') === 'insurance_day';
                                                     @endphp
                                                     @if ($docUrl !== '')
                                                         <a
                                                             href="{{ $docUrl }}"
                                                             target="_blank"
                                                             rel="noopener noreferrer"
-                                                            class="inline-flex max-w-[10rem] items-center justify-center truncate rounded-md bg-emerald-50 px-1.5 py-0.5 font-medium text-emerald-800 hover:bg-emerald-100 dark:bg-emerald-950/40 dark:text-emerald-200"
+                                                            class="inline-flex max-w-[10rem] items-center justify-center gap-1 truncate rounded-md bg-emerald-50 px-1.5 py-0.5 font-medium text-emerald-800 hover:bg-emerald-100 dark:bg-emerald-950/40 dark:text-emerald-200"
                                                             title="{{ $row['document_status_label'] ?? $docHint }}"
                                                             onclick="event.stopPropagation()"
                                                         >
-                                                            {{ $docHint }}
+                                                            <span aria-hidden="true">📎</span>
+                                                            <span>{{ $isPolicy && ! str_contains(mb_strtolower($docHint), 'polisa') ? 'Polisa' : $docHint }}</span>
                                                         </a>
                                                     @else
-                                                        <span class="inline-flex max-w-[10rem] truncate rounded-md bg-emerald-50 px-1.5 py-0.5 font-medium text-emerald-800 dark:bg-emerald-950/40 dark:text-emerald-200">
+                                                        <span class="inline-flex max-w-[10rem] items-center gap-1 truncate rounded-md bg-emerald-50 px-1.5 py-0.5 font-medium text-emerald-800 dark:bg-emerald-950/40 dark:text-emerald-200">
+                                                            <span aria-hidden="true">📎</span>
                                                             {{ $docHint }}
                                                         </span>
                                                     @endif
@@ -631,7 +635,7 @@
             @empty
                 <div class="rounded-xl border border-dashed border-gray-300 p-8 text-center space-y-3">
                     <p class="text-gray-600 dark:text-gray-300">Brak pozycji kosztów (wykonanie).</p>
-                    <p class="text-sm text-gray-500">Dodaj wydatek nieprzewidziany albo koszt programu z kalkulacji.</p>
+                    <p class="text-sm text-gray-500">Dodaj wydatek nieprzewidziany albo koszt programu ze szablonu.</p>
                     <div class="flex flex-wrap justify-center gap-2">
                         <x-filament::button wire:click="startAddManualCost" icon="heroicon-o-plus">
                             Dodaj wydatek

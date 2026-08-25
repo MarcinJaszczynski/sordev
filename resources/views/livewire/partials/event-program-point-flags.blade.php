@@ -9,7 +9,7 @@
     >Prog</button>
     <button
         type="button"
-        title="{{ $point->include_in_calculation ? 'W kalkulacji — kliknij, aby wyłączyć' : 'Poza kalkulacją — kliknij, aby włączyć' }}"
+        title="{{ $point->include_in_calculation ? 'W kosztach — kliknij, aby wyłączyć' : 'Poza kosztami — kliknij, aby włączyć' }}"
         wire:click="togglePointProperty({{ $point->id }}, 'include_in_calculation')"
         @class(['epp-flag', 'epp-flag--calc', 'epp-flag--on' => $point->include_in_calculation, 'epp-flag--off' => ! $point->include_in_calculation])
     >Kalk</button>

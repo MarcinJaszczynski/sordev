@@ -57,7 +57,6 @@ class EventProgramDayTree extends Component implements HasActions, HasForms
     {
         $this->eventId = $eventId;
         $this->activeDay = $this->resolveInitialDay();
-        $this->mountInteractsWithTaskEditModal();
     }
 
     public function openCreateTaskForPoint(int $pointId): void

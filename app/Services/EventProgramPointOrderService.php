@@ -61,9 +61,9 @@ class EventProgramPointOrderService
      *
      * @return EloquentCollection<int, EventProgramPoint>
      */
-    public function visibleProgramPoints(Event $event, bool $requireActive = true): EloquentCollection
+    public function visibleProgramPoints(Event $event, bool $requireActive = true, ?EloquentCollection $preloaded = null): EloquentCollection
     {
-        $points = $this->loadPoints($event);
+        $points = $preloaded ?? $this->loadPoints($event);
 
         $visible = $points->filter(function (EventProgramPoint $point) use ($requireActive) {
             if (! (bool) $point->include_in_program) {
@@ -165,6 +165,24 @@ class EventProgramPointOrderService
                 'parent',
             ])
             ->withCount('children')
+            ->get();
+    }
+
+    /**
+     * Lekkie ładowanie punktów do planera (bez kontrahentów, drzewa dzieci itd.).
+     *
+     * @return EloquentCollection<int, EventProgramPoint>
+     */
+    public function loadPointsForPlanner(Event $event): EloquentCollection
+    {
+        return EventProgramPoint::query()
+            ->where('event_id', $event->id)
+            ->with([
+                'templatePoint',
+                'reservations',
+                'hotelStays.reservation',
+                'sharedReservation',
+            ])
             ->get();
     }
 

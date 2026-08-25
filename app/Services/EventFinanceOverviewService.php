@@ -6,6 +6,7 @@ namespace App\Services;
 
 use App\Models\Currency;
 use App\Models\Event;
+use App\Models\EventHotelStay;
 use App\Models\EventProgramPoint;
 use App\Models\EventSettlement;
 use App\Models\EventSettlementCost;
@@ -20,7 +21,7 @@ use Illuminate\Support\Facades\Schema;
 
 /**
  * Read-model uproszczonego ekranu Finanse imprezy:
- * kalkulacja / plan / zapłacone + health + dokumenty.
+ * szablon / planowane / zapłacono + health + dokumenty.
  */
 final class EventFinanceOverviewService
 {
@@ -60,12 +61,12 @@ final class EventFinanceOverviewService
 
     /** Uproszczone etykiety statusu UI (nie 8 raw payment_status). */
     public static array $uiStatusLabels = [
-        'paid' => 'Zapłacone',
+        'paid' => 'Zapłacono',
         'partial' => 'Częściowo',
         'advance' => 'Zaliczka',
         'due' => 'Do zapłaty',
         'overdue' => 'Po terminie',
-        'ok' => 'Zapłacone',
+        'ok' => 'Zapłacono',
         'n/a' => 'Brak kwoty',
         'review' => 'Do sprawdzenia',
     ];
@@ -349,7 +350,7 @@ final class EventFinanceOverviewService
                 'plan_group_size' => $point !== null ? (int) ($point->group_size ?? 1) : null,
                 'plan_quantity' => $point ? max(1, (int) ($point->quantity ?? 1)) : null,
                 'plan_unit_price_label' => $point
-                    ? ProgramPointPricingCalculator::unitPriceLabel($point->group_size)
+                    ? ProgramPointPricingCalculator::unitPriceLabel($point->group_size).' (szablon)'
                     : null,
                 'notes' => $planCost->notes,
                 'is_program_point' => $planCost->source_type === 'program_point',
@@ -919,13 +920,42 @@ final class EventFinanceOverviewService
             }
         }
 
-        if (in_array($planCost->source_type, ['transport', 'accommodation'], true)) {
+        if ($planCost->source_type === 'transport') {
+            try {
+                $calculator = new EventTransportCostCalculator($event);
+                $fromBus = round($calculator->busCalculatedTransportCost(), 2);
+                // Przy ryczałcie bez autokaru nie ma pierwotnego kosztorysu z km — pokaż ryczałt.
+                // Gdy jest autokar: zawsze pierwotna kalkulacja (ryczałt żyje w Planie).
+                if ($fromBus > 0.009) {
+                    return $fromBus;
+                }
+
+                return round($calculator->effectiveTransportCost(), 2);
+            } catch (\Throwable) {
+                // fallback poniżej
+            }
+        }
+
+        if ($planCost->source_type === 'accommodation') {
             try {
                 return round((float) app(SettlementAggregateFinanceService::class)
                     ->resolveReferenceTotalPln($event, (string) $planCost->source_type), 2);
             } catch (\Throwable) {
                 // fallback poniżej
             }
+        }
+
+        if ($planCost->source_type === 'accommodation_hotel' && $planCost->source_id) {
+            return app(HotelStaySettlementSync::class)
+                ->referenceTotalPlnForContractor($event, (int) $planCost->source_id);
+        }
+
+        if ($planCost->source_type === 'accommodation_hotel_stay' && $planCost->source_id) {
+            $stay = EventHotelStay::query()->with('roomLines.currency')->find((int) $planCost->source_id);
+
+            return $stay
+                ? app(HotelStaySettlementSync::class)->referenceTotalPlnForStay($event, $stay)
+                : $this->health->plannedPlnForCost($planCost);
         }
 
         return $this->health->plannedPlnForCost($planCost);

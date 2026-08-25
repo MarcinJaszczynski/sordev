@@ -25,7 +25,7 @@ class EventPricePerPersonFields
                 ->columnSpanFull()
                 ->schema([
                     Forms\Components\Placeholder::make('calculated_price_per_person_preview')
-                        ->label('Cena z kalkulacji (do zapłaty)')
+                        ->label('Cena ze szablonu (do zapłaty)')
                         ->content(function (?Event $record, Get $get): string {
                             $count = max(1, (int) ($get('participant_count') ?? $record?->participant_count ?? 1));
                             $gratis = self::resolveGratisFromForm(

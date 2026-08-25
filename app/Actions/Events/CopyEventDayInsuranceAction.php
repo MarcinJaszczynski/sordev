@@ -51,7 +51,11 @@ final class CopyEventDayInsuranceAction
         /** @var list<EventDayInsurance> $created */
         $created = [];
 
-        DB::transaction(function () use ($event, $insuranceId, $targetDays, &$created): void {
+        DB::transaction(function () use ($event, $insuranceId, $targetDays, $source, &$created): void {
+            $policyId = Schema::hasColumn('event_day_insurance', 'event_insurance_policy_id')
+                ? ($source->event_insurance_policy_id ? (int) $source->event_insurance_policy_id : null)
+                : null;
+
             foreach ($targetDays as $day) {
                 $exists = EventDayInsurance::query()
                     ->where('event_id', $event->id)
@@ -71,6 +75,10 @@ final class CopyEventDayInsuranceAction
 
                 if (Schema::hasColumn('event_day_insurance', 'is_done')) {
                     $attributes['is_done'] = false;
+                }
+
+                if ($policyId) {
+                    $attributes['event_insurance_policy_id'] = $policyId;
                 }
 
                 $created[] = EventDayInsurance::query()->create($attributes);

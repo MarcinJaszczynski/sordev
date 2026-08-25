@@ -49,7 +49,7 @@ final class ReservationFormDefaults
                 $hint = 'Z planu kosztów (zaliczka)';
             } elseif ($planned > 0.009) {
                 $amount = $planned;
-                $hint = 'Z planu / kalkulacji punktu';
+                $hint = 'Z planowanych / szablonu punktu';
             }
         }
 
@@ -61,9 +61,14 @@ final class ReservationFormDefaults
         $depositDue = $existing?->deposit_due_at?->toDateString()
             ?? ($cost?->advance_due_date?->toDateString());
 
+        $defaultParticipants = max(1, (int) ($existing?->participant_count ?? 0));
+        if ($defaultParticipants <= 0 && $event) {
+            $defaultParticipants = self::defaultParticipantCountForPoint($point, $event);
+        }
+
         return [
             'reserved_amount' => ($amount !== null && $amount > 0.009) ? $amount : null,
-            'participant_count' => max(1, (int) ($existing?->participant_count ?? $event?->participant_count ?? 1)),
+            'participant_count' => $defaultParticipants,
             'currency_id' => $currencyId ? (int) $currencyId : null,
             'amount_basis' => (string) ($existing?->amount_basis ?? 'lump_sum'),
             'participant_scope' => (string) ($existing?->participant_scope ?? 'all'),
@@ -72,5 +77,14 @@ final class ReservationFormDefaults
             'deposit_due_at' => $depositDue,
             'amount_hint' => $hint,
         ];
+    }
+
+    private static function defaultParticipantCountForPoint(EventProgramPoint $point, \App\Models\Event $event): int
+    {
+        if ((bool) ($point->is_hotel ?? false) && ! \App\Models\Event::isHotelTransferProgramPoint($point)) {
+            return max(1, $event->resolveOperationalHeadcountForParticipantCount());
+        }
+
+        return max(1, (int) ($event->participant_count ?? 1));
     }
 }

@@ -3,6 +3,7 @@
 namespace App\Support;
 
 use App\Models\Place;
+use Illuminate\Support\Facades\Schema;
 use Illuminate\Support\Str;
 
 class Region
@@ -17,6 +18,10 @@ class Region
      */
     public static function slugForLinks(?int $startPlaceId = null): string
     {
+        if (! self::placesTableAvailable()) {
+            return 'warszawa';
+        }
+
         if ($startPlaceId) {
             $place = Place::find($startPlaceId);
             if ($place && $place->name) {
@@ -39,5 +44,14 @@ class Region
             ?? Place::where('name', 'Warszawa')->value('slug');
 
         return $slug ?: 'warszawa';
+    }
+
+    private static function placesTableAvailable(): bool
+    {
+        try {
+            return Schema::hasTable('places');
+        } catch (\Throwable) {
+            return false;
+        }
     }
 }

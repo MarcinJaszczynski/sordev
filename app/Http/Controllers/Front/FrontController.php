@@ -394,20 +394,54 @@ class FrontController extends Controller
             ->firstOrFail();
 
         $pivotDate = $blogPost->published_at ?? $blogPost->created_at ?? now();
+        $isGuide = $blogPost->isGuide();
+        $navScope = $isGuide ? 'guide' : 'news';
 
-        // Previous/next navigation
+        // Previous/next navigation within the same content type
         $previousPost = BlogPost::published()
+            ->{$navScope}()
+            ->where('id', '!=', $blogPost->id)
             ->whereRaw('COALESCE(published_at, created_at) < ?', [$pivotDate])
             ->orderByDesc($orderExpression)
             ->orderByDesc('id')
             ->first();
         $nextPost = BlogPost::published()
+            ->{$navScope}()
+            ->where('id', '!=', $blogPost->id)
             ->whereRaw('COALESCE(published_at, created_at) > ?', [$pivotDate])
             ->orderBy($orderExpression)
             ->orderBy('id')
             ->first();
 
-        return view('front.blog-post', compact('blogPost', 'previousPost', 'nextPost'));
+        $relatedPostsQuery = BlogPost::published()
+            ->{$navScope}()
+            ->where('id', '!=', $blogPost->id);
+
+        if ($isGuide && filled($blogPost->guide_category)) {
+            $relatedPostsQuery->where('guide_category', $blogPost->guide_category);
+        }
+
+        $relatedPosts = $relatedPostsQuery
+            ->orderByDesc($orderExpression)
+            ->orderByDesc('id')
+            ->take(3)
+            ->get();
+
+        if ($relatedPosts->count() < 3 && $isGuide) {
+            $extra = BlogPost::published()
+                ->guide()
+                ->where('id', '!=', $blogPost->id)
+                ->whereNotIn('id', $relatedPosts->pluck('id'))
+                ->orderByDesc($orderExpression)
+                ->orderByDesc('id')
+                ->take(3 - $relatedPosts->count())
+                ->get();
+            $relatedPosts = $relatedPosts->concat($extra);
+        }
+
+        return view('front.blog-post', compact('blogPost', 'previousPost', 'nextPost', 'relatedPosts') + [
+            'guideMode' => $isGuide,
+        ]);
     }
 
     public function directorypackages(Request $request)

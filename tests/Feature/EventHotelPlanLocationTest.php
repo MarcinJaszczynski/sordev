@@ -114,14 +114,17 @@ class EventHotelPlanLocationTest extends TestCase
             'selectedSettlementDocuments' => collect(),
             'attachedFiles' => collect(),
             'pilotSetFinanceCards' => [],
+            'pilotExpenseRows' => [],
+            'pilotContactPlaces' => [],
         ])->render();
 
-        $this->assertStringContainsString('Hotel / nocleg', $html);
+        $this->assertStringContainsString('Hotel', $html);
         $this->assertStringContainsString('Sieć Hoteli', $html);
         $this->assertStringContainsString('Hotel Zakopane', $html);
         $this->assertStringContainsString('ul. Górska 10', $html);
         $this->assertStringContainsString('999888777', $html);
         $this->assertStringContainsString('zakopane@example.com', $html);
+        $this->assertStringContainsString('Pokoje', $html);
     }
 
     public function test_hotel_plan_editor_shows_selected_hotel_contact_card(): void

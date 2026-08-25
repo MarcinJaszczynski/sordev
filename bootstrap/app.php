@@ -13,6 +13,9 @@ return Application::configure(basePath: dirname(__DIR__))
         health: '/up',
     )
     ->withMiddleware(function (Middleware $middleware) {
+        // Za reverse proxy (nginx, Cloudflare) — bez tego sesja/CSRF może padać z 419.
+        $middleware->trustProxies(at: '*');
+
         // Enable Sanctum stateful middleware for first-party SPA API auth.
         $middleware->statefulApi();
 
@@ -75,5 +78,16 @@ return Application::configure(basePath: dirname(__DIR__))
             ->appendOutputTo(storage_path('logs/portal-inquiry-escalation.log'));
     })
     ->withExceptions(function (Exceptions $exceptions) {
-        //
+        $exceptions->render(function (\Illuminate\Session\TokenMismatchException $e, \Illuminate\Http\Request $request) {
+            if ($request->expectsJson() || $request->is('livewire/*')) {
+                return response()->json([
+                    'message' => 'Sesja wygasła. Odśwież stronę i zaloguj się ponownie.',
+                ], 419);
+            }
+
+            return redirect()
+                ->back()
+                ->withInput($request->except('_token'))
+                ->with('error', 'Sesja wygasła. Odśwież stronę i zaloguj się ponownie.');
+        });
     })->create();

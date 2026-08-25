@@ -43,8 +43,6 @@
         return $value->locale('pl')->translatedFormat('l').', '.$value->format('d.m.Y');
     };
     $startDateLabel = $formatDayLabel($event->start_date);
-    // Horyzont trwania (duration / szablon / span dat) — bierz późniejszą z end_date
-    // i daty wyliczonej, żeby złapać zarówno za krótkie end_date, jak i dłuższy duration.
     $computedReturnDate = $event->dateForProgramDay($event->resolveCoreProgramDaysCount());
     $returnDate = $event->end_date?->copy();
     if ($computedReturnDate && (! $returnDate || $computedReturnDate->gt($returnDate))) {
@@ -54,57 +52,81 @@
     $returnPlace = filled($travelLegends['return_place'] ?? null) && ($travelLegends['return_place'] ?? '—') !== '—'
         ? (string) $travelLegends['return_place']
         : $pickupPlace;
+
+    $today = now()->startOfDay();
+    $openDay = null;
+    $sortedDays = $byDay->sortKeys();
+    foreach ($sortedDays as $dayKey => $_) {
+        $candidate = $baseDate->copy()->addDays(((int) $dayKey) - 1)->startOfDay();
+        if ($candidate->equalTo($today)) {
+            $openDay = (int) $dayKey;
+            break;
+        }
+        if ($candidate->greaterThanOrEqualTo($today) && $openDay === null) {
+            $openDay = (int) $dayKey;
+        }
+    }
+    if ($openDay === null && $sortedDays->isNotEmpty()) {
+        $openDay = (int) $sortedDays->keys()->last();
+    }
 @endphp
 
-<div class="space-y-4">
+<div class="space-y-3">
     @if($eventPilotNotes)
-        <section class="sor-lw-card">
-            <h3 class="sor-lw-title mb-2">Uwagi biura dla pilota</h3>
-            <div class="prose prose-sm max-w-none text-gray-700 dark:prose-invert">{!! $eventPilotNotes !!}</div>
+        <section class="portal-card">
+            <div class="portal-card-title"><p>Uwagi biura dla pilota</p></div>
+            <div class="prose prose-sm max-w-none text-[#2C2C2A]">{!! $eventPilotNotes !!}</div>
         </section>
     @endif
 
-    <section class="sor-lw-card overflow-hidden !p-0">
-        <header class="border-b border-blue-100 bg-blue-50 px-4 py-3 dark:border-blue-900/40 dark:bg-blue-950/30">
-            <h3 class="sor-lw-title text-blue-900 dark:text-blue-100">Podstawienie i wyjazd</h3>
-            <p class="sor-lw-muted">Start programu</p>
-        </header>
-        <dl class="divide-y divide-gray-100 px-4 dark:divide-gray-700">
-            <div class="flex flex-col gap-0.5 py-3 sm:flex-row sm:justify-between sm:gap-4">
-                <dt class="text-xs font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400">Data</dt>
-                <dd class="text-sm font-semibold text-gray-900 dark:text-gray-100">{{ $startDateLabel ?: '—' }}</dd>
+    <section class="portal-card">
+        <div class="portal-card-title"><p>Podstawienie i wyjazd</p></div>
+        <div class="portal-info-grid">
+            <div>
+                <p class="label">Data</p>
+                <p class="value">{{ $startDateLabel ?: '—' }}</p>
             </div>
-            <div class="flex flex-col gap-0.5 py-3 sm:flex-row sm:justify-between sm:gap-4">
-                <dt class="text-xs font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400">Godzina podstawienia</dt>
-                <dd class="text-sm font-semibold text-[#0663fc]">{{ $substitutionClock ?: '—' }}</dd>
+            <div>
+                <p class="label">Godzina podstawienia</p>
+                <p class="value">{{ $substitutionClock ?: '—' }}</p>
             </div>
-            <div class="flex flex-col gap-0.5 py-3 sm:flex-row sm:justify-between sm:gap-4">
-                <dt class="text-xs font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400">Godzina wyjazdu</dt>
-                <dd class="text-sm font-semibold text-[#0663fc]">{{ $departureClock ?: '—' }}</dd>
+            <div>
+                <p class="label">Godzina wyjazdu</p>
+                <p class="value">{{ $departureClock ?: '—' }}</p>
             </div>
-            <div class="flex flex-col gap-0.5 py-3 sm:flex-row sm:justify-between sm:gap-4">
-                <dt class="text-xs font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400">Miejsce podstawienia</dt>
-                <dd class="text-sm text-gray-900 dark:text-gray-100 sm:text-right whitespace-pre-line">{{ $pickupPlace !== '' ? $pickupPlace : '—' }}</dd>
+            <div>
+                <p class="label">Miejsce podstawienia</p>
+                <p class="value" style="white-space:pre-line;">{{ $pickupPlace !== '' ? $pickupPlace : '—' }}</p>
             </div>
-        </dl>
+        </div>
     </section>
 
-    @forelse($byDay->sortKeys() as $day => $dayPoints)
-        @php
-            $dayDate = $baseDate->copy()->addDays($day - 1);
-            $dayRoute = $event->programDayRoute((int) $day);
-        @endphp
-        <section class="sor-lw-card overflow-hidden !p-0">
-            <header class="border-b border-gray-100 bg-gray-50 px-4 py-3 dark:border-gray-700 dark:bg-gray-800">
-                <h3 class="sor-lw-title">Dzień {{ $day }}</h3>
-                <p class="sor-lw-muted">{{ $dayDate->format('d.m.Y (l)') }}</p>
+    <section class="portal-card">
+        <div class="portal-card-title">
+            <p>Program — {{ $event->name }}</p>
+        </div>
+
+        @forelse($sortedDays as $day => $dayPoints)
+            @php
+                $dayDate = $baseDate->copy()->addDays($day - 1);
+                $dayRoute = $event->programDayRoute((int) $day);
+                $pointCount = $dayPoints->count();
+                $dayLabel = 'Dzień '.$day.' · '.$dayDate->locale('pl')->translatedFormat('d.m (l)');
+                $countLabel = $pointCount === 1
+                    ? '1 punkt'
+                    : ($pointCount.' punktów');
+                $isOpen = $openDay !== null && (int) $day === (int) $openDay;
+            @endphp
+            <details class="portal-day-accordion" @if($isOpen) open @endif>
+                <summary>
+                    <p>{{ $dayLabel }}</p>
+                    <p>{{ $countLabel }}</p>
+                </summary>
+
                 @if(filled($dayRoute))
-                    <p class="mt-1 text-sm font-medium text-gray-800 dark:text-gray-100">
-                        Trasa: {{ $dayRoute }}
-                    </p>
+                    <p class="portal-muted" style="margin:8px 0 0;">Trasa: {{ $dayRoute }}</p>
                 @endif
-            </header>
-            <ul class="divide-y divide-gray-100 dark:divide-gray-700">
+
                 @foreach($dayPoints as $point)
                     @php
                         $name = $point->templatePoint->name ?? $point->name ?? ('Punkt #'.$point->id);
@@ -119,75 +141,70 @@
                         $showOfficePay = $financeHint && ! empty($financeHint['has_office_obligation']);
                         $reservationLines = PilotProgramReservationDisplay::linesForPoint($point);
                     @endphp
-                    <li @class([
-                        'px-4 py-3',
-                        'pl-8' => $isSetChild,
-                    ])>
+                    <div @class(['portal-day-item', 'pl-4' => $isSetChild])>
                         <div class="flex items-start justify-between gap-3">
                             <div class="min-w-0 flex-1">
-                                <p class="text-sm font-semibold text-gray-900 dark:text-gray-100">
+                                <p>
                                     @if($isSetChild)
-                                        <span class="mr-1 text-gray-400" aria-hidden="true">↳</span>
+                                        <span class="mr-1 text-[#888780]" aria-hidden="true">↳</span>
                                     @endif
                                     @if($point->is_transport) 🚌 @elseif($point->is_hotel) 🏨 @endif
                                     {{ $name }}
                                     @if($point->is_hotel)
-                                        <span class="ml-2 inline-flex items-center rounded-full bg-emerald-100 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-emerald-800 dark:bg-emerald-900/40 dark:text-emerald-200">Hotel</span>
+                                        <span class="portal-status-pill" style="background:#EAF3DE;color:#27500A;">Hotel</span>
                                     @endif
                                     @if($isSetParent)
-                                        <span class="ml-2 inline-flex items-center rounded-full bg-indigo-100 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-indigo-800 dark:bg-indigo-900/40 dark:text-indigo-200">Set</span>
+                                        <span class="portal-status-pill">Set</span>
                                     @endif
                                     @if($showPay)
-                                        <span class="ml-2 inline-flex items-center rounded-full bg-sky-100 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-sky-800 dark:bg-sky-900/40 dark:text-sky-200">👤 Pilot płaci</span>
+                                        <span class="portal-status-pill">Pilot płaci</span>
                                     @elseif($showOfficePay)
-                                        <span class="ml-2 inline-flex items-center rounded-full bg-teal-100 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-teal-800 dark:bg-teal-900/40 dark:text-teal-200">Płaci biuro</span>
+                                        <span class="portal-status-pill" style="background:#EAF3DE;color:#27500A;">Płaci biuro</span>
                                     @endif
                                 </p>
                                 @if($start || $end)
-                                    <p class="mt-1 text-xs font-medium text-[#0663fc]">
-                                        {{ $start ?? '—' }}@if($end) – {{ $end }} @endif
+                                    <p class="portal-day-time">
+                                        {{ $start ?? '—' }}@if($end) – {{ $end }}@endif
                                     </p>
                                 @endif
-                                <div class="mt-2">
-                                    @if($reservationLines !== [])
-                                        <ul class="space-y-1">
-                                            @foreach($reservationLines as $reservationLine)
-                                                <li class="flex flex-wrap items-center gap-2 text-xs">
-                                                    <span @class([
-                                                        'inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide',
-                                                        $reservationLine['badge_classes'],
-                                                    ])>
-                                                        {{ $reservationLine['status_label'] }}
+                                @if($reservationLines !== [])
+                                    <ul class="mt-2 space-y-1">
+                                        @foreach($reservationLines as $reservationLine)
+                                            <li class="flex flex-wrap items-center gap-2 text-xs">
+                                                <span @class([
+                                                    'inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide',
+                                                    $reservationLine['badge_classes'],
+                                                ])>
+                                                    {{ $reservationLine['status_label'] }}
+                                                </span>
+                                                @if(filled($reservationLine['time']))
+                                                    <span class="font-medium text-[#2C2C2A]">
+                                                        godz. {{ $reservationLine['time'] }}
                                                     </span>
-                                                    @if(filled($reservationLine['time']))
-                                                        <span class="font-medium text-gray-800 dark:text-gray-200">
-                                                            godz. {{ $reservationLine['time'] }}
-                                                        </span>
-                                                    @endif
-                                                    @if(filled($reservationLine['reference']))
-                                                        <span class="text-gray-500 dark:text-gray-400">
-                                                            nr {{ $reservationLine['reference'] }}
-                                                        </span>
-                                                    @endif
-                                                </li>
-                                            @endforeach
-                                        </ul>
-                                    @endif
-                                </div>
+                                                @endif
+                                                @if(filled($reservationLine['reference']))
+                                                    <span class="text-[#5F5E5A]">
+                                                        nr {{ $reservationLine['reference'] }}
+                                                    </span>
+                                                @endif
+                                            </li>
+                                        @endforeach
+                                    </ul>
+                                @endif
                                 @if(filled($description))
-                                    <div class="prose prose-sm mt-2 max-w-none text-gray-700 dark:prose-invert dark:text-gray-300">
+                                    <div class="prose prose-sm mt-2 max-w-none text-[#5F5E5A]">
                                         {!! \App\Support\AgreementHtml::sanitize((string) $description) !!}
                                     </div>
                                 @endif
                                 @if(filled($pilotNotes))
-                                    <div class="mt-2 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 dark:border-amber-800 dark:bg-amber-950/30">
-                                        <p class="text-[11px] font-semibold uppercase tracking-wide text-amber-800 dark:text-amber-200">Uwagi dla pilota</p>
-                                        <div class="prose prose-sm mt-1 max-w-none text-amber-900 dark:prose-invert dark:text-amber-100">{!! \App\Support\AgreementHtml::sanitize((string) $pilotNotes) !!}</div>
+                                    <div class="portal-notice portal-notice--amber mt-2 !mb-0">
+                                        <p class="text-[11px] font-semibold uppercase tracking-wide">Uwagi dla pilota</p>
+                                        <div class="prose prose-sm mt-1 max-w-none">{!! \App\Support\AgreementHtml::sanitize((string) $pilotNotes) !!}</div>
                                     </div>
                                 @endif
                                 @if($showPay)
-                                    <div class="mt-2 rounded-lg border border-blue-200 bg-blue-50 px-3 py-2 text-sm text-blue-950 dark:border-blue-800 dark:bg-blue-950/30 dark:text-blue-100">
-                                        <p class="text-[11px] font-semibold uppercase tracking-wide text-blue-800 dark:text-blue-200">Do zapłaty</p>
+                                    <div class="portal-notice portal-notice--accent mt-2 !mb-0">
+                                        <p class="text-[11px] font-semibold uppercase tracking-wide">Do zapłaty</p>
                                         @if(filled($financeHint['planned_label'] ?? null))
                                             <p class="mt-1 font-semibold">{{ $financeHint['planned_label'] }}</p>
                                         @endif
@@ -198,57 +215,52 @@
                                         </ul>
                                         @if(! empty($settlementUrl))
                                             <p class="mt-2">
-                                                <a href="{{ $settlementUrl }}" class="text-xs font-semibold text-[#0663fc] hover:underline">
+                                                <a href="{{ $settlementUrl }}" class="portal-link text-xs">
                                                     Przejdź do rozliczenia →
                                                 </a>
                                             </p>
                                         @endif
                                     </div>
                                 @elseif($isSetChild && $financeHint && empty($financeHint['has_pilot_obligation']))
-                                    <p class="mt-2 text-xs italic text-gray-500 dark:text-gray-400">wchodzi w set</p>
+                                    <p class="mt-2 text-xs italic text-[#888780]">wchodzi w set</p>
                                 @endif
                             </div>
                             @if($point->contractor)
-                                <div class="shrink-0 max-w-[14rem] rounded-lg border border-gray-200 bg-gray-50 px-3 py-2 text-right dark:border-gray-700 dark:bg-gray-800/80">
-                                    <p class="text-[11px] font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400">Wykonawca</p>
-                                    <p class="mt-0.5 text-xs font-semibold text-gray-900 dark:text-gray-100">{{ $point->contractor->displayLabel() }}</p>
+                                <div class="shrink-0 max-w-[14rem] rounded-lg border border-[#E5E3DA] bg-[#F1EFE8] px-3 py-2 text-right">
+                                    <p class="text-[11px] font-semibold uppercase tracking-wide text-[#888780]">Wykonawca</p>
+                                    <p class="mt-0.5 text-xs font-semibold text-[#2C2C2A]">{{ $point->contractor->displayLabel() }}</p>
                                     <x-contractor-contact-details
                                         :contractor="$point->contractor"
                                         :location="$point->contractorLocation"
                                         address-label="Adres prowadzenia / podjazdu"
-                                        class="mt-1 text-left text-[11px] leading-snug text-gray-600 dark:text-gray-300"
+                                        class="mt-1 text-left text-[11px] leading-snug text-[#5F5E5A]"
                                     />
                                 </div>
                             @endif
                         </div>
-                    </li>
+                    </div>
                 @endforeach
-            </ul>
-        </section>
-    @empty
-        <div class="sor-lw-empty">
-            Brak punktów programu dla tej wycieczki.
-        </div>
-    @endforelse
+            </details>
+        @empty
+            <p class="portal-muted" style="margin:0;">Brak punktów programu dla tej wycieczki.</p>
+        @endforelse
+    </section>
 
-    <section class="sor-lw-card overflow-hidden !p-0">
-        <header class="border-b border-orange-100 bg-orange-50 px-4 py-3 dark:border-orange-900/40 dark:bg-orange-950/30">
-            <h3 class="sor-lw-title text-orange-900 dark:text-orange-100">Powrót / podstawienie</h3>
-            <p class="sor-lw-muted">Koniec programu</p>
-        </header>
-        <dl class="divide-y divide-gray-100 px-4 dark:divide-gray-700">
-            <div class="flex flex-col gap-0.5 py-3 sm:flex-row sm:justify-between sm:gap-4">
-                <dt class="text-xs font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400">Data</dt>
-                <dd class="text-sm font-semibold text-gray-900 dark:text-gray-100">{{ $endDateLabel ?: '—' }}</dd>
+    <section class="portal-card">
+        <div class="portal-card-title"><p>Powrót / podstawienie</p></div>
+        <div class="portal-info-grid">
+            <div>
+                <p class="label">Data</p>
+                <p class="value">{{ $endDateLabel ?: '—' }}</p>
             </div>
-            <div class="flex flex-col gap-0.5 py-3 sm:flex-row sm:justify-between sm:gap-4">
-                <dt class="text-xs font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400">Godzina podstawienia / powrotu</dt>
-                <dd class="text-sm font-semibold text-[#0663fc]">{{ $returnClock ?: '—' }}</dd>
+            <div>
+                <p class="label">Godzina podstawienia / powrotu</p>
+                <p class="value">{{ $returnClock ?: '—' }}</p>
             </div>
-            <div class="flex flex-col gap-0.5 py-3 sm:flex-row sm:justify-between sm:gap-4">
-                <dt class="text-xs font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400">Miejsce podstawienia</dt>
-                <dd class="text-sm text-gray-900 dark:text-gray-100 sm:text-right whitespace-pre-line">{{ $returnPlace !== '' ? $returnPlace : '—' }}</dd>
+            <div style="grid-column: 1 / -1;">
+                <p class="label">Miejsce podstawienia</p>
+                <p class="value" style="white-space:pre-line;">{{ $returnPlace !== '' ? $returnPlace : '—' }}</p>
             </div>
-        </dl>
+        </div>
     </section>
 </div>

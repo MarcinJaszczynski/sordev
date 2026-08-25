@@ -187,7 +187,7 @@ class EventKeyInfoFields
                         $livewire->dispatch('event-price-table-refresh');
                     }
                 })
-                ->helperText('Osoby jadące w grupie bez opłaty za siebie. Uwzględniane w kalkulacji kosztów i zapisywane w wariancie ilościowym grupy.'),
+                ->helperText('Osoby jadące w grupie bez opłaty za siebie. Uwzględniane w kosztach i zapisywane w wariancie ilościowym grupy.'),
 
             Forms\Components\Placeholder::make('bus_seat_capacity_warning')
                 ->hiddenLabel()
@@ -333,7 +333,7 @@ class EventKeyInfoFields
                                 ->openUrlInNewTab()
                                 ->visible(fn (string $operation, $state): bool => $operation === 'edit' && filled($state))
                         )
-                        ->helperText(fn (string $operation): ?string => $operation === 'create' ? 'Szablon programu i kalkulacji.' : 'Brak możliwości zmiany szablonu po utworzeniu imprezy.')
+                        ->helperText(fn (string $operation): ?string => $operation === 'create' ? 'Szablon programu i kosztów.' : 'Brak możliwości zmiany szablonu po utworzeniu imprezy.')
                         ->columnSpanFull(),
 
                     Forms\Components\Group::make([
@@ -434,6 +434,35 @@ class EventKeyInfoFields
                 ->rules(PilotIdentityValidation::optionalPeselRules())
                 ->visible(fn (Get $get): bool => filled($get('pilot_contractor_id')))
                 ->helperText('Opcjonalnie — zapis w karcie kontrahenta.'),
+
+            Forms\Components\Select::make('pilot_settlement_form')
+                ->label('Forma rozliczenia')
+                ->options(\App\Enums\ContractorSettlementForm::options())
+                ->nullable()
+                ->native(false)
+                ->placeholder(function (Get $get): string {
+                    $contractorId = (int) ($get('pilot_contractor_id') ?? 0);
+                    if ($contractorId <= 0) {
+                        return 'Wybierz pilota';
+                    }
+
+                    $contractor = Contractor::query()->find($contractorId);
+                    $inherited = $contractor?->settlement_form;
+
+                    if ($inherited instanceof \App\Enums\ContractorSettlementForm) {
+                        return 'Jak na karcie: '.$inherited->label();
+                    }
+
+                    $parsed = \App\Enums\ContractorSettlementForm::tryFromMixed($inherited);
+
+                    return $parsed
+                        ? 'Jak na karcie: '.$parsed->label()
+                        : 'Jak na karcie kontrahenta (brak)';
+                })
+                ->helperText('Puste = dziedziczy z karty kontrahenta. Nadpisanie dotyczy tylko tej imprezy.')
+                ->visible(fn (Get $get): bool => Schema::hasColumn('events', 'pilot_settlement_form')
+                    && filled($get('pilot_contractor_id')))
+                ->columnSpanFull(),
 
             Forms\Components\Placeholder::make('pilot_portal_account')
                 ->label('Konto panelu pilota')

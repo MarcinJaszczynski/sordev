@@ -79,7 +79,7 @@ class ClientPaymentsPage extends Page
 
     public function getTitle(): string|Htmlable
     {
-        return 'Płatności: '.$this->event->name;
+        return $this->event->name;
     }
 
     protected function getHeaderActions(): array

@@ -63,7 +63,7 @@ class ClientParticipantsPage extends Page
 
     public function getTitle(): string|Htmlable
     {
-        return 'Uczestnicy: '.$this->event->name;
+        return $this->event->name;
     }
 
     public function getHeading(): string|Htmlable

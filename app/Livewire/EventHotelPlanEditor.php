@@ -15,6 +15,7 @@ use App\Models\HotelRoom;
 use App\Models\Reservation;
 use App\Services\ContractorLocationService;
 use App\Services\ContractorLookupService;
+use App\Services\EventHotelOccupancyService;
 use App\Services\EventHotelOccupantsImporter;
 use App\Services\EventHotelPlanService;
 use App\Services\HotelStayReservationSync;
@@ -100,10 +101,21 @@ class EventHotelPlanEditor extends Component
             'hotelProgramPoints',
         ])->findOrFail($this->eventId);
 
-        app(EventHotelPlanService::class)->ensureStaysForEvent($event);
-        app(EventHotelPlanService::class)->syncAllRoomUnitsForEvent($event);
-        app(HotelStayReservationSync::class)->backfillForEvent($event);
-        app(\App\Services\ProgramPointReservationSync::class)->backfillForEvent($event);
+        try {
+            app(EventHotelPlanService::class)->ensureStaysForEvent($event);
+            app(EventHotelPlanService::class)->syncAllRoomUnitsForEvent($event);
+            app(HotelStayReservationSync::class)->backfillForEvent($event);
+            app(\App\Services\ProgramPointReservationSync::class)->backfillForEvent($event);
+        } catch (\Throwable $exception) {
+            report($exception);
+
+            Notification::make()
+                ->title('Nie udało się zsynchronizować planu hotelowego')
+                ->body('Wyświetlam zapisany plan. Odśwież stronę lub zapisz ponownie.')
+                ->warning()
+                ->send();
+        }
+
         $event->refresh()->load([
             'hotelStays.roomLines.occupants',
             'hotelStays.roomLines.units',
@@ -116,7 +128,8 @@ class EventHotelPlanEditor extends Component
         $this->hotelFlatStayAmount = $event->hotel_flat_stay_amount !== null
             ? (string) $event->hotel_flat_stay_amount
             : null;
-        $this->hotelFlatStayCurrencyId = $event->hotel_flat_stay_currency_id;
+        $this->hotelFlatStayCurrencyId = $event->hotel_flat_stay_currency_id
+            ?: Currency::defaultPlnId();
         $this->hotelFlatStayConvertToPln = (bool) ($event->hotel_flat_stay_convert_to_pln ?? true);
 
         $this->stays = app(EventHotelPlanService::class)->staysToPayload($event);
@@ -420,6 +433,10 @@ class EventHotelPlanEditor extends Component
 
     public function removeRoomLine(int $lineIndex): void
     {
+        if (! isset($this->stays[$this->activeStayIndex]['room_lines'][$lineIndex])) {
+            return;
+        }
+
         unset($this->stays[$this->activeStayIndex]['room_lines'][$lineIndex]);
         $this->stays[$this->activeStayIndex]['room_lines'] = array_values($this->stays[$this->activeStayIndex]['room_lines']);
         $this->afterStayMutation();
@@ -544,6 +561,7 @@ class EventHotelPlanEditor extends Component
             'event_agreement_id' => $participant['agreement_id'] ?? null,
             'contract_id' => $participant['contract_id'] ?? null,
             'reservation_id' => $participant['reservation_id'] ?? null,
+            'event_participant_id' => $participant['event_participant_id'] ?? null,
             'participant_key' => $participantKey,
         ];
 
@@ -569,7 +587,7 @@ class EventHotelPlanEditor extends Component
     public function addManualOccupant(int $lineIndex, string $name = ''): void
     {
         $name = trim($name);
-        if ($name === '') {
+        if ($name === '' || ! isset($this->stays[$this->activeStayIndex]['room_lines'][$lineIndex])) {
             return;
         }
 
@@ -586,6 +604,10 @@ class EventHotelPlanEditor extends Component
 
     public function addParticipantToRoom(int $lineIndex, string $participantKey): void
     {
+        if (! isset($this->stays[$this->activeStayIndex]['room_lines'][$lineIndex])) {
+            return;
+        }
+
         $event = Event::findOrFail($this->eventId);
         $participant = collect(app(EventHotelPlanService::class)->availableParticipants($event))
             ->firstWhere('key', $participantKey);
@@ -607,13 +629,17 @@ class EventHotelPlanEditor extends Component
 
     public function removeOccupant(int $lineIndex, int $occupantIndex): void
     {
+        if (! isset($this->stays[$this->activeStayIndex]['room_lines'][$lineIndex]['occupants'][$occupantIndex])) {
+            return;
+        }
+
         unset($this->stays[$this->activeStayIndex]['room_lines'][$lineIndex]['occupants'][$occupantIndex]);
         $this->stays[$this->activeStayIndex]['room_lines'][$lineIndex]['occupants'] = array_values(
             $this->stays[$this->activeStayIndex]['room_lines'][$lineIndex]['occupants']
         );
     }
 
-    public function save(): bool
+    public function save(bool $showNotification = true): bool
     {
         $event = Event::findOrFail($this->eventId);
 
@@ -628,7 +654,10 @@ class EventHotelPlanEditor extends Component
             app(EventHotelPlanService::class)->linkStaysToProgramPoints($event->fresh());
             $this->loadPlan();
             $this->dispatch('event-price-table-refresh');
-            Notification::make()->title('Plan hoteli zapisany')->success()->send();
+
+            if ($showNotification) {
+                Notification::make()->title('Plan hoteli zapisany')->success()->send();
+            }
 
             return true;
         } catch (\Illuminate\Validation\ValidationException $e) {
@@ -718,6 +747,10 @@ class EventHotelPlanEditor extends Component
 
     public function copyOccupantsToAllNights(): void
     {
+        if (! $this->persistStaysBeforeCopy()) {
+            return;
+        }
+
         $event = Event::findOrFail($this->eventId);
         $sourceDay = (int) ($this->stays[$this->activeStayIndex]['day'] ?? $this->copySourceDay);
         app(EventHotelPlanService::class)->copyOccupantsToAllStays($event, $sourceDay);
@@ -727,6 +760,10 @@ class EventHotelPlanEditor extends Component
 
     public function copyToAllNights(): void
     {
+        if (! $this->persistStaysBeforeCopy()) {
+            return;
+        }
+
         $event = Event::findOrFail($this->eventId);
         $sourceDay = (int) ($this->stays[$this->activeStayIndex]['day'] ?? $this->copySourceDay);
         app(EventHotelPlanService::class)->copyStructureToAllStays($event, $sourceDay);
@@ -736,11 +773,23 @@ class EventHotelPlanEditor extends Component
 
     public function copyToSelectedDays(): void
     {
+        if (! $this->persistStaysBeforeCopy()) {
+            return;
+        }
+
         $event = Event::findOrFail($this->eventId);
         $sourceDay = (int) $this->copySourceDay;
         app(EventHotelPlanService::class)->copyStructureToDays($event, $sourceDay, $this->copyTargetDays);
         $this->loadPlan();
         Notification::make()->title('Skopiowano na wybrane noce')->success()->send();
+    }
+
+    /**
+     * Kopiowanie czyta z bazy — najpierw zapisz bieżący stan formularza (w tym pola z debounce/blur).
+     */
+    protected function persistStaysBeforeCopy(): bool
+    {
+        return $this->save(showNotification: false);
     }
 
     public function initializeEmptyPlan(): void
@@ -766,6 +815,10 @@ class EventHotelPlanEditor extends Component
         if (! $contractorId) {
             Notification::make()->title('Wybierz hotel dla aktywnej nocy')->warning()->send();
 
+            return;
+        }
+
+        if (! $this->persistStaysBeforeCopy()) {
             return;
         }
 
@@ -826,6 +879,7 @@ class EventHotelPlanEditor extends Component
     public function getTotalPlnProperty(): float
     {
         $currencies = Currency::query()->pluck('symbol', 'id');
+        $people = $this->peoplePerNightForPricing();
 
         return EventHotelPlanFormatting::eventTotalPln(
             $this->stays,
@@ -836,12 +890,14 @@ class EventHotelPlanEditor extends Component
             $this->hotelFlatStayCurrencyId,
             $this->hotelFlatStayConvertToPln,
             $currencies,
+            $people,
         );
     }
 
     public function getTotalDisplayProperty(): string
     {
         $currencies = Currency::query()->pluck('symbol', 'id');
+        $people = $this->peoplePerNightForPricing();
 
         return EventHotelPlanFormatting::eventTotalDisplay(
             $this->stays,
@@ -852,7 +908,18 @@ class EventHotelPlanEditor extends Component
             $this->hotelFlatStayCurrencyId,
             $this->hotelFlatStayConvertToPln,
             $currencies,
+            $people,
         );
+    }
+
+    public function peoplePerNightForPricing(): int
+    {
+        $event = Event::query()->find($this->eventId);
+        if (! $event) {
+            return 0;
+        }
+
+        return (int) app(EventHotelOccupancyService::class)->forEvent($event)['required_beds_per_night'];
     }
 
     public function getUsesLinePricingProperty(): bool
@@ -897,6 +964,10 @@ class EventHotelPlanEditor extends Component
 
         if (! empty($occupant['reservation_id'])) {
             return 'reservation:'.$occupant['reservation_id'];
+        }
+
+        if (! empty($occupant['event_participant_id'])) {
+            return 'participant:'.$occupant['event_participant_id'];
         }
 
         return null;
@@ -1031,6 +1102,7 @@ class EventHotelPlanEditor extends Component
             'hotelRooms' => $hotelRooms,
             'hotelRoomsById' => $hotelRooms->keyBy('id'),
             'currencies' => Currency::query()->orderBy('symbol')->pluck('symbol', 'id'),
+            'currencyOptions' => Currency::filamentSelectOptions(),
             'roles' => \App\Models\EventHotelRoomLine::ROLES,
             'priceBasisOptions' => \App\Models\EventHotelRoomLine::priceBasisOptions(),
             'participants' => app(EventHotelPlanService::class)->availableParticipants($event),
@@ -1041,6 +1113,7 @@ class EventHotelPlanEditor extends Component
             'contractorEditUrl' => $contractorEditUrl,
             'programUrl' => $programUrl,
             'stayContactHints' => $stayContactHints,
+            'peoplePerNight' => $this->peoplePerNightForPricing(),
         ]);
     }
 }

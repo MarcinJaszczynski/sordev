@@ -7,6 +7,7 @@ namespace App\Services;
 use App\Models\Event;
 use App\Models\EventSettlementDocument;
 use App\Models\HotelRoom;
+use App\Services\Documents\PilotPackageOperationalDataBuilder;
 use App\Support\EventParticipantGroupLabels;
 use App\Support\StoragePath;
 use Illuminate\Support\Collection;
@@ -20,7 +21,7 @@ final class EventPrintPdfDataFactory
 {
     public const AUDIENCE_LABELS = [
         'pilot' => 'Pakiet dla pilota',
-        'hotel' => 'Pakiet dla hotelu',
+        'hotel' => 'Informacje dla Hotelu',
         'driver' => 'Pakiet dla kierowcy',
         'folder' => 'Teczka imprezy',
         'all' => 'Komplet pakietów',
@@ -50,6 +51,9 @@ final class EventPrintPdfDataFactory
         $programByDay = $this->buildProgramByDay($event);
 
         $pilotSetFinanceCards = [];
+        $pilotExpenseRows = [];
+        $pilotContactPlaces = [];
+        $pilotDueByPointId = [];
         if (in_array($audience, ['pilot', 'folder'], true)) {
             $pilotSetFinanceCards = array_values(
                 app(PilotSetFinanceDisplay::class)->cardsForEvent($event)
@@ -220,12 +224,28 @@ final class EventPrintPdfDataFactory
             ]);
         }
 
+        $travelLegends = app(EventFolderPdfService::class)->buildTravelLegends($event);
+        $programDayRoutes = $event->programDayRoutes();
+
+        if (in_array($audience, ['pilot', 'folder'], true)) {
+            $operational = app(PilotPackageOperationalDataBuilder::class);
+            $pilotExpenseRows = $operational->expenseRows($event);
+            $pilotDueByPointId = $operational->pilotDueByPointId($event);
+            $pilotContactPlaces = $operational->contactPlaces(
+                $event,
+                $hotelPlan instanceof Collection ? $hotelPlan : collect($hotelPlan),
+                $programByDay,
+                $travelLegends,
+                $programDayRoutes,
+            );
+        }
+
         $documentFocus = [
             'pilot' => [
                 'Harmonogram dzienny i godziny punktów programu',
+                'Adresy i kontakty (trasa, hotele, kontrahenci)',
+                'Wydatki do zapłaty przez pilota',
                 'Notatki pilota i notatki operacyjne biura',
-                'Liczba uczestników i kontakt do biura/klienta',
-                'Plan transportu i status płatności grupy',
                 'Polisa i oryginalna lista ubezpieczonych (jeśli wgrane)',
             ],
             'hotel' => [
@@ -260,9 +280,16 @@ final class EventPrintPdfDataFactory
             'driverCount' => $driverCount,
             'gratisCount' => $gratisCount,
             'hotelNotes' => trim(strip_tags((string) ($event->hotel_notes ?? ''))),
+            'dietInfoLines' => array_values(array_filter(array_map(
+                static fn (string $line): string => trim($line),
+                preg_split("/\r\n|\n|\r/", (string) ($event->diet_info ?? '')) ?: [],
+            ))),
             'hotelProgramPoints' => $event->hotelProgramPoints,
             'programByDay' => $programByDay,
             'pilotSetFinanceCards' => $pilotSetFinanceCards,
+            'pilotExpenseRows' => $pilotExpenseRows,
+            'pilotDueByPointId' => $pilotDueByPointId,
+            'pilotContactPlaces' => $pilotContactPlaces,
             'hotelPlan' => $hotelPlan,
             'usesEventHotelPlan' => $usesEventHotelPlan,
             'agreements' => $individualAgreementReport['agreements'],
@@ -271,15 +298,24 @@ final class EventPrintPdfDataFactory
             'documentFocus' => $documentFocus[$audience] ?? [],
             'selectedSettlementDocuments' => $selectedDocumentsForView,
             'attachedFiles' => $attachedFiles,
-            'travelLegends' => app(EventFolderPdfService::class)->buildTravelLegends($event),
-            'programDayRoutes' => $event->programDayRoutes(),
-            'participantSummaryLine' => sprintf(
-                '%d uczestników + %d '.EventParticipantGroupLabels::GRATIS_GENITIVE.'; obsługa: %d; kierowca(y): %d',
+            'travelLegends' => $travelLegends,
+            'programDayRoutes' => $programDayRoutes,
+            'participantCompactLine' => sprintf(
+                '%d+%d',
                 max(0, $participantCount),
-                $gratisCount,
-                $staffCount,
-                $driverCount
+                max(0, $gratisCount),
             ),
+            // Kierowca: krótki format operacyjny „16+1”. Reszta: pełny opis jak na branchu.
+            'participantSummaryLine' => $audience === 'driver'
+                ? sprintf('%d+%d', max(0, $participantCount), max(0, $gratisCount))
+                : sprintf(
+                    '%d uczestników + %d %s; obsługa: %d; kierowca(y): %d',
+                    max(0, $participantCount),
+                    max(0, $gratisCount),
+                    EventParticipantGroupLabels::GRATIS_GENITIVE,
+                    $staffCount,
+                    $driverCount
+                ),
         ];
     }
 

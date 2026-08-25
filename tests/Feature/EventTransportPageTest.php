@@ -335,7 +335,7 @@ class EventTransportPageTest extends TestCase
         Livewire::test(ManageEventTransport::class, ['record' => $event->getKey()])
             ->set('data.use_manual_transport_cost', true)
             ->set('data.manual_transport_cost', 4500.50)
-            ->assertSeeHtml('Koszt transportu (ryczałt):')
+            ->assertSeeHtml('Koszt transportu (ręczny):')
             ->assertSee('4 500,50 PLN', escape: false);
     }
 

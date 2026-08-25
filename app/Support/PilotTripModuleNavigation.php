@@ -45,17 +45,19 @@ final class PilotTripModuleNavigation
 
             $tabs[] = [
                 'key' => 'checklist',
-                'label' => 'Checklista',
+                'label' => 'Checklista i czynności',
                 'url' => PilotChecklistPage::urlFor($event),
                 'icon' => 'heroicon-o-clipboard-document-check',
             ];
 
-            $tabs[] = [
-                'key' => 'attendance',
-                'label' => 'Obecność',
-                'url' => PilotAttendancePage::urlFor($event),
-                'icon' => 'heroicon-o-clipboard-document-list',
-            ];
+            if ($event->showsPilotAttendance()) {
+                $tabs[] = [
+                    'key' => 'attendance',
+                    'label' => 'Obecność',
+                    'url' => PilotAttendancePage::urlFor($event),
+                    'icon' => 'heroicon-o-clipboard-document-list',
+                ];
+            }
 
             $tabs[] = [
                 'key' => 'settlement',

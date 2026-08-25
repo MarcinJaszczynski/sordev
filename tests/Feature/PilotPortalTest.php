@@ -124,7 +124,7 @@ class PilotPortalTest extends TestCase
         $this->assertTrue($pilotAdmin->can('view', $mine));
     }
 
-    public function test_office_preview_allows_admin_with_pilot_role_to_view_any_trip_in_pilot_panel(): void
+    public function test_office_preview_scopes_list_to_selected_pilot_only(): void
     {
         $pilotAdmin = User::factory()->create(['status' => 'active']);
         $pilotAdmin->assignRole(['pilot', 'admin']);
@@ -143,6 +143,7 @@ class PilotPortalTest extends TestCase
             'status' => Event::STATUS_CONFIRMED,
         ]);
 
+        // Podgląd bez konkretnego pilota — pusta lista (nie wszystkie imprezy).
         session(['pilot_preview_mode' => true]);
 
         $service = app(\App\Services\PilotAccessService::class);
@@ -152,12 +153,18 @@ class PilotPortalTest extends TestCase
 
         $this->actingAs($pilotAdmin);
 
+        $this->assertSame([], $service->visibleTripsQuery($pilotAdmin)->pluck('id')->all());
+        $this->assertFalse($pilotAdmin->can('view', $other));
+        $this->assertFalse($pilotAdmin->can('view', $mine));
+
+        // Podgląd jako konkretny pilot — tylko jego przypisane wycieczki.
+        session(['pilot_preview_user_id' => $otherPilot->id]);
+
         $ids = $service->visibleTripsQuery($pilotAdmin)->pluck('id')->all();
 
-        $this->assertContains($mine->id, $ids);
-        $this->assertContains($other->id, $ids);
+        $this->assertSame([$other->id], $ids);
         $this->assertTrue($pilotAdmin->can('view', $other));
-        $this->assertTrue($pilotAdmin->can('viewPilotDetails', $other));
+        $this->assertFalse($pilotAdmin->can('view', $mine));
 
         Filament::setServingStatus(false);
         Filament::setCurrentPanel(null);
@@ -177,6 +184,8 @@ class PilotPortalTest extends TestCase
         $this->actingAs($admin)
             ->get('/pilot/pilot-events/'.$event->id.'?preview=1')
             ->assertOk();
+
+        $this->assertSame((int) $event->assigned_to, (int) session('pilot_preview_user_id'));
     }
 
     public function test_admin_with_pilot_role_can_edit_event_in_admin_panel(): void

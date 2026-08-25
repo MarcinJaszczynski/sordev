@@ -9,13 +9,13 @@
         $isSetParent = (bool) $record->getAttribute('_is_set_parent');
         $isSetExpanded = (bool) $record->getAttribute('_set_expanded');
         $childCount = (int) ($record->children_count ?? 0);
-        $order = sprintf('%02d', (int) ($record->order ?? 1)); // used in set preview
         $name = $record->name ?? $record->templatePoint?->name ?? '—';
+        $inProgram = (bool) $record->include_in_program;
+        $inCalc = (bool) $record->include_in_calculation;
 
-        $start = $record->hide_times ? null : ($record->start_time ? substr((string) $record->start_time, 0, 5) : null);
-        $end = $record->hide_times ? null : ($record->end_time ? substr((string) $record->end_time, 0, 5) : null);
-
-        $contractorName = $record->contractor?->name;
+        // W panelu admin zawsze pokazujemy opis (show_description steruje tylko frontem / PDF).
+        $descHtml = trim((string) ($record->description ?? $record->templatePoint?->description ?? ''));
+        $descPlain = trim(preg_replace('/\s+/u', ' ', strip_tags($descHtml)) ?? '');
 
         /** @var \Illuminate\Support\Collection<int, \App\Models\EventProgramPoint>|null $setChildren */
         $setChildren = $record->getAttribute('_set_children_preview');
@@ -31,98 +31,102 @@
         'epp-name-cell--set-parent' => $isSetParent,
         'epp-name-cell--has-set-preview' => $isSetParent && $setChildren instanceof \Illuminate\Support\Collection && $setChildren->isNotEmpty(),
     ])>
-        <div class="epp-name-head">
-            @if ($isSetParent)
-                <span class="epp-set-badge-wrap">
-                    <button
-                        type="button"
-                        @class([
-                            'epp-set-badge',
-                            'epp-set-badge--expanded' => $isSetExpanded,
-                        ])
-                        aria-expanded="{{ $isSetExpanded ? 'true' : 'false' }}"
-                        aria-label="{{ $isSetExpanded ? 'Zwiń set' : 'Rozwiń set' }} — {{ $childCount }} {{ $childCount === 1 ? 'podpunkt' : 'podpunkty' }}"
-                        x-on:click.stop="$wire.toggleSetExpanded({{ $record->id }})"
-                    >
-                        <span class="epp-set-badge__chevron" aria-hidden="true"></span>
-                        <span class="epp-set-badge__icon" aria-hidden="true"></span>
-                        <span class="epp-set-badge__label">Set</span>
-                        <span class="epp-set-badge__count">{{ $childCount }} {{ $childCount === 1 ? 'podpunkt' : 'podpunkty' }}</span>
-                    </button>
-                </span>
-            @endif
+        @php
+            $gallery = is_array($record->gallery_images) ? $record->gallery_images : [];
+            $hasAttachments = filled($record->featured_image) || count($gallery) > 0;
+            $attachmentCount = (filled($record->featured_image) ? 1 : 0) + count($gallery);
+            $hasTypeIcons = $record->is_transport || $record->is_hotel || $record->is_hotel_service || $hasAttachments;
+            $showNameHead = $isSetParent || $hasTypeIcons;
+        @endphp
 
-            @if ($start && $end)
-                <span class="epp-time">{{ $start }}–{{ $end }}</span>
-            @else
-                <span class="epp-time epp-time--muted">bez godzin</span>
-            @endif
+        @php
+            $timeStart = null;
+            $timeEnd = null;
+            if (! $record->hide_times) {
+                $timeStart = $record->start_time ? substr((string) $record->start_time, 0, 5) : null;
+                $timeEnd = $record->end_time ? substr((string) $record->end_time, 0, 5) : null;
+            }
+            $hasTime = filled($timeStart);
+        @endphp
 
-            <span class="epp-type-icons">
-                @if ($record->is_transport)
-                    <span class="epp-type-icon" title="Transport">🚌</span>
+        @if ($hasTime)
+            <div class="epp-name-time" aria-label="Godzina">
+                <span class="epp-name-time__start">{{ $timeStart }}</span>
+                @if (filled($timeEnd))
+                    <span class="epp-name-time__sep">–</span>
+                    <span class="epp-name-time__end">{{ $timeEnd }}</span>
                 @endif
-                @if ($record->is_hotel)
-                    <span class="epp-type-icon" title="Nocleg / Hotel">🏨</span>
+            </div>
+        @endif
+
+        @if ($showNameHead)
+            <div class="epp-name-head">
+                @if ($isSetParent)
+                    <span class="epp-set-badge-wrap">
+                        <button
+                            type="button"
+                            @class([
+                                'epp-set-badge',
+                                'epp-set-badge--expanded' => $isSetExpanded,
+                            ])
+                            aria-expanded="{{ $isSetExpanded ? 'true' : 'false' }}"
+                            aria-label="{{ $isSetExpanded ? 'Zwiń set' : 'Rozwiń set' }} — {{ $childCount }} {{ $childCount === 1 ? 'podpunkt' : 'podpunkty' }}"
+                            x-on:click.stop="$wire.toggleSetExpanded({{ $record->id }})"
+                        >
+                            <span class="epp-set-badge__chevron" aria-hidden="true"></span>
+                            <span class="epp-set-badge__icon" aria-hidden="true"></span>
+                            <span class="epp-set-badge__label">Set</span>
+                            <span class="epp-set-badge__count">{{ $childCount }}</span>
+                        </button>
+                    </span>
                 @endif
-                @if ($record->is_hotel_service)
-                    <span class="epp-type-icon" title="Usługa hotelu">🍽</span>
+
+                @if ($hasTypeIcons)
+                    <span class="epp-type-icons">
+                        @if ($record->is_transport)
+                            <span class="epp-type-icon" title="Transport">🚌</span>
+                        @endif
+                        @if ($record->is_hotel)
+                            <span class="epp-type-icon" title="Nocleg / Hotel">🏨</span>
+                        @endif
+                        @if ($record->is_hotel_service)
+                            <span class="epp-type-icon" title="Usługa hotelu">🍽</span>
+                        @endif
+                        @if ($hasAttachments)
+                            <span class="epp-type-icon" title="Załączniki / zdjęcia: {{ $attachmentCount }}">📎 {{ $attachmentCount }}</span>
+                        @endif
+                    </span>
                 @endif
-                @php
-                    $gallery = is_array($record->gallery_images) ? $record->gallery_images : [];
-                    $hasAttachments = filled($record->featured_image) || count($gallery) > 0;
-                    $attachmentCount = (filled($record->featured_image) ? 1 : 0) + count($gallery);
-                @endphp
-                @if ($hasAttachments)
-                    <span class="epp-type-icon" title="Załączniki / zdjęcia: {{ $attachmentCount }}">📎 {{ $attachmentCount }}</span>
-                @endif
-            </span>
-        </div>
+            </div>
+        @endif
 
         <div class="epp-title-row">
             <span class="epp-title">{{ $name }}</span>
-            @include('filament.components.program-point-scope-chips', ['record' => $record])
-        </div>
-
-        @php
-            // W panelu admin zawsze pokazujemy opis (show_description steruje tylko frontem / PDF).
-            $descHtml = trim((string) ($record->description ?? $record->templatePoint?->description ?? ''));
-            $descPlain = trim(preg_replace('/\s+/u', ' ', strip_tags($descHtml)) ?? '');
-        @endphp
-        @if ($descPlain !== '')
-            <div class="epp-program-desc" title="{{ $descPlain }}">
-                {{ \Illuminate\Support\Str::limit($descPlain, 90) }}
-            </div>
-        @endif
-
-        @if ($contractorName)
-            <div class="epp-meta">
-                @php
-                    $contractor = $record->contractor;
-                @endphp
-                <div>
-                    <span class="font-medium">{{ $contractorName }}</span>
-                    @if ($contractor)
-                        <x-contractor-contact-details
-                            :contractor="$contractor"
-                            :location="$record->contractorLocation"
-                            class="mt-0.5 text-[11px] leading-snug text-gray-600 dark:text-gray-400"
-                        />
+            @if ($inProgram || $inCalc)
+                <span class="epp-scope-pills" title="Program = oferta/PDF. Koszt = lista kosztów i rozliczenie.">
+                    @if ($inProgram)
+                        <span class="epp-mini-pill epp-mini-pill--program epp-mini-pill--on">program</span>
                     @endif
-                </div>
-            </div>
-        @endif
-
-        <div class="mt-1 flex flex-wrap items-center gap-1">
+                    @if ($inCalc)
+                        <span class="epp-mini-pill epp-mini-pill--cost epp-mini-pill--on">koszt</span>
+                    @endif
+                </span>
+            @endif
             <button
                 type="button"
                 wire:click="openCreateTaskForProgramPoint({{ $record->getKey() }})"
-                class="inline-flex items-center rounded-md border border-slate-300 bg-white px-2 py-0.5 text-[11px] font-medium text-slate-700 transition hover:bg-slate-50"
+                class="epp-task-btn"
                 x-on:click.stop
             >
                 + Zadanie
             </button>
         </div>
+
+        @if ($descPlain !== '')
+            <div class="epp-point-sub" title="{{ $descPlain }}">
+                {{ $descPlain }}
+            </div>
+        @endif
 
         @if ($isSetParent && ! $isSetExpanded && $setChildren instanceof \Illuminate\Support\Collection && $setChildren->isNotEmpty())
             <div class="epp-set-preview" role="tooltip" aria-hidden="true">
@@ -173,7 +177,7 @@
                             @if ($flags !== [])
                                 <span class="epp-set-preview__flags">{{ implode(' · ', $flags) }}</span>
                             @else
-                                <span class="epp-set-preview__flags epp-set-preview__flags--ok">w programie i kalkulacji</span>
+                                <span class="epp-set-preview__flags epp-set-preview__flags--ok">w programie i w kosztach</span>
                             @endif
 
                             <span class="epp-set-preview__action">{{ $inView ? 'Edytuj' : 'Pokaż i edytuj' }}</span>

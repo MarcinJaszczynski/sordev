@@ -264,14 +264,14 @@ final class EventReadinessIndicators
      */
     protected static function insuranceItem(Event $event): array
     {
-        // Gotowość: tylko zrobione / nie — bez „nie dotyczy” i bez stanu pośredniego.
-        if (($event->insurance_status ?? 'pending') === 'completed') {
+        // Gotowość: opłacone w kosztach = gotowe.
+        if (app(\App\Services\EventInsuranceOperationalSync::class)->isEventInsurancePaid($event)) {
             return [
                 'key' => 'insurance',
                 'label' => 'Ubezp.',
                 'short' => 'OK',
                 'tone' => 'ok',
-                'title' => 'Ubezpieczenie oznaczone jako gotowe',
+                'title' => 'Ubezpieczenie opłacone w kosztach',
             ];
         }
 
@@ -280,7 +280,7 @@ final class EventReadinessIndicators
             'label' => 'Ubezp.',
             'short' => 'brak',
             'tone' => 'danger',
-            'title' => 'Uzupełnij w Operacje → Ubezpieczenia i ustaw status „Gotowe”',
+            'title' => 'Uzupełnij polisę i opłać pozycje ubezpieczenia w kosztach',
         ];
     }
 

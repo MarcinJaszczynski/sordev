@@ -25,7 +25,7 @@ final class CurrencyConversionFields
         string $currencyField = 'currency_id',
     ): Forms\Components\Toggle {
         return Forms\Components\Toggle::make($name)
-            ->label('Przelicz na PLN w kalkulacji')
+            ->label('Przelicz na PLN w szablonie')
             ->default(true)
             ->inline(false)
             ->live()

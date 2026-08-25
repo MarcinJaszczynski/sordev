@@ -15,6 +15,16 @@
                             @endif
                         @endforeach
                     </dl>
+                    <label class="mt-3 inline-flex items-center gap-2 text-sm text-gray-800 dark:text-gray-100">
+                        <input
+                            type="radio"
+                            name="trip-contact-primary"
+                            @checked((bool) ($selected['goes_on_trip'] ?? false))
+                            wire:click="setAsTripContact"
+                            class="rounded-full border-gray-400 text-primary-600 focus:ring-primary-500"
+                        />
+                        <span>Jedzie na wyjazd — kontakt dla pilota</span>
+                    </label>
                 </div>
                 <button
                     type="button"

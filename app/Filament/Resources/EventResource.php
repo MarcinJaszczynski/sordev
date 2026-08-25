@@ -8,9 +8,11 @@ use App\Data\AssignEventPilotData;
 use App\Data\ChangeEventStatusData;
 use App\Filament\Forms\EventKeyInfoFields;
 use App\Filament\Forms\EventNotesFields;
+use App\Filament\Forms\EventProgramDayRouteFields;
 use App\Filament\Forms\EventReadinessFields;
 use App\Filament\Forms\EventTransportCostSummaryFields;
 use App\Filament\Forms\EventTransportFields;
+use App\Filament\Forms\EventVehicleFields;
 use App\Filament\Forms\TransportContractorContactsFields;
 use App\Filament\Forms\TypedContractorSelect;
 use App\Filament\Resources\EventResource\Pages;
@@ -119,12 +121,12 @@ class EventResource extends Resource
     {
         return Forms\Components\Section::make('Finanse')
             ->icon('heroicon-o-banknotes')
-            ->description('Cena z kalkulacji, rozliczenie biura i wpłaty klientów.')
+            ->description('Cena ze szablonu, rozliczenie biura i wpłaty klientów.')
             ->columns(['default' => 1, 'md' => 2])
             ->hidden(fn (string $operation) => $operation !== 'edit')
             ->schema([
                 Forms\Components\Placeholder::make('fs_calc_cost')
-                    ->label('Cena z kalkulacji')
+                    ->label('Cena ze szablonu')
                     ->helperText('Na podstawie szablonu, km i liczby uczestników')
                     ->content(function ($record, callable $get): string {
                         if (! $record) {
@@ -247,7 +249,7 @@ class EventResource extends Resource
                     }),
 
                 Forms\Components\TextInput::make('total_cost')
-                    ->label('Cena z kalkulacji (PLN)')
+                    ->label('Cena ze szablonu (PLN)')
                     ->numeric()
                     ->suffix('PLN')
                     ->default(0)
@@ -257,246 +259,310 @@ class EventResource extends Resource
             ]);
     }
 
-    public static function carrierAndDriverSection(): Forms\Components\Section
+    public static function carrierAndDriverSection(): array
     {
-        return Forms\Components\Section::make('Przewoźnik i kierowca')
-            ->icon('heroicon-o-truck')
-            ->description('Firma, autokar, km i ryczałt. Kwota transportu aktualizuje się na żywo; zapis przelicza imprezę.')
-            ->columns(['default' => 1, 'md' => 2, 'xl' => 3])
-            ->schema([
-                ...TypedContractorSelect::make(
-                    field: 'transport_contractor_id',
-                    label: 'Firma transportowa',
-                    typeNames: ContractorType::transportTypeNames(),
-                    searchAllField: 'transport_contractor_search_all',
-                    defaultTypeOnCreate: 'przewoźnik',
-                    helperText: 'Wybierz firmę z listy, wyszukaj po nazwie lub dodaj nową.',
-                    searchAllHelperText: 'Domyślnie tylko przewoźnicy i kierowcy. Zaznacz, gdy firma ma źle przypisany typ.',
-                    afterStateUpdated: function ($state, callable $set): void {
-                        if (! Schema::hasColumn('events', 'transport_company_name')) {
-                            return;
-                        }
+        $timeFields = EventTransportFields::transportTimeFieldsKeyed();
 
-                        if (! $state) {
-                            $set('transport_company_name', null);
+        $startPlaceSelect = Forms\Components\Select::make('start_place_id')
+            ->label('Punkt startowy (kalkulacja)')
+            ->options(fn (callable $get, ?Event $record) => Place::startingPlaceSelectOptionsForTemplate(
+                (int) ($get('event_template_id') ?? $record?->event_template_id ?? 0) ?: null,
+                (int) ($get('start_place_id') ?? $record?->start_place_id ?? 0) ?: null,
+            ))
+            ->searchable()
+            ->nullable()
+            ->reactive()
+            ->hintIcon(
+                'heroicon-m-information-circle',
+                tooltip: 'Miejsce z cennika dystansów — do kalkulacji km transferu. Adres dla kierowcy wpisujesz poniżej.',
+            )
+            ->afterStateUpdated(function (callable $get, callable $set, ?\App\Models\Event $record): void {
+                $templateId = (int) ($get('event_template_id') ?? $record?->event_template_id ?? 0);
+                $startPlaceId = (int) ($get('start_place_id') ?? 0);
+                $currentTransfer = (float) ($get('transfer_km') ?? 0);
 
-                            return;
-                        }
+                if ($templateId) {
+                    $set('transfer_km', static::resolveTransferKmFromTemplateState(
+                        $templateId,
+                        $startPlaceId,
+                        $currentTransfer
+                    ));
+                } else {
+                    $programStartPlaceId = (int) ($get('program_start_place_id') ?? 0);
+                    if ($programStartPlaceId > 0 && $startPlaceId > 0) {
+                        $d1 = (float) (\App\Models\PlaceDistance::query()
+                            ->where('from_place_id', $startPlaceId)
+                            ->where('to_place_id', $programStartPlaceId)
+                            ->value('distance_km') ?? 0);
+                        $set('transfer_km', $d1 * 2);
+                    }
+                }
 
-                        $name = Contractor::query()->whereKey($state)->value('name');
-                        $set('transport_company_name', $name ?: null);
-                    },
-                    columnSpan: 'full',
-                ),
+                static::refreshTotalCostFromTemplateState($set, $get);
+            });
 
-                ...TransportContractorContactsFields::make(
-                    contractorField: 'transport_contractor_id',
-                    prefix: 'transport_carrier',
-                    afterContractorCardUpdated: function (Contractor $contractor, callable $set): void {
-                        if (Schema::hasColumn('events', 'transport_company_name')) {
-                            $set('transport_company_name', $contractor->name);
-                        }
-                    },
-                ),
+        $programStartSelect = Forms\Components\Select::make('program_start_place_id')
+            ->label('Początek programu')
+            ->options(\App\Models\Place::query()->orderBy('name')->pluck('name', 'id'))
+            ->searchable()
+            ->nullable()
+            ->dehydrated(fn (): bool => Schema::hasColumn('events', 'program_start_place_id'))
+            ->reactive()
+            ->visible(fn (): bool => Schema::hasColumn('events', 'program_start_place_id'))
+            ->afterStateUpdated(function (callable $get, callable $set, ?\App\Models\Event $record): void {
+                $templateId = (int) ($get('event_template_id') ?? $record?->event_template_id ?? 0);
+                $startPlaceId = (int) ($get('start_place_id') ?? 0);
+                $programStartPlaceId = (int) ($get('program_start_place_id') ?? 0);
 
-                Forms\Components\Hidden::make('transport_company_name')
-                    ->visible(fn (): bool => Schema::hasColumn('events', 'transport_company_name')),
+                if ($templateId > 0) {
+                    $set('transfer_km', static::resolveTransferKmFromTemplateState(
+                        $templateId,
+                        $startPlaceId,
+                        (float) ($get('transfer_km') ?? 0)
+                    ));
+                } elseif ($programStartPlaceId > 0 && $startPlaceId > 0) {
+                    $d1 = (float) (\App\Models\PlaceDistance::query()
+                        ->where('from_place_id', $startPlaceId)
+                        ->where('to_place_id', $programStartPlaceId)
+                        ->value('distance_km') ?? 0);
+                    $set('transfer_km', $d1 * 2);
+                }
 
-                Forms\Components\Select::make('bus_id')
-                    ->label('Autokar')
-                    ->options(Bus::pluck('name', 'id'))
-                    ->searchable()
-                    ->nullable()
-                    ->live()
-                    ->afterStateUpdated(fn ($livewire) => $livewire->dispatch('event-price-table-refresh')),
+                static::refreshTotalCostFromTemplateState($set, $get);
+            })
+            ->hintIcon(
+                'heroicon-m-information-circle',
+                tooltip: 'Miejsce startu programu (z szablonu lub skorygowane ręcznie) — do kalkulacji transferu i dokumentów.',
+            );
 
-                Forms\Components\Placeholder::make('bus_seat_capacity_warning')
-                    ->hiddenLabel()
-                    ->visible(fn (callable $get, ?Event $record): bool => EventBusSeatCapacity::resolveMessage($get, $record) !== null)
-                    ->content(fn (callable $get, ?Event $record) => EventBusSeatCapacity::warningHtml($get, $record) ?? '')
-                    ->columnSpanFull(),
+        return [
+            Forms\Components\Section::make('Trasa i harmonogram')
+                ->icon('heroicon-o-map')
+                ->description('Daty i godziny transportu + trasy dzienne + podgląd transportu w programie.')
+                ->extraAttributes(['class' => 'transport-form-card'])
+                ->columns(['default' => 1, 'md' => 2])
+                ->schema([
+                    Forms\Components\Fieldset::make('Terminy transportu')
+                        ->columns(['default' => 1, 'md' => 2, 'xl' => 3])
+                        ->columnSpanFull()
+                        ->schema(array_values(array_filter([
+                            Forms\Components\DatePicker::make('start_date')
+                                ->label('Data podstawienia / wyjazdu')
+                                ->required()
+                                ->native(false)
+                                ->live()
+                                ->hintIcon('heroicon-m-information-circle', tooltip: 'Ta sama data co rozpoczęcie imprezy (Podsumowanie).')
+                                ->afterStateUpdated(function ($state, Forms\Get $get, callable $set, ?Event $record): void {
+                                    if (empty($state)) {
+                                        return;
+                                    }
 
-                Forms\Components\Select::make('start_place_id')
-                    ->label('Miejsce wyjazdu (podstawienia)')
-                    ->options(fn (callable $get, ?Event $record) => Place::startingPlaceSelectOptionsForTemplate(
-                        (int) ($get('event_template_id') ?? $record?->event_template_id ?? 0) ?: null,
-                        (int) ($get('start_place_id') ?? $record?->start_place_id ?? 0) ?: null,
-                    ))
-                    ->searchable()
-                    ->nullable()
-                    ->reactive()
-                    ->helperText(fn (callable $get, ?Event $record): string => filled($get('event_template_id') ?? $record?->event_template_id)
-                        ? 'Punkty startowe dostępne dla szablonu tej imprezy.'
-                        : 'Tylko miejsca oznaczone jako punkty startowe — wymagane do kalkulacji transferu.')
-                    ->afterStateUpdated(function (callable $get, callable $set, ?\App\Models\Event $record): void {
-                        $templateId = (int) ($get('event_template_id') ?? $record?->event_template_id ?? 0);
-                        $startPlaceId = (int) ($get('start_place_id') ?? 0);
-                        $currentTransfer = (float) ($get('transfer_km') ?? 0);
+                                    $start = \Carbon\Carbon::parse($state);
+                                    $fallbackDuration = ($record?->start_date && $record?->end_date)
+                                        ? max(1, $record->start_date->diffInDays($record->end_date) + 1)
+                                        : 1;
+                                    $duration = max(1, (int) ($get('duration_days') ?? $record?->duration_days ?? $fallbackDuration));
 
-                        if ($templateId) {
-                            $set('transfer_km', static::resolveTransferKmFromTemplateState(
-                                $templateId,
-                                $startPlaceId,
-                                $currentTransfer
-                            ));
-                        } else {
-                            $programStartPlaceId = (int) ($get('program_start_place_id') ?? 0);
-                            if ($programStartPlaceId > 0 && $startPlaceId > 0) {
-                                $d1 = (float) (\App\Models\PlaceDistance::query()
-                                    ->where('from_place_id', $startPlaceId)
-                                    ->where('to_place_id', $programStartPlaceId)
-                                    ->value('distance_km') ?? 0);
-                                $set('transfer_km', $d1 * 2);
+                                    $set('end_date', $start->copy()->addDays($duration - 1)->toDateString());
+                                    $set('duration_days', $duration);
+                                }),
+
+                            $timeFields['substitution'],
+                            $timeFields['departure'],
+
+                            Forms\Components\DatePicker::make('end_date')
+                                ->label('Data powrotu')
+                                ->required()
+                                ->native(false)
+                                ->live()
+                                ->hintIcon('heroicon-m-information-circle', tooltip: 'Data powrotu / zakończenia transportu. Aktualizuje liczbę dni imprezy.')
+                                ->afterStateUpdated(function ($state, Forms\Get $get, callable $set): void {
+                                    if (empty($state) || empty($get('start_date'))) {
+                                        return;
+                                    }
+
+                                    $start = \Carbon\Carbon::parse($get('start_date'))->startOfDay();
+                                    $end = \Carbon\Carbon::parse($state)->startOfDay();
+
+                                    if ($end->lt($start)) {
+                                        $set('end_date', $start->toDateString());
+                                        $set('duration_days', 1);
+
+                                        return;
+                                    }
+
+                                    $set('duration_days', max(1, $start->diffInDays($end) + 1));
+                                }),
+
+                            Forms\Components\Hidden::make('duration_days'),
+
+                            $timeFields['return'],
+                        ]))),
+
+                    Forms\Components\Placeholder::make('transport_from_program')
+                        ->label('Transport w programie')
+                        ->hiddenOn('create')
+                        ->content(function (?Event $record): \Illuminate\Support\HtmlString {
+                            if (! $record) {
+                                return new \Illuminate\Support\HtmlString('<span style="color:#9ca3af">Brak danych</span>');
                             }
-                        }
 
-                        static::refreshTotalCostFromTemplateState($set, $get);
-                    }),
+                            $transportPoints = $record->transportProgramPoints()->get();
+                            if ($transportPoints->isEmpty()) {
+                                return new \Illuminate\Support\HtmlString('<span style="color:#9ca3af">Brak punktów oznaczonych jako transport.</span>');
+                            }
 
-                Forms\Components\Fieldset::make('Terminy transportu')
-                    ->columns(['default' => 1, 'md' => 2, 'xl' => 4])
-                    ->columnSpanFull()
-                    ->schema([
-                        Forms\Components\DatePicker::make('start_date')
-                            ->label('Data podstawienia / wyjazdu')
-                            ->required()
-                            ->native(false)
-                            ->live()
-                            ->helperText('Ta sama data co rozpoczęcie imprezy (Podsumowanie).')
-                            ->afterStateUpdated(function ($state, Forms\Get $get, callable $set, ?Event $record): void {
-                                if (empty($state)) {
-                                    return;
-                                }
+                            $rows = $transportPoints->map(function ($point) {
+                                $name = e($point->name ?? $point->templatePoint?->name ?? '—');
+                                $contractor = e($point->contractor?->name ?? '—');
+                                $day = (int) ($point->day ?? 1);
 
-                                $start = \Carbon\Carbon::parse($state);
-                                $fallbackDuration = ($record?->start_date && $record?->end_date)
-                                    ? max(1, $record->start_date->diffInDays($record->end_date) + 1)
-                                    : 1;
-                                $duration = max(1, (int) ($get('duration_days') ?? $record?->duration_days ?? $fallbackDuration));
+                                return '<tr>'
+                                    .'<td style="padding:4px 12px 4px 0;color:#6b7280;white-space:nowrap">Dzień '.$day.'</td>'
+                                    .'<td style="padding:4px 12px 4px 0;font-weight:500">🚌 '.$name.'</td>'
+                                    .'<td style="padding:4px 0;color:#374151">'.$contractor.'</td>'
+                                    .'</tr>';
+                            })->implode('');
 
-                                $set('end_date', $start->copy()->addDays($duration - 1)->toDateString());
-                                $set('duration_days', $duration);
-                            }),
+                            return new \Illuminate\Support\HtmlString(
+                                '<table style="border-collapse:collapse;font-size:0.85rem">'.$rows.'</table>'
+                            );
+                        })
+                        ->columnSpanFull(),
 
-                        Forms\Components\Hidden::make('end_date'),
-                        Forms\Components\Hidden::make('duration_days'),
+                    Forms\Components\Fieldset::make('Trasy przejazdu')
+                        ->schema(function (?Event $record, $livewire = null): array {
+                            $event = $record
+                                ?? (is_object($livewire) && method_exists($livewire, 'getRecord')
+                                    ? $livewire->getRecord()
+                                    : null);
 
-                        ...EventTransportFields::transportTimeFields(),
-                    ]),
+                            return EventProgramDayRouteFields::fieldsForEvent($event instanceof Event ? $event : null);
+                        })
+                        ->columnSpanFull()
+                        ->extraAttributes(['class' => 'transport-day-routes-fieldset']),
+                ]),
 
-                Forms\Components\Select::make('program_start_place_id')
-                    ->label('Początek programu')
-                    ->options(\App\Models\Place::query()->orderBy('name')->pluck('name', 'id'))
-                    ->searchable()
-                    ->nullable()
-                    ->dehydrated(fn (): bool => Schema::hasColumn('events', 'program_start_place_id'))
-                    ->reactive()
-                    ->visible(fn (): bool => Schema::hasColumn('events', 'program_start_place_id'))
-                    ->afterStateUpdated(function (callable $get, callable $set, ?\App\Models\Event $record): void {
-                        $templateId = (int) ($get('event_template_id') ?? $record?->event_template_id ?? 0);
-                        $startPlaceId = (int) ($get('start_place_id') ?? 0);
-                        $programStartPlaceId = (int) ($get('program_start_place_id') ?? 0);
+            Forms\Components\Section::make('Autokar, przewoźnik i kierowca')
+                ->icon('heroicon-o-truck')
+                ->description('Cennik, flota (nr rej.), firma, km i kierowca. Kwota aktualizuje się na żywo.')
+                ->extraAttributes(['class' => 'transport-form-card transport-sidebar-card transport-carrier-card'])
+                ->columns(1)
+                ->schema([
+                    Forms\Components\Select::make('bus_id')
+                        ->label('Autokar (cennik)')
+                        ->helperText('Pozycja z cennika — do wyceny i liczby miejsc. Nr rejestracyjny ustawiasz we flocie poniżej.')
+                        ->options(Bus::pluck('name', 'id'))
+                        ->searchable()
+                        ->nullable()
+                        ->live()
+                        ->afterStateUpdated(fn ($livewire) => $livewire->dispatch('event-price-table-refresh')),
 
-                        if ($templateId > 0) {
-                            $set('transfer_km', static::resolveTransferKmFromTemplateState(
-                                $templateId,
-                                $startPlaceId,
-                                (float) ($get('transfer_km') ?? 0)
-                            ));
-                        } elseif ($programStartPlaceId > 0 && $startPlaceId > 0) {
-                            $d1 = (float) (\App\Models\PlaceDistance::query()
-                                ->where('from_place_id', $startPlaceId)
-                                ->where('to_place_id', $programStartPlaceId)
-                                ->value('distance_km') ?? 0);
-                            $set('transfer_km', $d1 * 2);
-                        }
+                    Forms\Components\Placeholder::make('bus_seat_capacity_warning')
+                        ->hiddenLabel()
+                        ->visible(fn (callable $get, ?Event $record): bool => EventBusSeatCapacity::resolveMessage($get, $record) !== null)
+                        ->content(fn (callable $get, ?Event $record) => EventBusSeatCapacity::warningHtml($get, $record) ?? '')
+                        ->columnSpanFull(),
 
-                        static::refreshTotalCostFromTemplateState($set, $get);
-                    })
-                    ->helperText(fn (callable $get, ?\App\Models\Event $record): string => filled($get('event_template_id') ?? $record?->event_template_id)
-                        ? 'Miejsce startu programu (z szablonu lub skorygowane ręcznie).'
-                        : 'Miejsce rozpoczęcia programu — do kalkulacji transferu i dokumentów.'),
+                    Forms\Components\Grid::make(2)
+                        ->schema([
+                            Forms\Components\TextInput::make('transfer_km')
+                                ->label('Km transferu')
+                                ->numeric()
+                                ->minValue(0)
+                                ->default(0)
+                                ->live(onBlur: true)
+                                ->helperText('Liczone z punktu startowego / początku programu (sekcja Podstawienie).')
+                                ->afterStateUpdated(fn ($livewire) => method_exists($livewire, 'dispatch') ? $livewire->dispatch('event-price-table-refresh') : null),
 
-                Forms\Components\TextInput::make('transfer_km')
-                    ->label('Km transferu')
-                    ->numeric()
-                    ->minValue(0)
-                    ->default(0)
-                    ->live(onBlur: true)
-                    ->afterStateUpdated(fn ($livewire) => method_exists($livewire, 'dispatch') ? $livewire->dispatch('event-price-table-refresh') : null),
+                            Forms\Components\TextInput::make('program_km')
+                                ->label('Km programu')
+                                ->numeric()
+                                ->minValue(0)
+                                ->default(0)
+                                ->live(onBlur: true)
+                                ->afterStateUpdated(fn ($livewire, callable $get, callable $set) => [
+                                    static::refreshTotalCostFromTemplateState($set, $get),
+                                    method_exists($livewire, 'dispatch') ? $livewire->dispatch('event-price-table-refresh') : null,
+                                ]),
+                        ]),
 
-                Forms\Components\TextInput::make('program_km')
-                    ->label('Km programu')
-                    ->numeric()
-                    ->minValue(0)
-                    ->default(0)
-                    ->live(onBlur: true)
-                    ->afterStateUpdated(fn ($livewire, callable $get, callable $set) => [
-                        static::refreshTotalCostFromTemplateState($set, $get),
-                        method_exists($livewire, 'dispatch') ? $livewire->dispatch('event-price-table-refresh') : null,
-                    ]),
+                    ...EventTransportFields::manualTransportCostFields(),
 
-                ...EventTransportFields::manualTransportCostFields(),
+                    ...EventTransportCostSummaryFields::placeholder(),
 
-                ...EventTransportCostSummaryFields::placeholder(),
+                    ...TypedContractorSelect::make(
+                        field: 'transport_contractor_id',
+                        label: 'Firma transportowa',
+                        typeNames: ContractorType::transportTypeNames(),
+                        searchAllField: 'transport_contractor_search_all',
+                        defaultTypeOnCreate: 'przewoźnik',
+                        helperText: 'Wybierz firmę z listy lub dodaj nową — kontakty poniżej.',
+                        searchAllHelperText: 'Domyślnie tylko przewoźnicy i kierowcy. Zaznacz, gdy firma ma źle przypisany typ.',
+                        afterStateUpdated: function ($state, callable $set): void {
+                            if (! Schema::hasColumn('events', 'transport_company_name')) {
+                                return;
+                            }
 
-                Forms\Components\Textarea::make('bus_info')
-                    ->label('Informacje o autokarze')
-                    ->rows(2)
-                    ->maxLength(1000)
-                    ->columnSpanFull()
-                    ->visible(fn (): bool => Schema::hasColumn('events', 'bus_info')),
+                            if (! $state) {
+                                $set('transport_company_name', null);
 
-                Forms\Components\Fieldset::make('Kierowca i podstawienie')
-                    ->columns(['default' => 1, 'md' => 2])
-                    ->columnSpanFull()
-                    ->schema(EventReadinessFields::driverFields()),
+                                return;
+                            }
 
-                Forms\Components\Placeholder::make('transport_from_program')
-                    ->label('Transport w programie')
-                    ->hiddenOn('create')
-                    ->content(function (?Event $record): \Illuminate\Support\HtmlString {
-                        if (! $record) {
-                            return new \Illuminate\Support\HtmlString('<span style="color:#9ca3af">Brak danych</span>');
-                        }
+                            $name = Contractor::query()->whereKey($state)->value('name');
+                            $set('transport_company_name', $name ?: null);
+                        },
+                        columnSpan: 'full',
+                    ),
 
-                        $transportPoints = $record->transportProgramPoints()->get();
-                        if ($transportPoints->isEmpty()) {
-                            return new \Illuminate\Support\HtmlString('<span style="color:#9ca3af">Brak punktów oznaczonych jako transport.</span>');
-                        }
+                    Forms\Components\Hidden::make('transport_company_name')
+                        ->visible(fn (): bool => Schema::hasColumn('events', 'transport_company_name')),
 
-                        $rows = $transportPoints->map(function ($point) {
-                            $name = e($point->name ?? $point->templatePoint?->name ?? '—');
-                            $contractor = e($point->contractor?->name ?? '—');
-                            $day = (int) ($point->day ?? 1);
+                    ...TransportContractorContactsFields::make(
+                        contractorField: 'transport_contractor_id',
+                        prefix: 'transport_carrier',
+                        afterContractorCardUpdated: function (Contractor $contractor, callable $set): void {
+                            if (Schema::hasColumn('events', 'transport_company_name')) {
+                                $set('transport_company_name', $contractor->name);
+                            }
+                        },
+                        sidebarPreview: true,
+                    ),
 
-                            return '<tr>'
-                                .'<td style="padding:4px 12px 4px 0;color:#6b7280;white-space:nowrap">Dzień '.$day.'</td>'
-                                .'<td style="padding:4px 12px 4px 0;font-weight:500">🚌 '.$name.'</td>'
-                                .'<td style="padding:4px 0;color:#374151">'.$contractor.'</td>'
-                                .'</tr>';
-                        })->implode('');
+                    Forms\Components\Fieldset::make('Pojazd operacyjny (flota)')
+                        ->schema([
+                            ...EventVehicleFields::mainVehicleSelect(),
+                            EventReadinessFields::vehicleRegistrationPreview(),
+                        ]),
 
-                        return new \Illuminate\Support\HtmlString(
-                            '<table style="border-collapse:collapse;font-size:0.85rem">'.$rows.'</table>'
-                        );
-                    })
-                    ->columnSpanFull(),
+                    Forms\Components\Fieldset::make('Kierowca')
+                        ->columns(1)
+                        ->schema([
+                            ...EventReadinessFields::driverIdentityFields(),
+                            EventReadinessFields::driverPickupSentToggle(),
+                        ]),
 
-                EventNotesFields::driverNotes()
-                    ->columnSpanFull(),
+                    Forms\Components\Textarea::make('bus_info')
+                        ->label('Informacje o autokarze')
+                        ->rows(2)
+                        ->maxLength(1000)
+                        ->columnSpanFull()
+                        ->visible(fn (): bool => Schema::hasColumn('events', 'bus_info')),
+                ]),
 
-                Forms\Components\Placeholder::make('transport_notes_stack')
-                    ->hiddenLabel()
-                    ->content(fn (?Event $record) => view('filament.components.sticky-notes-stack', [
-                        'notableType' => Event::class,
-                        'notableId' => $record?->id,
-                        'title' => 'Notatki - Transport',
-                        'filterCategory' => \App\Support\StickyNotes\StickyNoteCategory::TRANSPORT,
-                    ]))
-                    ->hiddenOn('create')
-                    ->columnSpanFull(),
-            ]);
+            Forms\Components\Section::make('Podstawienie i uwagi dla kierowcy')
+                ->icon('heroicon-o-map-pin')
+                ->description('Punkt do kalkulacji km + dokładny adres dla kierowcy — to nie to samo pole.')
+                ->extraAttributes(['class' => 'transport-form-card'])
+                ->columns(['default' => 1, 'md' => 2])
+                ->schema([
+                    $startPlaceSelect,
+                    $programStartSelect,
+                    EventReadinessFields::pickupPlaceDetailsField(),
+                    EventNotesFields::driverNotes()->columnSpanFull(),
+                ]),
+        ];
     }
 
     public static function hotelSection(): Forms\Components\Section
@@ -860,8 +926,8 @@ class EventResource extends Resource
                             $deltaLine .= '</div>';
 
                             $html = '<div style="font-size:0.78rem;line-height:1.4;text-align:right">'
-                                .'<div><span style="color:#6b7280">Kalkulacja:</span> '.e($fmt($calcPlan)).'</div>'
-                                .'<div><span style="color:#6b7280">Rozliczenie:</span> '.e($fmt($settlementPlan)).'</div>'
+                                .'<div><span style="color:#6b7280">Szablon:</span> '.e($fmt($calcPlan)).'</div>'
+                                .'<div><span style="color:#6b7280">Planowane:</span> '.e($fmt($settlementPlan)).'</div>'
                                 .$deltaLine;
                             if ($warn) {
                                 $html .= '<div style="color:#dc2626;font-size:0.7rem">Rozbieżność &gt; 5%</div>';
@@ -1244,7 +1310,8 @@ class EventResource extends Resource
 
     public static function getRecordSubNavigation(Page $page): array
     {
-        // IA: primary — Zadania osobno; Operacje / Finanse / Dokumenty / Uczestnicy mają nested module nav.
+        // IA: primary flat — Rezerwacje/Transport/Hotele/Pilot/Ubezpieczenia w jednym wierszu.
+        // Finanse / Dokumenty / Uczestnicy nadal mają nested module nav.
         $items = [
             Pages\EditEvent::class,
             Pages\EditEventProgram::class,
@@ -1256,6 +1323,14 @@ class EventResource extends Resource
 
         $items[] = Pages\ManageEventTasks::class;
         $items[] = Pages\ManageEventReservations::class;
+        $items[] = Pages\ManageEventTransport::class;
+        $items[] = Pages\EventHotelPlanning::class;
+        $items[] = Pages\ManageEventPilot::class;
+
+        if (Schema::hasTable('event_day_insurance')) {
+            $items[] = Pages\ManageEventDayInsurances::class;
+        }
+
         $items[] = Pages\EventFinance::class;
 
         if (Schema::hasTable('contracts') || Schema::hasTable('event_agreements')) {

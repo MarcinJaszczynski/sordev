@@ -50,5 +50,12 @@
                 @endif
             </div>
         @endif
+
+        @if (filled($meta['bank_account'] ?? null))
+            <div class="contractor-contact-details__line">
+                <span class="text-gray-500">Konto:</span>
+                <span class="font-mono tracking-tight">{{ $meta['bank_account'] }}</span>
+            </div>
+        @endif
     </div>
 @endif

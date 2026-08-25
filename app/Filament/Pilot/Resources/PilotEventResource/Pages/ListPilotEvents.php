@@ -25,7 +25,7 @@ class ListPilotEvents extends ListRecords
 
     public function getHeading(): string|Htmlable
     {
-        return 'Moje wycieczki';
+        return '';
     }
 
     /**

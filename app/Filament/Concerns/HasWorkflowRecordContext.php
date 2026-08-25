@@ -12,7 +12,8 @@ namespace App\Filament\Concerns;
  *     status?: string|null,
  *     statusColor?: string|null,
  *     links?: array<int, array{label: string, url?: string, wire_click?: string, icon?: string|null, external?: bool}>,
- *     meta?: array<int, array{label: string, value: string}>
+ *     meta?: array<int, array{label: string, value: string, hint?: string, url?: string}>,
+ *     finance?: array<string, mixed>|null
  * }
  */
 trait HasWorkflowRecordContext

@@ -22,6 +22,9 @@ class PilotEventChecklist extends Component
 
     public bool $readOnly = false;
 
+    /** @var array<int, string> */
+    public array $responses = [];
+
     /** Biuro/administracja zarządza listą (wybór szablonu, dodawanie/usuwanie punktów). */
     public bool $canManage = false;
 
@@ -41,6 +44,18 @@ class PilotEventChecklist extends Component
 
         // Pilot poza oknem pełnego dostępu (archiwum) nie może nawet odznaczać.
         $this->readOnly = ! $isOffice && ! app(PilotAccessService::class)->hasFullAccess($event, $user);
+
+        $this->syncResponsesFromTasks();
+    }
+
+    protected function syncResponsesFromTasks(): void
+    {
+        $this->responses = app(PilotChecklistService::class)
+            ->tasksForEvent($this->event())
+            ->mapWithKeys(fn (Task $task): array => [
+                $task->id => (string) ($task->checklist_response ?? ''),
+            ])
+            ->all();
     }
 
     protected function resolveCanManage(): bool
@@ -123,7 +138,57 @@ class PilotEventChecklist extends Component
             return;
         }
 
-        app(PilotChecklistService::class)->toggleDone($task);
+        try {
+            if ($task->checklistInputType()->requiresValue()) {
+                app(PilotChecklistService::class)->saveResponse($task, $this->responses[$taskId] ?? '');
+                $task->refresh();
+            }
+
+            app(PilotChecklistService::class)->toggleDone($task);
+        } catch (\Illuminate\Validation\ValidationException $exception) {
+            Notification::make()
+                ->title(collect($exception->errors())->flatten()->first() ?? 'Nie udało się zaktualizować punktu.')
+                ->danger()
+                ->send();
+
+            return;
+        }
+
+        $this->syncResponsesFromTasks();
+        $this->dispatch('pilot-checklist-updated');
+    }
+
+    public function saveResponse(int $taskId): void
+    {
+        if ($this->readOnly) {
+            return;
+        }
+
+        $task = Task::query()
+            ->whereKey($taskId)
+            ->where('taskable_type', Event::class)
+            ->where('taskable_id', $this->eventId)
+            ->first();
+
+        if (! $task || ! $task->checklistInputType()->requiresValue()) {
+            return;
+        }
+
+        try {
+            app(PilotChecklistService::class)->saveResponse($task, $this->responses[$taskId] ?? '');
+
+            Notification::make()
+                ->title('Zapisano wartość')
+                ->success()
+                ->send();
+        } catch (\Illuminate\Validation\ValidationException $exception) {
+            Notification::make()
+                ->title(collect($exception->errors())->flatten()->first() ?? 'Nie udało się zapisać wartości.')
+                ->danger()
+                ->send();
+        }
+
+        $this->syncResponsesFromTasks();
         $this->dispatch('pilot-checklist-updated');
     }
 

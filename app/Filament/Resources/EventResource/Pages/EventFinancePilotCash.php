@@ -24,9 +24,9 @@ class EventFinancePilotCash extends Page
 
     protected static string $view = 'filament.resources.event-resource.pages.event-finance-pilot-cash';
 
-    protected static ?string $navigationLabel = 'Gotówka dla pilota';
+    protected static ?string $navigationLabel = 'Gotówka pilota';
 
-    protected static ?string $title = 'Gotówka dla pilota';
+    protected static ?string $title = 'Gotówka pilota';
 
     protected static ?string $navigationIcon = 'heroicon-o-banknotes';
 

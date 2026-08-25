@@ -6,7 +6,7 @@
             'due' => 'Do zapłaty',
             'overdue' => 'Przeterminowane',
             'approved_unpaid' => 'Zaakceptowane nieopłacone',
-            'paid_period' => 'Zapłacone w okresie',
+            'paid_period' => 'Zapłacono w okresie',
         ] as $tab => $label)
             <x-filament::button
                 :color="$activeTab === $tab ? 'primary' : 'gray'"

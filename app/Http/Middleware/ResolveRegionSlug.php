@@ -6,6 +6,7 @@ use App\Models\Place;
 use Closure;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Cookie;
+use Illuminate\Support\Facades\Schema;
 use Illuminate\Support\Facades\URL;
 use Illuminate\Support\Str;
 
@@ -18,12 +19,13 @@ class ResolveRegionSlug
 {
     public function handle(Request $request, Closure $next)
     {
-        $routeName = (string) ($request->route()?->getName() ?? '');
-        if (
-            $request->is('livewire/*') ||
-            $request->is('admin/*') ||
-            str_starts_with($routeName, 'filament.')
-        ) {
+        if ($this->shouldSkip($request)) {
+            return $next($request);
+        }
+
+        if (! $this->placesTableAvailable()) {
+            $this->shareRegionContext(null, 'region');
+
             return $next($request);
         }
 
@@ -52,9 +54,7 @@ class ResolveRegionSlug
             }
         }
 
-        URL::defaults(['regionSlug' => $regionSlug ?: 'region']);
-        view()->share('current_start_place_id', $placeId);
-        view()->share('current_region_slug', $regionSlug);
+        $this->shareRegionContext($placeId, $regionSlug);
 
         // Canonicalize: if user passed start_place_id different from current slug -> redirect to proper slug
         if ($request->has('start_place_id')) {
@@ -89,5 +89,38 @@ class ResolveRegionSlug
         }
 
         return $next($request);
+    }
+
+    private function shouldSkip(Request $request): bool
+    {
+        $routeName = (string) ($request->route()?->getName() ?? '');
+
+        return $request->is(
+            'livewire/*',
+            'admin/*',
+            'pilot/*',
+            'portal/*',
+            'install',
+            'install/*',
+            'up',
+            'api/*',
+        ) || str_starts_with($routeName, 'filament.')
+            || str_starts_with($routeName, 'install.');
+    }
+
+    private function placesTableAvailable(): bool
+    {
+        try {
+            return Schema::hasTable('places');
+        } catch (\Throwable) {
+            return false;
+        }
+    }
+
+    private function shareRegionContext(?int $placeId, ?string $regionSlug): void
+    {
+        URL::defaults(['regionSlug' => $regionSlug ?: 'region']);
+        view()->share('current_start_place_id', $placeId);
+        view()->share('current_region_slug', $regionSlug ?: 'region');
     }
 }

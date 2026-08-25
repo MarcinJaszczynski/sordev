@@ -1,5 +1,12 @@
 @extends('front.layout.master')
 
+@section('head')
+    @include('front.partials.seo', [
+        'pageTitle' => 'Dokumenty | Biuro Podróży RAFA',
+        'pageDescription' => 'Dokumenty i formularze Biura Podróży RAFA: warunki uczestnictwa, regulaminy, informacje formalne i materiały pomocne przy organizacji wycieczki.',
+    ])
+@endsection
+
 @section('main_content')
     <div class="page-top">
         <div class="container">

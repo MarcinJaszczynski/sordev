@@ -610,6 +610,8 @@ class EventPaymentScheduleTest extends TestCase
             'advance_due_date' => now(),
             'paid_at' => now(),
             'advance_amount' => 500,
+            'actual_amount' => 500,
+            'actual_amount_pln' => 500,
             'planned_amount' => 2000,
             'planned_amount_pln' => 2000,
             'paid_by' => 'office',
@@ -625,6 +627,50 @@ class EventPaymentScheduleTest extends TestCase
         $this->assertStringContainsString('Zaliczka zapłacona', $html);
         $this->assertStringContainsString('pozostało', $html);
         $this->assertStringNotContainsString('#dc2626', $html);
+    }
+
+    public function test_advance_paid_flag_without_booked_money_is_not_shown_as_paid(): void
+    {
+        $user = $this->createOfficeUser();
+        $event = Event::factory()->create(['assigned_to' => $user->id]);
+        $point = EventProgramPoint::create([
+            'event_id' => $event->id,
+            'day' => 1,
+            'order' => 1,
+            'name' => 'Luwr bilety dorośli',
+            'include_in_program' => false,
+            'active' => true,
+        ]);
+
+        $settlement = EventSettlement::create([
+            'event_id' => $event->id,
+            'status' => 'active',
+            'created_by' => $user->id,
+        ]);
+
+        EventSettlementCost::create([
+            'settlement_id' => $settlement->id,
+            'source_type' => 'program_point',
+            'source_id' => $point->id,
+            'name' => 'Luwr bilety dorośli',
+            'payment_status' => 'advance_paid',
+            'advance_type' => 'full',
+            'advance_due_date' => '2026-08-06',
+            'paid_at' => '2026-08-06',
+            'advance_amount' => null,
+            'actual_amount' => null,
+            'planned_amount' => 66,
+            'planned_amount_pln' => null,
+            'paid_by' => 'pilot',
+        ]);
+
+        $rows = app(EventPaymentScheduleService::class)->collectForProgramPoint($point->fresh(), $event->fresh());
+        $html = EventProgramPointPaymentDueColumn::html($point, $rows);
+
+        $this->assertTrue($rows->isNotEmpty());
+        $this->assertNotSame('advance_paid', $rows->first()['kind'] ?? null);
+        $this->assertStringNotContainsString('Zaliczka zapłacona', $html);
+        $this->assertStringContainsString('do zapłaty', mb_strtolower($html));
     }
 
     public function test_calendar_includes_unpaid_reservation_deposit_due_date(): void

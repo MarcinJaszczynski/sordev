@@ -122,6 +122,61 @@ class PilotChecklistTemplateTest extends TestCase
             ->assertSee('Utwórz pierwszy szablon');
     }
 
+    public function test_required_input_must_be_filled_before_toggle(): void
+    {
+        [$event, $user] = $this->makeEventAndUser();
+        $service = app(PilotChecklistService::class);
+
+        $template = ChecklistTemplate::query()->create([
+            'name' => 'Test licznik',
+            'is_active' => true,
+        ]);
+
+        $template->items()->create([
+            'title' => 'Sprawdź licznik autokaru',
+            'input_type' => 'number',
+            'input_label' => 'Stan licznika',
+            'input_required' => true,
+            'input_unit' => 'km',
+            'sort_order' => 0,
+        ]);
+
+        $service->applyTemplate($event, $template, $user);
+        $task = $service->tasksForEvent($event)->firstOrFail();
+
+        $this->expectException(\Illuminate\Validation\ValidationException::class);
+        $service->toggleDone($task);
+    }
+
+    public function test_number_input_can_be_saved_and_checked_off(): void
+    {
+        [$event, $user] = $this->makeEventAndUser();
+        $service = app(PilotChecklistService::class);
+
+        $template = ChecklistTemplate::query()->create([
+            'name' => 'Test licznik',
+            'is_active' => true,
+        ]);
+
+        $template->items()->create([
+            'title' => 'Sprawdź licznik autokaru',
+            'input_type' => 'number',
+            'input_label' => 'Stan licznika',
+            'input_required' => true,
+            'input_unit' => 'km',
+            'sort_order' => 0,
+        ]);
+
+        $service->applyTemplate($event, $template, $user);
+        $task = $service->tasksForEvent($event)->firstOrFail();
+
+        $service->saveResponse($task, '123456');
+        $updated = $service->toggleDone($task->fresh());
+
+        $this->assertSame('123456', $updated->checklist_response);
+        $this->assertSame('Zakończone', $updated->status?->name);
+    }
+
     /**
      * @return array{0: Event, 1: User}
      */

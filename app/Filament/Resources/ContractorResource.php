@@ -7,6 +7,7 @@ use App\Filament\Forms\PhoneInput;
 use App\Filament\Resources\ContractorResource\Pages;
 use App\Filament\Resources\ContractorResource\RelationManagers\ContactsRelationManager;
 use App\Filament\Resources\ContractorResource\RelationManagers\LocationsRelationManager;
+use App\Filament\Resources\ContractorResource\RelationManagers\VehiclesRelationManager;
 use App\Filament\Resources\ContractorResource\RelationManagers\VendorInvoicesRelationManager;
 use App\Filament\Resources\TaskResource\RelationManagers\TasksRelationManager;
 use App\Models\Contractor;
@@ -140,6 +141,12 @@ class ContractorResource extends Resource
                     Forms\Components\TextInput::make('nip')
                         ->label('NIP')
                         ->maxLength(20),
+                    Forms\Components\TextInput::make('bank_account')
+                        ->label('Nr konta bankowego')
+                        ->maxLength(64)
+                        ->nullable()
+                        ->helperText('IBAN lub numer konta do przelewów — widoczny w kartach kontrahenta w imprezach.')
+                        ->visible(fn (): bool => \Illuminate\Support\Facades\Schema::hasColumn('contractors', 'bank_account')),
                     Forms\Components\TextInput::make('www')
                         ->label('Strona WWW')
                         ->url()
@@ -169,6 +176,14 @@ class ContractorResource extends Resource
                         ->rules(PilotIdentityValidation::optionalPeselRules())
                         ->visible(fn (Get $get): bool => static::formTypesIncludePilot($get('types')))
                         ->helperText('Widoczne tylko, gdy w typach wybrano „pilot”.'),
+                    Forms\Components\Select::make('settlement_form')
+                        ->label('Forma rozliczenia')
+                        ->options(\App\Enums\ContractorSettlementForm::options())
+                        ->nullable()
+                        ->native(false)
+                        ->visible(fn (Get $get): bool => \Illuminate\Support\Facades\Schema::hasColumn('contractors', 'settlement_form')
+                            && static::formTypesIncludePilot($get('types')))
+                        ->helperText('Umowa o dzieło albo faktura — dziedziczone na imprezę, o ile nie nadpiszesz.'),
                 ]),
 
             Forms\Components\Section::make('Adres rozliczeniowy / siedziba')
@@ -289,6 +304,21 @@ class ContractorResource extends Resource
                     ->searchable()
                     ->placeholder('—')
                     ->toggleable(isToggledHiddenByDefault: true),
+                Tables\Columns\TextColumn::make('bank_account')
+                    ->label('Nr konta')
+                    ->searchable()
+                    ->placeholder('—')
+                    ->copyable()
+                    ->toggleable(isToggledHiddenByDefault: true)
+                    ->visible(fn (): bool => \Illuminate\Support\Facades\Schema::hasColumn('contractors', 'bank_account')),
+                Tables\Columns\TextColumn::make('settlement_form')
+                    ->label('Rozliczenie')
+                    ->formatStateUsing(fn ($state): string => $state instanceof \App\Enums\ContractorSettlementForm
+                        ? $state->label()
+                        : (\App\Enums\ContractorSettlementForm::tryFromMixed($state)?->label() ?? '—'))
+                    ->badge()
+                    ->toggleable(isToggledHiddenByDefault: true)
+                    ->visible(fn (): bool => \Illuminate\Support\Facades\Schema::hasColumn('contractors', 'settlement_form')),
                 Tables\Columns\TextColumn::make('city')
                     ->label('Adres')
                     ->searchable(['city', 'street', 'postal_code'])
@@ -367,6 +397,10 @@ class ContractorResource extends Resource
             LocationsRelationManager::class,
             TasksRelationManager::class,
         ];
+
+        if (\Illuminate\Support\Facades\Schema::hasTable('vehicles')) {
+            $relations[] = VehiclesRelationManager::class;
+        }
 
         if (\Illuminate\Support\Facades\Schema::hasTable('vendor_invoices')) {
             $relations[] = VendorInvoicesRelationManager::class;

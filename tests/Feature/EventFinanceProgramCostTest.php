@@ -180,4 +180,46 @@ class EventFinanceProgramCostTest extends TestCase
         // PLN currency still present for other flows / defaults
         $this->assertNotNull($pln->fresh());
     }
+
+    public function test_event_finance_drawer_persists_manual_planned_total_without_changing_unit_price(): void
+    {
+        if (! Schema::hasTable('event_settlement_costs') || ! Schema::hasTable('event_program_points')) {
+            $this->markTestSkipped('Brak wymaganych tabel.');
+        }
+
+        $pln = Currency::factory()->pln()->create();
+        $event = Event::factory()->create(['duration_days' => 3, 'participant_count' => 20]);
+        $settlement = EventSettlement::findOrCreateActiveForEvent($event);
+        $point = EventProgramPoint::factory()->create([
+            'event_id' => $event->id,
+            'unit_price' => 10,
+            'group_size' => 1,
+            'quantity' => 20,
+            'planned_price' => 200,
+            'currency_id' => $pln->id,
+            'convert_to_pln' => true,
+            'include_in_calculation' => true,
+            'active' => true,
+        ]);
+        $settlement->upsertCostFromProgramPoint($point->fresh(['currency', 'templatePoint']));
+
+        $cost = EventSettlementCost::query()
+            ->where('source_type', 'program_point')
+            ->where('source_id', $point->id)
+            ->firstOrFail();
+
+        Livewire::test(EventFinance::class, ['record' => $event->getKey()])
+            ->call('openCost', $cost->id)
+            ->call('startEditPlan')
+            ->set('planForm.planned_price', 250)
+            ->call('savePlan')
+            ->assertNotified();
+
+        $point->refresh();
+        $cost->refresh();
+
+        $this->assertEqualsWithDelta(250.0, (float) $point->planned_price, 0.01);
+        $this->assertEqualsWithDelta(250.0, (float) $cost->planned_amount, 0.01);
+        $this->assertEqualsWithDelta(10.0, (float) $point->unit_price, 0.01);
+    }
 }

@@ -102,10 +102,30 @@ class PilotPortalVisibilityTest extends TestCase
 
         $this->assertContains('settlement', $keys);
         $this->assertNotContains('advance', $keys);
+        $this->assertNotContains('attendance', $keys);
         $this->assertStringContainsString(
             '/pilot/settlement/',
             collect($tabs)->firstWhere('key', 'settlement')['url'] ?? '',
         );
+    }
+
+    public function test_trip_nav_shows_attendance_when_enabled(): void
+    {
+        $pilot = User::factory()->create(['status' => 'active']);
+        $pilot->assignRole('pilot');
+
+        $event = Event::factory()->create([
+            'assigned_to' => $pilot->id,
+            'shared_with_pilot' => true,
+            'status' => Event::STATUS_CONFIRMED,
+            'pilot_portal_show_attendance' => true,
+        ]);
+
+        $this->actingAs($pilot);
+
+        $keys = collect(\App\Support\PilotTripModuleNavigation::tabs($event))->pluck('key')->all();
+
+        $this->assertContains('attendance', $keys);
     }
 
     public function test_admin_pilot_cash_desk_respects_portal_exchange_visibility(): void

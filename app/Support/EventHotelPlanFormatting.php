@@ -224,9 +224,19 @@ final class EventHotelPlanFormatting
         return $slots;
     }
 
+    public static function isEventFlatPricing(?string $eventMode): bool
+    {
+        return in_array($eventMode, ['flat_stay', 'flat_stay_per_person'], true);
+    }
+
+    public static function isStayFlatPricing(?string $stayMode): bool
+    {
+        return in_array($stayMode, ['flat_night', 'flat_night_per_person'], true);
+    }
+
     public static function usesLinePricing(?string $eventMode, ?string $stayMode = 'lines'): bool
     {
-        if ($eventMode === 'flat_stay') {
+        if (self::isEventFlatPricing($eventMode)) {
             return false;
         }
 
@@ -234,16 +244,35 @@ final class EventHotelPlanFormatting
     }
 
     /**
+     * Kwota flat w walucie źródłowej (po ewentualnym × osoby).
+     */
+    public static function resolveFlatNativeAmount(float $amount, ?string $mode, int $peoplePerNight = 0): float
+    {
+        $amount = round($amount, 2);
+
+        if (in_array($mode, ['flat_stay_per_person', 'flat_night_per_person'], true)) {
+            return round($amount * max(0, $peoplePerNight), 2);
+        }
+
+        return $amount;
+    }
+
+    /**
      * @param  array<string, mixed>  $stay
      */
-    public static function stayTotalPln(array $stay, ?string $eventPricingMode = 'lines', ?Collection $currenciesById = null): float
-    {
-        if ($eventPricingMode === 'flat_stay') {
+    public static function stayTotalPln(
+        array $stay,
+        ?string $eventPricingMode = 'lines',
+        ?Collection $currenciesById = null,
+        int $peoplePerNight = 0,
+    ): float {
+        if (self::isEventFlatPricing($eventPricingMode)) {
             return 0.0;
         }
 
-        if (($stay['pricing_mode'] ?? 'lines') === 'flat_night' && isset($stay['flat_amount']) && $stay['flat_amount'] !== '') {
-            $amount = round((float) $stay['flat_amount'], 2);
+        $stayMode = $stay['pricing_mode'] ?? 'lines';
+        if (self::isStayFlatPricing($stayMode) && isset($stay['flat_amount']) && $stay['flat_amount'] !== '') {
+            $amount = self::resolveFlatNativeAmount((float) $stay['flat_amount'], $stayMode, $peoplePerNight);
             $currencyId = $stay['flat_currency_id'] ?? null;
             $symbol = $currencyId && $currenciesById?->has($currencyId)
                 ? (string) $currenciesById->get($currencyId)
@@ -276,9 +305,10 @@ final class EventHotelPlanFormatting
         ?int $flatStayCurrencyId = null,
         bool $flatStayConvertToPln = true,
         ?Collection $currenciesById = null,
+        int $peoplePerNight = 0,
     ): float {
-        if ($eventPricingMode === 'flat_stay' && $flatStayAmount !== null) {
-            $amount = round($flatStayAmount, 2);
+        if (self::isEventFlatPricing($eventPricingMode) && $flatStayAmount !== null) {
+            $amount = self::resolveFlatNativeAmount($flatStayAmount, $eventPricingMode, $peoplePerNight);
             $symbol = $flatStayCurrencyId && $currenciesById?->has($flatStayCurrencyId)
                 ? (string) $currenciesById->get($flatStayCurrencyId)
                 : (Currency::query()->find($flatStayCurrencyId)?->symbol ?? 'PLN');
@@ -292,23 +322,31 @@ final class EventHotelPlanFormatting
             return round($amount * $rate, 2);
         }
 
-        return round(collect($stays)->sum(fn (array $stay) => self::stayTotalPln($stay, $eventPricingMode, $currenciesById)), 2);
+        return round(collect($stays)->sum(
+            fn (array $stay) => self::stayTotalPln($stay, $eventPricingMode, $currenciesById, $peoplePerNight)
+        ), 2);
     }
 
     /**
      * @param  array<string, mixed>  $stay
      */
-    public static function stayTotalDisplay(array $stay, ?string $eventPricingMode = 'lines', ?Collection $currenciesById = null): string
-    {
-        if ($eventPricingMode === 'flat_stay') {
+    public static function stayTotalDisplay(
+        array $stay,
+        ?string $eventPricingMode = 'lines',
+        ?Collection $currenciesById = null,
+        int $peoplePerNight = 0,
+    ): string {
+        if (self::isEventFlatPricing($eventPricingMode)) {
             return '—';
         }
 
-        if (($stay['pricing_mode'] ?? 'lines') === 'flat_night' && isset($stay['flat_amount']) && $stay['flat_amount'] !== '') {
+        $stayMode = $stay['pricing_mode'] ?? 'lines';
+        if (self::isStayFlatPricing($stayMode) && isset($stay['flat_amount']) && $stay['flat_amount'] !== '') {
             $currency = self::resolveCurrency($stay['flat_currency_id'] ?? null, $currenciesById);
+            $amount = self::resolveFlatNativeAmount((float) $stay['flat_amount'], $stayMode, $peoplePerNight);
 
             return CurrencyAmountDisplay::format(
-                (float) $stay['flat_amount'],
+                $amount,
                 $currency,
                 (bool) ($stay['flat_convert_to_pln'] ?? true),
                 0,
@@ -332,20 +370,23 @@ final class EventHotelPlanFormatting
         ?int $flatStayCurrencyId = null,
         bool $flatStayConvertToPln = true,
         ?Collection $currenciesById = null,
+        int $peoplePerNight = 0,
     ): string {
-        if ($eventPricingMode === 'flat_stay' && $flatStayAmount !== null) {
+        if (self::isEventFlatPricing($eventPricingMode) && $flatStayAmount !== null) {
             $currency = self::resolveCurrency($flatStayCurrencyId, $currenciesById);
+            $amount = self::resolveFlatNativeAmount($flatStayAmount, $eventPricingMode, $peoplePerNight);
 
-            return CurrencyAmountDisplay::format($flatStayAmount, $currency, $flatStayConvertToPln, 0);
+            return CurrencyAmountDisplay::format($amount, $currency, $flatStayConvertToPln, 0);
         }
 
         $plnPart = 0.0;
         $foreignBuckets = [];
 
         foreach ($stays as $stay) {
-            if (($stay['pricing_mode'] ?? 'lines') === 'flat_night' && isset($stay['flat_amount']) && $stay['flat_amount'] !== '') {
+            $stayMode = $stay['pricing_mode'] ?? 'lines';
+            if (self::isStayFlatPricing($stayMode) && isset($stay['flat_amount']) && $stay['flat_amount'] !== '') {
                 $currency = self::resolveCurrency($stay['flat_currency_id'] ?? null, $currenciesById);
-                $amount = (float) $stay['flat_amount'];
+                $amount = self::resolveFlatNativeAmount((float) $stay['flat_amount'], $stayMode, $peoplePerNight);
                 $symbol = CurrencyAmountDisplay::symbol($currency);
                 $pln = CurrencyAmountDisplay::plnEquivalent($amount, $currency, (bool) ($stay['flat_convert_to_pln'] ?? true));
 
@@ -377,6 +418,89 @@ final class EventHotelPlanFormatting
         }
 
         return CurrencyAmountDisplay::formatMixedTotal($plnPart, $foreignBuckets, 0);
+    }
+
+    /**
+     * Sumy noclegów per waluta (PLN + obce bez konwersji).
+     * Klucz = symbol waluty (np. PLN, EUR).
+     *
+     * @param  array<int, array<string, mixed>>  $stays
+     * @return array<string, float>
+     */
+    public static function eventTotalsByCurrency(
+        array $stays,
+        ?string $eventPricingMode = 'lines',
+        ?float $flatStayAmount = null,
+        ?int $flatStayCurrencyId = null,
+        bool $flatStayConvertToPln = true,
+        ?Collection $currenciesById = null,
+        int $peoplePerNight = 0,
+    ): array {
+        $buckets = [];
+
+        $add = static function (string $symbol, float $amount) use (&$buckets): void {
+            if ($amount <= 0) {
+                return;
+            }
+            $code = strtoupper($symbol ?: 'PLN');
+            $buckets[$code] = round(($buckets[$code] ?? 0) + $amount, 2);
+        };
+
+        if (self::isEventFlatPricing($eventPricingMode) && $flatStayAmount !== null) {
+            $currency = self::resolveCurrency($flatStayCurrencyId, $currenciesById);
+            $amount = self::resolveFlatNativeAmount($flatStayAmount, $eventPricingMode, $peoplePerNight);
+            $symbol = CurrencyAmountDisplay::symbol($currency);
+            $pln = CurrencyAmountDisplay::plnEquivalent($amount, $currency, $flatStayConvertToPln);
+
+            if ($pln !== null) {
+                $add('PLN', $pln);
+            } else {
+                $add($symbol, $amount);
+            }
+
+            return $buckets;
+        }
+
+        foreach ($stays as $stay) {
+            $stayMode = $stay['pricing_mode'] ?? 'lines';
+            if (self::isStayFlatPricing($stayMode) && isset($stay['flat_amount']) && $stay['flat_amount'] !== '') {
+                $currency = self::resolveCurrency($stay['flat_currency_id'] ?? null, $currenciesById);
+                $amount = self::resolveFlatNativeAmount((float) $stay['flat_amount'], $stayMode, $peoplePerNight);
+                $symbol = CurrencyAmountDisplay::symbol($currency);
+                $pln = CurrencyAmountDisplay::plnEquivalent(
+                    $amount,
+                    $currency,
+                    (bool) ($stay['flat_convert_to_pln'] ?? true),
+                );
+
+                if ($pln !== null) {
+                    $add('PLN', $pln);
+                } else {
+                    $add($symbol, $amount);
+                }
+
+                continue;
+            }
+
+            foreach ($stay['room_lines'] ?? [] as $line) {
+                $total = self::lineNativeTotal($line);
+                $currency = self::resolveCurrency($line['currency_id'] ?? null, $currenciesById);
+                $symbol = CurrencyAmountDisplay::symbol($currency);
+                $pln = CurrencyAmountDisplay::plnEquivalent(
+                    $total,
+                    $currency,
+                    (bool) ($line['convert_to_pln'] ?? true),
+                );
+
+                if ($pln !== null) {
+                    $add('PLN', $pln);
+                } else {
+                    $add($symbol, $total);
+                }
+            }
+        }
+
+        return $buckets;
     }
 
     /**
@@ -465,5 +589,20 @@ final class EventHotelPlanFormatting
         $value = Str::ascii(mb_strtolower(trim($value)));
 
         return preg_replace('/\s+/', ' ', $value) ?? '';
+    }
+
+    public static function displaySurname(string $fullName): string
+    {
+        $fullName = trim($fullName);
+        if ($fullName === '') {
+            return '';
+        }
+
+        $parts = preg_split('/\s+/u', $fullName) ?: [];
+        if (count($parts) <= 1) {
+            return $fullName;
+        }
+
+        return (string) end($parts);
     }
 }

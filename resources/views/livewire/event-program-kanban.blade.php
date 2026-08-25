@@ -74,7 +74,7 @@
                         </div>
                         <div class="flex items-center">
                             <input type="checkbox" wire:model.live.debounce.500ms="modalData.include_in_calculation" id="include_in_calculation" class="h-4 w-4 text-primary-600 border-gray-300 rounded">
-                            <label for="include_in_calculation" class="ml-2 block text-sm text-gray-900">Uwzględnij w kalkulacji</label>
+                            <label for="include_in_calculation" class="ml-2 block text-sm text-gray-900">Uwzględnij w kosztach</label>
                         </div>
                         <div class="flex items-center">
                             <input type="checkbox" wire:model.live.debounce.500ms="modalData.active" id="active" class="h-4 w-4 text-primary-600 border-gray-300 rounded">

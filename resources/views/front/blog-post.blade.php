@@ -1,8 +1,19 @@
 @extends('front.layout.master')
 
 @section('head')
-    @include('front.partials.seo')
-    <x-seo.json-ld :schemas="[\App\Support\Seo\SchemaBuilder::article($blogPost, route('blog.post.global', $blogPost->slug))]" />
+    @php
+        $postUrl = route('blog.post.global', $blogPost->slug);
+        $isGuide = $guideMode ?? $blogPost->isGuide();
+    @endphp
+    @include('front.partials.seo', [
+        'pageTitle' => $blogPost->title.' | '.($isGuide ? 'Poradnik' : 'Aktualności').' – Biuro Podróży RAFA',
+        'pageDescription' => $blogPost->excerpt ?: \Illuminate\Support\Str::limit(strip_tags((string) $blogPost->content), 160),
+        'canonical' => $postUrl,
+    ])
+    <x-seo.json-ld :schemas="[
+        \App\Support\Seo\SchemaBuilder::article($blogPost, $postUrl),
+        \App\Support\Seo\SchemaBuilder::blogPostBreadcrumbs($blogPost, $postUrl),
+    ]" />
 @endsection
 
 @section('main_content')
@@ -14,7 +25,7 @@
                 <div class="breadcrumb-container">
                     <ol class="breadcrumb">
                         <li class="breadcrumb-item"><a href="{{ route('home') }}">Start</a></li>
-                        <li class="breadcrumb-item"><a href="{{ route('blog.global') }}">Aktualności</a></li>
+                        <li class="breadcrumb-item"><a href="{{ $isGuide ? route('guide.global') : route('blog.global') }}">{{ $isGuide ? 'Poradnik' : 'Aktualności' }}</a></li>
                         <li class="breadcrumb-item active">{{ $blogPost->title }}</li>
                     </ol>
                 </div>
@@ -81,11 +92,41 @@
                     {!! \App\Support\AgreementHtml::sanitize((string) $blogPost->content) !!}
                 </div>
 
+                @if($isGuide)
+                    <aside class="blog-post-useful-links mt-4 p-3 rounded">
+                        <p class="mb-2"><strong>Przydatne strony:</strong></p>
+                        <ul class="mb-0">
+                            <li><a href="{{ route('insurance') }}">Ubezpieczenia na wycieczkę</a></li>
+                            <li><a href="{{ route('documents.global') }}">Dokumenty do wyjazdu</a></li>
+                            <li><a href="{{ route('faq') }}">FAQ – najczęstsze pytania</a></li>
+                            <li><a href="{{ route('contact') }}">Kontakt z biurem</a></li>
+                        </ul>
+                    </aside>
+                @endif
+
+                @if(isset($relatedPosts) && $relatedPosts->isNotEmpty())
+                    <section class="blog-related mt-5 pt-4 border-top" aria-labelledby="related-posts-heading">
+                        <h2 id="related-posts-heading" class="h4 mb-3">
+                            {{ $isGuide ? 'Powiązane artykuły z poradnika' : 'Powiązane aktualności' }}
+                        </h2>
+                        <div class="row g-3">
+                            @foreach($relatedPosts as $related)
+                                <div class="col-md-4">
+                                    <a href="{{ route('blog.post.global', $related->slug) }}" class="blog-related-card d-block h-auto text-decoration-none">
+                                        <strong class="d-block mb-1">{{ $related->title }}</strong>
+                                        <span class="text-muted small">{{ $related->excerpt ?: \Illuminate\Support\Str::limit(strip_tags((string) $related->content), 90) }}</span>
+                                    </a>
+                                </div>
+                            @endforeach
+                        </div>
+                    </section>
+                @endif
+
                 <!-- Back to Blog Button -->
                 <div class="blog-post-navigation mt-5 pt-4 border-top text-center">
-                    <a href="{{ route('blog.global') }}" class="btn btn-primary">
+                    <a href="{{ $isGuide ? route('guide.global') : route('blog.global') }}" class="btn btn-primary">
                         <i class="fas fa-list me-2"></i>
-                        Powrót do wszystkich postów
+                        Powrót do {{ $isGuide ? 'poradnika' : 'wszystkich postów' }}
                     </a>
                 </div>
             </article>
@@ -218,6 +259,32 @@
         border-color: #af0b0b;
         transform: translateY(-2px);
         box-shadow: 0 4px 8px rgba(206, 13, 13, 0.3);
+    }
+
+    .blog-post-useful-links {
+        background: #f7f9fc;
+        border: 1px solid #e6e8ec;
+    }
+
+    .blog-post-useful-links ul {
+        padding-left: 1.2rem;
+        margin-bottom: 0;
+    }
+
+    .blog-related-card {
+        height: auto !important;
+        border: 1px solid #e6e8ec;
+        border-radius: 10px;
+        padding: 14px 16px;
+        color: #1f2a37;
+        background: #fff;
+        transition: border-color 0.2s, box-shadow 0.2s;
+    }
+
+    .blog-related-card:hover {
+        border-color: #c9d4e2;
+        box-shadow: 0 6px 18px rgba(31, 42, 55, 0.08);
+        color: #1f2a37;
     }
     
     /* Mobile responsiveness */

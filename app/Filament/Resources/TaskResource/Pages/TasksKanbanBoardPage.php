@@ -68,7 +68,7 @@ class TasksKanbanBoardPage extends Page implements HasForms
     public $dueFilter = '';
 
     /** office | system | '' (wszystkie) — domyślnie biuro. */
-    public string $sourceFilter = 'office';
+    public string $sourceFilter = 'all';
 
     public bool $showFinishedTasks = false;
 
@@ -109,8 +109,6 @@ class TasksKanbanBoardPage extends Page implements HasForms
             $this->quickTaskableType = Event::class;
             $this->quickTaskableId = $this->eventFilter;
         }
-
-        $this->mountInteractsWithTaskEditModal();
     }
 
     protected function getHeaderActions(): array
@@ -402,7 +400,7 @@ class TasksKanbanBoardPage extends Page implements HasForms
     {
         $this->tasksScope = 'assigned';
         $this->showFinishedTasks = false;
-        $this->sourceFilter = 'office';
+        $this->sourceFilter = 'all';
         $this->reset(['priorityFilter', 'contextFilter', 'searchTerm', 'dueFilter', 'columnSorts']);
 
         // Clear computed properties
@@ -419,7 +417,7 @@ class TasksKanbanBoardPage extends Page implements HasForms
     public function applyQuickFilter(string $filter): void
     {
         $this->reset(['priorityFilter', 'contextFilter', 'searchTerm', 'dueFilter']);
-        $this->sourceFilter = 'office';
+        $this->sourceFilter = 'all';
 
         match ($filter) {
             'high_priority' => $this->priorityFilter = TaskPriority::Urgent->value,

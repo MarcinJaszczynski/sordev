@@ -22,13 +22,13 @@ class BusResource extends Resource
 
     protected static ?string $navigationGroup = FilamentNavigation::GROUP_CONFIG;
 
-    protected static ?string $navigationLabel = 'Autokary';
+    protected static ?string $navigationLabel = 'Autokary (cennik)';
 
     protected static ?int $navigationSort = 10;
 
-    protected static ?string $modelLabel = 'autokar';
+    protected static ?string $modelLabel = 'autokar (cennik)';
 
-    protected static ?string $pluralModelLabel = 'autokary';
+    protected static ?string $pluralModelLabel = 'autokary (cennik)';
 
     public static function form(Form $form): Form
     {

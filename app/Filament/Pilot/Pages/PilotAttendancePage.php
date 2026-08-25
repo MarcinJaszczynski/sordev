@@ -35,11 +35,13 @@ class PilotAttendancePage extends Page
 
     public int $day = 1;
 
-    /** @var array<int|string, string> */
+    /** @var array<int|string, bool> */
     public array $statuses = [];
 
     public function mount(Event $event): void
     {
+        abort_unless($event->showsPilotAttendance(), 404);
+
         $this->authorizePilotTrip($event);
         $this->event = $event;
         $this->day = 1;
@@ -58,7 +60,7 @@ class PilotAttendancePage extends Page
 
     public function getTitle(): string|Htmlable
     {
-        return 'Obecność: '.$this->event->name;
+        return $this->event->name;
     }
 
     public static function urlFor(Event $event): string
@@ -91,10 +93,18 @@ class PilotAttendancePage extends Page
     {
         abort_unless(app(PilotAccessService::class)->hasFullAccess($this->event, Auth::user()), 403);
 
+        $statuses = [];
+        foreach ($this->participants as $participant) {
+            $checked = (bool) ($this->statuses[$participant->id] ?? false);
+            $statuses[$participant->id] = $checked
+                ? EventAttendance::STATUS_PRESENT
+                : EventAttendance::STATUS_ABSENT;
+        }
+
         app(MarkAttendanceAction::class)(new MarkAttendanceData(
             event: $this->event,
             day: $this->day,
-            statuses: $this->statuses,
+            statuses: $statuses,
             markedBy: Auth::id(),
         ));
 
@@ -106,7 +116,7 @@ class PilotAttendancePage extends Page
         $this->statuses = [];
 
         foreach ($this->participants as $participant) {
-            $this->statuses[$participant->id] = EventAttendance::STATUS_UNKNOWN;
+            $this->statuses[$participant->id] = false;
         }
 
         if (! Schema::hasTable('event_attendances')) {
@@ -118,7 +128,7 @@ class PilotAttendancePage extends Page
             ->where('day', $this->day)
             ->get()
             ->each(function (EventAttendance $row): void {
-                $this->statuses[$row->event_participant_id] = $row->status;
+                $this->statuses[$row->event_participant_id] = $row->status === EventAttendance::STATUS_PRESENT;
             });
     }
 

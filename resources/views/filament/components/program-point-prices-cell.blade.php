@@ -51,7 +51,7 @@
             <div class="epp-prices-set-label" style="font-size:10px;color:#6b7280;margin-bottom:4px;font-weight:600">Σ set</div>
         @endif
         <div class="epp-prices-row">
-            <span class="epp-prices-label">Kalkulacja</span>
+            <span class="epp-prices-label">Szablon</span>
             <span class="epp-prices-value">{!! $money($calc, $calcSub) !!}</span>
         </div>
 
@@ -59,8 +59,8 @@
             'epp-prices-row',
             'epp-prices-row--plan-differs' => $planDiffersFromCalc,
         ])>
-            <span class="epp-prices-label">Plan</span>
-            <span class="epp-prices-value" @if($planDiffersFromCalc) title="Różni się od kalkulacji: {{ $calc }}{{ $calcSub ? ' '.$calcSub : '' }}" @endif>
+            <span class="epp-prices-label">Planowane</span>
+            <span class="epp-prices-value" @if($planDiffersFromCalc) title="Planowane różnią się od szablonu: {{ $calc }}{{ $calcSub ? ' '.$calcSub : '' }}" @endif>
                 {!! $money($planned, $plannedSub) !!}
             </span>
         </div>

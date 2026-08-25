@@ -211,6 +211,10 @@ class EventOrderingPartyFields
                     ->helperText('Widoczne tylko wewnętrznie — pomaga rozróżnić kontakty przy tej samej firmie.')
                     ->columnSpanFull(),
 
+                Forms\Components\Hidden::make('goes_on_trip')
+                    ->default(false)
+                    ->dehydrated(),
+
                 Forms\Components\ViewField::make('party_details_preview')
                     ->label('Dane kontaktowe')
                     ->view('filament.components.ordering-party-contact-preview')

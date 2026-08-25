@@ -51,7 +51,7 @@ final class EventSettlementReportSummarySheet implements \Maatwebsite\Excel\Conc
             ['Impreza', ($event['code'] ?? '').' — '.($event['name'] ?? '')],
             ['Uczestnicy', (int) ($event['participant_count'] ?? 0)],
             ['Plan kosztów', $labels['planned_cost'] ?? ''],
-            ['Wpłacono wykonawcom', $labels['actual_cost'] ?? ''],
+            ['Zapłacono dostawcom', $labels['actual_cost'] ?? ''],
             ['Należne od klientów', $labels['participant_due'] ?? ''],
             ['Wpłacono od klientów', $labels['participant_paid'] ?? ''],
             ['Wynik netto', $labels['net_result'] ?? ''],
@@ -76,7 +76,7 @@ final class EventSettlementReportCostsSheet implements \Maatwebsite\Excel\Concer
 
     public function headings(): array
     {
-        return ['Pozycja', 'Źródło', 'Płatnik', 'Plan PLN', 'Wpłacono PLN', 'Brakuje PLN', 'Semafor'];
+        return ['Pozycja', 'Źródło', 'Płatnik', 'Planowane PLN', 'Zapłacono PLN', 'Brakuje PLN', 'Semafor'];
     }
 
     public function array(): array

@@ -22,8 +22,12 @@ final class AddEventDayInsurancesAction
      * @param  list<int|string>  $insuranceIds
      * @return list<EventDayInsurance>
      */
-    public function __invoke(Event $event, int $day, array $insuranceIds): array
-    {
+    public function __invoke(
+        Event $event,
+        int $day,
+        array $insuranceIds,
+        ?int $policyId = null,
+    ): array {
         if ($day < 1 || $day > $event->resolveCoreProgramDaysCount()) {
             return [];
         }
@@ -49,18 +53,33 @@ final class AddEventDayInsurancesAction
             return [];
         }
 
+        $resolvedPolicyId = $policyId;
+        if ($resolvedPolicyId !== null
+            && $resolvedPolicyId > 0
+            && Schema::hasColumn('event_day_insurance', 'event_insurance_policy_id')) {
+            // keep
+        } else {
+            $resolvedPolicyId = null;
+        }
+
         /** @var list<EventDayInsurance> $created */
         $created = [];
 
-        DB::transaction(function () use ($event, $day, $validIds, &$created): void {
+        DB::transaction(function () use ($event, $day, $validIds, $resolvedPolicyId, &$created): void {
             foreach ($validIds as $insuranceId) {
-                $exists = EventDayInsurance::query()
+                $existing = EventDayInsurance::query()
                     ->where('event_id', $event->id)
                     ->where('day', $day)
                     ->where('insurance_id', $insuranceId)
-                    ->exists();
+                    ->first();
 
-                if ($exists) {
+                if ($existing) {
+                    if ($resolvedPolicyId
+                        && Schema::hasColumn('event_day_insurance', 'event_insurance_policy_id')
+                        && ! $existing->event_insurance_policy_id) {
+                        $existing->update(['event_insurance_policy_id' => $resolvedPolicyId]);
+                    }
+
                     continue;
                 }
 
@@ -72,6 +91,10 @@ final class AddEventDayInsurancesAction
 
                 if (Schema::hasColumn('event_day_insurance', 'is_done')) {
                     $attributes['is_done'] = false;
+                }
+
+                if ($resolvedPolicyId && Schema::hasColumn('event_day_insurance', 'event_insurance_policy_id')) {
+                    $attributes['event_insurance_policy_id'] = $resolvedPolicyId;
                 }
 
                 $created[] = EventDayInsurance::query()->create($attributes);

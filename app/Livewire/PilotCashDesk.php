@@ -41,7 +41,13 @@ class PilotCashDesk extends Component
      */
     public bool $respectPortalVisibility = false;
 
-    /** all|exchange — modal „Wymiana waluty” pokazuje tylko sekcję wymiany. */
+    /** Na stronie Operacje → Pilot: wydatki w akordeonie (domyślnie otwartym). */
+    public bool $collapseExpenses = false;
+
+    /** Gdy false — ukryj blok wymiany w tym instancji (np. przeniesiony do prawej kolumny). */
+    public bool $includeCurrencyExchange = true;
+
+    /** all|exchange — modal / prawa kolumna pokazuje tylko sekcję wymiany. */
     public string $focus = 'all';
 
     public string $expenseName = '';
@@ -84,6 +90,8 @@ class PilotCashDesk extends Component
         bool $compact = false,
         bool $showOfficePayoutBlock = true,
         bool $respectPortalVisibility = false,
+        bool $collapseExpenses = false,
+        bool $includeCurrencyExchange = true,
         string $focus = 'all',
     ): void {
         $this->event = $event->loadMissing(['pilotFundsPaidByUser', 'pilotAdvancePaidCurrency']);
@@ -91,6 +99,8 @@ class PilotCashDesk extends Component
         $this->compact = $compact;
         $this->showOfficePayoutBlock = $showOfficePayoutBlock && $focus !== 'exchange';
         $this->respectPortalVisibility = $respectPortalVisibility;
+        $this->collapseExpenses = $collapseExpenses;
+        $this->includeCurrencyExchange = $includeCurrencyExchange;
         $this->focus = in_array($focus, ['all', 'exchange'], true) ? $focus : 'all';
 
         if ($context === 'pilot') {
@@ -221,7 +231,7 @@ class PilotCashDesk extends Component
         }
 
         $this->loadCashReportingFields();
-        $this->notifyLedger('Usunięto wypłatę gotówki');
+        $this->notifyLedger('Usunięto zaliczkę');
     }
 
     public function saveOfficePayout(): void
@@ -236,8 +246,8 @@ class PilotCashDesk extends Component
             'payoutProvidedAt' => 'required|date',
             'payoutComment' => 'nullable|string|max:2000',
         ], [
-            'payoutCurrencyId.required' => 'Wybierz walutę wypłaty.',
-            'payoutAmount.required' => 'Podaj kwotę wypłaconą pilotowi.',
+            'payoutCurrencyId.required' => 'Wybierz walutę zaliczki.',
+            'payoutAmount.required' => 'Podaj kwotę zaliczki.',
             'payoutProvidedAt.required' => 'Podaj datę wypłaty.',
         ]);
 
@@ -265,8 +275,8 @@ class PilotCashDesk extends Component
         $this->loadCashReportingFields();
         $this->notifyLedger(
             $wasEditing
-                ? 'Zaktualizowano wypłatę gotówki'
-                : 'Zapisano wypłatę gotówki pilotowi'
+                ? 'Zaktualizowano zaliczkę'
+                : 'Dodano zaliczkę pilotowi'
         );
     }
 

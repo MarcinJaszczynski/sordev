@@ -40,7 +40,7 @@ class ClientProgramPage extends Page
 
     public function getTitle(): string|Htmlable
     {
-        return 'Program: '.$this->event->name;
+        return $this->event->name;
     }
 
     public static function urlFor(Event $event): string

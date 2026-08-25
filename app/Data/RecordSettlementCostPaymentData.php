@@ -25,5 +25,7 @@ readonly class RecordSettlementCostPaymentData
         public ?float $rate = null,
         public int|string|null $currencyId = null,
         public ?int $reservationId = null,
+        /** Czy kwota obca ma wejść do sum PLN (actual_amount_pln). */
+        public bool $convertToPln = true,
     ) {}
 }

@@ -85,7 +85,7 @@ final class ContractGenerationWizardFields
                     ->description('Treść umowy i ceny (PLN + waluta)')
                     ->schema([
                         Forms\Components\Placeholder::make('price_hint')
-                            ->label('Podpowiedź z kalkulacji imprezy')
+                            ->label('Podpowiedź ze szablonu imprezy')
                             ->content(function () use ($event): HtmlString {
                                 $e = $event();
                                 if (! $e) {
@@ -274,7 +274,7 @@ final class ContractGenerationWizardFields
                             ->content(fn (Get $get): HtmlString => new HtmlString(static::clientOutcomeHtml($get, $event()))),
 
                         Forms\Components\Placeholder::make('foreign_amount_hint')
-                            ->label('Waluta na osobę (z kalkulacji)')
+                            ->label('Waluta na osobę (ze szablonu)')
                             ->content(function () use ($event): string {
                                 $e = $event();
                                 if (! $e) {
@@ -282,7 +282,7 @@ final class ContractGenerationWizardFields
                                 }
                                 $hints = ContractGenerationPriceHints::forEvent($e);
                                 if ($hints['foreign'] === []) {
-                                    return 'Brak składowej walutowej w kalkulacji.';
+                                    return 'Brak składowej walutowej w szablonie.';
                                 }
 
                                 return collect($hints['foreign'])

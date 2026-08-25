@@ -157,7 +157,7 @@
             <div class="mb-4">
                 <label class="flex items-center">
                     <input type="checkbox" wire:model.live.debounce.500ms="modalData.include_in_calculation" class="rounded border-gray-300 text-primary-600 shadow-sm focus:border-primary-300 focus:ring focus:ring-primary-200 focus:ring-opacity-50">
-                    <span class="ml-2 text-sm text-gray-700">Uwzględnij w kalkulacji</span>
+                    <span class="ml-2 text-sm text-gray-700">Uwzględnij w kosztach</span>
                 </label>
             </div>
             <div class="mb-4">

@@ -89,8 +89,7 @@ class EventCostCalculator
             ? max(0, $driverOverride)
             : max(0, (int) ($variant->driver ?? 1));
 
-        $hotelPlanTotal = $this->hotelPlanTotal();
-        $hasHotelPlan = $hotelPlanTotal !== null;
+        $hasHotelPlan = $this->hasHotelPlan();
         $forceConvertForeign = ! ($event->eventTemplate?->isForeignTrip() ?? true);
 
         $lines = [];
@@ -133,13 +132,23 @@ class EventCostCalculator
             }
         }
 
-        // 2) Nocleg z planu hotelowego (raz).
+        // 2) Nocleg z planu hotelowego (PLN + waluty obce bez konwersji).
+        $hotelTotals = $hasHotelPlan
+            ? app(EventHotelPlanService::class)->totalsByCurrencyForEvent($this->event)
+            : [];
+        $hotelPlanTotal = round((float) ($hotelTotals['PLN'] ?? 0), 2);
         if ($hasHotelPlan && $hotelPlanTotal > 0) {
             $lines[] = [
                 'category' => 'accommodation',
                 'name' => 'Nocleg (plan hotelowy)',
-                'cost_pln' => round($hotelPlanTotal, 2),
+                'cost_pln' => $hotelPlanTotal,
             ];
+        }
+        foreach ($hotelTotals as $code => $amount) {
+            if (strtoupper((string) $code) === 'PLN' || $amount <= 0) {
+                continue;
+            }
+            $foreignBuckets[strtoupper((string) $code)] = ($foreignBuckets[strtoupper((string) $code)] ?? 0) + $amount;
         }
 
         // 3) Transport (raz).
@@ -276,7 +285,7 @@ class EventCostCalculator
         $costHeadcount = ProgramPointCostPricing::applyIncludedExtras(
             $payingCount,
             $gratis,
-            ProgramPointCostPricing::pilotCount($this->event),
+            ProgramPointCostPricing::pilotCount($this->event, $payingCount),
             $driver,
             (bool) ($point->include_gratis_in_cost ?? false),
             (bool) ($point->include_pilot_in_cost ?? false),
@@ -308,13 +317,18 @@ class EventCostCalculator
         ];
     }
 
-    private function hotelPlanTotal(): ?float
+    private function hasHotelPlan(): bool
     {
         if ($this->event->relationLoaded('hotelStays')) {
-            if ($this->event->hotelStays->isEmpty()) {
-                return null;
-            }
-        } elseif (! $this->event->hotelStays()->exists()) {
+            return $this->event->hotelStays->isNotEmpty();
+        }
+
+        return $this->event->hotelStays()->exists();
+    }
+
+    private function hotelPlanTotal(): ?float
+    {
+        if (! $this->hasHotelPlan()) {
             return null;
         }
 

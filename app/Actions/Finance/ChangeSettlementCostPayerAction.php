@@ -30,7 +30,7 @@ final class ChangeSettlementCostPayerAction
         }
 
         if (EventSettlementCost::isPaymentSourceType($plan->source_type)) {
-            throw new InvalidArgumentException('Można zmieniać płatnika tylko na pozycji planu.');
+            throw new InvalidArgumentException('Można zmieniać płatnika tylko dla kosztu planowanego.');
         }
 
         $paidBy = array_key_exists($data->paidBy, EventSettlementCost::$paidByOptions)

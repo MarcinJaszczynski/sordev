@@ -40,7 +40,7 @@ class PilotSettlementPage extends Page
 
     public function getTitle(): string|Htmlable
     {
-        return 'Gotówka i rozliczenie: '.$this->event->name;
+        return $this->event->name;
     }
 
     protected function getHeaderActions(): array

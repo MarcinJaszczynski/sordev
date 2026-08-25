@@ -2,24 +2,21 @@
 
 namespace App\Livewire;
 
-use App\Filament\Forms\ProgramPointSettlementFinanceFields;
+use App\Filament\Resources\EventResource\Concerns\InteractsWithSettlementCostDrawer;
 use App\Models\Event;
+use App\Models\EventSettlementCost;
 use App\Services\SettlementAggregateFinanceService;
-use App\Services\SettlementFinanceFormSupport;
-use Filament\Actions\Action;
-use Filament\Actions\Concerns\InteractsWithActions;
-use Filament\Actions\Contracts\HasActions;
-use Filament\Forms;
-use Filament\Forms\Concerns\InteractsWithForms;
-use Filament\Forms\Contracts\HasForms;
 use Filament\Notifications\Notification;
-use Illuminate\Support\HtmlString;
 use Livewire\Component;
+use Livewire\WithFileUploads;
 
-class SettlementAggregateFinancePanel extends Component implements HasActions, HasForms
+/**
+ * Finanse agregatu (transport / legacy accommodation) — ten sam boczny drawer co Finanse / hotele.
+ */
+class SettlementAggregateFinancePanel extends Component
 {
-    use InteractsWithActions;
-    use InteractsWithForms;
+    use InteractsWithSettlementCostDrawer;
+    use WithFileUploads;
 
     public int $eventId;
 
@@ -37,6 +34,9 @@ class SettlementAggregateFinancePanel extends Component implements HasActions, H
             'accommodation' => 'Finanse noclegu',
             default => 'Finanse',
         };
+
+        $this->initializeSettlementCostDrawerForms();
+        app(SettlementAggregateFinanceService::class)->ensureBaseCost($this->event(), $this->aggregateType);
     }
 
     public function render()
@@ -53,163 +53,53 @@ class SettlementAggregateFinancePanel extends Component implements HasActions, H
             ->summary($this->event(), $this->aggregateType);
     }
 
-    public function planAction(): Action
+    public function getRecord(): Event
     {
-        $service = app(SettlementAggregateFinanceService::class);
-        $event = $this->event();
-
-        return Action::make('plan')
-            ->label('Plan')
-            ->icon('heroicon-o-banknotes')
-            ->color('warning')
-            ->button()
-            ->modalHeading($this->heading.' — plan')
-            ->modalWidth('3xl')
-            ->fillForm(fn (): array => $service->buildFormData($event, $this->aggregateType))
-            ->form([
-                Forms\Components\Section::make('Kwoty referencyjne')
-                    ->columns(2)
-                    ->schema([
-                        Forms\Components\Placeholder::make('reference_total')
-                            ->label('Kalkulacja / kosztorys')
-                            ->content(fn (Forms\Get $get): string => SettlementFinanceFormSupport::formatAmountLabel(
-                                (float) ($get('event_point_total') ?? 0),
-                                $get('settlement_planned_currency_id'),
-                                true,
-                            )),
-                    ]),
-                Forms\Components\Section::make('Plan rozliczenia')
-                    ->columns(2)
-                    ->schema(ProgramPointSettlementFinanceFields::planFields()),
-            ])
-            ->action(function (array $data) use ($service, $event): void {
-                $summary = $service->persist($event, $this->aggregateType, $data, false);
-                $this->notifySaved('Plan finansowy zapisany', $summary);
-            })
-            ->disabled(! $service->ensureBaseCost($event, $this->aggregateType));
+        return $this->event();
     }
 
-    public function advanceAction(): Action
+    protected function settlementCostEvent(): Event
     {
-        $service = app(SettlementAggregateFinanceService::class);
-        $event = $this->event();
-
-        return Action::make('advance')
-            ->label('Zaliczka')
-            ->icon('heroicon-o-credit-card')
-            ->color('gray')
-            ->button()
-            ->modalHeading($this->heading.' — zaliczka')
-            ->modalWidth('3xl')
-            ->fillForm(fn (): array => $service->buildFormData($event, $this->aggregateType))
-            ->form([
-                Forms\Components\Section::make('Kwoty referencyjne')
-                    ->columns(2)
-                    ->schema([
-                        Forms\Components\Placeholder::make('event_point_total_ref')
-                            ->label('Kosztorys')
-                            ->content(fn (Forms\Get $get): string => SettlementFinanceFormSupport::formatAmountLabel(
-                                (float) ($get('event_point_total') ?? 0),
-                                $get('settlement_planned_currency_id'),
-                                (bool) ($get('settlement_planned_convert_to_pln') ?? true),
-                            )),
-                        Forms\Components\Placeholder::make('planned_amount_ref')
-                            ->label('Planowana kwota')
-                            ->content(fn (Forms\Get $get): string => SettlementFinanceFormSupport::formatAmountLabel(
-                                (float) ($get('settlement_planned_amount') ?? 0),
-                                $get('settlement_planned_currency_id'),
-                                (bool) ($get('settlement_planned_convert_to_pln') ?? true),
-                            )),
-                    ]),
-                Forms\Components\Section::make('Zaliczka i status')
-                    ->columns(3)
-                    ->schema(ProgramPointSettlementFinanceFields::advanceFields()),
-                ...ProgramPointSettlementFinanceFields::advanceDocumentSection(),
-            ])
-            ->action(function (array $data) use ($service, $event): void {
-                $summary = $service->persist($event, $this->aggregateType, $data, false);
-                $this->notifySaved('Zaliczka zapisana', $summary);
-            })
-            ->disabled(! $service->ensureBaseCost($event, $this->aggregateType));
+        return $this->event();
     }
 
-    public function paymentsAction(): Action
+    protected function invalidateSettlementCostCaches(): void
     {
-        $service = app(SettlementAggregateFinanceService::class);
-        $event = $this->event();
+        unset($this->selectedRow, $this->drawerReservations);
+        $this->dispatchSettlementFinanceChanged();
+        $this->dispatch('event-price-table-refresh');
+    }
 
-        return Action::make('payments')
-            ->label('Wpłaty')
-            ->icon('heroicon-o-receipt-percent')
-            ->color('success')
-            ->button()
-            ->modalHeading($this->heading.' — wpłaty')
-            ->modalWidth('4xl')
-            ->fillForm(fn (): array => $service->buildFormData($event, $this->aggregateType))
-            ->form([
-                Forms\Components\Section::make('Podsumowanie')
-                    ->columns(2)
-                    ->schema([
-                        Forms\Components\Placeholder::make('event_point_total_ref')
-                            ->label('Kosztorys')
-                            ->content(fn (Forms\Get $get): string => SettlementFinanceFormSupport::formatAmountLabel(
-                                (float) ($get('event_point_total') ?? 0),
-                                $get('settlement_planned_currency_id'),
-                                (bool) ($get('settlement_planned_convert_to_pln') ?? true),
-                            )),
-                        Forms\Components\Placeholder::make('planned_amount_ref')
-                            ->label('Planowana kwota')
-                            ->content(fn (Forms\Get $get): string => SettlementFinanceFormSupport::formatAmountLabel(
-                                (float) ($get('settlement_planned_amount') ?? 0),
-                                $get('settlement_planned_currency_id'),
-                                (bool) ($get('settlement_planned_convert_to_pln') ?? true),
-                            )),
-                        Forms\Components\Placeholder::make('payments_summary')
-                            ->label('')
-                            ->content(fn (Forms\Get $get): HtmlString => SettlementFinanceFormSupport::paymentsSummaryHtml($get))
-                            ->columnSpanFull(),
-                    ]),
-                Forms\Components\Section::make('Wpłaty i dopłaty')
-                    ->schema([
-                        Forms\Components\Repeater::make('payment_entries')
-                            ->label('')
-                            ->addActionLabel('Dodaj wpis')
-                            ->defaultItems(1)
-                            ->live(debounce: 800)
-                            ->reorderable()
-                            ->schema(ProgramPointSettlementFinanceFields::paymentEntryFields())
-                            ->columns(3)
-                            ->columnSpanFull(),
-                    ]),
-            ])
-            ->action(function (array $data) use ($service, $event): void {
-                $summary = $service->persist($event, $this->aggregateType, $data, true);
-                $this->notifySaved('Wpłaty zapisane', $summary);
-            })
-            ->disabled(! $service->ensureBaseCost($event, $this->aggregateType));
+    /**
+     * @param  'panel'|'plan'|'advance'|'payment'|null  $focus
+     */
+    public function openAggregateFinance(?string $focus = 'panel'): void
+    {
+        $cost = app(SettlementAggregateFinanceService::class)
+            ->ensureBaseCost($this->event(), $this->aggregateType);
+
+        if (! $cost instanceof EventSettlementCost) {
+            Notification::make()
+                ->title('Brak pozycji transportu w rozliczeniu')
+                ->body('Uzupełnij autokar lub włącz ręczną kwotę transportu i zapisz imprezę — wtedy pojawi się koszt do płatności.')
+                ->warning()
+                ->send();
+
+            return;
+        }
+
+        $this->openCost((int) $cost->id);
+
+        match ($focus) {
+            'plan' => $this->startEditPlan(),
+            'advance' => $this->startAddAdvance(),
+            'payment' => $this->startAddPayment(),
+            default => null,
+        };
     }
 
     protected function event(): Event
     {
         return Event::query()->findOrFail($this->eventId);
-    }
-
-    /**
-     * @param  array{
-     *     planned_label: string,
-     *     paid_label: string,
-     *     advance_label: string,
-     *     remaining_label: string
-     * }  $summary
-     */
-    protected function notifySaved(string $title, array $summary): void
-    {
-        Notification::make()
-            ->success()
-            ->title($title)
-            ->body(SettlementFinanceFormSupport::notificationBody($summary))
-            ->send();
-
-        $this->dispatch('event-price-table-refresh');
     }
 }

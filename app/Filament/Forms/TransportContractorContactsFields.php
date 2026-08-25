@@ -25,6 +25,7 @@ final class TransportContractorContactsFields
         string $contractorField,
         string $prefix,
         ?callable $afterContractorCardUpdated = null,
+        bool $sidebarPreview = false,
     ): array {
         $tickField = "{$prefix}_contacts_tick";
 
@@ -36,7 +37,7 @@ final class TransportContractorContactsFields
             Forms\Components\ViewField::make("{$prefix}_contacts_preview")
                 ->label('Dane kontaktowe')
                 ->view('filament.components.transport-contractor-contacts-preview')
-                ->viewData(function (Get $get) use ($contractorField, $tickField): array {
+                ->viewData(function (Get $get) use ($contractorField, $tickField, $sidebarPreview): array {
                     // tick wymusza re-render po zapisie w modalu (sam contractor_id się nie zmienia)
                     $get($tickField);
 
@@ -45,6 +46,7 @@ final class TransportContractorContactsFields
                         return [
                             'contractor' => null,
                             'contacts' => collect(),
+                            'variant' => $sidebarPreview ? 'sidebar' : null,
                         ];
                     }
 
@@ -55,6 +57,7 @@ final class TransportContractorContactsFields
                     return [
                         'contractor' => $contractor,
                         'contacts' => $contractor?->contacts ?? collect(),
+                        'variant' => $sidebarPreview ? 'sidebar' : null,
                     ];
                 })
                 ->visible(fn (Get $get): bool => filled($get($contractorField)))
@@ -75,6 +78,8 @@ final class TransportContractorContactsFields
                             'name' => $contractor?->name,
                             'phone' => $contractor?->phone,
                             'email' => $contractor?->email,
+                            'bank_account' => $contractor?->bank_account,
+                            'nip' => $contractor?->nip,
                         ];
                     })
                     ->form([
@@ -90,6 +95,15 @@ final class TransportContractorContactsFields
                             ->email()
                             ->maxLength(255)
                             ->nullable(),
+                        Forms\Components\TextInput::make('nip')
+                            ->label('NIP')
+                            ->maxLength(20)
+                            ->nullable(),
+                        Forms\Components\TextInput::make('bank_account')
+                            ->label('Nr konta bankowego')
+                            ->maxLength(64)
+                            ->nullable()
+                            ->visible(fn (): bool => \Illuminate\Support\Facades\Schema::hasColumn('contractors', 'bank_account')),
                     ])
                     ->action(function (array $data, Get $get, Set $set) use ($contractorField, $tickField, $afterContractorCardUpdated): void {
                         $contractor = static::resolveContractor($get, $contractorField);
@@ -102,11 +116,23 @@ final class TransportContractorContactsFields
                             return;
                         }
 
-                        $contractor->update([
+                        $payload = [
                             'name' => $data['name'],
                             'phone' => $data['phone'] ?? null,
                             'email' => $data['email'] ?? null,
-                        ]);
+                        ];
+
+                        if (\Illuminate\Support\Facades\Schema::hasColumn('contractors', 'nip')) {
+                            $payload['nip'] = $data['nip'] ?? null;
+                        }
+
+                        if (\Illuminate\Support\Facades\Schema::hasColumn('contractors', 'bank_account')) {
+                            $payload['bank_account'] = filled($data['bank_account'] ?? null)
+                                ? trim((string) $data['bank_account'])
+                                : null;
+                        }
+
+                        $contractor->update($payload);
 
                         $contractor->refresh();
                         static::bumpTick($set, $get, $tickField);

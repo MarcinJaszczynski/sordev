@@ -84,8 +84,17 @@ final class TypedContractorSelect
                     ->email()
                     ->maxLength(255)
                     ->nullable(),
+                Forms\Components\TextInput::make('bank_account')
+                    ->label('Nr konta bankowego')
+                    ->maxLength(64)
+                    ->nullable()
+                    ->visible(fn (): bool => \Illuminate\Support\Facades\Schema::hasColumn('contractors', 'bank_account')),
             ])
             ->createOptionUsing(function (array $data) use ($defaultTypeOnCreate): int {
+                if (isset($data['bank_account']) && filled($data['bank_account'])) {
+                    $data['bank_account'] = trim((string) $data['bank_account']);
+                }
+
                 $contractor = Contractor::create($data);
 
                 if ($defaultTypeOnCreate !== null) {

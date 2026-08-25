@@ -25,7 +25,6 @@ use App\Services\ProgramPointListFinanceDisplay;
 use App\Services\ProgramPointSetFinanceAggregator;
 use App\Services\ProgramPointSetTimePropagator;
 use App\Services\ProgramPointSettlementCostCache;
-use App\Support\EventProgramPointPaymentDueColumn;
 use App\Support\ProgramPointCostPricing;
 use App\Support\ProgramTimeSlots;
 use App\Support\Reservations\ReservationWorkflowDisplay;
@@ -88,7 +87,6 @@ class ProgramPointsRelationManager extends RelationManager
     public function mount(): void
     {
         parent::mount();
-        $this->mountInteractsWithTaskEditModal();
         $this->initializeSettlementCostDrawerForms();
 
         $stored = session($this->expandedSetsSessionKey(), []);
@@ -176,6 +174,7 @@ class ProgramPointsRelationManager extends RelationManager
         unset($this->selectedRow);
         $this->invalidateSettlementCostCache();
         $this->resetTable();
+        $this->dispatchSettlementFinanceChanged();
     }
 
     public function toggleSetExpanded(int $parentId): void
@@ -383,7 +382,7 @@ class ProgramPointsRelationManager extends RelationManager
 
                 Forms\Components\Toggle::make('is_hotel_service')
                     ->label('Usługa hotelu')
-                    ->helperText('Dodatkowa usługa świadczona przez hotel (bankiet, obiad, DJ...). Liczona raz w kalkulacji; nie zaznaczaj razem z „Nocleg / Hotel”.')
+                    ->helperText('Dodatkowa usługa świadczona przez hotel (bankiet, obiad, DJ...). Liczona raz w kosztach; nie zaznaczaj razem z „Nocleg / Hotel”.')
                     ->default(false)
                     ->inline(false)
                     ->reactive()
@@ -570,7 +569,9 @@ class ProgramPointsRelationManager extends RelationManager
             ->defaultSort('day')
             ->striped(false)
             ->recordAction('edit')
-            ->recordClasses(fn (EventProgramPoint $record): string => $this->resolveProgramPointRowClass($record))
+            ->recordClasses(fn (EventProgramPoint $record): string => trim(
+                'epp-program-row '.$this->resolveProgramPointRowClass($record)
+            ))
             ->groups(fn (): array => $this->isProgramListView()
                 ? [
                     Group::make('day')
@@ -599,6 +600,7 @@ class ProgramPointsRelationManager extends RelationManager
                     ->label('Punkt programu')
                     ->view('filament.components.program-point-name-cell')
                     ->extraAttributes(['class' => 'epp-name-col'])
+                    ->extraCellAttributes(['class' => 'epp-name-col'])
                     ->searchable(query: function (\Illuminate\Database\Eloquent\Builder $query, string $search): \Illuminate\Database\Eloquent\Builder {
                         return $query->where(function ($q) use ($search) {
                             $q->whereHas('templatePoint', fn ($q) => $q->where('name', 'like', "%{$search}%"))
@@ -616,20 +618,34 @@ class ProgramPointsRelationManager extends RelationManager
                             ->select('event_program_points.*');
                     }),
 
-                Tables\Columns\ViewColumn::make('description_preview')
-                    ->label('Opis')
-                    ->view('filament.components.program-point-description-preview')
-                    ->toggleable(isToggledHiddenByDefault: true),
+                Tables\Columns\ViewColumn::make('contractor_label')
+                    ->label('Kontrahent')
+                    ->view('filament.components.program-point-contractor-cell')
+                    ->extraAttributes(['class' => 'epp-contractor-col'])
+                    ->extraCellAttributes(['class' => 'epp-contractor-col']),
 
-                Tables\Columns\ViewColumn::make('notes_preview')
-                    ->label('Uwagi biuro / pilot')
-                    ->view('filament.components.program-point-notes-preview')
-                    ->toggleable(),
+                Tables\Columns\ViewColumn::make('reservation_status')
+                    ->label('Rezerwacja')
+                    ->view('filament.components.program-point-reservation-status-cell')
+                    ->extraAttributes(['class' => 'epp-status-col epp-rez-col'])
+                    ->extraCellAttributes(['class' => 'epp-status-col epp-rez-col']),
+
+                Tables\Columns\ViewColumn::make('payment_status')
+                    ->label('Płatność')
+                    ->view('filament.components.program-point-payment-status-cell')
+                    ->extraAttributes(['class' => 'epp-status-col epp-pay-col'])
+                    ->extraCellAttributes(['class' => 'epp-status-col epp-pay-col']),
+
+                Tables\Columns\ViewColumn::make('finance')
+                    ->label('Kwoty')
+                    ->view('filament.components.program-point-finance-cell')
+                    ->extraAttributes(['class' => 'epp-finance-col'])
+                    ->extraCellAttributes(['class' => 'epp-finance-col']),
 
                 Tables\Columns\SelectColumn::make('settlement_paid_by')
                     ->label('Płatnik')
                     ->options(EventSettlementCost::$paidByOptions)
-                    ->tooltip('Kto płaci brakującą kwotę (plan − wpłaty)')
+                    ->tooltip('Płatnik pozostałej kwoty (plan − wpłaty)')
                     ->getStateUsing(function (EventProgramPoint $record): ?string {
                         if ($record->getAttribute('_is_set_parent')) {
                             return null;
@@ -648,16 +664,12 @@ class ProgramPointsRelationManager extends RelationManager
                     })
                     ->placeholder('—')
                     ->disabled(fn (EventProgramPoint $record): bool => (bool) $record->getAttribute('_is_set_parent'))
-                    ->width('5.5rem'),
-
-                Tables\Columns\ViewColumn::make('finance')
-                    ->label('Finanse')
-                    ->view('filament.components.program-point-finance-cell')
-                    ->extraAttributes(['class' => 'epp-finance-col'])
-                    ->extraCellAttributes(['class' => 'epp-finance-col']),
+                    ->extraAttributes(['class' => 'epp-payer-col'])
+                    ->extraCellAttributes(['class' => 'epp-payer-col'])
+                    ->width('4.75rem'),
 
                 Tables\Columns\TextColumn::make('finance_doc')
-                    ->label('Faktura')
+                    ->label('Dok.')
                     ->alignCenter()
                     ->html()
                     ->disabledClick()
@@ -672,76 +684,30 @@ class ProgramPointsRelationManager extends RelationManager
                         $hint = (string) ($s['documentHint'] ?? 'Brak pliku');
                         $url = (string) ($s['documentFirstUrl'] ?? '');
                         $hasFile = ! empty($s['hasUploadedFile']) && $url !== '';
+                        $title = e($s['documentStatusLabel'] ?? $hint);
+                        $icon = '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" class="epp-doc-icon__svg" aria-hidden="true"><path d="M4.75 2A1.75 1.75 0 0 0 3 3.75v12.5c0 .966.784 1.75 1.75 1.75h10.5A1.75 1.75 0 0 0 17 16.25V7.25a.75.75 0 0 0-.22-.53l-4.5-4.5A.75.75 0 0 0 11.75 2H4.75Zm7.5 1.56 3.19 3.19H13a.75.75 0 0 1-.75-.75V3.56Z"/></svg>';
 
                         if ($hasFile) {
                             return '<a href="'.e($url).'" target="_blank" rel="noopener noreferrer"'
-                                .' class="epp-invoice-btn"'
-                                .' title="'.e($s['documentStatusLabel'] ?? $hint).'">'
-                                .e($hint)
+                                .' class="epp-doc-icon epp-doc-icon--has"'
+                                .' title="'.$title.'">'
+                                .$icon
                                 .'</a>';
                         }
 
                         if ($hint !== '' && $hint !== 'Brak pliku') {
-                            return '<span class="epp-invoice-btn epp-invoice-btn--warn" title="'.e($hint).'">'.e($hint).'</span>';
+                            return '<span class="epp-doc-icon epp-doc-icon--warn" title="'.$title.'">'.$icon.'</span>';
                         }
 
-                        return '<span class="epp-invoice-btn epp-invoice-btn--empty">Brak</span>';
-                    }),
-
-                Tables\Columns\TextColumn::make('payment_due_dates')
-                    ->label('Terminy')
-                    ->html()
-                    ->toggleable(isToggledHiddenByDefault: true)
-                    ->state(function (EventProgramPoint $record): string {
-                        $event = $this->getOwnerRecord();
-
-                        if ($record->getAttribute('_is_set_parent')) {
-                            return '<span style="color:#999">—</span>';
-                        }
-
-                        return EventProgramPointPaymentDueColumn::html(
-                            $record,
-                            app(EventPaymentScheduleService::class)->collectForProgramPoint($record, $event),
-                        );
-                    }),
-
-                Tables\Columns\TextColumn::make('flags')
-                    ->label('Zakres')
-                    ->html()
-                    ->toggleable()
-                    ->state(function (EventProgramPoint $record): string {
-                        $chip = static function (string $onLabel, string $offLabel, bool $on, string $onClass, string $offClass): string {
-                            return sprintf(
-                                '<span class="epp-scope-chip %s" title="%s">%s</span>',
-                                $on ? $onClass : $offClass,
-                                e($on ? $onLabel : $offLabel),
-                                e($on ? $onLabel : $offLabel)
-                            );
-                        };
-
-                        $reservation = $record->latestVisibleReservation();
-                        $reservationHtml = '';
-                        if ($reservation && ! in_array((string) $reservation->status, ['cancelled', 'not_required'], true)) {
-                            $rezLabel = \App\Models\Reservation::$statuses[$reservation->status] ?? $reservation->status;
-                            $rezClass = in_array((string) $reservation->status, ['confirmed', 'completed', 'partially_confirmed'], true)
-                                ? 'epp-scope-chip--rez-ok'
-                                : 'epp-scope-chip--rez-pending';
-                            $reservationHtml = sprintf(
-                                '<span class="epp-scope-chip %s" title="%s">%s</span>',
-                                $rezClass,
-                                e($rezLabel),
-                                e($rezLabel),
-                            );
-                        }
-
-                        return '<div class="epp-scope">'
-                            .$chip('Program', 'Poza programem', (bool) $record->include_in_program, 'epp-scope-chip--program-on', 'epp-scope-chip--program-off')
-                            .$chip('Kalkulacja', 'Poza kalk.', (bool) $record->include_in_calculation, 'epp-scope-chip--calc-on', 'epp-scope-chip--calc-off')
-                            .$reservationHtml
-                            .'</div>';
+                        return '<span class="epp-doc-icon epp-doc-icon--empty" title="Brak pliku">'.$icon.'</span>';
                     })
-                    ->alignStart()
-                    ->width('8.5rem'),
+                    ->width('2.5rem'),
+
+                Tables\Columns\ViewColumn::make('office_pilot_notes')
+                    ->label('Uwagi biuro / pilot')
+                    ->view('filament.components.program-point-notes-preview')
+                    ->toggleable(isToggledHiddenByDefault: true)
+                    ->extraCellAttributes(['class' => 'epp-notes-col']),
             ])
             ->filters([
                 Tables\Filters\SelectFilter::make('paid_by_settlement')
@@ -801,10 +767,10 @@ class ProgramPointsRelationManager extends RelationManager
                     ->falseLabel('Nie — poza programem'),
 
                 Tables\Filters\TernaryFilter::make('include_in_calculation')
-                    ->label('Uwzględniony w kalkulacji')
+                    ->label('Uwzględniony w kosztach')
                     ->placeholder('Wszystkie')
-                    ->trueLabel('Tak — w kalkulacji')
-                    ->falseLabel('Nie — poza kalkulacją'),
+                    ->trueLabel('Tak — w kosztach')
+                    ->falseLabel('Nie — poza kosztami'),
 
                 Tables\Filters\TernaryFilter::make('active')
                     ->label('Aktywny')
@@ -1389,13 +1355,13 @@ class ProgramPointsRelationManager extends RelationManager
                         ->action(fn ($records) => $records->each->update(['include_in_program' => false])),
 
                     Tables\Actions\BulkAction::make('bulk_include_in_calculation_on')
-                        ->label('Zaznacz w kalkulacji')
+                        ->label('Dodaj do kosztów')
                         ->icon('heroicon-o-calculator')
                         ->color('success')
                         ->action(fn ($records) => $records->each->update(['include_in_calculation' => true])),
 
                     Tables\Actions\BulkAction::make('bulk_include_in_calculation_off')
-                        ->label('Odznacz z kalkulacji')
+                        ->label('Wyłącz z kosztów')
                         ->icon('heroicon-o-calculator')
                         ->color('gray')
                         ->action(fn ($records) => $records->each->update(['include_in_calculation' => false])),
@@ -1414,7 +1380,7 @@ class ProgramPointsRelationManager extends RelationManager
                         }),
 
                     Tables\Actions\BulkAction::make('bulk_include_in_settlement')
-                        ->label('Przywróć do rozliczenia')
+                        ->label('W programie i w kosztach')
                         ->icon('heroicon-o-calculator')
                         ->color('success')
                         ->action(function ($records): void {
@@ -1736,8 +1702,8 @@ class ProgramPointsRelationManager extends RelationManager
                     ->default(true)
                     ->inline(false),
                 Forms\Components\Toggle::make('include_in_calculation')
-                    ->label('W kalkulacji')
-                    ->helperText('Kosztorys i rozliczenie.')
+                    ->label('W kosztach')
+                    ->helperText('Wchodzi do kosztów i rozliczenia.')
                     ->default(true)
                     ->inline(false),
             ])

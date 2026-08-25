@@ -109,25 +109,32 @@ class AddEventDayInsurancesActionTest extends TestCase
                 ]
             )
             ->callTableAction('add_insurances', data: [
+                'event_insurance_policy_id' => null,
+                'insurance_policy_number' => 'POL-NEXT',
+                'insurance_status' => 'in_progress',
+                'insurance_payment_status' => 'pending',
+                'insurance_amount' => null,
+                'insurance_paid_at' => null,
+                'insurance_document_path' => null,
+                'insurance_insured_list_path' => null,
+                'insurance_terms' => null,
                 'day' => 1,
                 'insurance_ids' => [$kl->id],
             ], arguments: ['next' => true])
             ->assertHasNoTableActionErrors()
-            ->assertTableActionHalted('add_insurances')
-            ->assertTableActionDataSet([
-                'day' => 2,
-                'insurance_ids' => [],
-            ]);
+            ->assertTableActionHalted('add_insurances');
+
+        $policyId = \App\Models\EventInsurancePolicy::query()->where('event_id', $event->id)->value('id');
+        $this->assertNotNull($policyId);
 
         $dayOne = EventDayInsurance::query()
             ->where('event_id', $event->id)
             ->where('day', 1)
             ->orderBy('insurance_id')
-            ->pluck('insurance_id')
-            ->map(fn ($id): int => (int) $id)
-            ->all();
+            ->get();
 
-        $this->assertSame([$nnw->id, $kl->id], $dayOne);
+        $this->assertSame([$nnw->id, $kl->id], $dayOne->pluck('insurance_id')->map(fn ($id) => (int) $id)->all());
+        $this->assertSame((int) $policyId, (int) $dayOne->firstWhere('insurance_id', $kl->id)->event_insurance_policy_id);
         $this->assertSame(0, EventDayInsurance::query()->where('event_id', $event->id)->where('day', 2)->count());
     }
 
@@ -148,6 +155,15 @@ class AddEventDayInsurancesActionTest extends TestCase
                 ]
             )
             ->callTableAction('add_insurances', data: [
+                'event_insurance_policy_id' => null,
+                'insurance_policy_number' => 'POL-1',
+                'insurance_status' => 'pending',
+                'insurance_payment_status' => 'pending',
+                'insurance_amount' => null,
+                'insurance_paid_at' => null,
+                'insurance_document_path' => null,
+                'insurance_insured_list_path' => null,
+                'insurance_terms' => null,
                 'day' => 1,
                 'insurance_ids' => [$nnw->id],
             ])
@@ -155,6 +171,69 @@ class AddEventDayInsurancesActionTest extends TestCase
             ->assertTableActionNotMounted('add_insurances');
 
         $this->assertSame(1, EventDayInsurance::query()->where('event_id', $event->id)->count());
+        $this->assertSame(1, \App\Models\EventInsurancePolicy::query()->where('event_id', $event->id)->count());
+    }
+
+    public function test_save_and_next_reuses_same_policy(): void
+    {
+        Role::firstOrCreate(['name' => 'admin', 'guard_name' => 'web']);
+        $user = User::factory()->create();
+        $user->assignRole('admin');
+
+        [$event, $nnw] = $this->makeEventWithInsurances(durationDays: 3, user: $user);
+
+        $component = Livewire::actingAs($user)
+            ->test(
+                \App\Filament\Resources\EventResource\RelationManagers\DayInsurancesRelationManager::class,
+                [
+                    'ownerRecord' => $event,
+                    'pageClass' => \App\Filament\Resources\EventResource\Pages\ManageEventDayInsurances::class,
+                ]
+            )
+            ->callTableAction('add_insurances', data: [
+                'event_insurance_policy_id' => null,
+                'insurance_policy_number' => 'SHARED',
+                'insurance_status' => 'in_progress',
+                'insurance_payment_status' => 'pending',
+                'insurance_amount' => 50,
+                'insurance_paid_at' => null,
+                'insurance_document_path' => null,
+                'insurance_insured_list_path' => null,
+                'insurance_terms' => null,
+                'day' => 1,
+                'insurance_ids' => [$nnw->id],
+            ], arguments: ['next' => true])
+            ->assertTableActionHalted('add_insurances');
+
+        $policyId = (int) \App\Models\EventInsurancePolicy::query()->where('event_id', $event->id)->value('id');
+
+        $component
+            ->callTableAction('add_insurances', data: [
+                'event_insurance_policy_id' => $policyId,
+                'insurance_policy_number' => 'SHARED',
+                'insurance_status' => 'in_progress',
+                'insurance_payment_status' => 'pending',
+                'insurance_amount' => 50,
+                'insurance_paid_at' => null,
+                'insurance_document_path' => null,
+                'insurance_insured_list_path' => null,
+                'insurance_terms' => null,
+                'day' => 2,
+                'insurance_ids' => [$nnw->id],
+            ])
+            ->assertHasNoTableActionErrors()
+            ->assertTableActionNotMounted('add_insurances');
+
+        $this->assertSame(1, \App\Models\EventInsurancePolicy::query()->where('event_id', $event->id)->count());
+        $this->assertSame(
+            [$policyId, $policyId],
+            EventDayInsurance::query()
+                ->where('event_id', $event->id)
+                ->orderBy('day')
+                ->pluck('event_insurance_policy_id')
+                ->map(fn ($id) => (int) $id)
+                ->all()
+        );
     }
 
     /**

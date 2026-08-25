@@ -13,6 +13,9 @@ class ProgramPointPaymentStatusResolver
 {
     private const PAYMENT_SOURCE_TYPE = 'program_point_payment';
 
+    /** @var array<int, float> */
+    protected array $paymentStackByPointId = [];
+
     public function __construct(
         protected int $dueSoonDays = 14,
     ) {}
@@ -68,11 +71,15 @@ class ProgramPointPaymentStatusResolver
             return (float) ($baseCost->actual_amount_pln ?? $baseCost->actual_amount ?? 0);
         }
 
-        $stackSum = (float) $settlement->costs()
-            ->where('source_type', self::PAYMENT_SOURCE_TYPE)
-            ->where('source_id', $point->id)
-            ->whereIn('payment_status', SettlementPaymentHealthService::BOOKED_PAYMENT_STATUSES)
-            ->sum('actual_amount_pln');
+        if (array_key_exists($point->id, $this->paymentStackByPointId)) {
+            $stackSum = $this->paymentStackByPointId[$point->id];
+        } else {
+            $stackSum = (float) $settlement->costs()
+                ->where('source_type', self::PAYMENT_SOURCE_TYPE)
+                ->where('source_id', $point->id)
+                ->whereIn('payment_status', SettlementPaymentHealthService::BOOKED_PAYMENT_STATUSES)
+                ->sum('actual_amount_pln');
+        }
 
         if ($stackSum > 0) {
             return $stackSum;
@@ -149,7 +156,7 @@ class ProgramPointPaymentStatusResolver
             ];
         }
 
-        if (in_array($status, ['advance_required', 'reservation_required', 'planned'], true)) {
+        if (in_array($status, ['advance_required', 'reservation_required', 'planned'], true) || $paid <= 0.0) {
             return [
                 'code' => '$',
                 'color' => 'red',
@@ -231,5 +238,29 @@ class ProgramPointPaymentStatusResolver
             $cost = $costsByPointId->get($point->id);
             $point->setRelation('settlementCosts', $cost ? collect([$cost]) : collect());
         });
+    }
+
+    /**
+     * @param  Collection<int, EventProgramPoint>  $points
+     */
+    public function preloadPaymentStacks(Collection $points, Event $event): void
+    {
+        $this->paymentStackByPointId = [];
+
+        $settlement = $event->activeSettlement;
+
+        if (! $settlement || $points->isEmpty()) {
+            return;
+        }
+
+        $this->paymentStackByPointId = $settlement->costs()
+            ->where('source_type', self::PAYMENT_SOURCE_TYPE)
+            ->whereIn('source_id', $points->pluck('id'))
+            ->whereIn('payment_status', SettlementPaymentHealthService::BOOKED_PAYMENT_STATUSES)
+            ->selectRaw('source_id, SUM(actual_amount_pln) as stack_sum')
+            ->groupBy('source_id')
+            ->pluck('stack_sum', 'source_id')
+            ->map(fn ($sum) => (float) $sum)
+            ->all();
     }
 }

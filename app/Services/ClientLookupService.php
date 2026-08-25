@@ -606,20 +606,22 @@ class ClientLookupService
             : null;
 
         if ($contact) {
-            return $this->makePairRow($contact, $contractor, $department, $notes);
+            $row = $this->makePairRow($contact, $contractor, $department, $notes);
+        } else {
+            $row = $this->makeContractorRow($contractor, $notes);
+
+            if ($department !== null) {
+                $row['preview']['department'] = $department;
+                $row['label'] = app(EventOrderingPartyService::class)->formatPartyItemHeading(
+                    null,
+                    $contractorId,
+                    $department,
+                    $notes,
+                );
+            }
         }
 
-        $row = $this->makeContractorRow($contractor, $notes);
-
-        if ($department !== null) {
-            $row['preview']['department'] = $department;
-            $row['label'] = app(EventOrderingPartyService::class)->formatPartyItemHeading(
-                null,
-                $contractorId,
-                $department,
-                $notes,
-            );
-        }
+        $row['goes_on_trip'] = (bool) ($party['goes_on_trip'] ?? false);
 
         return $row;
     }
@@ -663,6 +665,7 @@ class ClientLookupService
                 ? (string) $selected['preview']['department']
                 : null,
             'notes' => filled($selected['notes'] ?? null) ? (string) $selected['notes'] : null,
+            'goes_on_trip' => (bool) ($selected['goes_on_trip'] ?? false),
         ];
     }
 
@@ -780,7 +783,10 @@ class ClientLookupService
                 : null;
 
             if ($contractor && $contact) {
-                return $this->makePairRow($contact, $contractor, $department);
+                $row = $this->makePairRow($contact, $contractor, $department);
+                $row['goes_on_trip'] = (bool) ($first['goes_on_trip'] ?? false);
+
+                return $row;
             }
 
             if ($contractor) {
@@ -793,6 +799,7 @@ class ClientLookupService
                         $department,
                     );
                 }
+                $row['goes_on_trip'] = (bool) ($first['goes_on_trip'] ?? false);
 
                 return $row;
             }
@@ -808,6 +815,7 @@ class ClientLookupService
             'contractor_id' => $event->contractor_id ? (int) $event->contractor_id : null,
             'label' => (string) $event->client_name,
             'notes' => null,
+            'goes_on_trip' => true,
             'preview' => [
                 'person' => null,
                 'company' => (string) $event->client_name,

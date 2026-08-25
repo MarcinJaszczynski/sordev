@@ -26,6 +26,11 @@ class Task extends Model implements Sortable
         'status_id',
         'priority',
         'source',
+        'checklist_input_type',
+        'checklist_input_label',
+        'checklist_input_required',
+        'checklist_input_unit',
+        'checklist_response',
         'author_id',
         'assignee_id',
         'parent_id',
@@ -38,6 +43,7 @@ class Task extends Model implements Sortable
         'due_date' => 'datetime',
         'latest_activity_at' => 'datetime',
         'source' => TaskSource::class,
+        'checklist_input_required' => 'boolean',
     ];
 
     protected $attributes = [
@@ -218,5 +224,26 @@ class Task extends Model implements Sortable
         }
 
         return $query->where('source', TaskSource::PilotChecklist->value);
+    }
+
+    public function checklistInputType(): ?\App\Enums\ChecklistItemInputType
+    {
+        if (! filled($this->checklist_input_type)) {
+            return \App\Enums\ChecklistItemInputType::CheckOnly;
+        }
+
+        return \App\Enums\ChecklistItemInputType::tryFrom((string) $this->checklist_input_type)
+            ?? \App\Enums\ChecklistItemInputType::CheckOnly;
+    }
+
+    public function checklistRequiresResponse(): bool
+    {
+        return $this->checklistInputType()->requiresValue()
+            && (bool) $this->checklist_input_required;
+    }
+
+    public function hasChecklistResponse(): bool
+    {
+        return filled(trim((string) $this->checklist_response));
     }
 }

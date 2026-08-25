@@ -564,8 +564,8 @@ class PilotAdvanceMultiCurrencyTest extends TestCase
                 'record' => $event->getKey(),
             ])
             ->assertFormFieldExists('pilot_funds_paid')
-            ->assertSee('Zmień / dopłać / dodaj walutę')
-            ->assertSee('Rozliczenie — gotówka i wymiana walut')
+            ->assertSee('Edytuj / dopłać / dodaj zaliczkę')
+            ->assertSee('Rozliczenie — wypłata, saldo, zwrot, wydatki')
             ->call('revokePilotOfficePayout')
             ->assertNotified();
 

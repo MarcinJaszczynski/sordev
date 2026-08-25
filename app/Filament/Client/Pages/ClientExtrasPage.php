@@ -56,7 +56,7 @@ class ClientExtrasPage extends Page
 
     public function getTitle(): string|Htmlable
     {
-        return 'Świadczenia: '.$this->event->name;
+        return $this->event->name;
     }
 
     public function getHeading(): string|Htmlable

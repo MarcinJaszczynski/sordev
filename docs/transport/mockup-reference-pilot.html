@@ -1,0 +1,325 @@
+<!--
+  PLIK REFERENCYJNY — nie wdrażać 1:1 do produkcji.
+  Cel: pokazać Cursorowi dokładny układ wizualny (siatka, karty, kolory, zakładki),
+  który ma odwzorować, PODPINAJĄC pod niego prawdziwe pola formularza Filament.
+  Nazwy pól, walidację, logikę wyliczania gotówki/wydatków, relacje itd. zostawić bez zmian.
+
+  Ta sama paleta co w mockup-reference-transport.html i mockup-reference-hotele.html
+  (dla spójności całego modułu Operacje):
+  - tło strony:        #F5F4EF
+  - karta/panel:        #FFFFFF, border 1px solid #E5E3DA, border-radius 12px
+  - karta wyciszona:    #F1EFE8, border-radius 8px
+  - tekst główny:       #2C2C2A
+  - tekst drugorzędny:  #5F5E5A
+  - tekst muted:        #888780
+  - accent (aktywne):   #E6F1FB tło, #0C447C tekst
+  - success (status):   #EAF3DE tło, #27500A tekst
+  - danger (do zwrotu): #FCEBEB tło, #791F1F tekst
+  - fill-primary (Zapisz): #2C2C2A tło, #FFFFFF tekst
+  - czcionka: system-ui / sans-serif
+  - promienie: 12px karty, 8px kontrolki
+
+  STRUKTURA (4 zakładki wewnątrz "Pilot", zamiast jednego długiego scrolla):
+  1. Odprawa i pilot        — status odprawy, uwagi, przypisanie pilota/opiekuna, dane osobowe
+  2. Gotówka i rozliczenia  — POŁĄCZONE w jeden przepływ: Plan → Wypłacono → Wydatki → Do zwrotu
+                              (dziś to 3 osobne sekcje z powtarzającymi się kwotami:
+                              "Gotówka — Planowana/Wypłacona", "Wypłata gotówki pilotowi",
+                              "Rozliczenie — gotówka i wymiana walut")
+  3. Checklista             — postęp, szablony, punkty, dodawanie własnych
+  4. Uwagi i portal         — uwagi dla pilota + udostępnianie portalu (pasek z góry oryginału)
+-->
+<!DOCTYPE html>
+<html lang="pl">
+<head>
+<meta charset="UTF-8">
+<title>Referencja wizualna — Pilot</title>
+<style>
+  * { box-sizing: border-box; }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    background: #F5F4EF;
+    color: #2C2C2A;
+    margin: 0;
+    padding: 24px;
+  }
+  .wrap { max-width: 1180px; margin: 0 auto; }
+
+  input, select, textarea, button {
+    font-family: inherit;
+    font-size: 13px;
+    border: 1px solid #D3D1C7;
+    border-radius: 8px;
+    padding: 8px 10px;
+    background: #FFFFFF;
+    color: #2C2C2A;
+  }
+  input, select, textarea { width: 100%; }
+  input:focus, select:focus, textarea:focus {
+    outline: none;
+    border-color: #378ADD;
+    box-shadow: 0 0 0 2px rgba(55,138,221,0.15);
+  }
+  button { cursor: pointer; background: #FFFFFF; }
+  button:hover { background: #F1EFE8; }
+  label { display: block; font-size: 12px; color: #5F5E5A; margin-bottom: 4px; }
+
+  /* ===== Pasek statusu ===== */
+  .status-bar {
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 14px 16px; background: #F1EFE8; border-radius: 12px;
+    margin-bottom: 12px; flex-wrap: wrap; gap: 10px;
+  }
+  .status-bar .title { display: flex; align-items: center; gap: 10px; }
+  .status-bar .title p:first-child { margin: 0; font-size: 15px; font-weight: 500; }
+  .status-bar .title p:last-child { margin: 0; font-size: 13px; color: #5F5E5A; }
+  .status-bar .actions { display: flex; gap: 8px; flex-wrap: wrap; }
+  .status-bar .actions button { font-size: 12px; padding: 5px 10px; }
+  .badge { font-size: 12px; padding: 4px 10px; border-radius: 8px; font-weight: 500; }
+  .badge.success { background: #EAF3DE; color: #27500A; }
+
+  /* ===== Kafelki statystyk ===== */
+  .stat-grid {
+    display: grid; grid-template-columns: repeat(4, minmax(0, 1fr));
+    gap: 10px; margin-bottom: 16px;
+  }
+  .stat-card { background: #F1EFE8; border-radius: 8px; padding: 12px; }
+  .stat-card.danger { background: #FCEBEB; }
+  .stat-card p:first-child { margin: 0 0 4px; font-size: 12px; color: #5F5E5A; }
+  .stat-card.danger p:first-child { color: #791F1F; }
+  .stat-card p:last-child { margin: 0; font-size: 16px; font-weight: 500; }
+  .stat-card.danger p:last-child { color: #791F1F; }
+
+  /* ===== Zakładki wewnętrzne ===== */
+  .subtabs { display: flex; gap: 6px; margin-bottom: 14px; border-bottom: 1px solid #E5E3DA; flex-wrap: wrap; }
+  .subtabs .tab { padding: 8px 14px; font-size: 13px; color: #5F5E5A; border-bottom: 2px solid transparent; cursor: pointer; }
+  .subtabs .tab.active { color: #0C447C; border-bottom-color: #0C447C; font-weight: 500; }
+
+  /* ===== Karty ===== */
+  .card { background: #FFFFFF; border: 1px solid #E5E3DA; border-radius: 12px; padding: 16px 20px; margin-bottom: 16px; }
+  .card-header { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-bottom: 12px; flex-wrap: wrap; }
+  .card-header .left { display: flex; align-items: center; gap: 8px; }
+  .card-header .icon { width: 18px; height: 18px; color: #5F5E5A; flex-shrink: 0; }
+  .card-header p { margin: 0; font-size: 15px; font-weight: 500; }
+
+  .two-col { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
+  @media (max-width: 720px) { .two-col { grid-template-columns: 1fr; } }
+  .field-grid-2 { display: grid; grid-template-columns: repeat(2, minmax(0,1fr)); gap: 10px; }
+
+  /* ===== Zakładka 2: Gotówka — jeden przepływ zamiast 3 sekcji ===== */
+  .cash-flow { display: grid; grid-template-columns: repeat(4, minmax(0,1fr)); gap: 10px; margin-bottom: 12px; text-align: center; }
+  .cash-flow .step p:first-child { margin: 0 0 4px; font-size: 11px; color: #888780; }
+  .cash-flow .step.danger p:first-child { color: #791F1F; }
+  .cash-flow .step p:last-child { margin: 0; font-size: 14px; font-weight: 500; }
+  .cash-flow .step.danger p:last-child { color: #791F1F; }
+  .cash-actions { border-top: 1px solid #E5E3DA; padding-top: 12px; display: flex; gap: 8px; flex-wrap: wrap; }
+  .cash-actions button { font-size: 12px; padding: 5px 10px; }
+  .cash-actions button.spacer { margin-left: auto; }
+
+  /* wydatki - tabela rozwijana w akordeonie */
+  .accordion { margin-top: 12px; }
+  .accordion summary { cursor: pointer; font-size: 13px; color: #0C447C; list-style: none; }
+  .accordion summary::-webkit-details-marker { display: none; }
+  table.expenses { width: 100%; font-size: 12px; border-collapse: collapse; margin-top: 10px; }
+  table.expenses th { font-weight: 400; text-align: left; color: #5F5E5A; padding: 5px 4px; }
+  table.expenses td { padding: 6px 4px; border-top: 1px solid #E5E3DA; }
+  .add-expense { display: grid; grid-template-columns: 2fr 1fr 1fr 1fr auto; gap: 8px; margin-top: 10px; }
+  .add-expense button { font-size: 12px; }
+
+  /* ===== Zakładka 3: Checklista ===== */
+  .progress-bar { background: #F1EFE8; border-radius: 8px; height: 6px; overflow: hidden; margin-bottom: 12px; }
+  .progress-bar .fill { background: #378ADD; height: 100%; }
+  .checklist-item { display: flex; align-items: center; gap: 8px; font-size: 13px; padding: 6px 0; border-top: 1px solid #E5E3DA; }
+  .checklist-item .del { margin-left: auto; color: #888780; cursor: pointer; }
+  .add-item-row { display: flex; gap: 8px; margin-top: 10px; }
+  .add-item-row input { flex: 1; }
+  .add-item-row button { font-size: 13px; }
+
+  /* ===== Zakładka 4: Uwagi i portal ===== */
+  .portal-row { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 12px; }
+  .portal-row button { font-size: 12px; padding: 5px 10px; }
+
+  .action-row { display: flex; gap: 8px; }
+  .action-row button { flex: 1; font-size: 13px; }
+  .action-row button.primary { background: #2C2C2A; color: #FFFFFF; border: none; }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <!-- PASEK STATUSU -->
+  <div class="status-bar">
+    <div class="title">
+      <span>🧑‍✈️</span>
+      <div>
+        <p>Pilot — Michał Jaszczynski</p>
+        <p>Uczestnicy: 44 + 4 (płacący + opiekunowie)</p>
+      </div>
+    </div>
+    <div class="actions">
+      <span class="badge success">Udostępniona</span>
+      <button>Podgląd jako pilot</button>
+      <button>Wyślij e-mail do pilota</button>
+    </div>
+  </div>
+
+  <!-- KAFELKI STATYSTYK -->
+  <div class="stat-grid">
+    <div class="stat-card">
+      <p>Status odprawy</p>
+      <p>Do zrobienia</p>
+    </div>
+    <div class="stat-card">
+      <p>Checklista</p>
+      <p>0 / 7</p>
+    </div>
+    <div class="stat-card">
+      <p>Wypłacono pilotowi</p>
+      <p>2500 zł + 800 EUR</p>
+    </div>
+    <div class="stat-card danger">
+      <p>Do zwrotu (PLN/EUR)</p>
+      <p>1220 / 1100</p>
+    </div>
+  </div>
+
+  <!-- ZAKŁADKI WEWNĘTRZNE -->
+  <div class="subtabs">
+    <div class="tab active">Odprawa i pilot</div>
+    <div class="tab">Gotówka i rozliczenia</div>
+    <div class="tab">Checklista</div>
+    <div class="tab">Uwagi i portal</div>
+  </div>
+
+  <!-- ZAKŁADKA 1: ODPRAWA I PILOT -->
+  <div class="two-col">
+    <div class="card">
+      <div class="card-header">
+        <div class="left"><span class="icon">📋</span><p>Odprawa</p></div>
+      </div>
+      <div style="margin-bottom:10px;">
+        <label>Status odprawy</label>
+        <select><option>Do zrobienia</option></select>
+      </div>
+      <div>
+        <label>Uwagi do odprawy</label>
+        <textarea rows="2" placeholder="Wpisz uwagi…"></textarea>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-header">
+        <div class="left"><span class="icon">🪪</span><p>Przypisanie pilota</p></div>
+      </div>
+      <input value="MARCIN JASZCZYŃSKI (Warszawa)" readonly style="margin-bottom:10px;">
+      <p style="margin:0; font-size:13px; font-weight:500;">Marcin Jaszczyński</p>
+      <p style="margin:0 0 10px; font-size:13px; color:#5F5E5A;">+48690674114 · m.jaszczynski@gmail.com</p>
+      <div class="field-grid-2">
+        <div>
+          <label>Data urodzenia</label>
+          <input placeholder="—">
+        </div>
+        <div>
+          <label>PESEL</label>
+          <input placeholder="Opcjonalnie">
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ZAKŁADKA 2: GOTÓWKA I ROZLICZENIA (jeden przepływ) -->
+  <div class="card">
+    <div class="card-header">
+      <div class="left"><span class="icon">💰</span><p>Gotówka pilota — jeden przepływ</p></div>
+    </div>
+    <div class="cash-flow">
+      <div class="step">
+        <p>Plan</p>
+        <p>2500 zł</p>
+      </div>
+      <div class="step">
+        <p>→ Wypłacono</p>
+        <p>2500 zł + 800 EUR</p>
+      </div>
+      <div class="step">
+        <p>→ Wydano</p>
+        <p>4158 zł / 1122 EUR</p>
+      </div>
+      <div class="step danger">
+        <p>→ Do zwrotu</p>
+        <p>1220 zł / 1100 EUR</p>
+      </div>
+    </div>
+    <div class="cash-actions">
+      <button>Zmień / dopłać / dodaj walutę</button>
+      <button>Cofnij wypłatę</button>
+      <button>Zapisz zwrot</button>
+      <button class="spacer">Uzupełnij z wyliczenia</button>
+    </div>
+
+    <!-- Wydatki jako akordeon, żeby nie zajmowały miejsca gdy nieaktywne -->
+    <details class="accordion">
+      <summary>+ Rozwiń wydatki / koszty pilota (9 pozycji)</summary>
+      <table class="expenses">
+        <tr><th>Punkt / set</th><th>Zapłacono</th><th>Komu</th><th>Uwagi</th><th></th></tr>
+        <tr><td>Luwr bilety dorośli</td><td>—</td><td>—</td><td>—</td><td>Edytuj</td></tr>
+        <tr><td>Pilot zagraniczne</td><td>—</td><td>—</td><td>—</td><td>Edytuj</td></tr>
+        <tr><td>Obiadokolacja Paryż (zaliczka biura)</td><td>—</td><td>—</td><td>—</td><td>Edytuj</td></tr>
+      </table>
+      <div class="add-expense">
+        <input placeholder="Opis">
+        <input placeholder="Kwota">
+        <select><option>Polski złoty</option></select>
+        <input placeholder="Nr faktury">
+        <button>Dodaj wydatek</button>
+      </div>
+    </details>
+  </div>
+
+  <!-- ZAKŁADKA 3: CHECKLISTA -->
+  <div class="card">
+    <div class="card-header">
+      <div class="left"><span class="icon">✅</span><p>Checklista</p></div>
+      <span style="font-size:13px; color:#5F5E5A;">0 / 7</span>
+    </div>
+    <div class="progress-bar"><div class="fill" style="width:0%;"></div></div>
+    <div style="margin-bottom:10px;">
+      <select><option>— wybierz szablon —</option></select>
+    </div>
+    <div class="checklist-item"><span>○</span><span>Potwierdzić autokar i dane kierowcy</span><span class="del">✕</span></div>
+    <div class="checklist-item"><span>○</span><span>Sprawdzić rezerwacje hoteli</span><span class="del">✕</span></div>
+    <div class="checklist-item"><span>○</span><span>Przygotować gotówkę / zaliczkę pilota</span><span class="del">✕</span></div>
+    <div class="add-item-row">
+      <input placeholder="Dodaj własny punkt checklisty…">
+      <button>Dodaj</button>
+    </div>
+  </div>
+
+  <!-- ZAKŁADKA 4: UWAGI I PORTAL -->
+  <div class="card">
+    <div class="card-header">
+      <div class="left"><span class="icon">🔗</span><p>Udostępnianie portalu</p></div>
+    </div>
+    <div class="portal-row">
+      <button>Podgląd jako Michał Jaszczynski</button>
+      <button>Udostępnij pilotowi</button>
+      <button>Wyślij e-mail do pilota</button>
+      <span class="badge success">Udostępniona</span>
+    </div>
+    <div class="field-grid-2" style="margin-bottom:12px;">
+      <label style="display:flex; align-items:center; gap:6px; font-size:13px;"><input type="checkbox" style="width:auto;"> Portal: wymiana</label>
+      <label style="display:flex; align-items:center; gap:6px; font-size:13px;"><input type="checkbox" style="width:auto;"> Portal: zbiórka</label>
+    </div>
+    <div>
+      <label>Uwagi dla pilota</label>
+      <textarea rows="3" placeholder="Informacje przekazywane pilotowi / opiekunowi…"></textarea>
+    </div>
+  </div>
+
+  <div class="action-row">
+    <button>Anuluj</button>
+    <button class="primary">Zapisz</button>
+  </div>
+
+</div>
+</body>
+</html>

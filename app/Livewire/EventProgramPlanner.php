@@ -7,6 +7,7 @@ use App\Models\EventProgramPoint;
 use App\Models\Reservation;
 use App\Models\VendorInvoice;
 use App\Services\EventProgramScheduleService;
+use App\Services\EventPaymentScheduleService;
 use App\Services\ProgramPointPaymentStatusResolver;
 use Carbon\Carbon;
 use Illuminate\Support\Collection;
@@ -43,6 +44,13 @@ class EventProgramPlanner extends Component
     /** @var array<int, array<string, mixed>>|null */
     protected ?array $calendarEventsCache = null;
 
+    /** @var array<string, array{0: Carbon, 1: Carbon}> */
+    protected array $scheduleWindowCache = [];
+
+    protected ?bool $hasTimesManuallyLockedColumn = null;
+
+    protected ?ProgramPointPaymentStatusResolver $paymentStatusResolver = null;
+
     public function mount(int $eventId): void
     {
         $this->eventId = $eventId;
@@ -53,14 +61,26 @@ class EventProgramPlanner extends Component
 
     public function render()
     {
+        $events = $this->getCalendarEvents();
+        [$rangeStart, $rangeEnd, $durationDays] = $this->resolveCalendarWindow($events);
+
         return view('livewire.event-program-planner', [
             'plannerData' => [
-                'events' => $this->getCalendarEvents(),
-                'initialDate' => $this->resolveBaseDate()->toDateString(),
-                'durationDays' => $this->resolveDurationDays(),
-                'maxDate' => $this->resolveBaseDate()->copy()->addDays($this->resolveDurationDays())->toDateString(),
+                'events' => $events,
+                'initialDate' => $rangeStart->toDateString(),
+                'durationDays' => $durationDays,
+                'rangeStart' => $rangeStart->toDateString(),
+                'maxDate' => $rangeEnd->copy()->addDay()->toDateString(),
+                'tripStart' => $this->resolveBaseDate()->toDateString(),
             ],
         ]);
+    }
+
+    #[On('event-program-planner-refresh')]
+    public function refreshCalendarFromFinanceChange(): void
+    {
+        $this->calendarEventsCache = null;
+        $this->dispatchCalendarUpdate();
     }
 
     public function openEditModal(int $pointId): void
@@ -136,7 +156,7 @@ class EventProgramPlanner extends Component
                 return;
             }
         } else {
-            $this->reorderPlannerSchedule();
+            $this->reorderPlannerScheduleDays([(int) ($point->day ?? 1)]);
         }
 
         $this->event->refresh();
@@ -225,6 +245,8 @@ class EventProgramPlanner extends Component
             return;
         }
 
+        $previousDay = (int) ($point->day ?? 1);
+
         $start = Carbon::parse($startInput);
         $end = $endInput ? Carbon::parse($endInput) : $start->copy()->addHour();
 
@@ -259,39 +281,30 @@ class EventProgramPlanner extends Component
         }
 
         $baseDate = $this->resolveBaseDate();
-        $newDay = $baseDate->copy()->startOfDay()->diffInDays($start->copy()->startOfDay()) + 1;
+        $newDay = (int) $baseDate->copy()->startOfDay()->diffInDays($start->copy()->startOfDay()) + 1;
         $newDay = max(1, min($this->resolveDurationDays(), $newDay));
 
-        DB::table('event_program_points')
-            ->where('id', $point->id)
-            ->update([
-                'day' => $newDay,
-                'updated_at' => now(),
-            ]);
-
-        $point = $point->fresh();
-
         if (! (bool) ($point->hide_times ?? false)) {
-            if ($point->parent_id === null) {
-                app(EventProgramScheduleService::class)->applyManualTimeChange(
+            try {
+                app(EventProgramScheduleService::class)->applyPlannerTimeChange(
                     $point,
                     $start->format('H:i'),
                     $end->format('H:i'),
+                    $newDay,
                 );
-            } else {
-                $payload = [
-                    'start_time' => $start->format('H:i:s'),
-                    'end_time' => $end->format('H:i:s'),
-                    'updated_at' => now(),
-                ];
+            } catch (InvalidArgumentException $e) {
+                $this->dispatchCalendarUpdate();
 
-                if (Schema::hasColumn('event_program_points', 'times_manually_locked')) {
-                    $payload['times_manually_locked'] = true;
-                }
-
-                $point->update($payload);
-                $this->reorderPlannerSchedule();
+                return;
             }
+        } elseif ($previousDay !== $newDay) {
+            DB::table('event_program_points')
+                ->where('id', $point->id)
+                ->update([
+                    'day' => $newDay,
+                    'updated_at' => now(),
+                ]);
+            $this->reorderPlannerScheduleDays([$previousDay, $newDay]);
         }
 
         $this->event->refresh();
@@ -301,24 +314,16 @@ class EventProgramPlanner extends Component
 
     protected function applyTypedTimes(EventProgramPoint $point, string $startTime, string $endTime): void
     {
-        if ($point->parent_id === null) {
-            app(EventProgramScheduleService::class)->applyManualTimeChange($point, $startTime, $endTime);
+        app(EventProgramScheduleService::class)->applyPlannerTimeChange($point, $startTime, $endTime);
+    }
 
-            return;
+    protected function supportsTimesManuallyLockedColumn(): bool
+    {
+        if ($this->hasTimesManuallyLockedColumn === null) {
+            $this->hasTimesManuallyLockedColumn = Schema::hasColumn('event_program_points', 'times_manually_locked');
         }
 
-        $payload = [
-            'start_time' => $startTime,
-            'end_time' => $endTime,
-            'updated_at' => now(),
-        ];
-
-        if (Schema::hasColumn('event_program_points', 'times_manually_locked')) {
-            $payload['times_manually_locked'] = true;
-        }
-
-        $point->update($payload);
-        $this->reorderPlannerSchedule();
+        return $this->hasTimesManuallyLockedColumn;
     }
 
     /**
@@ -336,8 +341,12 @@ class EventProgramPlanner extends Component
         $baseDate = $this->resolveBaseDate();
         $day = max(1, (int) ($point->day ?? 1));
         $date = $baseDate->copy()->addDays($day - 1);
-        $service = app(\App\Services\EventProgramPointOrderService::class);
-        $visible = $service->visibleProgramPoints($this->event, requireActive: false);
+        $orderService = app(\App\Services\EventProgramPointOrderService::class);
+        $visible = $orderService->visibleProgramPoints(
+            $this->event,
+            requireActive: false,
+            preloaded: $orderService->loadPointsForPlanner($this->event),
+        );
         $parentsById = $visible->whereNull('parent_id')->keyBy('id');
         [$start, $end] = $this->resolvePointScheduleWindow($point, $date, $parentsById, $visible);
 
@@ -350,6 +359,23 @@ class EventProgramPlanner extends Component
     protected function reorderPlannerSchedule(): void
     {
         app(\App\Services\EventProgramPointOrderService::class)->repairOrderByStartTimes($this->event);
+    }
+
+    /**
+     * @param  array<int>  $days
+     */
+    protected function reorderPlannerScheduleDays(array $days): void
+    {
+        $service = app(\App\Services\EventProgramPointOrderService::class);
+
+        foreach (array_values(array_unique(array_filter($days))) as $day) {
+            $service->repairOrderByStartTimes($this->event, (int) $day);
+        }
+    }
+
+    protected function paymentStatusResolver(): ProgramPointPaymentStatusResolver
+    {
+        return $this->paymentStatusResolver ??= app(ProgramPointPaymentStatusResolver::class);
     }
 
     protected function resolveDurationDays(): int
@@ -384,20 +410,38 @@ class EventProgramPlanner extends Component
 
     protected function dispatchCalendarUpdate(): void
     {
-        $this->dispatch("planner-data-updated-{$this->getId()}", events: $this->refreshCalendarEvents());
+        $events = $this->refreshCalendarEvents();
+        [$rangeStart, $rangeEnd, $durationDays] = $this->resolveCalendarWindow($events);
+
+        $this->dispatch("planner-data-updated-{$this->getId()}", plannerData: [
+            'events' => $events,
+            'initialDate' => $rangeStart->toDateString(),
+            'durationDays' => $durationDays,
+            'rangeStart' => $rangeStart->toDateString(),
+            'maxDate' => $rangeEnd->copy()->addDay()->toDateString(),
+        ]);
     }
 
     protected function buildCalendarEvents(): array
     {
-        $service = app(\App\Services\EventProgramPointOrderService::class);
-        $points = $service->visibleProgramPoints($this->event, requireActive: false);
-        app(ProgramPointPaymentStatusResolver::class)->preloadSettlementCosts($points, $this->event);
+        $this->scheduleWindowCache = [];
+
+        $orderService = app(\App\Services\EventProgramPointOrderService::class);
+        $points = $orderService->visibleProgramPoints(
+            $this->event,
+            requireActive: false,
+            preloaded: $orderService->loadPointsForPlanner($this->event),
+        );
+
+        $paymentResolver = $this->paymentStatusResolver();
+        $paymentResolver->preloadSettlementCosts($points, $this->event);
+        $paymentResolver->preloadPaymentStacks($points, $this->event);
         $this->preloadVendorInvoices($points);
         $baseDate = $this->resolveBaseDate();
         $parentsById = $points->whereNull('parent_id')->keyBy('id');
         $parentDisplayOrderPerDay = [];
 
-        return $points->map(function (EventProgramPoint $point) use ($baseDate, $parentsById, $points, &$parentDisplayOrderPerDay) {
+        $pointEvents = $points->map(function (EventProgramPoint $point) use ($baseDate, $parentsById, $points, &$parentDisplayOrderPerDay, $paymentResolver) {
             $day = max(1, (int) ($point->day ?? 1));
             $date = $baseDate->copy()->addDays($day - 1);
             $isChild = $point->parent_id !== null;
@@ -417,7 +461,7 @@ class EventProgramPlanner extends Component
                     $name
                 );
 
-            $paymentInfo = app(ProgramPointPaymentStatusResolver::class)->resolve($point, $this->event);
+            $paymentInfo = $paymentResolver->resolve($point, $this->event);
             $invoiceInfo = $this->resolveInvoiceBadge($point);
             $payerInfo = $this->resolvePayerBadge($point);
             $reservationInfo = $this->resolveReservationBadge($point);
@@ -426,8 +470,8 @@ class EventProgramPlanner extends Component
             $event = [
                 'id' => (string) $point->id,
                 'title' => $title,
-                'start' => $start->toIso8601String(),
-                'end' => $end->toIso8601String(),
+                'start' => $start->format('Y-m-d\TH:i:s'),
+                'end' => $end->format('Y-m-d\TH:i:s'),
                 'allDay' => false,
                 'classNames' => $isChild ? ['event-program-child'] : ['event-program-parent'],
                 'extendedProps' => [
@@ -448,6 +492,102 @@ class EventProgramPlanner extends Component
 
             return $event;
         })->values()->all();
+
+        $paymentDueEvents = $this->buildPaymentDueCalendarEvents($points);
+
+        return array_merge($pointEvents, $paymentDueEvents);
+    }
+
+    /**
+     * @param  Collection<int, EventProgramPoint>  $points
+     * @return list<array<string, mixed>>
+     */
+    protected function buildPaymentDueCalendarEvents(Collection $points): array
+    {
+        if ($points->isEmpty()) {
+            return [];
+        }
+
+        $scheduleService = app(EventPaymentScheduleService::class);
+        $scheduleService->warmCacheForProgramPoints($points, $this->event);
+
+        $events = [];
+
+        foreach ($points as $point) {
+            $pointName = $point->templatePoint?->name ?? $point->name ?? ('Punkt #'.$point->id);
+
+            foreach ($scheduleService->collectForProgramPoint($point, $this->event) as $row) {
+                if (empty($row['due_date'])) {
+                    continue;
+                }
+
+                if (($row['status'] ?? null) === 'paid') {
+                    continue;
+                }
+
+                if (in_array($row['kind'] ?? null, ['advance_paid', 'payment'], true)) {
+                    continue;
+                }
+
+                $dueDate = Carbon::parse((string) $row['due_date'])->toDateString();
+                $kindLabel = (string) ($row['kind_label'] ?? 'Termin płatności');
+                $amountLabel = (string) ($row['amount_label'] ?? '');
+                $phrase = (string) ($row['phrase'] ?? '');
+                $isOverdue = (bool) ($row['is_overdue'] ?? false);
+                $rowId = (string) ($row['id'] ?? ('point-'.$point->id.'-'.$dueDate));
+
+                $events[] = [
+                    'id' => 'payment-due-'.$rowId,
+                    'title' => $kindLabel.': '.$pointName,
+                    'start' => $dueDate.'T07:00:00',
+                    'end' => $dueDate.'T07:30:00',
+                    'allDay' => false,
+                    'editable' => false,
+                    'startEditable' => false,
+                    'durationEditable' => false,
+                    'backgroundColor' => $isOverdue ? '#dc2626' : '#ea580c',
+                    'borderColor' => $isOverdue ? '#991b1b' : '#c2410c',
+                    'classNames' => ['event-program-payment-due'],
+                    'extendedProps' => [
+                        'isPaymentDue' => true,
+                        'programPointId' => (string) $point->id,
+                        'amountLabel' => $amountLabel,
+                        'tooltip' => trim(collect([$phrase, $amountLabel])->filter()->implode(' · ')),
+                    ],
+                ];
+            }
+        }
+
+        return $events;
+    }
+
+    /**
+     * @param  list<array<string, mixed>>  $events
+     * @return array{0: Carbon, 1: Carbon, 2: int}
+     */
+    protected function resolveCalendarWindow(array $events): array
+    {
+        $tripStart = $this->resolveBaseDate();
+        $tripEnd = $tripStart->copy()->addDays(max(0, $this->resolveDurationDays() - 1));
+
+        $dates = collect($events)
+            ->map(function (array $event): ?Carbon {
+                $start = $event['start'] ?? null;
+
+                if (! filled($start)) {
+                    return null;
+                }
+
+                return Carbon::parse(substr((string) $start, 0, 10))->startOfDay();
+            })
+            ->filter()
+            ->push($tripStart, $tripEnd);
+
+        $rangeStart = $dates->min()->copy()->startOfDay();
+        $rangeEnd = $dates->max()->copy()->startOfDay();
+        $durationDays = max(1, (int) $rangeStart->diffInDays($rangeEnd) + 1);
+
+        return [$rangeStart, $rangeEnd, $durationDays];
     }
 
     /**
@@ -461,6 +601,12 @@ class EventProgramPlanner extends Component
         Collection $parentsById,
         Collection $allVisible,
     ): array {
+        $cacheKey = (int) $point->id.'|'.$date->toDateString();
+
+        if (isset($this->scheduleWindowCache[$cacheKey])) {
+            return $this->scheduleWindowCache[$cacheKey];
+        }
+
         $fallbackIndex = max(1, (int) ($point->order ?? 1));
 
         if ($point->start_time) {
@@ -519,7 +665,10 @@ class EventProgramPlanner extends Component
             }
         }
 
-        return [$start, $end];
+        $result = [$start, $end];
+        $this->scheduleWindowCache[$cacheKey] = $result;
+
+        return $result;
     }
 
     protected function resolvePayerBadge(EventProgramPoint $point): array
@@ -710,7 +859,7 @@ class EventProgramPlanner extends Component
                 'updated_at' => now(),
             ]);
 
-        $this->reorderPlannerSchedule();
+        $this->reorderPlannerScheduleDays([(int) ($point->day ?? 1)]);
         $this->event->refresh();
 
         $this->dispatchCalendarUpdate();

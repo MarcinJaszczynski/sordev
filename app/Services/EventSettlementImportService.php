@@ -439,10 +439,26 @@ final class EventSettlementImportService
 
     private function importAccommodationCostsFromEventPlan(Event $event, ?int $fallbackPlnCurrencyId): void
     {
-        $event->loadMissing(['hotelStays.roomLines.currency']);
-        $totalAccommodationCostPln = app(\App\Services\EventHotelPlanService::class)->totalPlnForEvent($event);
+        app(HotelStaySettlementSync::class)->syncForEvent($event);
 
-        if ($totalAccommodationCostPln <= 0) {
+        // Zachowaj kompatybilność: gdy sync nie utworzył kosztów (pusty plan), stary import jako fallback.
+        $settlement = $this->settlement;
+        $hasHotelCosts = $settlement->costs()
+            ->whereIn('source_type', [HotelStaySettlementSync::SOURCE_HOTEL, HotelStaySettlementSync::SOURCE_STAY])
+            ->exists();
+
+        if ($hasHotelCosts) {
+            return;
+        }
+
+        $event->loadMissing(['hotelStays.roomLines.currency']);
+        $totals = app(\App\Services\EventHotelPlanService::class)->totalsByCurrencyForEvent($event);
+        $plnTotal = round((float) ($totals['PLN'] ?? 0), 2);
+        $foreignTotals = collect($totals)
+            ->reject(fn ($amount, $code) => strtoupper((string) $code) === 'PLN' || (float) $amount <= 0)
+            ->map(fn ($amount) => round((float) $amount, 2));
+
+        if ($plnTotal <= 0 && $foreignTotals->isEmpty()) {
             return;
         }
 
@@ -451,23 +467,93 @@ final class EventSettlementImportService
             ->whereNull('source_id')
             ->first();
 
-        $attributes = [
-            'name' => 'Koszty noclegu (hotel)',
-            'contractor_id' => $existing?->contractor_id ?? $this->resolveAccommodationContractorId($event),
-            'planned_amount' => $totalAccommodationCostPln,
-            'planned_currency_id' => $fallbackPlnCurrencyId,
-            'planned_rate' => 1,
-            'planned_amount_pln' => $totalAccommodationCostPln,
-            'paid_by' => $existing?->paid_by ?? 'office',
-            'advance_type' => 'full',
-            'payment_status' => $existing?->payment_status ?? 'planned',
-            'order' => 1001,
-        ];
+        // Jedna waluta obca bez PLN → plan w tej walucie (bez przeliczania).
+        if ($plnTotal <= 0 && $foreignTotals->count() === 1) {
+            $code = strtoupper((string) $foreignTotals->keys()->first());
+            $amount = (float) $foreignTotals->first();
+            $currency = Currency::query()
+                ->where('symbol', $code)
+                ->first();
 
-        $this->settlement->costs()->updateOrCreate(
-            ['source_type' => 'accommodation', 'source_id' => null],
-            $this->mergeExistingCostPilotReporting($existing, $attributes)
-        );
+            $attributes = [
+                'name' => 'Koszty noclegu (hotel)',
+                'contractor_id' => $existing?->contractor_id ?? $this->resolveAccommodationContractorId($event),
+                'planned_amount' => $amount,
+                'planned_currency_id' => $currency?->id ?? $fallbackPlnCurrencyId,
+                'planned_rate' => (float) ($currency?->exchange_rate ?? 1),
+                'planned_convert_to_pln' => false,
+                'planned_amount_pln' => null,
+                'paid_by' => $existing?->paid_by ?? 'office',
+                'advance_type' => 'full',
+                'payment_status' => $existing?->payment_status ?? 'planned',
+                'order' => 1001,
+            ];
+
+            $this->settlement->costs()->updateOrCreate(
+                ['source_type' => 'accommodation', 'source_id' => null],
+                $this->mergeExistingCostPilotReporting($existing, $attributes)
+            );
+
+            return;
+        }
+
+        // PLN (ew. z przeliczonych walut) — główna pozycja.
+        if ($plnTotal > 0) {
+            $attributes = [
+                'name' => 'Koszty noclegu (hotel)',
+                'contractor_id' => $existing?->contractor_id ?? $this->resolveAccommodationContractorId($event),
+                'planned_amount' => $plnTotal,
+                'planned_currency_id' => $fallbackPlnCurrencyId,
+                'planned_rate' => 1,
+                'planned_convert_to_pln' => true,
+                'planned_amount_pln' => $plnTotal,
+                'paid_by' => $existing?->paid_by ?? 'office',
+                'advance_type' => 'full',
+                'payment_status' => $existing?->payment_status ?? 'planned',
+                'order' => 1001,
+            ];
+
+            $this->settlement->costs()->updateOrCreate(
+                ['source_type' => 'accommodation', 'source_id' => null],
+                $this->mergeExistingCostPilotReporting($existing, $attributes)
+            );
+        }
+
+        // Dodatkowe waluty obce (bez konwersji) — osobne wiersze keyed po currency_id.
+        foreach ($foreignTotals as $code => $amount) {
+            $currency = Currency::query()
+                ->where('symbol', strtoupper((string) $code))
+                ->first();
+            if (! $currency) {
+                continue;
+            }
+
+            $foreignExisting = $this->settlement->costs()
+                ->where('source_type', 'accommodation')
+                ->where('source_id', $currency->id)
+                ->first();
+
+            $foreignAttributes = [
+                'name' => 'Koszty noclegu (hotel) — '.$currency->symbol,
+                'contractor_id' => $foreignExisting?->contractor_id
+                    ?? $existing?->contractor_id
+                    ?? $this->resolveAccommodationContractorId($event),
+                'planned_amount' => $amount,
+                'planned_currency_id' => $currency->id,
+                'planned_rate' => (float) ($currency->exchange_rate ?? 1),
+                'planned_convert_to_pln' => false,
+                'planned_amount_pln' => null,
+                'paid_by' => $foreignExisting?->paid_by ?? 'office',
+                'advance_type' => 'full',
+                'payment_status' => $foreignExisting?->payment_status ?? 'planned',
+                'order' => 1001 + (int) $currency->id,
+            ];
+
+            $this->settlement->costs()->updateOrCreate(
+                ['source_type' => 'accommodation', 'source_id' => $currency->id],
+                $this->mergeExistingCostPilotReporting($foreignExisting, $foreignAttributes)
+            );
+        }
     }
 
     private function resolveTransportContractorId(Event $event): ?int
