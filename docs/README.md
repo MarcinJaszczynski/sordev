@@ -19,6 +19,8 @@ Dokumentacja pełni rolę "Konstytucji Projektu" dla programistów oraz agentów
 ├── 09_AI_RULES.md
 ├── 10_API.md
 │
+├── (zrzuty / backup MySQL → patrz [`database/dumps/README.md`](../database/dumps/README.md))
+│
 ├── api/
 │   ├── README.md
 │   ├── openapi-public.yaml

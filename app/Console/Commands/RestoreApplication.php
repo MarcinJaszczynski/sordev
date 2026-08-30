@@ -3,6 +3,7 @@
 namespace App\Console\Commands;
 
 use App\Support\BackupArchive;
+use App\Support\DatabaseCliBinary;
 use Illuminate\Console\Command;
 use Illuminate\Support\Facades\Artisan;
 use Illuminate\Support\Facades\Config;
@@ -182,9 +183,9 @@ class RestoreApplication extends Command
             return 'Plik database.sql nie znaleziony w archiwum.';
         }
 
-        $mysql = $this->findBinary('mysql');
+        $mysql = DatabaseCliBinary::find('mysql');
         if (! $mysql) {
-            return 'Nie znaleziono programu mysql. Zainstaluj pakiet mysql-client.';
+            return 'Nie znaleziono programu mysql. Zainstaluj mysql-client albo upewnij się, że DBngin/Herd ma MySQL.';
         }
 
         $connection = Config::get('database.connections.mysql');
@@ -314,20 +315,4 @@ class RestoreApplication extends Command
         return true;
     }
 
-    private function findBinary(string $name): ?string
-    {
-        $which = trim((string) shell_exec('which '.escapeshellarg($name).' 2>/dev/null'));
-        if ($which !== '' && is_executable($which)) {
-            return $which;
-        }
-
-        $commonPaths = ['/usr/bin/'.$name, '/usr/local/bin/'.$name, '/usr/local/mysql/bin/'.$name];
-        foreach ($commonPaths as $path) {
-            if (is_executable($path)) {
-                return $path;
-            }
-        }
-
-        return null;
-    }
 }

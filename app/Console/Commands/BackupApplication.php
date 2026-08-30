@@ -3,6 +3,7 @@
 namespace App\Console\Commands;
 
 use App\Support\BackupArchive;
+use App\Support\DatabaseCliBinary;
 use Illuminate\Console\Command;
 use Illuminate\Support\Facades\Artisan;
 use Illuminate\Support\Facades\Config;
@@ -95,20 +96,26 @@ class BackupApplication extends Command
             }
         }
 
+        if (! empty($errors)) {
+            $zip->close();
+            @unlink($zipPath);
+
+            foreach ($errors as $err) {
+                $this->error('  ✗ '.$err);
+            }
+            $this->error('Kopia zapasowa nie została utworzona — popraw błędy i spróbuj ponownie.');
+
+            return self::FAILURE;
+        }
+
         $zip->addFromString('manifest.json', json_encode($manifest, JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE));
         $zip->close();
-
-        if (! empty($errors)) {
-            foreach ($errors as $err) {
-                $this->warn('  ⚠ '.$err);
-            }
-        }
 
         $sizeMb = round(filesize($zipPath) / 1024 / 1024, 2);
         $this->line("BACKUP_PATH={$zipPath}");
         $this->info("Kopia zapasowa utworzona: {$zipPath} ({$sizeMb} MB)");
 
-        if (empty($errors) && ! app()->environment('testing')) {
+        if (! app()->environment('testing')) {
             Artisan::call('app:backup-prune');
             $pruneOutput = trim(Artisan::output());
             if ($pruneOutput !== '') {
@@ -116,7 +123,7 @@ class BackupApplication extends Command
             }
         }
 
-        return empty($errors) ? self::SUCCESS : self::FAILURE;
+        return self::SUCCESS;
     }
 
     private function backupDatabase(ZipArchive $zip, array &$manifest): true|string
@@ -147,9 +154,9 @@ class BackupApplication extends Command
 
     private function backupMysql(ZipArchive $zip, array &$manifest): true|string
     {
-        $mysqldump = $this->findBinary('mysqldump');
+        $mysqldump = DatabaseCliBinary::find('mysqldump');
         if (! $mysqldump) {
-            return 'Nie znaleziono programu mysqldump. Zainstaluj pakiet mysql-client.';
+            return 'Nie znaleziono programu mysqldump. Zainstaluj mysql-client albo upewnij się, że DBngin/Herd ma MySQL.';
         }
 
         $connection = Config::get('database.connections.mysql');
@@ -256,20 +263,4 @@ class BackupApplication extends Command
         return true;
     }
 
-    private function findBinary(string $name): ?string
-    {
-        $which = trim((string) shell_exec('which '.escapeshellarg($name).' 2>/dev/null'));
-        if ($which !== '' && is_executable($which)) {
-            return $which;
-        }
-
-        $commonPaths = ['/usr/bin/'.$name, '/usr/local/bin/'.$name, '/usr/local/mysql/bin/'.$name];
-        foreach ($commonPaths as $path) {
-            if (is_executable($path)) {
-                return $path;
-            }
-        }
-
-        return null;
-    }
 }
