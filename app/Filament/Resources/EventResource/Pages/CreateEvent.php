@@ -56,6 +56,11 @@ class CreateEvent extends CreateRecord
                     'markup_id' => $this->template->markup_id,
                     'name' => $this->template->name,
                     'program_start_place_id' => $this->template->start_place_id,
+                    // fill() nadpisuje cały stan — bez tego giną default(1) z EventKeyInfoFields
+                    'participant_count' => 1,
+                    'gratis_count' => 0,
+                    'staff_count' => 1,
+                    'driver_count' => 1,
                 ]);
             }
         }
@@ -115,6 +120,16 @@ class CreateEvent extends CreateRecord
                                 $set('name', $this->template->name);
                                 if (\Illuminate\Support\Facades\Schema::hasColumn('events', 'program_start_place_id')) {
                                     $set('program_start_place_id', $this->template->start_place_id);
+                                }
+
+                                // Puste → 1; jawne 0 zostaje (wycieczka bez obsługi/kierowcy).
+                                $staff = $get('staff_count');
+                                if ($staff === null || $staff === '') {
+                                    $set('staff_count', 1);
+                                }
+                                $driver = $get('driver_count');
+                                if ($driver === null || $driver === '') {
+                                    $set('driver_count', 1);
                                 }
 
                                 $startPlaceId = (int) ($get('start_place_id') ?? 0);
@@ -255,6 +270,10 @@ class CreateEvent extends CreateRecord
                 'data.event_template_id' => ['Wybór szablonu jest wymagany. Imprezę bez szablonu mogą zakładać tylko admin / super_admin.'],
             ]);
         }
+
+        // Puste pole → 1; jawne 0 = wycieczka bez obsługi / bez kierowcy.
+        $data['staff_count'] = Event::normalizeOperationalCount($data['staff_count'] ?? null);
+        $data['driver_count'] = Event::normalizeOperationalCount($data['driver_count'] ?? null);
 
         return $data;
     }
@@ -403,8 +422,12 @@ class CreateEvent extends CreateRecord
                 $event->syncQtyVariantForGroup(
                     (int) ($data['participant_count'] ?? 1),
                     (int) ($data['gratis_count'] ?? 0),
-                    array_key_exists('staff_count', $data) ? (int) $data['staff_count'] : null,
-                    array_key_exists('driver_count', $data) ? (int) $data['driver_count'] : null,
+                    array_key_exists('staff_count', $data)
+                        ? Event::normalizeOperationalCount($data['staff_count'])
+                        : null,
+                    array_key_exists('driver_count', $data)
+                        ? Event::normalizeOperationalCount($data['driver_count'])
+                        : null,
                 );
             } catch (\Throwable $e) {
                 Log::warning('CreateEvent:web:sync_qty_variant_failed_no_template', [

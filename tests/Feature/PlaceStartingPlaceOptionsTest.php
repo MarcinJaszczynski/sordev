@@ -85,25 +85,77 @@ test('template start place options can include legacy selected place outside ava
         ->and($options)->toHaveKey($legacy->id);
 });
 
-test('search select options finds places by name without requiring full preload', function () {
-    Place::query()->create(['name' => 'Wilno Stare Miasto', 'starting_place' => false]);
-    Place::query()->create(['name' => 'Kalisz', 'starting_place' => true]);
-    $target = Place::query()->create(['name' => 'Kraków Rynek', 'starting_place' => false]);
+test('place search select options match only by name not description', function () {
+    $krakow = Place::query()->create([
+        'name' => 'Kraków',
+        'description' => 'Stolica Małopolski',
+        'starting_place' => false,
+    ]);
+    $bobolice = Place::query()->create([
+        'name' => 'Bobolice',
+        'description' => 'Zamek niedaleko Krakowa',
+        'starting_place' => false,
+    ]);
 
-    $options = Place::searchSelectOptions('Krak', 50);
+    $options = Place::searchSelectOptions('Kraków');
 
-    expect($options)->toHaveKey($target->id)
-        ->and($options)->not->toHaveKey(
-            Place::query()->where('name', 'Kalisz')->value('id')
-        );
+    expect($options)->toHaveKey($krakow->id)
+        ->and($options)->not->toHaveKey($bobolice->id)
+        ->and($options[$krakow->id])->toBe('Kraków');
 });
 
-test('search select options keeps currently selected place even if outside result set', function () {
-    $selected = Place::query()->create(['name' => 'Zakopane', 'starting_place' => false]);
-    Place::query()->create(['name' => 'Gdańsk', 'starting_place' => false]);
+test('place search select options disambiguate duplicate names', function () {
+    $first = Place::query()->create(['name' => 'Rzeszów', 'starting_place' => false]);
+    $second = Place::query()->create(['name' => 'Rzeszów', 'starting_place' => false]);
 
-    $options = Place::searchSelectOptions('Gdań', 50, $selected->id);
+    $options = Place::searchSelectOptions('Rzeszów');
 
-    expect($options)->toHaveKey($selected->id)
-        ->and($options[$selected->id])->toBe('Zakopane');
+    expect($options)->toHaveKey($first->id)
+        ->and($options)->toHaveKey($second->id)
+        ->and($options[$first->id])->toBe('Rzeszów (#'.$first->id.')')
+        ->and($options[$second->id])->toBe('Rzeszów (#'.$second->id.')');
+
+    expect(Place::optionLabel($first->id))->toBe('Rzeszów (#'.$first->id.')');
+});
+
+test('place search prefers prefix matches over contains', function () {
+    $exact = Place::query()->create(['name' => 'Testowo', 'starting_place' => false]);
+    $prefix = Place::query()->create(['name' => 'Testowo Górne', 'starting_place' => false]);
+    $contains = Place::query()->create(['name' => 'Stare Testowo', 'starting_place' => false]);
+
+    $options = Place::searchSelectOptions('Testowo');
+    $ids = array_keys($options);
+
+    expect($ids[0])->toBe($exact->id)
+        ->and(array_search($prefix->id, $ids, true))
+        ->toBeLessThan(array_search($contains->id, $ids, true));
+});
+
+test('place search for krakow does not return kalisz or kadzidlo', function () {
+    Place::query()->create(['name' => 'Kraków', 'starting_place' => false]);
+    Place::query()->create(['name' => 'Kalisz', 'starting_place' => false]);
+    Place::query()->create(['name' => 'Kadzidło', 'starting_place' => false]);
+
+    $options = Place::searchSelectOptions('krakow');
+
+    expect($options)->toHaveCount(1)
+        ->and(array_values($options))->toBe(['Kraków']);
+});
+
+test('place search requires at least two characters', function () {
+    Place::query()->create(['name' => 'Kraków', 'starting_place' => false]);
+
+    expect(Place::searchSelectOptions('k'))->toBeEmpty()
+        ->and(Place::searchSelectOptions('kr'))->not->toBeEmpty();
+});
+
+test('place search select options skip blank names', function () {
+    Place::query()->create(['name' => '   ', 'starting_place' => false]);
+    $valid = Place::query()->create(['name' => 'Poznań', 'starting_place' => false]);
+
+    $options = Place::searchSelectOptions('Poz');
+
+    expect($options)->toHaveKey($valid->id)
+        ->and($options)->not->toContain('')
+        ->and(collect($options)->every(fn (string $label): bool => trim($label) !== ''))->toBeTrue();
 });

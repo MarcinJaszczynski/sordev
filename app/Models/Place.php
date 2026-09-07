@@ -45,41 +45,88 @@ class Place extends Model
     }
 
     /**
-     * Wyszukiwanie miejsc do selectów Filament (server-side, bez preloadu całej tabeli).
+     * Wyszukiwanie miejsc do selectów Filament — wyłącznie tabela places, tylko po nazwie.
+     * Dopasowanie bez względu na polskie znaki (krakow → Kraków), bez fuzzy „podobnych” miast.
      *
      * @return array<int|string, string>
      */
-    public static function searchSelectOptions(string $search, int $limit = 50, ?int $includePlaceId = null): array
+    public static function searchSelectOptions(string $search, int $limit = 40): array
     {
         $term = trim($search);
-        $limit = max(1, min(100, $limit));
+        $limit = max(1, min(500, $limit));
 
-        $query = static::query()->orderBy('name');
+        $places = static::query()
+            ->whereNotNull('name')
+            ->whereRaw("TRIM(name) != ''")
+            ->orderBy('name')
+            ->orderBy('id')
+            ->get(['id', 'name']);
 
         if ($term !== '') {
-            $like = '%'.$term.'%';
-            $query->where(function (Builder $inner) use ($like): void {
-                $inner->where('name', 'like', $like);
+            $foldedTerm = static::foldSearchValue($term);
 
-                if (Schema::hasColumn((new static)->getTable(), 'description')) {
-                    $inner->orWhere('description', 'like', $like);
-                }
-            });
-        }
-
-        $options = $query
-            ->limit($limit)
-            ->pluck('name', 'id')
-            ->all();
-
-        if ($includePlaceId && ! array_key_exists($includePlaceId, $options)) {
-            $label = static::query()->whereKey($includePlaceId)->value('name');
-            if ($label !== null) {
-                $options = [$includePlaceId => $label] + $options;
+            // Za krótkie frazy dają szum (szczególnie w Choices na szerokim viewportcie).
+            if (mb_strlen($foldedTerm) < 2) {
+                return [];
             }
+
+            $places = $places
+                ->map(function (self $place) use ($term, $foldedTerm): ?array {
+                    $name = trim((string) $place->name);
+                    $foldedName = static::foldSearchValue($name);
+
+                    $rank = null;
+                    if (strcasecmp($name, $term) === 0 || $foldedName === $foldedTerm) {
+                        $rank = 0;
+                    } elseif (str_starts_with($foldedName, $foldedTerm)) {
+                        $rank = 1;
+                    } elseif (str_contains($foldedName, $foldedTerm)) {
+                        $rank = 2;
+                    }
+
+                    if ($rank === null) {
+                        return null;
+                    }
+
+                    return [
+                        'place' => $place,
+                        'rank' => $rank,
+                        'name' => $name,
+                    ];
+                })
+                ->filter()
+                ->sortBy([
+                    ['rank', 'asc'],
+                    ['name', 'asc'],
+                ])
+                ->take($limit)
+                ->pluck('place')
+                ->values();
+        } else {
+            $places = $places->take($limit);
         }
 
-        return $options;
+        return static::formatSelectOptions($places);
+    }
+
+    /**
+     * Normalizacja do porównań: małe litery + bez polskich diakrytyków.
+     */
+    public static function foldSearchValue(string $value): string
+    {
+        $value = mb_strtolower(trim($value), 'UTF-8');
+
+        return strtr($value, [
+            'ą' => 'a',
+            'ć' => 'c',
+            'ę' => 'e',
+            'ł' => 'l',
+            'ń' => 'n',
+            'ó' => 'o',
+            'ś' => 's',
+            'ź' => 'z',
+            'ż' => 'z',
+        ]);
     }
 
     public static function optionLabel(?int $placeId): ?string
@@ -88,7 +135,56 @@ class Place extends Model
             return null;
         }
 
-        return static::query()->whereKey($placeId)->value('name');
+        $place = static::query()->whereKey($placeId)->first(['id', 'name']);
+        if (! $place || blank($place->name)) {
+            return null;
+        }
+
+        $isDuplicate = static::query()
+            ->where('name', $place->name)
+            ->whereKeyNot($place->id)
+            ->exists();
+
+        return $isDuplicate
+            ? sprintf('%s (#%d)', $place->name, $place->id)
+            : $place->name;
+    }
+
+    /**
+     * @param  \Illuminate\Support\Collection<int, self>|\Illuminate\Database\Eloquent\Collection<int, self>  $places
+     * @return array<int|string, string>
+     */
+    protected static function formatSelectOptions($places): array
+    {
+        if ($places->isEmpty()) {
+            return [];
+        }
+
+        $names = $places->pluck('name')->unique()->filter()->values()->all();
+
+        $duplicateNames = static::query()
+            ->select('name')
+            ->whereIn('name', $names)
+            ->groupBy('name')
+            ->havingRaw('COUNT(*) > 1')
+            ->pluck('name')
+            ->flip()
+            ->all();
+
+        $options = [];
+
+        foreach ($places as $place) {
+            $name = trim((string) $place->name);
+            if ($name === '') {
+                continue;
+            }
+
+            $options[$place->id] = isset($duplicateNames[$place->name]) || isset($duplicateNames[$name])
+                ? sprintf('%s (#%d)', $name, $place->id)
+                : $name;
+        }
+
+        return $options;
     }
 
     /**

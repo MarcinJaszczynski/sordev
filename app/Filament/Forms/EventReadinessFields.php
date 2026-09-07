@@ -921,6 +921,7 @@ class EventReadinessFields
                         ->icon('heroicon-m-trash'))
                     ->reorderable(false)
                     ->columnSpanFull()
+                    ->dehydrated()
                     ->visible(fn (): bool => Schema::hasColumn('events', 'pilot_advance_planned_amount'))
                     ->disabled(fn (?Event $record): bool => (bool) ($record?->pilot_funds_paid)),
             ]
@@ -990,6 +991,8 @@ class EventReadinessFields
                 ->label('Wypłacona — zatwierdź rzeczywistą wypłatę')
                 ->helperText('Oznacza fizyczną wypłatę (Wypłacona) i zasila saldo gotówki pilota we wszystkich zaplanowanych walutach. Po zatwierdzeniu cofasz osobną akcją „Cofnij wypłatę”.')
                 ->columnSpanFull()
+                // Zawsze dehydruj — przy disabled Filament domyślnie pomija pole i pending approval w afterSave nie startuje.
+                ->dehydrated(true)
                 ->disabled(fn (Forms\Get $get, ?Event $record): bool => (
                     $hasAdvanceLines
                         ? blank($get('pilot_advance_planned_lines'))

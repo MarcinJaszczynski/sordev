@@ -583,6 +583,74 @@ class PilotAdvanceMultiCurrencyTest extends TestCase
             ->value('provided_amount'));
     }
 
+    public function test_manage_event_pilot_marks_paid_when_contractor_has_no_portal_user(): void
+    {
+        if (! \Illuminate\Support\Facades\Schema::hasColumn('events', 'pilot_contractor_id')) {
+            $this->markTestSkipped('pilot_contractor_id column is required.');
+        }
+
+        Role::firstOrCreate(['name' => 'admin']);
+        $admin = User::factory()->create(['status' => 'active']);
+        $admin->assignRole('admin');
+
+        $pilot = User::factory()->create([
+            'status' => 'active',
+            'email' => 'pilot.portal@example.test',
+        ]);
+        $pilot->assignRole('pilot');
+
+        $pilotType = \App\Models\ContractorType::query()->firstOrCreate(['name' => 'pilot']);
+        \App\Models\ContractorType::clearIdsForNamesCache();
+
+        // Kontrahent bez konta portalu (inny e-mail / brak User) — wcześniej zerował assigned_to przy zapisie.
+        $contractor = \App\Models\Contractor::create([
+            'name' => 'Kontrahent bez portalu',
+            'email' => 'contractor.only@example.test',
+            'status' => 'active',
+        ]);
+        $contractor->types()->sync([$pilotType->getKey()]);
+
+        $plnId = Currency::query()->create([
+            'name' => 'PLN', 'code' => 'PLN', 'symbol' => 'PLN', 'exchange_rate' => 1,
+        ])->id;
+
+        $event = Event::factory()->create([
+            'assigned_to' => $pilot->id,
+            'pilot_contractor_id' => $contractor->id,
+            'shared_with_pilot' => true,
+            'status' => Event::STATUS_CONFIRMED,
+            'pilot_funds_paid' => false,
+        ]);
+
+        $this->actingAs($admin);
+
+        Livewire::actingAs($admin)
+            ->test(\App\Filament\Resources\EventResource\Pages\ManageEventPilot::class, [
+                'record' => $event->getKey(),
+            ])
+            ->fillForm([
+                'pilot_contractor_id' => $contractor->id,
+                'pilot_advance_planned_lines' => [
+                    ['amount' => 900, 'currency_id' => $plnId],
+                ],
+                'pilot_funds_paid' => true,
+            ])
+            ->call('save')
+            ->assertHasNoFormErrors()
+            ->assertSuccessful();
+
+        $event->refresh();
+        $this->assertSame($pilot->id, $event->assigned_to);
+        $this->assertTrue((bool) $event->pilot_funds_paid);
+        $this->assertNotNull($event->pilot_funds_paid_at);
+
+        $settlement = \App\Models\EventSettlement::findActiveForEvent($event);
+        $this->assertNotNull($settlement);
+        $this->assertSame(900.0, (float) $settlement->pilotCashPreparations()
+            ->where('currency_id', $plnId)
+            ->value('provided_amount'));
+    }
+
     public function test_event_finance_pilot_cash_page_records_office_payout(): void
     {
         Role::firstOrCreate(['name' => 'admin']);

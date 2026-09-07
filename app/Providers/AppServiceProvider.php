@@ -28,8 +28,10 @@ use App\Services\Sms\SmsChannelInterface;
 use App\Services\Tfg\HttpTfgFeedClient;
 use App\Services\Tfg\MockTfgFeedClient;
 use App\Services\Tfg\TfgFeedClientInterface;
+use App\Support\Filament\PatchedSelectAlpineComponent;
 use App\Support\FilamentFormBinding;
 use App\Support\ViteAssetResolver;
+use Filament\Support\Assets\AssetManager;
 use Filament\Support\Assets\Css;
 use Filament\Support\Facades\FilamentAsset;
 use Illuminate\Support\Facades\Event as EventFacade;
@@ -38,6 +40,7 @@ use Illuminate\Support\Facades\Schema;
 use Illuminate\Support\Facades\URL;
 use Illuminate\Support\Facades\Vite;
 use Illuminate\Support\ServiceProvider;
+use ReflectionClass;
 use Livewire\Livewire;
 
 class AppServiceProvider extends ServiceProvider
@@ -102,6 +105,8 @@ class AppServiceProvider extends ServiceProvider
             // Keep Filament JS stack isolated. Custom app.js is loaded on front layouts,
             // and injecting it globally into the panel can break table/select Alpine boot.
         ]);
+
+        $this->replaceFilamentSelectAlpineComponent();
 
         // Rejestracja komponenty Blade dla powiadomień
         $this->app['blade.compiler']->component('app.filament.components.topbar-notifications', 'app-filament-components-topbar-notifications');
@@ -168,5 +173,48 @@ class AppServiceProvider extends ServiceProvider
         $host = strtolower($host);
 
         return in_array($host, ['localhost', '127.0.0.1', '::1'], true);
+    }
+
+    /**
+     * Filament Select dokłada puste choice'y (value="") — podmieniamy Alpine component
+     * na poprawiony plik z osobnym ?v=, żeby omijać cache przeglądarki.
+     */
+    private function replaceFilamentSelectAlpineComponent(): void
+    {
+        $fixedPath = public_path('js/sorsystem/select.js');
+        if (! is_file($fixedPath)) {
+            return;
+        }
+
+        $manager = app(AssetManager::class);
+        $reflection = new ReflectionClass($manager);
+        if (! $reflection->hasProperty('alpineComponents')) {
+            return;
+        }
+
+        $property = $reflection->getProperty('alpineComponents');
+        $property->setAccessible(true);
+        /** @var array<string, array<int, mixed>> $components */
+        $components = $property->getValue($manager);
+
+        if (empty($components['filament/forms']) || ! is_array($components['filament/forms'])) {
+            return;
+        }
+
+        foreach ($components['filament/forms'] as $index => $component) {
+            if (! is_object($component) || ! method_exists($component, 'getId')) {
+                continue;
+            }
+
+            if ($component->getId() !== 'select') {
+                continue;
+            }
+
+            $components['filament/forms'][$index] = PatchedSelectAlpineComponent::make('select', $fixedPath)
+                ->package('filament/forms');
+            $property->setValue($manager, $components);
+
+            return;
+        }
     }
 }

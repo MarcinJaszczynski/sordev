@@ -79,6 +79,68 @@ class CreateEventPageTest extends TestCase
         ]);
     }
 
+    public function test_create_event_defaults_staff_and_driver_count_to_one(): void
+    {
+        $admin = User::factory()->create(['status' => 'active']);
+        $admin->assignRole('admin');
+
+        $place = Place::factory()->starting()->create();
+        $template = EventTemplate::factory()->create([
+            'start_place_id' => $place->id,
+            'duration_days' => 2,
+        ]);
+
+        $contractor = Contractor::create([
+            'name' => 'Szkoła Podstawowa',
+            'status' => 'active',
+        ]);
+        $contact = Contact::create([
+            'first_name' => 'Anna',
+            'last_name' => 'Nowak',
+            'email' => 'anna@example.com',
+            'phone' => '500600701',
+        ]);
+        $contractor->contacts()->attach($contact->id);
+
+        $this->actingAs($admin);
+
+        $component = Livewire::test(CreateEvent::class);
+
+        $this->assertSame(1, (int) $component->get('data.staff_count'));
+        $this->assertSame(1, (int) $component->get('data.driver_count'));
+
+        $component
+            ->call('applyClientLookup', [
+                [
+                    'contact_id' => (string) $contact->id,
+                    'contractor_id' => (string) $contractor->id,
+                    'department_label' => null,
+                ],
+            ], 'Anna Nowak · Szkoła Podstawowa', 'anna@example.com', '500600701')
+            ->fillForm([
+                'event_template_id' => $template->id,
+                'name' => 'Wycieczka z domyślną obsługą',
+                'start_date' => '2026-08-01',
+                'duration_days' => 2,
+                'participant_count' => 20,
+                'gratis_count' => 2,
+                'start_place_id' => $place->id,
+                // celowo bez staff_count / driver_count
+            ])
+            ->call('create')
+            ->assertHasNoFormErrors();
+
+        $event = Event::query()->where('name', 'Wycieczka z domyślną obsługą')->first();
+        $this->assertNotNull($event);
+
+        $variant = $event->qtyVariants()->where('qty', 20)->first();
+        $this->assertNotNull($variant);
+        $this->assertSame(1, (int) $variant->staff);
+        $this->assertSame(1, (int) $variant->driver);
+        $this->assertSame(1, $event->resolveStaffCountForParticipantCount(20));
+        $this->assertSame(1, $event->resolveDriverCountForParticipantCount(20));
+    }
+
     public function test_create_event_without_client_shows_validation_error(): void
     {
         $admin = User::factory()->create(['status' => 'active']);

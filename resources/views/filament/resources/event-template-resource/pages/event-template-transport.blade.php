@@ -5,6 +5,17 @@
         </div>
     @endunless
 
+    {{-- Na desktopie Choices potrafi ucinać listę przez overflow sekcji / źle pozycjonować dropdown. --}}
+    <style>
+        .fi-fo-select .choices__list--dropdown,
+        .fi-fo-select .choices__list[aria-expanded="true"] {
+            z-index: 60;
+        }
+        .fi-section:has(.fi-fo-select) {
+            overflow: visible;
+        }
+    </style>
+
     <form wire:submit="save">
         {{ $this->form }}
 
@@ -179,6 +190,25 @@
 
     <script>
         document.addEventListener('DOMContentLoaded', function () {
+            // Filament/Choices czasem dokłada choice z pustym value/label — usuwamy je z dropdownu.
+            const removeEmptyChoices = () => {
+                document.querySelectorAll('.fi-fo-select .choices__list--dropdown .choices__item--choice').forEach((el) => {
+                    const value = el.getAttribute('data-value');
+                    const text = (el.textContent || '').replace(/\s+/g, ' ').trim();
+                    const isLoading = el.hasAttribute('data-choice-disabled') && (value === '' || value === null);
+                    if (isLoading) {
+                        return;
+                    }
+                    if (value === '' || text === '') {
+                        el.remove();
+                    }
+                });
+            };
+
+            removeEmptyChoices();
+            const observer = new MutationObserver(removeEmptyChoices);
+            observer.observe(document.body, { childList: true, subtree: true });
+
             let isCalculating = false;
 
             function showProgress(message, isVisible = true) {

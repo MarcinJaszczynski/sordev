@@ -429,11 +429,17 @@ class ManageEventPilot extends EditRecord
                 }
             }
 
-            // Konto panelu pilota bierzemy z karty kontrahenta tylko gdy karta jest wybrana.
-            // Bez kontrahenta zostawiamy istniejące assigned_to (starsze imprezy tylko z użytkownikiem).
+            // Konto panelu (`assigned_to`) z karty kontrahenta tylko gdy da się je rozwiązać.
+            // Brak konta portalu u kontrahenta NIE może wyzerować istniejącego assigned_to —
+            // inaczej approvePayment pada po zapisie (wcześniej 404, teraz ciche „nie zapisuje”).
             if ($newContractor > 0) {
                 $contractor = \App\Models\Contractor::query()->find($newContractor);
-                $data['assigned_to'] = $assignmentService->resolvePortalUserId($contractor);
+                $portalUserId = $assignmentService->resolvePortalUserId($contractor);
+                if ($portalUserId !== null) {
+                    $data['assigned_to'] = $portalUserId;
+                } else {
+                    unset($data['assigned_to']);
+                }
             } elseif ($previousContractor > 0) {
                 $data['assigned_to'] = null;
             } else {
@@ -550,24 +556,42 @@ class ManageEventPilot extends EditRecord
             );
         }
 
-        if (Schema::hasTable('pilot_advance_lines') && ! $this->record->pilot_funds_paid) {
+        // Sync tylko gdy pole jest w stanie formularza. Brak klucza (dehydracja / zakładka CSS)
+        // nie może kasować planu pustą tablicą tuż przed approvePayment.
+        $plannedLinesFromForm = array_key_exists('pilot_advance_planned_lines', $state)
+            && is_array($state['pilot_advance_planned_lines'])
+            ? $state['pilot_advance_planned_lines']
+            : null;
+
+        if (
+            Schema::hasTable('pilot_advance_lines')
+            && ! $this->record->pilot_funds_paid
+            && $plannedLinesFromForm !== null
+        ) {
             app(PilotAdvanceService::class)->syncPlannedLines(
                 $this->record->fresh(),
-                $state['pilot_advance_planned_lines'] ?? [],
+                $plannedLinesFromForm,
             );
         }
 
         if (Schema::hasTable('pilot_fee_lines')) {
-            app(PilotFeeService::class)->syncDueLines(
-                $this->record->fresh(),
-                $state['pilot_fee_due_lines'] ?? [],
-            );
+            $feeLinesFromForm = array_key_exists('pilot_fee_due_lines', $state)
+                && is_array($state['pilot_fee_due_lines'])
+                ? $state['pilot_fee_due_lines']
+                : null;
+
+            if ($feeLinesFromForm !== null) {
+                app(PilotFeeService::class)->syncDueLines(
+                    $this->record->fresh(),
+                    $feeLinesFromForm,
+                );
+            }
 
             if ($this->pendingPilotFeePaid) {
                 try {
                     app(PilotFeeService::class)->markPaid(
                         $this->record->fresh(),
-                        collect($state['pilot_fee_due_lines'] ?? [])->map(fn (array $line) => [
+                        collect($feeLinesFromForm ?? [])->map(fn (array $line) => [
                             'amount' => $line['amount'] ?? 0,
                             'currency_id' => (int) ($line['currency_id'] ?? 0),
                         ])->all(),
@@ -586,23 +610,24 @@ class ManageEventPilot extends EditRecord
 
         if ($this->pendingPilotPaymentApproval) {
             $advanceService = app(PilotAdvanceService::class);
-            $plannedLines = $state['pilot_advance_planned_lines'] ?? null;
+            $event = $this->record->fresh();
 
             try {
-                if (Schema::hasTable('pilot_advance_lines') && is_array($plannedLines) && $plannedLines !== []) {
+                if (Schema::hasTable('pilot_advance_lines') && is_array($plannedLinesFromForm) && $plannedLinesFromForm !== []) {
                     $advanceService->approvePayment(
-                        $this->record->fresh(),
+                        $event,
                         comment: $state['pilot_advance_paid_comment'] ?? null,
-                        paidLines: collect($plannedLines)->map(fn (array $line) => [
+                        paidLines: collect($plannedLinesFromForm)->map(fn (array $line) => [
                             'amount' => $line['amount'] ?? 0,
                             'currency_id' => (int) ($line['currency_id'] ?? 0),
                         ])->all(),
                     );
                 } else {
+                    // Plan z formularza niedostępny / pusty — bierz linie / legacy z DB.
                     $advanceService->approvePayment(
-                        $this->record->fresh(),
+                        $event,
                         isset($state['pilot_advance_paid_amount']) ? (float) $state['pilot_advance_paid_amount'] : null,
-                        $state['pilot_advance_paid_currency_id'] ?? null,
+                        isset($state['pilot_advance_paid_currency_id']) ? (int) $state['pilot_advance_paid_currency_id'] : null,
                         $state['pilot_advance_paid_comment'] ?? null,
                     );
                 }
@@ -611,6 +636,7 @@ class ManageEventPilot extends EditRecord
                     ->title('Nie oznaczono wypłaty gotówki')
                     ->body($e->getMessage())
                     ->danger()
+                    ->persistent()
                     ->send();
             }
 

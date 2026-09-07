@@ -16,6 +16,18 @@ class EventQty extends Model
         'driver',
     ];
 
+    protected static function booted(): void
+    {
+        static::creating(function (self $model): void {
+            if (is_null($model->staff)) {
+                $model->staff = 1;
+            }
+            if (is_null($model->driver)) {
+                $model->driver = 1;
+            }
+        });
+    }
+
     public function event()
     {
         return $this->belongsTo(Event::class);

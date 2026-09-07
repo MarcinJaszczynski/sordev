@@ -1233,8 +1233,22 @@ class Event extends Model
     protected function resolveQtyFieldForParticipantCount(string $field, ?int $participantCount = null): int
     {
         $count = max(1, (int) ($participantCount ?? $this->participant_count ?? 1));
+        // Brak wariantu: obsługa/kierowca domyślnie 1, gratis 0.
+        $default = in_array($field, ['staff', 'driver'], true) ? 1 : 0;
 
-        return max(0, (int) ($this->closestQtyVariantForParticipantCount($count)?->{$field} ?? 0));
+        return max(0, (int) ($this->closestQtyVariantForParticipantCount($count)?->{$field} ?? $default));
+    }
+
+    /**
+     * Puste (null/'') → $defaultWhenEmpty. Jawne 0 = bez roli (obsługa/kierowca).
+     */
+    public static function normalizeOperationalCount(mixed $value, int $defaultWhenEmpty = 1): int
+    {
+        if ($value === null || $value === '') {
+            return max(0, $defaultWhenEmpty);
+        }
+
+        return max(0, (int) $value);
     }
 
     protected function closestQtyVariantForParticipantCount(int $count): ?EventQty
@@ -1884,8 +1898,12 @@ class Event extends Model
                 $event->syncQtyVariantForGroup(
                     (int) ($data['participant_count'] ?? 1),
                     (int) ($data['gratis_count'] ?? $event->resolveGratisCountForParticipantCount()),
-                    array_key_exists('staff_count', $data) ? (int) $data['staff_count'] : null,
-                    array_key_exists('driver_count', $data) ? (int) $data['driver_count'] : null,
+                    array_key_exists('staff_count', $data)
+                        ? self::normalizeOperationalCount($data['staff_count'])
+                        : null,
+                    array_key_exists('driver_count', $data)
+                        ? self::normalizeOperationalCount($data['driver_count'])
+                        : null,
                 );
             } catch (\Throwable $e) {
                 // ignore qty sync failures

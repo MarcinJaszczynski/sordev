@@ -88,7 +88,7 @@ class EventSnapshot extends Model
                 ];
             })->toArray();
 
-        // Pobierz dane imprezy
+        // Pobierz dane imprezy (bez notes — TipTap HTML „zapytania klienta” nie należy do migawki).
         $eventData = [
             'name' => $event->name,
             'client_name' => $event->client_name,
@@ -98,7 +98,6 @@ class EventSnapshot extends Model
             'end_date' => $event->end_date,
             'participant_count' => $event->participant_count,
             'status' => $event->status,
-            'notes' => $event->notes,
             'event_template_id' => $event->event_template_id,
             'event_template_name' => $event->eventTemplate?->name,
             'assigned_to' => $event->assigned_to,
@@ -193,7 +192,8 @@ class EventSnapshot extends Model
         // Zapisz obecny stan jako snapshot przed przywróceniem
         self::createSnapshot($event, 'manual', 'Backup przed przywróceniem', 'Automatyczny backup przed przywróceniem stanu z: '.$this->name);
 
-        // Przywróć dane imprezy (tylko wybrane pola)
+        // Przywróć dane imprezy (tylko wybrane pola).
+        // notes celowo poza migawką — nie nadpisujemy zapytania klienta przy restore.
         $event->update([
             'name' => $this->event_data['name'],
             'client_name' => $this->event_data['client_name'],
@@ -202,7 +202,6 @@ class EventSnapshot extends Model
             'start_date' => $this->event_data['start_date'],
             'end_date' => $this->event_data['end_date'],
             'participant_count' => $this->event_data['participant_count'],
-            'notes' => $this->event_data['notes'],
             'assigned_to' => $this->event_data['assigned_to'],
         ]);
 

@@ -285,24 +285,31 @@ class EventTemplateTransport extends Page implements HasForms
                 ->action('calculateDistances')
                 ->color('warning'),
             Actions\Action::make('recalculate-prices')
-                ->label('Przelicz ceny (ten szablon)')
+                ->label('Przelicz ceny')
                 ->icon('heroicon-o-calculator')
                 ->visible(fn (): bool => $this->canMutateEventTemplateNow())
                 ->requiresConfirmation()
                 ->action('recalculatePricesForThisTemplate')
                 ->color('success'),
-            Actions\Action::make('force-recalculate-prices')
-                ->label('WYMUSZ przeliczenie cen')
-                ->icon('heroicon-o-calculator')
-                ->visible(fn (): bool => $this->canMutateEventTemplateNow())
-                ->action('forceRecalculatePrices')
-                ->color('danger'),
-            Actions\Action::make('clean-duplicate-currencies')
-                ->label('Pokaż duplikaty walut')
-                ->icon('heroicon-o-exclamation-triangle')
-                ->visible(fn (): bool => $this->canMutateEventTemplateNow())
-                ->action('showDuplicateCurrencies')
-                ->color('warning'),
+            Actions\ActionGroup::make([
+                Actions\Action::make('force-recalculate-prices')
+                    ->label('Wymuś przeliczenie cen')
+                    ->icon('heroicon-o-calculator')
+                    ->visible(fn (): bool => $this->canMutateEventTemplateNow())
+                    ->action('forceRecalculatePrices')
+                    ->color('danger'),
+                Actions\Action::make('clean-duplicate-currencies')
+                    ->label('Pokaż duplikaty walut')
+                    ->icon('heroicon-o-exclamation-triangle')
+                    ->visible(fn (): bool => $this->canMutateEventTemplateNow())
+                    ->action('showDuplicateCurrencies')
+                    ->color('warning'),
+            ])
+                ->label('Narzędzia')
+                ->icon('heroicon-o-ellipsis-vertical')
+                ->color('gray')
+                ->button()
+                ->visible(fn (): bool => $this->canMutateEventTemplateNow()),
         ];
     }
 
@@ -681,16 +688,20 @@ class EventTemplateTransport extends Page implements HasForms
                             ->placeholder('Ilość kilometrów w realizacji programu')
                             ->disabled(fn (): bool => ! $this->canMutateEventTemplateNow()),
 
+                        // Bez preloadu całej listy — na szerokim ekranie Choices+Fuse
+                        // miesza wyniki (Kalisz przy „krakow”). Wąski viewport wyglądał
+                        // lepiej, bo widać mniej pozycji naraz. Szukamy tylko z serwera.
                         Select::make('start_place_id')
                             ->label('Miejsce początkowe (start programu)')
                             ->searchable()
                             ->nullable()
                             ->placeholder('Wpisz nazwę miejsca…')
-                            ->getSearchResultsUsing(fn (string $search): array => \App\Models\Place::searchSelectOptions(
-                                $search,
-                                50,
-                                (int) ($this->data['start_place_id'] ?? $this->record->start_place_id ?? 0) ?: null,
-                            ))
+                            ->searchPrompt('Wpisz min. 2 znaki nazwy miejsca')
+                            ->noSearchResultsMessage('Brak miejsc o takiej nazwie')
+                            ->searchDebounce(200)
+                            ->optionsLimit(40)
+                            ->columnSpanFull()
+                            ->getSearchResultsUsing(fn (string $search): array => \App\Models\Place::searchSelectOptions($search, 40))
                             ->getOptionLabelUsing(fn ($value): ?string => \App\Models\Place::optionLabel(
                                 filled($value) ? (int) $value : null
                             ))
@@ -701,11 +712,12 @@ class EventTemplateTransport extends Page implements HasForms
                             ->searchable()
                             ->nullable()
                             ->placeholder('Wpisz nazwę miejsca…')
-                            ->getSearchResultsUsing(fn (string $search): array => \App\Models\Place::searchSelectOptions(
-                                $search,
-                                50,
-                                (int) ($this->data['end_place_id'] ?? $this->record->end_place_id ?? 0) ?: null,
-                            ))
+                            ->searchPrompt('Wpisz min. 2 znaki nazwy miejsca')
+                            ->noSearchResultsMessage('Brak miejsc o takiej nazwie')
+                            ->searchDebounce(200)
+                            ->optionsLimit(40)
+                            ->columnSpanFull()
+                            ->getSearchResultsUsing(fn (string $search): array => \App\Models\Place::searchSelectOptions($search, 40))
                             ->getOptionLabelUsing(fn ($value): ?string => \App\Models\Place::optionLabel(
                                 filled($value) ? (int) $value : null
                             ))
@@ -785,6 +797,11 @@ class EventTemplateTransport extends Page implements HasForms
 
     public function getTitle(): string
     {
-        return 'Transport - '.$this->record->name;
+        return 'Transport i miejsca startowe';
+    }
+
+    public function getHeading(): string|\Illuminate\Contracts\Support\Htmlable
+    {
+        return 'Transport i miejsca startowe';
     }
 }
