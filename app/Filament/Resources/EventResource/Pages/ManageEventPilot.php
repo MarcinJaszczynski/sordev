@@ -504,6 +504,12 @@ class ManageEventPilot extends EditRecord
                 : null;
         }
 
+        if (Schema::hasColumn('events', 'pilot_settlement_form') && array_key_exists('pilot_settlement_form', $data)) {
+            $data['pilot_settlement_form'] = filled($data['pilot_settlement_form'] ?? null)
+                ? (string) $data['pilot_settlement_form']
+                : null;
+        }
+
         if (Schema::hasColumn('events', 'pilot_funds_paid')) {
             $this->pendingPilotPaymentApproval = ! empty($data['pilot_funds_paid']) && ! $this->record->pilot_funds_paid;
             unset($data['pilot_funds_paid']);

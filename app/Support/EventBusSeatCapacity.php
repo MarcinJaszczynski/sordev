@@ -156,6 +156,49 @@ final class EventBusSeatCapacity
     /**
      * @param  callable(string): mixed  $get
      */
+    public static function resolveFleetMessage(callable $get, ?Event $record = null): ?string
+    {
+        $vehicleId = (int) ($get('main_fleet_vehicle_id') ?: 0);
+        if ($vehicleId <= 0) {
+            return null;
+        }
+
+        $vehicle = Vehicle::query()->find($vehicleId);
+        if (! $vehicle) {
+            return null;
+        }
+
+        $capacity = (int) ($vehicle->capacity ?? 0);
+        if ($capacity <= 0) {
+            return null;
+        }
+
+        $paying = self::resolvePaying($get, $record);
+        $gratis = self::resolveGratis($get, $record, $paying);
+
+        $label = filled($vehicle->registration_number)
+            ? (string) $vehicle->registration_number
+            : $vehicle->displayLabel();
+
+        return self::message($paying, $gratis, $capacity, $label);
+    }
+
+    private static function wrapWarning(?string $message): ?HtmlString
+    {
+        if ($message === null) {
+            return null;
+        }
+
+        return new HtmlString(
+            '<div class="rounded-lg border border-danger-300 bg-danger-50 px-4 py-3 text-sm font-medium text-danger-700 dark:border-danger-700 dark:bg-danger-950/40 dark:text-danger-300">'
+            .e($message)
+            .'</div>'
+        );
+    }
+
+    /**
+     * @param  callable(string): mixed  $get
+     */
     private static function resolvePaying(callable $get, ?Event $record): int
     {
         $fromForm = $get('participant_count');

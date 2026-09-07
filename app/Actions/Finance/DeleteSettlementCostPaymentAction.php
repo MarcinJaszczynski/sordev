@@ -76,7 +76,7 @@ final class DeleteSettlementCostPaymentAction
                 ->first();
         }
 
-        if (in_array($payment->source_type, ['transport_payment', 'accommodation_payment'], true)) {
+        if (in_array($payment->source_type, ['transport_payment', 'accommodation_payment', 'accommodation_hotel_payment', 'accommodation_hotel_stay_payment'], true)) {
             $planType = str_replace('_payment', '', $payment->source_type);
 
             return EventSettlementCost::query()

@@ -801,6 +801,14 @@ class EventHotelPlanEditor extends Component
         return $this->save(showNotification: false);
     }
 
+    /**
+     * Kopiowanie czyta z bazy — najpierw zapisz bieżący stan formularza (w tym pola z debounce/blur).
+     */
+    protected function persistStaysBeforeCopy(): bool
+    {
+        return $this->save(showNotification: false);
+    }
+
     public function initializeEmptyPlan(): void
     {
         $event = Event::findOrFail($this->eventId);
