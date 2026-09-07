@@ -40,7 +40,7 @@ class PilotChecklistPage extends Page
 
     public function getTitle(): string|Htmlable
     {
-        return 'Lista kontrolna: '.$this->event->name;
+        return $this->event->name;
     }
 
     protected function getHeaderActions(): array

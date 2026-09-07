@@ -2,6 +2,8 @@
 
 namespace App\Filament\Pages;
 
+use App\Filament\Resources\ContractorResource;
+use App\Filament\Resources\EventResource;
 use App\Services\ExecutiveStatisticsService;
 use App\Support\ExecutiveAccess;
 use App\Support\ExecutiveModuleNavigation;
@@ -57,5 +59,27 @@ class ExecutiveStatisticsPage extends Page
     public function getSettlementsByStatus(): array
     {
         return app(ExecutiveStatisticsService::class)->settlementsByStatus()->all();
+    }
+
+    public function profitLossUrl(array $query = []): string
+    {
+        $base = ExecutiveProfitLossPage::getUrl();
+
+        return $query === [] ? $base : $base.'?'.http_build_query($query);
+    }
+
+    public function eventsIndexUrl(?string $status = null): string
+    {
+        $params = [];
+        if (filled($status)) {
+            $params['tableFilters']['status']['value'] = $status;
+        }
+
+        return EventResource::getUrl('index', $params);
+    }
+
+    public function contractorsUrl(): string
+    {
+        return ContractorResource::getUrl('index');
     }
 }

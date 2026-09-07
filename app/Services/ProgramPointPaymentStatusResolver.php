@@ -13,6 +13,12 @@ class ProgramPointPaymentStatusResolver
 {
     private const PAYMENT_SOURCE_TYPE = 'program_point_payment';
 
+    /** @var array<int, float> suma native (actual_amount) */
+    protected array $paymentStackNativeByPointId = [];
+
+    /** @var array<int, float> suma PLN (actual_amount_pln z fallbackiem rate) */
+    protected array $paymentStackPlnByPointId = [];
+
     public function __construct(
         protected int $dueSoonDays = 14,
     ) {}
@@ -60,30 +66,98 @@ class ProgramPointPaymentStatusResolver
             ->first();
     }
 
-    protected function sumPaymentStackPln(EventSettlementCost $baseCost, ?EventProgramPoint $point, ?Event $event): float
+    /**
+     * @return array{paid: float, planned: float}
+     */
+    protected function resolveComparableAmounts(EventSettlementCost $cost, ?EventProgramPoint $point, ?Event $event): array
+    {
+        $plannedNative = (float) ($cost->planned_amount ?? 0);
+        $plannedPln = $cost->planned_amount_pln !== null ? (float) $cost->planned_amount_pln : null;
+        if ($plannedPln === null && $plannedNative > 0.009) {
+            $rate = (float) ($cost->planned_rate ?? 0);
+            if ($rate > 0.009 && (bool) ($cost->planned_convert_to_pln ?? false)) {
+                $plannedPln = round($plannedNative * $rate, 2);
+            }
+        }
+
+        [$paidNative, $paidPln] = $this->sumPaymentStacks($cost, $point, $event);
+
+        // Porównuj w PLN tylko gdy obie strony mają wiarygodne PLN.
+        if ($plannedPln !== null && $plannedPln > 0.009 && $paidPln > 0.009) {
+            return ['paid' => $paidPln, 'planned' => $plannedPln];
+        }
+
+        if ($plannedNative > 0.009) {
+            return ['paid' => $paidNative, 'planned' => $plannedNative];
+        }
+
+        return [
+            'paid' => $paidPln > 0.009 ? $paidPln : $paidNative,
+            'planned' => $plannedPln ?? $plannedNative,
+        ];
+    }
+
+    /**
+     * @return array{0: float, 1: float} [native, pln]
+     */
+    protected function sumPaymentStacks(EventSettlementCost $baseCost, ?EventProgramPoint $point, ?Event $event): array
     {
         $settlement = $baseCost->settlement ?? $event?->activeSettlement;
 
         if (! $settlement || ! $point) {
-            return (float) ($baseCost->actual_amount_pln ?? $baseCost->actual_amount ?? 0);
+            return $this->amountsFromCostRow($baseCost);
         }
 
-        $stackSum = (float) $settlement->costs()
+        if (
+            array_key_exists($point->id, $this->paymentStackNativeByPointId)
+            || array_key_exists($point->id, $this->paymentStackPlnByPointId)
+        ) {
+            return [
+                (float) ($this->paymentStackNativeByPointId[$point->id] ?? 0),
+                (float) ($this->paymentStackPlnByPointId[$point->id] ?? 0),
+            ];
+        }
+
+        $rows = $settlement->costs()
             ->where('source_type', self::PAYMENT_SOURCE_TYPE)
             ->where('source_id', $point->id)
             ->whereIn('payment_status', SettlementPaymentHealthService::BOOKED_PAYMENT_STATUSES)
-            ->sum('actual_amount_pln');
+            ->get(['actual_amount', 'actual_amount_pln', 'actual_rate', 'payment_status']);
 
-        if ($stackSum > 0) {
-            return $stackSum;
+        $native = 0.0;
+        $pln = 0.0;
+        foreach ($rows as $row) {
+            [$rowNative, $rowPln] = $this->amountsFromCostRow($row);
+            $native += $rowNative;
+            $pln += $rowPln;
         }
 
-        // Legacy: actual na planie tylko gdy status zaksięgowany.
-        if (SettlementPaymentHealthService::isBookedPaymentStatus($baseCost->payment_status)) {
-            return (float) ($baseCost->actual_amount_pln ?? $baseCost->actual_amount ?? 0);
+        if ($native <= 0.009 && $pln <= 0.009
+            && SettlementPaymentHealthService::isBookedPaymentStatus($baseCost->payment_status)) {
+            return $this->amountsFromCostRow($baseCost);
         }
 
-        return 0.0;
+        return [round($native, 2), round($pln, 2)];
+    }
+
+    /**
+     * @return array{0: float, 1: float} [native, pln]
+     */
+    protected function amountsFromCostRow(EventSettlementCost $row): array
+    {
+        $native = (float) ($row->actual_amount ?? 0);
+        $pln = $row->actual_amount_pln !== null ? (float) $row->actual_amount_pln : 0.0;
+        $rate = (float) ($row->actual_rate ?? 0);
+
+        if ($pln <= 0.009 && $native > 0.009 && $rate > 0.009) {
+            $pln = round($native * $rate, 2);
+        }
+
+        if ($native <= 0.009 && $pln > 0.009) {
+            $native = $pln;
+        }
+
+        return [$native, $pln];
     }
 
     /**
@@ -91,16 +165,17 @@ class ProgramPointPaymentStatusResolver
      */
     protected function resolveFromSettlementCost(EventSettlementCost $cost, ?EventProgramPoint $point = null, ?Event $event = null): array
     {
-        $planned = (float) ($cost->planned_amount_pln ?? $cost->planned_amount ?? 0);
-        $paid = $this->sumPaymentStackPln($cost, $point, $event);
+        $amounts = $this->resolveComparableAmounts($cost, $point, $event);
+        $planned = $amounts['planned'];
+        $paid = $amounts['paid'];
         $status = (string) ($cost->payment_status ?? 'planned');
         $dueDate = $cost->advance_due_date;
 
         if ($planned <= 0.0) {
             return [
-                'code' => 'N/A',
+                'code' => '',
                 'color' => 'gray',
-                'tooltip' => 'Płatność: brak zaplanowanej kwoty w rozliczeniu.',
+                'tooltip' => '',
             ];
         }
 
@@ -149,7 +224,7 @@ class ProgramPointPaymentStatusResolver
             ];
         }
 
-        if (in_array($status, ['advance_required', 'reservation_required', 'planned'], true)) {
+        if (in_array($status, ['advance_required', 'reservation_required', 'planned'], true) || $paid <= 0.0) {
             return [
                 'code' => '$',
                 'color' => 'red',
@@ -179,9 +254,9 @@ class ProgramPointPaymentStatusResolver
 
         if ($planned <= 0.0) {
             return [
-                'code' => 'N/A',
+                'code' => '',
                 'color' => 'gray',
-                'tooltip' => 'Płatność: brak zaplanowanej kwoty.',
+                'tooltip' => '',
             ];
         }
 
@@ -231,5 +306,39 @@ class ProgramPointPaymentStatusResolver
             $cost = $costsByPointId->get($point->id);
             $point->setRelation('settlementCosts', $cost ? collect([$cost]) : collect());
         });
+    }
+
+    /**
+     * @param  Collection<int, EventProgramPoint>  $points
+     */
+    public function preloadPaymentStacks(Collection $points, Event $event): void
+    {
+        $this->paymentStackNativeByPointId = [];
+        $this->paymentStackPlnByPointId = [];
+
+        $settlement = $event->activeSettlement;
+
+        if (! $settlement || $points->isEmpty()) {
+            return;
+        }
+
+        $rows = $settlement->costs()
+            ->where('source_type', self::PAYMENT_SOURCE_TYPE)
+            ->whereIn('source_id', $points->pluck('id'))
+            ->whereIn('payment_status', SettlementPaymentHealthService::BOOKED_PAYMENT_STATUSES)
+            ->reorder()
+            ->get(['source_id', 'actual_amount', 'actual_amount_pln', 'actual_rate']);
+
+        foreach ($rows->groupBy('source_id') as $pointId => $group) {
+            $native = 0.0;
+            $pln = 0.0;
+            foreach ($group as $row) {
+                [$rowNative, $rowPln] = $this->amountsFromCostRow($row);
+                $native += $rowNative;
+                $pln += $rowPln;
+            }
+            $this->paymentStackNativeByPointId[(int) $pointId] = round($native, 2);
+            $this->paymentStackPlnByPointId[(int) $pointId] = round($pln, 2);
+        }
     }
 }

@@ -53,12 +53,17 @@ class SettlementAggregateFinanceTest extends TestCase
 
         $service->persist($event->fresh(), 'transport', $form, false);
 
-        $paymentType = $service->paymentSourceType('transport');
+        $base = $base->fresh();
+        $paymentType = $service->paymentSourceTypeForPlan($base);
         $settlement = EventSettlement::findOrCreateActiveForEvent($event->fresh());
 
         $this->assertTrue($settlement->costs()
             ->where('source_type', $paymentType)
-            ->whereNull('source_id')
+            ->when(
+                $base->source_id !== null,
+                fn ($q) => $q->where('source_id', (int) $base->source_id),
+                fn ($q) => $q->whereNull('source_id'),
+            )
             ->where('advance_amount', 500)
             ->exists());
 
@@ -82,6 +87,43 @@ class SettlementAggregateFinanceTest extends TestCase
         $summary = $service->persist($event->fresh(), 'transport', $form, true);
 
         $this->assertGreaterThan(0, $summary['paid_pln']);
+    }
+
+    public function test_transport_groups_by_contractor_and_migrates_legacy(): void
+    {
+        $contractor = \App\Models\Contractor::create([
+            'name' => 'Autokary Alfa',
+            'status' => 'active',
+        ]);
+
+        $event = Event::factory()->create([
+            'use_manual_transport_cost' => true,
+            'manual_transport_cost' => 5000,
+            'transport_contractor_id' => $contractor->id,
+        ]);
+
+        $sync = app(\App\Services\TransportContractorSettlementSync::class);
+        $cost = $sync->ensureForContractor($event, (int) $contractor->id);
+
+        $this->assertNotNull($cost);
+        $this->assertSame('transport_contractor', $cost->source_type);
+        $this->assertSame((int) $contractor->id, (int) $cost->source_id);
+        $this->assertEqualsWithDelta(5000.0, (float) $cost->planned_amount_pln, 0.01);
+
+        $groups = $sync->financeGroups($event->fresh());
+        $this->assertCount(1, $groups);
+        $this->assertSame((int) $contractor->id, (int) $groups[0]['contractor_id']);
+        $this->assertTrue($groups[0]['is_primary']);
+
+        Livewire::test(SettlementAggregateFinancePanel::class, [
+            'eventId' => $event->getKey(),
+            'aggregateType' => 'transport',
+        ])
+            ->assertSee('Płatności wg przewoźnika')
+            ->assertSee('Autokary Alfa')
+            ->call('openTransportGroupFinance', (int) $contractor->id)
+            ->assertSet('selectedCostId', (int) $cost->id)
+            ->assertSet('selectedRow.supports_reservation', true);
     }
 
     public function test_transport_reference_total_is_kosztorys_not_plan(): void
@@ -113,9 +155,12 @@ class SettlementAggregateFinanceTest extends TestCase
 
         EventFinanceOverviewService::forgetOverviewCacheForEvent((int) $event->id);
         $overview = app(EventFinanceOverviewService::class)->forEvent($event->fresh(), hideZero: false);
-        $row = collect($overview['rows'])->firstWhere('source_type', 'transport');
+        $row = collect($overview['rows'])->first(
+            fn (array $candidate): bool => in_array($candidate['source_type'] ?? null, ['transport', 'transport_contractor'], true)
+        );
 
         $this->assertNotNull($row);
+        $this->assertTrue((bool) ($row['supports_reservation'] ?? false));
         $this->assertEqualsWithDelta(5000.0, (float) $row['calculation_pln'], 0.01);
         $this->assertEqualsWithDelta(4000.0, (float) $row['planned_pln'], 0.01);
 
@@ -124,7 +169,7 @@ class SettlementAggregateFinanceTest extends TestCase
         $this->assertEqualsWithDelta(5000.0, (float) $form['event_point_total'], 0.01);
     }
 
-    public function test_transport_finance_panel_renders_and_exposes_plan_action(): void
+    public function test_transport_finance_panel_opens_settlement_drawer(): void
     {
         $event = Event::factory()->create([
             'transfer_km' => 100,
@@ -134,19 +179,86 @@ class SettlementAggregateFinanceTest extends TestCase
             'manual_transport_cost' => 5000,
         ]);
 
-        app(SettlementAggregateFinanceService::class)->ensureBaseCost($event, 'transport');
+        $base = app(SettlementAggregateFinanceService::class)->ensureBaseCost($event, 'transport');
+        $this->assertNotNull($base);
 
         Livewire::test(SettlementAggregateFinancePanel::class, [
             'eventId' => $event->getKey(),
             'aggregateType' => 'transport',
             'heading' => 'Finanse transportu',
         ])
-            ->assertSee('Finanse transportu')
-            ->assertSee('Plan')
+            ->assertSee('Planowane')
             ->assertSee('Zaliczka')
             ->assertSee('Wpłaty')
-            ->assertActionExists('plan')
-            ->assertActionExists('advance')
-            ->assertActionExists('payments');
+            ->call('openAggregateFinance', 'advance')
+            ->assertSet('selectedCostId', (int) $base->id)
+            ->assertSet('showPaymentForm', true)
+            ->assertSet('paymentForm.advance_type', 'advance')
+            ->call('closeCost')
+            ->assertSet('selectedCostId', null)
+            ->call('openAggregateFinance', 'payment')
+            ->assertSet('selectedCostId', (int) $base->id)
+            ->assertSet('showPaymentForm', true)
+            ->call('closeCost')
+            ->call('openAggregateFinance', 'plan')
+            ->assertSet('selectedCostId', (int) $base->id)
+            ->assertSet('showPlanForm', true);
+    }
+
+    public function test_transport_drawer_records_advance_and_second_payment(): void
+    {
+        $event = Event::factory()->create([
+            'use_manual_transport_cost' => true,
+            'manual_transport_cost' => 5000,
+        ]);
+
+        $base = app(SettlementAggregateFinanceService::class)->ensureBaseCost($event, 'transport');
+        $this->assertNotNull($base);
+
+        $component = Livewire::test(SettlementAggregateFinancePanel::class, [
+            'eventId' => $event->getKey(),
+            'aggregateType' => 'transport',
+        ])
+            ->call('openAggregateFinance', 'advance')
+            ->set('paymentForm.amount_pln', 500)
+            ->set('paymentForm.payment_method', 'transfer')
+            ->set('paymentForm.paid_at', now()->toDateString())
+            ->call('savePayment')
+            ->assertHasNoErrors();
+
+        $settlement = EventSettlement::findOrCreateActiveForEvent($event->fresh());
+        $paymentType = $base->source_type.'_payment';
+        $payments = $settlement->costs()
+            ->where('source_type', $paymentType)
+            ->when(
+                $base->source_id !== null,
+                fn ($q) => $q->where('source_id', (int) $base->source_id),
+                fn ($q) => $q->whereNull('source_id'),
+            )
+            ->get();
+
+        $this->assertCount(1, $payments);
+        $this->assertEqualsWithDelta(500.0, (float) $payments->first()->actual_amount_pln, 0.01);
+
+        $component
+            ->call('openAggregateFinance', 'payment')
+            ->set('paymentForm.advance_type', 'supplement')
+            ->set('paymentForm.amount_pln', 1500)
+            ->set('paymentForm.payment_method', 'transfer')
+            ->set('paymentForm.paid_at', now()->toDateString())
+            ->call('savePayment')
+            ->assertHasNoErrors();
+
+        $this->assertSame(
+            2,
+            $settlement->fresh()->costs()
+                ->where('source_type', $paymentType)
+                ->when(
+                    $base->source_id !== null,
+                    fn ($q) => $q->where('source_id', (int) $base->source_id),
+                    fn ($q) => $q->whereNull('source_id'),
+                )
+                ->count()
+        );
     }
 }

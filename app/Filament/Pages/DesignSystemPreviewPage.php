@@ -51,6 +51,7 @@ class DesignSystemPreviewPage extends Page
             ['group' => FilamentNavigation::GROUP_FINANCE, 'icon' => FilamentNavigation::groupIcon(FilamentNavigation::GROUP_FINANCE), 'class' => FilamentNavigation::groupCssClass(FilamentNavigation::GROUP_FINANCE)],
             ['group' => FilamentNavigation::GROUP_EXECUTIVE, 'icon' => FilamentNavigation::groupIcon(FilamentNavigation::GROUP_EXECUTIVE), 'class' => FilamentNavigation::groupCssClass(FilamentNavigation::GROUP_EXECUTIVE)],
             ['group' => FilamentNavigation::GROUP_CONTACTS, 'icon' => FilamentNavigation::groupIcon(FilamentNavigation::GROUP_CONTACTS), 'class' => FilamentNavigation::groupCssClass(FilamentNavigation::GROUP_CONTACTS)],
+            ['group' => FilamentNavigation::GROUP_PEOPLE, 'icon' => FilamentNavigation::groupIcon(FilamentNavigation::GROUP_PEOPLE), 'class' => FilamentNavigation::groupCssClass(FilamentNavigation::GROUP_PEOPLE)],
             ['group' => FilamentNavigation::GROUP_DICTIONARIES, 'icon' => FilamentNavigation::groupIcon(FilamentNavigation::GROUP_DICTIONARIES), 'class' => FilamentNavigation::groupCssClass(FilamentNavigation::GROUP_DICTIONARIES)],
             ['group' => FilamentNavigation::GROUP_SYSTEM, 'icon' => FilamentNavigation::groupIcon(FilamentNavigation::GROUP_SYSTEM), 'class' => FilamentNavigation::groupCssClass(FilamentNavigation::GROUP_SYSTEM)],
         ];

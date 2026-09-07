@@ -608,9 +608,16 @@ class EventTemplateCalculationEngine
                 $common = [20, 25, 30, 35, 40];
                 $qtyVariants = EventTemplateQty::whereIn('qty', $common)->get();
                 if ($qtyVariants->isEmpty()) {
-                    $qtyVariants = EventTemplateQty::all();
+                    $qtyVariants = EventTemplateQty::query()->orderBy('qty')->get();
                 }
             }
+        }
+
+        // qtyVariants() bierze się z PPP — przy pustym cenniku bez fallbacku nie da się
+        // odtworzyć cen (force-delete → puste qty → brak zapisu → oferta znika z WWW).
+        // Spójne z EventTemplateUiCalculationService / widgetem cen.
+        if ($qtyVariants->isEmpty()) {
+            $qtyVariants = EventTemplateQty::query()->orderBy('qty')->get();
         }
 
         return $qtyVariants;

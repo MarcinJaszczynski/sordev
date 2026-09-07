@@ -70,7 +70,14 @@ final class SettlementCostContractorResolver
 
         $sourceType = (string) ($cost->source_type ?? '');
 
-        if ($sourceType === 'transport') {
+        if ($sourceType === 'transport' || $sourceType === 'transport_contractor') {
+            if ($sourceType === 'transport_contractor' && filled($cost->contractor_id ?: $cost->source_id)) {
+                $contractor = Contractor::query()->find((int) ($cost->contractor_id ?: $cost->source_id));
+                if ($contractor) {
+                    return $this->packContractor($contractor, 'transport');
+                }
+            }
+
             $transportContractor = $this->resolveTransportContractor($event);
             if ($transportContractor) {
                 return $this->packContractor($transportContractor, 'transport');

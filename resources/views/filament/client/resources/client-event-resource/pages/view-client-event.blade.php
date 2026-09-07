@@ -9,7 +9,7 @@
         'contactUrl' => $contactUrl ?? null,
     ])
 
-    <div class="client-portal-section">
-        {{ $this->infolist }}
-    </div>
+    @include('filament.client.partials.trip-info-cards', [
+        'event' => $this->record,
+    ])
 </x-filament-panels::page>

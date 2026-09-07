@@ -48,9 +48,7 @@ class FinancialReportPage extends Page implements HasForms
 
     public static function canAccess(): bool
     {
-        $user = auth()->user();
-
-        return $user && ($user->hasRole(['admin', 'super_admin', 'ksiegowosc']) || $user->can('view_any_event::settlement'));
+        return \App\Support\ExecutiveAccess::canAccessSensitiveAnalytics();
     }
 
     public function mount(): void

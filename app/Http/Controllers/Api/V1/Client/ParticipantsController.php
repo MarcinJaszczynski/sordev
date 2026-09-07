@@ -43,6 +43,8 @@ class ParticipantsController extends BaseApiController
                     'id' => $p->id,
                     'first_name' => $p->first_name,
                     'last_name' => $p->last_name,
+                    'gender' => $p->gender,
+                    'gender_label' => $p->genderLabel(),
                     'diet' => $p->diet,
                     'consents' => EventParticipantConsents::checklist($p->consents ?? null),
                     'balance' => $status,
@@ -131,6 +133,7 @@ class ParticipantsController extends BaseApiController
         $validated = $request->validate([
             'first_name' => ['required_without:last_name', 'nullable', 'string', 'max:120'],
             'last_name' => ['nullable', 'string', 'max:120'],
+            'gender' => ['nullable', 'string', 'in:'.implode(',', array_keys(EventParticipant::$genders))],
             'diet' => ['nullable', 'string', 'max:255'],
             'consents' => ['nullable', 'array'],
             'consents.*' => ['boolean'],
@@ -146,6 +149,7 @@ class ParticipantsController extends BaseApiController
             participant: $participant,
             firstName: trim((string) ($validated['first_name'] ?? '')) ?: null,
             lastName: trim((string) ($validated['last_name'] ?? '')) ?: null,
+            gender: filled($validated['gender'] ?? null) ? (string) $validated['gender'] : null,
             diet: trim((string) ($validated['diet'] ?? '')) ?: null,
             consentFlags: $flags,
             ensurePayment: false,
@@ -165,6 +169,8 @@ class ParticipantsController extends BaseApiController
             'id' => $saved->id,
             'first_name' => $saved->first_name,
             'last_name' => $saved->last_name,
+            'gender' => $saved->gender,
+            'gender_label' => $saved->genderLabel(),
             'diet' => $saved->diet,
         ], $participant ? 'Zaktualizowano uczestnika.' : 'Dodano uczestnika.', $participant ? 200 : 201);
     }

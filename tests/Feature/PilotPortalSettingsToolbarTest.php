@@ -169,6 +169,54 @@ class PilotPortalSettingsToolbarTest extends TestCase
         $component->assertSee('Podgląd jako Jan Pilot');
     }
 
+    public function test_preview_label_uses_contractor_name_when_assigned_user_differs(): void
+    {
+        if (! \Illuminate\Support\Facades\Schema::hasColumn('events', 'pilot_contractor_id')) {
+            $this->markTestSkipped('pilot_contractor_id column is required.');
+        }
+
+        $admin = User::factory()->create(['status' => 'active']);
+        $admin->assignRole('admin');
+
+        $oldPilot = User::factory()->create([
+            'status' => 'active',
+            'name' => 'Aleksander Jaszczynski',
+            'email' => 'aleksander@example.test',
+        ]);
+        $oldPilot->assignRole('pilot');
+
+        $newPilot = User::factory()->create([
+            'status' => 'active',
+            'name' => 'Aleksandra Kalisz',
+            'email' => 'aleksandra.kalisz@example.test',
+        ]);
+        $newPilot->assignRole('pilot');
+
+        $pilotType = \App\Models\ContractorType::query()->firstOrCreate(['name' => 'pilot']);
+        \App\Models\ContractorType::clearIdsForNamesCache();
+
+        $contractor = \App\Models\Contractor::create([
+            'name' => 'Aleksandra Kalisz',
+            'email' => 'aleksandra.kalisz@example.test',
+            'status' => 'active',
+        ]);
+        $contractor->types()->sync([$pilotType->getKey()]);
+
+        $event = Event::factory()->create([
+            'assigned_to' => $oldPilot->id,
+            'pilot_contractor_id' => $contractor->id,
+            'shared_with_pilot' => true,
+        ]);
+
+        $this->actingAs($admin);
+
+        $component = Livewire::test(PilotPortalSettingsToolbar::class, ['eventId' => $event->id]);
+
+        $this->assertSame('Podgląd jako Aleksandra Kalisz', $component->instance()->previewAsPilotLabel());
+        $this->assertStringContainsString('pilot='.$newPilot->id, $component->instance()->previewUrl());
+        $this->assertStringNotContainsString('pilot='.$oldPilot->id, $component->instance()->previewUrl());
+    }
+
     public function test_preview_as_pilot_hidden_label_when_no_pilot_assigned(): void
     {
         $admin = User::factory()->create(['status' => 'active']);
@@ -230,5 +278,25 @@ class PilotPortalSettingsToolbarTest extends TestCase
 
         $this->assertFalse($event->fresh()->showsPilotCurrencyExchange());
         $this->assertFalse((bool) $event->fresh()->pilot_portal_show_currency_exchange);
+        $this->assertFalse($event->fresh()->showsPilotAttendance());
+    }
+
+    public function test_toggle_attendance_dispatches_visibility_event(): void
+    {
+        $admin = User::factory()->create(['status' => 'active']);
+        $admin->assignRole('admin');
+
+        $event = Event::factory()->create([
+            'status' => Event::STATUS_CONFIRMED,
+            'pilot_portal_show_attendance' => false,
+        ]);
+
+        $this->actingAs($admin);
+
+        Livewire::test(PilotPortalSettingsToolbar::class, ['eventId' => $event->id])
+            ->callAction('toggleAttendance')
+            ->assertDispatched('pilot-portal-visibility-updated');
+
+        $this->assertTrue((bool) $event->fresh()->pilot_portal_show_attendance);
     }
 }

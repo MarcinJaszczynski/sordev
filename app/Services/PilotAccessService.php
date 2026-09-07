@@ -91,8 +91,8 @@ class PilotAccessService
         return [
             'title' => 'Podgląd: '.$name.' · tylko odczyt',
             'description' => $pilot
-                ? 'Widzisz portal jak przypisany pilot (także przed „Udostępnij”). Mutacje są zablokowane.'
-                : 'Tryb podglądu biura bez konkretnego pilota — lista wycieczek. Wybierz „Podgląd jako ten pilot” z imprezy.',
+                ? 'Widzisz portal jak przypisany pilot (także przed „Udostępnij”). Zapis jest wyłączony.'
+                : 'Brak wybranego pilota — lista wycieczek jest pusta. Wejdź przez „Podgląd jako ten pilot” z imprezy w biurze.',
             'exitUrl' => url('/pilot/pilot-events?exit_preview=1'),
         ];
     }
@@ -105,15 +105,41 @@ class PilotAccessService
             return ! $this->isArchived($event);
         }
 
+        // Podgląd biura bez konkretnego pilota nie daje pełnego dostępu do cudzych wycieczek.
         if ($user && $this->isOfficePreview($user) && ! PilotPreviewMiddleware::previewUserId()) {
-            return true;
+            return false;
         }
 
-        if ($user?->hasRole(['admin', 'super_admin', 'biuro']) && ! $user->hasRole('pilot')) {
+        if ($this->isOfficeStaff($user) && ! $user->hasRole('pilot')) {
             return true;
         }
 
         return ! $this->isArchived($event);
+    }
+
+    /**
+     * Role biura / admina, które mogą podglądać portal pilota (read-only przez preview).
+     *
+     * @return list<string>
+     */
+    public function officeStaffRoles(): array
+    {
+        return ['admin', 'super_admin', 'biuro'];
+    }
+
+    public function isOfficeStaff(?User $user = null): bool
+    {
+        $user ??= auth()->user();
+
+        return (bool) $user?->hasRole($this->officeStaffRoles());
+    }
+
+    /**
+     * Staff (admin/biuro) z aktywnym trybem podglądu — dostęp do stron panelu /pilot.
+     */
+    public function canStaffPreviewPortal(?User $user = null): bool
+    {
+        return $this->isOfficeStaff($user) && PilotPreviewMiddleware::isActive();
     }
 
     public function isOfficePreview(?User $user = null): bool
@@ -125,7 +151,7 @@ class PilotAccessService
         }
 
         return PilotPreviewMiddleware::isActive()
-            && $user->hasRole(['admin', 'super_admin', 'biuro']);
+            && $this->isOfficeStaff($user);
     }
 
     /**
@@ -135,14 +161,15 @@ class PilotAccessService
     {
         $previewPilot = $this->previewPilotUser();
         if ($previewPilot) {
-            // Podgląd biura: wszystkie przypisane do tego pilota (także przed „Udostępnij”).
+            // Podgląd biura: tylko wycieczki przypisane do wybranego pilota (także przed „Udostępnij”).
             return Event::query()
                 ->where('assigned_to', $previewPilot->id)
                 ->where('status', '!=', Event::STATUS_CANCELLED);
         }
 
+        // Podgląd bez wybranego pilota — pusta lista (nie wszystkie imprezy biura).
         if ($this->isOfficePreview($user)) {
-            return Event::query()->where('status', '!=', Event::STATUS_CANCELLED);
+            return Event::query()->whereRaw('1 = 0');
         }
 
         if ($user->hasRole('pilot')) {
@@ -223,14 +250,14 @@ class PilotAccessService
         }
 
         if ($this->isOfficePreview($user) && ! PilotPreviewMiddleware::previewUserId()) {
-            return true;
+            return false;
         }
 
         if ($user->hasRole('pilot')) {
             return $this->pilotOwnsTrip($user, $event);
         }
 
-        if ($user->hasRole(['admin', 'super_admin', 'biuro'])) {
+        if ($this->isOfficeStaff($user)) {
             return true;
         }
 

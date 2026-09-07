@@ -145,11 +145,12 @@ class ProgramPointsRelationManagerOrderPrefillTest extends TestCase
             'parent_id' => null,
         ]);
 
+        // Widok Lista — dzień jest edytowalny; w widoku Dzień pole jest zablokowane.
         Livewire::actingAs($user)
             ->test(ProgramPointsRelationManager::class, [
                 'ownerRecord' => $event,
                 'pageClass' => EditEventProgram::class,
-                'ownerProgramView' => 'days',
+                'ownerProgramView' => 'list',
                 'ownerProgramDay' => 1,
             ])
             ->mountTableAction('add_program_point')
@@ -164,5 +165,91 @@ class ProgramPointsRelationManagerOrderPrefillTest extends TestCase
                 'day' => 2,
                 'order' => 6,
             ]);
+    }
+
+    public function test_add_blank_point_stays_on_active_day_and_does_not_create_facultative_tab(): void
+    {
+        $user = User::factory()->create();
+        $user->assignRole('admin');
+
+        $event = Event::factory()->create([
+            'start_date' => '2026-06-01',
+            'end_date' => '2026-06-03',
+            'duration_days' => 3,
+        ]);
+
+        $currency = \App\Models\Currency::factory()->create(['code' => 'PLN', 'symbol' => 'PLN']);
+
+        // day=4 (fakultatyw) jest w opcjach selecta, ale widok Dzień wymusza aktywną zakładkę.
+        Livewire::actingAs($user)
+            ->test(ProgramPointsRelationManager::class, [
+                'ownerRecord' => $event,
+                'pageClass' => EditEventProgram::class,
+                'ownerProgramView' => 'days',
+                'ownerProgramDay' => 2,
+            ])
+            ->callTableAction('add_program_point', data: [
+                'name' => 'Punkt spoza szablonu',
+                'day' => 4,
+                'order' => 1,
+                'unit_price' => 0,
+                'currency_id' => $currency->id,
+                'include_in_program' => true,
+                'include_in_calculation' => true,
+                'active' => true,
+            ])
+            ->assertHasNoTableActionErrors();
+
+        $point = EventProgramPoint::query()
+            ->where('event_id', $event->id)
+            ->where('name', 'Punkt spoza szablonu')
+            ->first();
+
+        $this->assertNotNull($point);
+        $this->assertSame(2, (int) $point->day);
+        $this->assertSame(3, $event->fresh()->resolveProgramDaysCount());
+        $this->assertFalse($event->fresh()->isFacultativeProgramDay((int) $point->day));
+    }
+
+    public function test_add_from_catalog_template_uses_active_day_not_runaway_day(): void
+    {
+        $user = User::factory()->create();
+        $user->assignRole('admin');
+
+        $event = Event::factory()->create([
+            'start_date' => '2026-06-01',
+            'end_date' => '2026-06-03',
+            'duration_days' => 3,
+        ]);
+        $template = EventTemplateProgramPoint::factory()->create([
+            'name' => 'Rejs katalogowy',
+            'unit_price' => 10,
+        ]);
+
+        Livewire::actingAs($user)
+            ->test(ProgramPointsRelationManager::class, [
+                'ownerRecord' => $event,
+                'pageClass' => EditEventProgram::class,
+                'ownerProgramView' => 'days',
+                'ownerProgramDay' => 2,
+            ])
+            ->callTableAction('add_program_point', data: [
+                'source_point' => 'template_'.$template->id,
+                'name' => 'Rejs katalogowy',
+                'day' => 4,
+                'order' => 1,
+                'include_in_program' => true,
+                'include_in_calculation' => true,
+                'active' => true,
+            ]);
+
+        $point = EventProgramPoint::query()
+            ->where('event_id', $event->id)
+            ->where('event_template_program_point_id', $template->id)
+            ->first();
+
+        $this->assertNotNull($point);
+        $this->assertSame(2, (int) $point->day);
+        $this->assertSame(3, $event->fresh()->resolveProgramDaysCount());
     }
 }

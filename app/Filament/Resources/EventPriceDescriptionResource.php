@@ -10,6 +10,7 @@ use Filament\Forms\Form;
 use Filament\Resources\Resource;
 use Filament\Tables;
 use Filament\Tables\Table;
+use FilamentTiptapEditor\TiptapEditor;
 
 class EventPriceDescriptionResource extends Resource
 {
@@ -17,11 +18,9 @@ class EventPriceDescriptionResource extends Resource
 
     protected static ?string $navigationIcon = 'heroicon-o-currency-euro';
 
-    protected static ?string $navigationGroup = FilamentNavigation::GROUP_CONFIG;
+    protected static ?string $navigationGroup = FilamentNavigation::GROUP_DICTIONARIES;
 
-    protected static ?string $label = 'Opis ceny imprezy';
-
-    protected static ?string $pluralLabel = 'Opisy cen imprez';
+    protected static ?string $navigationLabel = 'Opisy cen imprez';
 
     protected static ?string $modelLabel = 'opis ceny imprezy';
 
@@ -29,35 +28,60 @@ class EventPriceDescriptionResource extends Resource
 
     protected static ?int $navigationSort = 120;
 
-    public static function shouldRegisterNavigation(): bool
+    /**
+     * Wspólny schemat formularza (CRUD + create/edit z selecta na szablonie).
+     *
+     * @return array<int, Forms\Components\Component>
+     */
+    public static function getFormSchema(): array
     {
-        return false;
+        return [
+            Forms\Components\TextInput::make('name')
+                ->label('Nazwa')
+                ->required()
+                ->maxLength(255),
+            TiptapEditor::make('description')
+                ->label('Opis (możesz używać <b>, <ul>, <li> itd.)')
+                ->required()
+                ->columnSpanFull(),
+        ];
     }
 
     public static function form(Form $form): Form
     {
-        return $form
-            ->schema([
-                Forms\Components\TextInput::make('name')
-                    ->label('Nazwa')
-                    ->required(),
-                \FilamentTiptapEditor\TiptapEditor::make('description')
-                    ->label('Opis (możesz używać <b>, <ul>, <li> itd.)')
-                    ->required()
-
-                    ->columnSpanFull(),
-            ]);
+        return $form->schema(static::getFormSchema());
     }
 
     public static function table(Table $table): Table
     {
         return $table
             ->columns([
-                Tables\Columns\TextColumn::make('name')->label('Nazwa'),
-                Tables\Columns\TextColumn::make('description')->label('Opis')->limit(80)->html(),
+                Tables\Columns\TextColumn::make('name')
+                    ->label('Nazwa')
+                    ->searchable()
+                    ->sortable(),
+                Tables\Columns\TextColumn::make('description')
+                    ->label('Opis')
+                    ->limit(80)
+                    ->html()
+                    ->wrap(),
+                Tables\Columns\TextColumn::make('event_templates_count')
+                    ->counts('eventTemplates')
+                    ->label('Szablony')
+                    ->sortable(),
+                Tables\Columns\TextColumn::make('updated_at')
+                    ->label('Aktualizacja')
+                    ->dateTime('Y-m-d H:i')
+                    ->sortable()
+                    ->toggleable(isToggledHiddenByDefault: true),
             ])
-            ->filters([
-                // Można dodać filtry po nazwie
+            ->defaultSort('name')
+            ->actions([
+                Tables\Actions\EditAction::make(),
+                Tables\Actions\DeleteAction::make(),
+            ])
+            ->bulkActions([
+                Tables\Actions\DeleteBulkAction::make(),
             ]);
     }
 

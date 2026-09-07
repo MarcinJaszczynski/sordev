@@ -11,7 +11,8 @@ class GenerateImagePreviews extends Command
     protected $signature = 'images:generate-previews
                             {--disk=public : Dysk storage do przetworzenia}
                             {--directory=event-templates : Katalog z istniejącymi obrazami}
-                            {--force : Nadpisz istniejące miniatury i WebP}';
+                            {--force : Nadpisz istniejące miniatury i WebP}
+                            {--purge-thumbs : Usuń stare pliki w thumbs/ przed regeneracją}';
 
     protected $description = 'Generuje prewki i warianty WebP dla istniejących zdjęć w storage.';
 
@@ -20,6 +21,7 @@ class GenerateImagePreviews extends Command
         $disk = (string) $this->option('disk');
         $directory = trim((string) $this->option('directory'), '/');
         $force = (bool) $this->option('force');
+        $purgeThumbs = (bool) $this->option('purge-thumbs');
 
         if ($directory === '') {
             $this->error('Podaj katalog do przetworzenia, np. --directory=event-templates');
@@ -33,7 +35,14 @@ class GenerateImagePreviews extends Command
             return self::FAILURE;
         }
 
-        $this->info("Generowanie prewek dla {$directory} na dysku {$disk}...");
+        if ($purgeThumbs) {
+            $deleted = ImageCompressionService::purgeThumbnails($disk, $directory);
+            $this->info("Usunięto stare prewki: {$deleted}");
+            // Po purge zawsze nadpisujemy / tworzymy thumbs od zera.
+            $force = true;
+        }
+
+        $this->info("Generowanie prewek ({$directory}, dysk {$disk}, rozmiar ".ImageCompressionService::THUMBNAIL_SIZE.'px)...');
 
         $results = ImageCompressionService::compressExistingImages($disk, $directory, $force);
 

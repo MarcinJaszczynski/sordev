@@ -27,7 +27,6 @@ class EventInquiryNotificationService
             title: $this->buildTitle($event),
             description: $this->buildDescription($event),
             priority: TaskPriority::Urgent,
-            dueDate: now()->addDay(),
             eventForAssignee: $event,
             preferredAssigneeId: $author?->id,
             url: AdminPanelUrls::eventEdit($event),

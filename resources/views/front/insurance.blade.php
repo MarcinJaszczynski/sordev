@@ -1,6 +1,13 @@
 <!-- Style przeniesione do public/dist-front/css/style.css -->
 @extends('front.layout.master')
 
+@section('head')
+    @include('front.partials.seo', [
+        'pageTitle' => 'Ubezpieczenia na wycieczki szkolne | Biuro Podróży RAFA',
+        'pageDescription' => 'Sprawdź ubezpieczenia dla wycieczek szkolnych i grupowych: NNW, KL i opcje dodatkowe. Biuro Podróży RAFA wspiera szkoły i organizatorów w doborze ochrony.',
+    ])
+@endsection
+
 @section('main_content')
     <div class="page-top">
         <div class="container">
@@ -65,7 +72,7 @@
                 <div class="included" ><div class="incl">wliczone w cenę wycieczki</div></div>
                 <ul class="price-cards-details">
                     <h6>Zakres ubezpieczenia:</h6>
-                    <li><i class="fas fa-check"></i> Ubezpieczenie KL i Asistatanse do kwoty 70 000 euro/osoba</li>
+                    <li><i class="fas fa-check"></i> Ubezpieczenie KL i Asistatanse do kwoty 300 000 euro/osoba</li>
                     <li><i class="fas fa-check"></i> Ubezpieczenie NNW do kwoty 35 000 zł/osoba</li>
                     <li><i class="fas fa-check"></i> Ubezpieczenie OC do kwoty 60 000 euro/osoba </li>
                     <li><i class="fas fa-check"></i> Ubezpieczenie bagażu podróżnego do kwoty 2 500 zł</li>

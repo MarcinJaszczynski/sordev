@@ -11,6 +11,7 @@ use App\Models\TaskComment;
 use App\Services\NotificationService;
 use App\Support\Tasks\TaskAttachmentStore;
 use App\Support\Tasks\TaskContextRegistry;
+use App\Support\Tasks\TaskDueDates;
 use Filament\Forms\Concerns\InteractsWithForms;
 use Filament\Forms\Contracts\HasForms;
 use Filament\Forms\Form;
@@ -62,8 +63,11 @@ class TaskFullEditor extends Component implements HasForms
 
         $this->record = new Task;
 
+        $resolvedDueDate = $defaultDueDate
+            ?? TaskDueDates::defaultForNew()->format('Y-m-d H:i:s');
+
         $this->form->fill(array_merge([
-            'due_date' => $defaultDueDate,
+            'due_date' => $resolvedDueDate,
             'status_id' => Task::getDefaultStatusId(),
             'priority' => TaskPriority::Normal->value,
             'assignee_id' => Auth::id(),

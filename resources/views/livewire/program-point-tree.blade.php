@@ -24,7 +24,7 @@
             <input type="checkbox"
                 @click.stop="window.livewire.emit('togglePivotProperty', {{ $point['pivot_id'] }}, 'include_in_calculation')"
                 {{ $point['include_in_calculation'] ? 'checked' : '' }}>
-            <span>Kalkulacja</span>
+            <span>W kosztach</span>
         </label>
         <label class="flex items-center space-x-1 text-xs">
             <input type="checkbox"

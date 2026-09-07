@@ -2,11 +2,13 @@
 
 namespace App\Models;
 
+use App\Enums\ContractorSettlementForm;
 use App\Models\Concerns\HasStickyNotes;
 use App\Models\Concerns\HasTasks;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\Eloquent\Relations\BelongsToMany;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Database\Eloquent\SoftDeletes;
 use Illuminate\Support\Facades\Schema;
@@ -37,12 +39,15 @@ class Contractor extends Model
      * @var array<int, string>
      */
     protected $fillable = [
+        'legacy_contractor_id',
         'name',
         'firstname',
         'surname',
         'email',
         'phone',
         'nip',
+        'bank_account',
+        'settlement_form',
         'www',
         'street',
         'house_number',
@@ -61,6 +66,7 @@ class Contractor extends Model
     protected $casts = [
         'birth_date' => 'date',
         'uses_business_locations' => 'boolean',
+        'settlement_form' => ContractorSettlementForm::class,
     ];
 
     /**
@@ -152,6 +158,14 @@ class Contractor extends Model
     }
 
     /**
+     * Noclegi hotelowe przypisane do tego kontrahenta
+     */
+    public function hotelStays(): HasMany
+    {
+        return $this->hasMany(EventHotelStay::class);
+    }
+
+    /**
      * Imprezy, w których kontrahent jest zamawiającym
      */
     public function orderingEvents()
@@ -159,6 +173,52 @@ class Contractor extends Model
         return $this->belongsToMany(Event::class, 'event_contractor')
             ->withPivot('sort_order')
             ->withTimestamps();
+    }
+
+    /**
+     * Imprezy z legacy FK events.contractor_id (główny klient)
+     */
+    public function clientEvents(): HasMany
+    {
+        return $this->hasMany(Event::class, 'contractor_id');
+    }
+
+    /**
+     * Imprezy archiwalne (stary SOR) — zamawiający lub wykonawca (pivot contractor_legacy_event).
+     */
+    public function legacyEvents(): BelongsToMany|HasMany
+    {
+        if (Schema::hasTable('contractor_legacy_event')) {
+            return $this->belongsToMany(LegacyEvent::class, 'contractor_legacy_event')
+                ->withPivot(['role', 'type_name'])
+                ->withTimestamps()
+                ->orderByDesc('legacy_events.start_datetime');
+        }
+
+        return $this->hasMany(LegacyEvent::class, 'contractor_id')->orderByDesc('start_datetime');
+    }
+
+    /**
+     * Tylko jako zamawiający (FK legacy_events.contractor_id).
+     */
+    public function legacyEventsAsPurchaser(): HasMany
+    {
+        return $this->hasMany(LegacyEvent::class, 'contractor_id')->orderByDesc('start_datetime');
+    }
+
+    public function transportEvents(): HasMany
+    {
+        return $this->hasMany(Event::class, 'transport_contractor_id');
+    }
+
+    public function driverEvents(): HasMany
+    {
+        return $this->hasMany(Event::class, 'driver_contractor_id');
+    }
+
+    public function pilotEvents(): HasMany
+    {
+        return $this->hasMany(Event::class, 'pilot_contractor_id');
     }
 
     /**
@@ -172,6 +232,11 @@ class Contractor extends Model
     public function vendorInvoices()
     {
         return $this->hasMany(VendorInvoice::class);
+    }
+
+    public function vehicles(): HasMany
+    {
+        return $this->hasMany(Vehicle::class)->orderBy('registration_number');
     }
 
     public function locations(): HasMany

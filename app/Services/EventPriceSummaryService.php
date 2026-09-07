@@ -77,6 +77,21 @@ final class EventPriceSummaryService
         $ppp = (float) ($pln['price_per_person'] ?? ($exact['price_per_person'] ?? 0));
         $pppRounded = PriceRoundingService::roundPerPerson($ppp, 'PLN');
         $total = (float) ($pln['price_with_tax'] ?? ($exact['price_with_tax'] ?? 0));
+        $basePln = round((float) ($pln['price_base'] ?? ($exact['price_base'] ?? 0)), 2);
+        $markupPln = round((float) ($pln['markup_amount'] ?? ($exact['markup_amount'] ?? 0)), 2);
+        $taxPln = round((float) ($pln['tax_amount'] ?? ($exact['tax_amount'] ?? 0)), 2);
+        $markupPercent = $basePln > 0.009 ? round(($markupPln / $basePln) * 100, 2) : 0.0;
+        $taxBreakdown = [];
+        foreach ($exact['tax_breakdown'] ?? $pln['tax_breakdown'] ?? [] as $tax) {
+            if (! is_array($tax)) {
+                continue;
+            }
+            $taxBreakdown[] = [
+                'name' => (string) ($tax['name'] ?? 'Podatek'),
+                'percentage' => round((float) ($tax['percentage'] ?? 0), 2),
+                'amount' => round((float) ($tax['amount'] ?? 0), 2),
+            ];
+        }
 
         return [
             'ready' => true,
@@ -85,9 +100,13 @@ final class EventPriceSummaryService
             'gratis' => $gratis,
             'total_pln' => round($total, 2),
             'payable_total_pln' => $this->payableTotalPln($pppRounded, $paying),
-            'base_pln' => round((float) ($pln['price_base'] ?? ($exact['price_base'] ?? 0)), 2),
-            'markup_pln' => round((float) ($pln['markup_amount'] ?? ($exact['markup_amount'] ?? 0)), 2),
-            'tax_pln' => round((float) ($pln['tax_amount'] ?? ($exact['tax_amount'] ?? 0)), 2),
+            'base_pln' => $basePln,
+            'insurance_pln' => 0.0,
+            'markup_percent' => $markupPercent,
+            'markup_pln' => $markupPln,
+            'net_profit_pln' => $markupPln,
+            'tax_pln' => $taxPln,
+            'tax_breakdown' => $taxBreakdown,
             'price_per_person' => round($ppp, 2),
             'price_per_person_rounded' => $pppRounded,
             'price_per_person_label' => $this->composePriceLabel($pppRounded, $foreign),
@@ -95,6 +114,15 @@ final class EventPriceSummaryService
             'breakdown_lines' => [],
             'nearest' => $this->nearestTemplatePrices($template, $startPlaceId, $paying, $gratis),
             'source' => 'template',
+            'labels' => [
+                'base' => MoneyFormatter::format($basePln, 'PLN'),
+                'insurance' => MoneyFormatter::format(0, 'PLN'),
+                'markup' => MoneyFormatter::format($markupPln, 'PLN'),
+                'tax' => MoneyFormatter::format($taxPln, 'PLN'),
+                'net_profit' => MoneyFormatter::format($markupPln, 'PLN'),
+                'total' => MoneyFormatter::format(round($total, 2), 'PLN'),
+                'price_per_person' => $this->composePriceLabel($pppRounded, $foreign),
+            ],
         ];
     }
 
@@ -133,6 +161,20 @@ final class EventPriceSummaryService
         $totalPln = round((float) ($calc['total_pln'] ?? 0), 2);
         $payingResolved = (int) ($calc['paying'] ?? $paying);
         $basePln = round((float) ($calc['base_pln'] ?? 0), 2);
+        $markupPln = round((float) ($calc['markup_pln'] ?? 0), 2);
+        $taxPln = round((float) ($calc['tax_pln'] ?? 0), 2);
+        $markupPercent = round((float) ($calc['markup_percent'] ?? 0), 2);
+        $taxBreakdown = array_values(array_map(
+            static fn (array $row): array => [
+                'name' => (string) ($row['name'] ?? 'Podatek'),
+                'percentage' => round((float) ($row['percentage'] ?? 0), 2),
+                'amount' => round((float) ($row['amount'] ?? 0), 2),
+            ],
+            $calc['tax_breakdown'] ?? [],
+        ));
+        $insurancePln = round((float) collect($calc['lines'] ?? [])
+            ->where('category', 'insurance')
+            ->sum('cost_pln'), 2);
         $hasMeaningful = $totalPln > 0 || $basePln > 0 || $pppRounded > 0 || $foreign !== [];
 
         $nearest = [];
@@ -161,8 +203,13 @@ final class EventPriceSummaryService
             'total_pln' => $totalPln,
             'payable_total_pln' => $this->payableTotalPln($pppRounded, $payingResolved),
             'base_pln' => $basePln,
-            'markup_pln' => round((float) ($calc['markup_pln'] ?? 0), 2),
-            'tax_pln' => round((float) ($calc['tax_pln'] ?? 0), 2),
+            'insurance_pln' => $insurancePln,
+            'markup_percent' => $markupPercent,
+            'markup_pln' => $markupPln,
+            // Czysty zysk oferty = narzut (baza + narzut + podatki = cena; podatki są narzutem fiskalnym).
+            'net_profit_pln' => $markupPln,
+            'tax_pln' => $taxPln,
+            'tax_breakdown' => $taxBreakdown,
             'price_per_person' => round((float) ($calc['price_per_person'] ?? 0), 2),
             'price_per_person_rounded' => $pppRounded,
             'price_per_person_label' => $this->composePriceLabel($pppRounded, $foreign),
@@ -170,6 +217,15 @@ final class EventPriceSummaryService
             'breakdown_lines' => array_values($calc['lines'] ?? []),
             'nearest' => $nearest,
             'source' => 'event',
+            'labels' => [
+                'base' => MoneyFormatter::format($basePln, 'PLN'),
+                'insurance' => MoneyFormatter::format($insurancePln, 'PLN'),
+                'markup' => MoneyFormatter::format($markupPln, 'PLN'),
+                'tax' => MoneyFormatter::format($taxPln, 'PLN'),
+                'net_profit' => MoneyFormatter::format($markupPln, 'PLN'),
+                'total' => MoneyFormatter::format($totalPln, 'PLN'),
+                'price_per_person' => $this->composePriceLabel($pppRounded, $foreign),
+            ],
         ];
     }
 
@@ -419,6 +475,8 @@ final class EventPriceSummaryService
      */
     private function empty(string $message): array
     {
+        $zero = MoneyFormatter::format(0, 'PLN');
+
         return [
             'ready' => false,
             'message' => $message,
@@ -427,8 +485,12 @@ final class EventPriceSummaryService
             'total_pln' => 0.0,
             'payable_total_pln' => 0.0,
             'base_pln' => 0.0,
+            'insurance_pln' => 0.0,
+            'markup_percent' => 0.0,
             'markup_pln' => 0.0,
+            'net_profit_pln' => 0.0,
             'tax_pln' => 0.0,
+            'tax_breakdown' => [],
             'price_per_person' => 0.0,
             'price_per_person_rounded' => 0.0,
             'price_per_person_label' => '—',
@@ -436,6 +498,15 @@ final class EventPriceSummaryService
             'breakdown_lines' => [],
             'nearest' => [],
             'source' => 'none',
+            'labels' => [
+                'base' => $zero,
+                'insurance' => $zero,
+                'markup' => $zero,
+                'tax' => $zero,
+                'net_profit' => $zero,
+                'total' => $zero,
+                'price_per_person' => '—',
+            ],
         ];
     }
 }

@@ -24,7 +24,7 @@
             <li>{{ $line }}</li>
         @endforeach
         @if(! $compact && filled($financeHint['planned_label'] ?? null))
-            <li><span class="font-medium">Plan:</span> {{ $financeHint['planned_label'] }}</li>
+            <li><span class="font-medium">Planowane:</span> {{ $financeHint['planned_label'] }}</li>
         @endif
         @if(! $compact && filled($financeHint['advance_label'] ?? null))
             <li><span class="font-medium">Zaliczka:</span> {{ $financeHint['advance_label'] }}</li>

@@ -36,12 +36,18 @@ class PilotCashDesk extends Component
     public bool $showOfficePayoutBlock = true;
 
     /**
-     * Gdy true (Operacje → Pilot), sekcja wymiany szanuje flagę portalu.
-     * Finanse / modal biura zostawiają false — pełny dostęp biura.
+     * Gdy true (Operacje → Pilot), pokaż informację o flagach portalu.
+     * Widoczność sekcji wymiany u admina jest zawsze; u pilota — wg flagi.
      */
     public bool $respectPortalVisibility = false;
 
-    /** all|exchange — modal „Wymiana waluty” pokazuje tylko sekcję wymiany. */
+    /** Na stronie Operacje → Pilot: wydatki w akordeonie (domyślnie otwartym). */
+    public bool $collapseExpenses = false;
+
+    /** Gdy false — ukryj blok wymiany w tym instancji (np. przeniesiony do prawej kolumny). */
+    public bool $includeCurrencyExchange = true;
+
+    /** all|exchange — modal / prawa kolumna pokazuje tylko sekcję wymiany. */
     public string $focus = 'all';
 
     public string $expenseName = '';
@@ -84,6 +90,8 @@ class PilotCashDesk extends Component
         bool $compact = false,
         bool $showOfficePayoutBlock = true,
         bool $respectPortalVisibility = false,
+        bool $collapseExpenses = false,
+        bool $includeCurrencyExchange = true,
         string $focus = 'all',
     ): void {
         $this->event = $event->loadMissing(['pilotFundsPaidByUser', 'pilotAdvancePaidCurrency']);
@@ -91,6 +99,8 @@ class PilotCashDesk extends Component
         $this->compact = $compact;
         $this->showOfficePayoutBlock = $showOfficePayoutBlock && $focus !== 'exchange';
         $this->respectPortalVisibility = $respectPortalVisibility;
+        $this->collapseExpenses = $collapseExpenses;
+        $this->includeCurrencyExchange = $includeCurrencyExchange;
         $this->focus = in_array($focus, ['all', 'exchange'], true) ? $focus : 'all';
 
         if ($context === 'pilot') {
@@ -141,13 +151,40 @@ class PilotCashDesk extends Component
         return app(PilotSettlementService::class)->currencyExchanges($this->event);
     }
 
+    /**
+     * Sekcja wymiany (lista + narracja): admin zawsze; pilot wg flagi portalu.
+     * Na Operacje→Pilot biuro widzi podgląd nawet przy wyłączonym portalu.
+     */
     public function getShowCurrencyExchangeProperty(): bool
     {
-        if ($this->context === 'pilot' || $this->respectPortalVisibility) {
+        if ($this->context === 'pilot') {
             return $this->event->showsPilotCurrencyExchange();
         }
 
         return true;
+    }
+
+    /**
+     * Formularz add/edit/delete wymiany.
+     * Admin: zawsze przy edytowalnym rozliczeniu.
+     * Pilot: tylko gdy włączona flaga portalu.
+     */
+    public function getCanEditCurrencyExchangeProperty(): bool
+    {
+        if (! $this->editable) {
+            return false;
+        }
+
+        if ($this->context === 'pilot') {
+            return $this->event->showsPilotCurrencyExchange();
+        }
+
+        return true;
+    }
+
+    public function getCashResourceStoryProperty(): object
+    {
+        return app(PilotSettlementService::class)->getCashResourceStory($this->settlement);
     }
 
     #[On('pilot-portal-visibility-updated')]
@@ -157,6 +194,20 @@ class PilotCashDesk extends Component
             return;
         }
 
+        $this->event = $this->event->fresh([
+            'pilotFundsPaidByUser',
+            'pilotAdvancePaidCurrency',
+        ]) ?? $this->event;
+    }
+
+    #[On('bus-collections-updated')]
+    public function refreshAfterBusCollections(?int $eventId = null): void
+    {
+        if ($eventId !== null && (int) $this->event->getKey() !== $eventId) {
+            return;
+        }
+
+        // Computed cashReconciliation odświeży się przy kolejnym renderze.
         $this->event = $this->event->fresh([
             'pilotFundsPaidByUser',
             'pilotAdvancePaidCurrency',
@@ -221,7 +272,7 @@ class PilotCashDesk extends Component
         }
 
         $this->loadCashReportingFields();
-        $this->notifyLedger('Usunięto wypłatę gotówki');
+        $this->notifyLedger('Usunięto zaliczkę');
     }
 
     public function saveOfficePayout(): void
@@ -236,8 +287,8 @@ class PilotCashDesk extends Component
             'payoutProvidedAt' => 'required|date',
             'payoutComment' => 'nullable|string|max:2000',
         ], [
-            'payoutCurrencyId.required' => 'Wybierz walutę wypłaty.',
-            'payoutAmount.required' => 'Podaj kwotę wypłaconą pilotowi.',
+            'payoutCurrencyId.required' => 'Wybierz walutę zaliczki.',
+            'payoutAmount.required' => 'Podaj kwotę zaliczki.',
             'payoutProvidedAt.required' => 'Podaj datę wypłaty.',
         ]);
 
@@ -265,8 +316,8 @@ class PilotCashDesk extends Component
         $this->loadCashReportingFields();
         $this->notifyLedger(
             $wasEditing
-                ? 'Zaktualizowano wypłatę gotówki'
-                : 'Zapisano wypłatę gotówki pilotowi'
+                ? 'Zaktualizowano zaliczkę'
+                : 'Dodano zaliczkę pilotowi'
         );
     }
 
@@ -319,8 +370,7 @@ class PilotCashDesk extends Component
 
     public function editExchange(int $exchangeId): void
     {
-        abort_unless($this->editable, 403);
-        abort_unless($this->showCurrencyExchange, 403);
+        abort_unless($this->canEditCurrencyExchange, 403);
 
         $exchange = app(PilotSettlementService::class)
             ->currencyExchanges($this->event)
@@ -352,8 +402,7 @@ class PilotCashDesk extends Component
 
     public function deleteExchange(int $exchangeId): void
     {
-        abort_unless($this->editable, 403);
-        abort_unless($this->showCurrencyExchange, 403);
+        abort_unless($this->canEditCurrencyExchange, 403);
 
         $exchange = app(PilotSettlementService::class)
             ->currencyExchanges($this->event)
@@ -373,8 +422,7 @@ class PilotCashDesk extends Component
 
     public function saveExchange(): void
     {
-        abort_unless($this->editable, 403);
-        abort_unless($this->showCurrencyExchange, 403);
+        abort_unless($this->canEditCurrencyExchange, 403);
 
         $this->exchangeFromAmount = str_replace([' ', ','], ['', '.'], trim($this->exchangeFromAmount));
         $this->exchangeToAmount = str_replace([' ', ','], ['', '.'], trim($this->exchangeToAmount));

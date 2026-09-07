@@ -35,7 +35,8 @@ final class ParticipantPaymentLedgerService
         }
 
         $amount = round($amount, 2);
-        if ($amount <= 0) {
+        $amountForeignRounded = $amountForeign !== null ? round($amountForeign, 2) : null;
+        if ($amount <= 0 && ($amountForeignRounded === null || $amountForeignRounded <= 0)) {
             throw new \InvalidArgumentException('Kwota wpłaty musi być większa od zera.');
         }
 
@@ -55,7 +56,7 @@ final class ParticipantPaymentLedgerService
             $payerName,
             $bankTransferDescription,
             $paymentKind,
-            $amountForeign,
+            $amountForeignRounded,
             $rate,
             $currencyId,
         ): EventSettlementParticipantPaymentEntry {
@@ -74,7 +75,7 @@ final class ParticipantPaymentLedgerService
             ];
 
             if (Schema::hasColumn('event_settlement_participant_payment_entries', 'currency_id')) {
-                $payload['amount'] = $amountForeign !== null ? round($amountForeign, 2) : null;
+                $payload['amount'] = $amountForeignRounded;
                 $payload['currency_id'] = $currencyId;
                 $payload['rate'] = $rate !== null ? round($rate, 6) : null;
             }

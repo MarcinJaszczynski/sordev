@@ -14,13 +14,14 @@ class ExecutiveAccessTest extends TestCase
 {
     use RefreshDatabase;
 
-    public function test_owner_roles_can_view_final_financial_results(): void
+    public function test_owner_and_admin_roles_can_view_final_financial_results(): void
     {
         config(['executive.open_access' => false]);
 
         Role::findOrCreate('super_admin');
         Role::findOrCreate('wlasciciel');
         Role::findOrCreate('admin');
+        Role::findOrCreate('biuro');
 
         $owner = User::factory()->create();
         $owner->assignRole('wlasciciel');
@@ -28,23 +29,29 @@ class ExecutiveAccessTest extends TestCase
         $admin = User::factory()->create();
         $admin->assignRole('admin');
 
+        $office = User::factory()->create();
+        $office->assignRole('biuro');
+
         $this->assertTrue(ExecutiveAccess::canViewFinalFinancialResults($owner));
-        $this->assertFalse(ExecutiveAccess::canViewFinalFinancialResults($admin));
+        $this->assertTrue(ExecutiveAccess::canViewFinalFinancialResults($admin));
+        $this->assertFalse(ExecutiveAccess::canViewFinalFinancialResults($office));
+        $this->assertFalse(ExecutiveAccess::canAccessSensitiveAnalytics($office));
+        $this->assertTrue(ExecutiveAccess::canAccessSensitiveAnalytics($admin));
     }
 
-    public function test_closed_settlement_summary_hidden_from_regular_staff(): void
+    public function test_closed_settlement_summary_hidden_from_office_staff(): void
     {
         config(['executive.open_access' => false]);
 
-        Role::findOrCreate('admin');
-        $admin = User::factory()->create();
-        $admin->assignRole('admin');
+        Role::findOrCreate('biuro');
+        $office = User::factory()->create();
+        $office->assignRole('biuro');
 
         $event = Event::factory()->create();
         $settlement = EventSettlement::findOrCreateActiveForEvent($event);
         $settlement->update(['status' => 'closed']);
 
-        $this->actingAs($admin);
+        $this->actingAs($office);
         $this->assertFalse(ExecutiveAccess::canViewSettlementFinancialSummary($settlement->fresh()));
     }
 
@@ -52,27 +59,27 @@ class ExecutiveAccessTest extends TestCase
     {
         config(['executive.open_access' => true]);
 
-        Role::findOrCreate('admin');
-        $admin = User::factory()->create();
-        $admin->assignRole('admin');
+        Role::findOrCreate('biuro');
+        $office = User::factory()->create();
+        $office->assignRole('biuro');
 
-        $this->assertTrue(ExecutiveAccess::canViewFinalFinancialResults($admin));
-        $this->assertTrue(ExecutiveAccess::canAccessStatisticsPanel($admin));
+        $this->assertTrue(ExecutiveAccess::canViewFinalFinancialResults($office));
+        $this->assertTrue(ExecutiveAccess::canAccessStatisticsPanel($office));
     }
 
-    public function test_active_settlement_summary_visible_to_regular_staff(): void
+    public function test_active_settlement_summary_visible_to_office_staff(): void
     {
         config(['executive.open_access' => false]);
 
-        Role::findOrCreate('admin');
-        $admin = User::factory()->create();
-        $admin->assignRole('admin');
+        Role::findOrCreate('biuro');
+        $office = User::factory()->create();
+        $office->assignRole('biuro');
 
         $event = Event::factory()->create();
         $settlement = EventSettlement::findOrCreateActiveForEvent($event);
         $settlement->update(['status' => 'active']);
 
-        $this->actingAs($admin);
+        $this->actingAs($office);
         $this->assertTrue(ExecutiveAccess::canViewSettlementFinancialSummary($settlement->fresh()));
     }
 }

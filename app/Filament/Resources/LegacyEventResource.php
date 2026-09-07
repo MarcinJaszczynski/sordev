@@ -22,15 +22,22 @@ class LegacyEventResource extends Resource
 
     protected static ?string $navigationIcon = 'heroicon-o-archive-box';
 
-    protected static ?string $navigationGroup = FilamentNavigation::GROUP_SYSTEM;
+    protected static ?string $navigationGroup = FilamentNavigation::GROUP_EVENTS;
 
     protected static ?string $navigationLabel = 'Imprezy archiwalne';
 
-    protected static ?int $navigationSort = 1;
+    protected static ?int $navigationSort = 90;
 
     protected static ?string $modelLabel = 'impreza archiwalna';
 
     protected static ?string $pluralModelLabel = 'imprezy archiwalne';
+
+    protected static ?string $recordTitleAttribute = 'name';
+
+    public static function getGloballySearchableAttributes(): array
+    {
+        return ['office_id', 'name', 'client_name', 'client_nip', 'client_email', 'client_phone', 'legacy_status'];
+    }
 
     public static function form(Form $form): Form
     {
@@ -68,15 +75,34 @@ class LegacyEventResource extends Resource
                 Tables\Columns\TextColumn::make('client_name')
                     ->label('Klient')
                     ->searchable()
+                    ->sortable()
                     ->wrap(),
+
+                Tables\Columns\TextColumn::make('client_nip')
+                    ->label('NIP')
+                    ->searchable()
+                    ->sortable()
+                    ->toggleable(isToggledHiddenByDefault: true),
+
+                Tables\Columns\TextColumn::make('contractor.name')
+                    ->label('Kontrahent w systemie')
+                    ->searchable()
+                    ->sortable()
+                    ->url(fn (LegacyEvent $record): ?string => $record->contractor_id
+                        ? \App\Filament\Resources\ContractorResource::getUrl('edit', ['record' => $record->contractor_id])
+                        : null)
+                    ->color('primary')
+                    ->toggleable(),
 
                 Tables\Columns\TextColumn::make('participant_count')
                     ->label('Uczestnicy')
-                    ->alignCenter(),
+                    ->alignCenter()
+                    ->sortable(),
 
                 Tables\Columns\TextColumn::make('legacy_status')
                     ->label('Status')
                     ->searchable()
+                    ->sortable()
                     ->badge()
                     ->color(fn (?string $state): string => LegacyEvent::statusColor($state)),
 
@@ -107,6 +133,22 @@ class LegacyEventResource extends Resource
                             ->all();
                     }),
 
+                Tables\Filters\SelectFilter::make('contractor_id')
+                    ->label('Kontrahent')
+                    ->relationship('contractor', 'name')
+                    ->searchable()
+                    ->preload(),
+
+                Tables\Filters\TernaryFilter::make('linked_contractor')
+                    ->label('Powiązany kontrahent')
+                    ->placeholder('Wszystkie')
+                    ->trueLabel('Tylko z kontrahentem')
+                    ->falseLabel('Bez kontrahenta')
+                    ->queries(
+                        true: fn (Builder $query) => $query->whereNotNull('contractor_id'),
+                        false: fn (Builder $query) => $query->whereNull('contractor_id'),
+                    ),
+
                 Filter::make('year')
                     ->form([
                         \Filament\Forms\Components\TextInput::make('year')
@@ -119,6 +161,17 @@ class LegacyEventResource extends Resource
                         }
 
                         return $query->whereYear('start_datetime', (int) $data['year']);
+                    }),
+
+                Filter::make('date_range')
+                    ->form([
+                        \Filament\Forms\Components\DatePicker::make('from')->label('Wyjazd od'),
+                        \Filament\Forms\Components\DatePicker::make('until')->label('Wyjazd do'),
+                    ])
+                    ->query(function (Builder $query, array $data): Builder {
+                        return $query
+                            ->when($data['from'] ?? null, fn (Builder $q, $date) => $q->whereDate('start_datetime', '>=', $date))
+                            ->when($data['until'] ?? null, fn (Builder $q, $date) => $q->whereDate('start_datetime', '<=', $date));
                     }),
             ])
             ->actions([
@@ -171,6 +224,14 @@ class LegacyEventResource extends Resource
                     Infolists\Components\TextEntry::make('client_contact_person')->label('Osoba kontaktowa')->icon('heroicon-o-user-circle'),
                     Infolists\Components\TextEntry::make('client_phone')->label('Telefon')->icon('heroicon-o-phone')->copyable(),
                     Infolists\Components\TextEntry::make('client_email')->label('Email')->icon('heroicon-o-envelope')->copyable(),
+                    Infolists\Components\TextEntry::make('contractor.name')
+                        ->label('Kontrahent w systemie')
+                        ->placeholder('—')
+                        ->url(fn (LegacyEvent $record): ?string => $record->contractor_id
+                            ? \App\Filament\Resources\ContractorResource::getUrl('edit', ['record' => $record->contractor_id])
+                            : null)
+                        ->color('primary'),
+                    Infolists\Components\TextEntry::make('legacy_purchaser_id')->label('ID zamawiającego (stary SOR)')->placeholder('—'),
                 ]),
 
             Infolists\Components\Section::make('Transport i logistyka')
@@ -190,7 +251,6 @@ class LegacyEventResource extends Resource
                     ]),
                     Infolists\Components\TextEntry::make('bus_board_time')->label('Zbiórka')->dateTime('d.m.Y H:i'),
                     Infolists\Components\TextEntry::make('advance_payment')->label('Zaliczka')->money('PLN'),
-                    Infolists\Components\TextEntry::make('contractor.name')->label('Dopasowany kontrahent')->placeholder('—'),
                 ]),
 
             Infolists\Components\Section::make('Uwagi')
@@ -233,47 +293,47 @@ class LegacyEventResource extends Resource
                         ->columnSpanFull(),
                 ]),
 
-            Infolists\Components\Section::make('Elementy programu')
+            Infolists\Components\Section::make('Program')
+                ->description('Elementy programu imprezy archiwalnej')
                 ->collapsible()
                 ->icon('heroicon-o-map')
                 ->schema([
-                    Infolists\Components\TextEntry::make('elements_json')
-                        ->label('Elementy')
-                        ->formatStateUsing(fn ($state): string => self::renderCollectionHtml($state))
-                        ->html()
+                    Infolists\Components\ViewEntry::make('program_table')
+                        ->hiddenLabel()
+                        ->view('filament.infolists.legacy-event-program')
                         ->columnSpanFull(),
                 ]),
 
-            Infolists\Components\Section::make('Płatności')
+            Infolists\Components\Section::make('Wydatki')
+                ->description('Planowane i zrealizowane koszty')
                 ->collapsible()
                 ->icon('heroicon-o-banknotes')
                 ->schema([
-                    Infolists\Components\TextEntry::make('payments_json')
-                        ->label('Płatności')
-                        ->formatStateUsing(fn ($state): string => self::renderCollectionHtml($state))
-                        ->html()
+                    Infolists\Components\ViewEntry::make('payments_table')
+                        ->hiddenLabel()
+                        ->view('filament.infolists.legacy-event-payments')
                         ->columnSpanFull(),
                 ]),
 
             Infolists\Components\Section::make('Wykonawcy')
                 ->collapsible()
+                ->collapsed()
                 ->icon('heroicon-o-briefcase')
                 ->schema([
-                    Infolists\Components\TextEntry::make('contractors_json')
-                        ->label('Wykonawcy')
-                        ->formatStateUsing(fn ($state): string => self::renderCollectionHtml($state))
-                        ->html()
+                    Infolists\Components\ViewEntry::make('contractors_table')
+                        ->hiddenLabel()
+                        ->view('filament.infolists.legacy-event-contractors')
                         ->columnSpanFull(),
                 ]),
 
             Infolists\Components\Section::make('Notatki powiązane')
                 ->collapsible()
+                ->collapsed()
                 ->icon('heroicon-o-document-text')
                 ->schema([
-                    Infolists\Components\TextEntry::make('notes_json')
-                        ->label('Notatki')
-                        ->formatStateUsing(fn ($state): string => self::renderCollectionHtml($state))
-                        ->html()
+                    Infolists\Components\ViewEntry::make('notes_table')
+                        ->hiddenLabel()
+                        ->view('filament.infolists.legacy-event-notes')
                         ->columnSpanFull(),
                 ]),
         ]);
@@ -380,6 +440,10 @@ class LegacyEventResource extends Resource
     {
         if ($state === null || $state === '') {
             return new HtmlString('<span class="text-sm text-gray-500">Brak danych</span>');
+        }
+
+        if (is_array($state)) {
+            return new HtmlString(self::renderCollectionHtml($state));
         }
 
         $value = (string) $state;

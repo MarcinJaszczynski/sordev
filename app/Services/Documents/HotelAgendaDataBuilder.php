@@ -266,8 +266,8 @@ final class HotelAgendaDataBuilder
 
     private function formatPointTime(EventProgramPoint $point): string
     {
-        $start = $point->start_time ? substr((string) $point->start_time, 0, 5) : null;
-        $end = $point->end_time ? substr((string) $point->end_time, 0, 5) : null;
+        $start = $point->displayStartTime();
+        $end = $point->displayEndTime();
 
         if ($start && $end) {
             return $start.'–'.$end;

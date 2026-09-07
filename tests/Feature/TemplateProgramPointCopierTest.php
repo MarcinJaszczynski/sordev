@@ -122,6 +122,41 @@ class TemplateProgramPointCopierTest extends TestCase
 
         $this->assertNotNull($child);
         $this->assertSame('Bilety', $child->name);
+        // Bez child_pivot: bezpośrednie dziecko rootu wchodzi do kalkulacji (jak UI szablonu).
+        $this->assertTrue((bool) $child->include_in_calculation);
+        $this->assertTrue((bool) $child->active);
+    }
+
+    public function test_copy_excludes_grandchildren_from_calculation_without_child_pivot(): void
+    {
+        $template = EventTemplate::factory()->create(['duration_days' => 1]);
+        $root = EventTemplateProgramPoint::factory()->create(['name' => 'Atrakcja']);
+        $child = EventTemplateProgramPoint::factory()->create(['name' => 'Bilety']);
+        $grandchild = EventTemplateProgramPoint::factory()->create(['name' => 'Dodatek wnuk']);
+
+        $template->programPoints()->attach($root->id, [
+            'day' => 1,
+            'order' => 1,
+            'include_in_program' => true,
+            'include_in_calculation' => true,
+            'active' => true,
+        ]);
+
+        DB::table('event_template_program_point_parent')->insert([
+            ['parent_id' => $root->id, 'child_id' => $child->id, 'order' => 1],
+            ['parent_id' => $child->id, 'child_id' => $grandchild->id, 'order' => 1],
+        ]);
+
+        $event = Event::factory()->create(['event_template_id' => $template->id]);
+        app(TemplateProgramPointCopier::class)->copyToEvent($event);
+
+        $grandchildCopy = EventProgramPoint::query()
+            ->where('event_id', $event->id)
+            ->where('event_template_program_point_id', $grandchild->id)
+            ->first();
+
+        $this->assertNotNull($grandchildCopy);
+        $this->assertFalse((bool) $grandchildCopy->include_in_calculation);
     }
 
     public function test_fill_missing_adds_only_missing_slots_without_duplicating_existing(): void
@@ -226,5 +261,68 @@ class TemplateProgramPointCopierTest extends TestCase
             'event_id' => $event->id,
             'event_template_program_point_id' => $point->id,
         ]);
+    }
+
+    public function test_copy_propagates_type_flags_from_catalog(): void
+    {
+        $template = EventTemplate::factory()->create(['duration_days' => 1]);
+        $hotel = EventTemplateProgramPoint::factory()->create([
+            'name' => 'Zakwaterowanie w centrum',
+            'is_hotel' => true,
+            'is_transport' => false,
+            'is_hotel_service' => false,
+        ]);
+        $bus = EventTemplateProgramPoint::factory()->create([
+            'name' => 'Przejazd grupy',
+            'is_hotel' => false,
+            'is_transport' => true,
+            'is_hotel_service' => false,
+        ]);
+        $service = EventTemplateProgramPoint::factory()->create([
+            'name' => 'Bankiet',
+            'is_hotel' => true,
+            'is_transport' => false,
+            'is_hotel_service' => true,
+        ]);
+
+        foreach ([$hotel, $bus, $service] as $index => $point) {
+            $template->programPoints()->attach($point->id, [
+                'day' => 1,
+                'order' => $index + 1,
+                'include_in_program' => true,
+                'include_in_calculation' => true,
+                'active' => true,
+            ]);
+        }
+
+        $event = Event::factory()->create([
+            'event_template_id' => $template->id,
+            'duration_days' => 1,
+        ]);
+
+        app(TemplateProgramPointCopier::class)->copyToEvent($event);
+
+        $hotelCopy = EventProgramPoint::query()
+            ->where('event_id', $event->id)
+            ->where('event_template_program_point_id', $hotel->id)
+            ->first();
+        $busCopy = EventProgramPoint::query()
+            ->where('event_id', $event->id)
+            ->where('event_template_program_point_id', $bus->id)
+            ->first();
+        $serviceCopy = EventProgramPoint::query()
+            ->where('event_id', $event->id)
+            ->where('event_template_program_point_id', $service->id)
+            ->first();
+
+        $this->assertTrue((bool) $hotelCopy?->is_hotel);
+        $this->assertFalse((bool) $hotelCopy?->is_transport);
+        $this->assertFalse((bool) $hotelCopy?->is_hotel_service);
+
+        $this->assertTrue((bool) $busCopy?->is_transport);
+        $this->assertFalse((bool) $busCopy?->is_hotel);
+
+        $this->assertTrue((bool) $serviceCopy?->is_hotel_service);
+        $this->assertFalse((bool) $serviceCopy?->is_hotel);
     }
 }

@@ -81,6 +81,19 @@ class EventProgramPointCreatorTest extends TestCase
         $this->assertFalse($point->include_in_calculation);
     }
 
+    public function test_add_blank_clamps_runaway_day_to_core_horizon(): void
+    {
+        $event = Event::factory()->create([
+            'start_date' => '2026-06-01',
+            'end_date' => '2026-06-03',
+            'duration_days' => 3,
+        ]);
+
+        $point = app(EventProgramPointCreator::class)->addBlank($event, 'Poza horyzontem', 99);
+
+        $this->assertSame(3, (int) $point->day);
+    }
+
     public function test_detach_from_parent_moves_child_to_day_root(): void
     {
         $event = Event::factory()->create();

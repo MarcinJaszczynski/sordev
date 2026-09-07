@@ -10,7 +10,6 @@ use App\Services\PilotAccessService;
 use App\Services\PilotProgramPointFinanceDisplay;
 use Filament\Pages\Page;
 use Illuminate\Contracts\Support\Htmlable;
-use Illuminate\Support\Facades\Auth;
 
 class PilotProgramPage extends Page
 {
@@ -41,7 +40,7 @@ class PilotProgramPage extends Page
 
     public function getTitle(): string|Htmlable
     {
-        return 'Program: '.$this->event->name;
+        return $this->event->name;
     }
 
     public static function urlFor(Event $event): string

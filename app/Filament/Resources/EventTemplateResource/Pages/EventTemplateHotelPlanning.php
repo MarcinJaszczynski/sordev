@@ -3,6 +3,7 @@
 namespace App\Filament\Resources\EventTemplateResource\Pages;
 
 use App\Filament\Concerns\AuthorizesEventTemplatePages;
+use App\Filament\Concerns\ConfirmsEventTemplateEditing;
 use App\Filament\Resources\EventTemplateResource;
 use App\Filament\Resources\EventTemplateResource\Concerns\HasEventTemplateWorkflowContext;
 use App\Filament\Resources\EventTemplateResource\Concerns\ManagesTemplateHotelDays;
@@ -12,6 +13,7 @@ use Filament\Resources\Pages\Page;
 class EventTemplateHotelPlanning extends Page
 {
     use AuthorizesEventTemplatePages;
+    use ConfirmsEventTemplateEditing;
     use HasEventTemplateWorkflowContext;
     use InteractsWithRecord;
     use ManagesTemplateHotelDays;
@@ -31,5 +33,11 @@ class EventTemplateHotelPlanning extends Page
         $this->record = $this->resolveRecord($record);
         $this->record->load('hotelDays');
         $this->bootTemplateHotelDays();
+        $this->bootTemplateEditingGate();
+    }
+
+    protected function getHeaderActions(): array
+    {
+        return $this->templateEditingHeaderActions();
     }
 }

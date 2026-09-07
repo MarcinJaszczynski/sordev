@@ -44,13 +44,26 @@ class PilotTripSettlementForm extends Component
 
     public bool $readOnly = false;
 
-    public function mount(Event $event, bool $showTripHeader = true, bool $readOnly = false): void
-    {
+    /** Sekcja „Dane z wycieczki” (licznik, osoby) — docelowo na Checkliście. */
+    public bool $showTripData = true;
+
+    /** Zaliczka, wydatki, dokumenty — zostają w Rozliczeniu. */
+    public bool $showFinanceSections = true;
+
+    public function mount(
+        Event $event,
+        bool $showTripHeader = true,
+        bool $readOnly = false,
+        bool $showTripData = true,
+        bool $showFinanceSections = true,
+    ): void {
         abort_unless(Auth::user()?->can('viewPilotDetails', $event), 403);
 
         $this->event = $event;
         $this->showTripHeader = $showTripHeader;
         $this->readOnly = $readOnly || app(\App\Services\PilotAccessService::class)->isPreviewReadOnly();
+        $this->showTripData = $showTripData;
+        $this->showFinanceSections = $showFinanceSections;
 
         $settlement = app(PilotSettlementService::class)->getOrCreateSettlement($event);
 

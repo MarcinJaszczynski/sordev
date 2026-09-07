@@ -9,7 +9,6 @@ use App\Services\ClientAccessService;
 use App\Services\EventProgramPointOrderService;
 use Filament\Pages\Page;
 use Illuminate\Contracts\Support\Htmlable;
-use Illuminate\Support\Facades\Auth;
 
 class ClientProgramPage extends Page
 {
@@ -40,7 +39,7 @@ class ClientProgramPage extends Page
 
     public function getTitle(): string|Htmlable
     {
-        return 'Program: '.$this->event->name;
+        return $this->event->name;
     }
 
     public static function urlFor(Event $event): string

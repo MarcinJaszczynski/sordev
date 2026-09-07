@@ -535,6 +535,99 @@ class PilotAdvanceMultiCurrencyTest extends TestCase
         );
     }
 
+    public function test_manage_event_pilot_can_mark_funds_as_paid_via_form(): void
+    {
+        Role::firstOrCreate(['name' => 'admin']);
+        $admin = User::factory()->create(['status' => 'active']);
+        $admin->assignRole('admin');
+
+        $pilot = User::factory()->create(['status' => 'active']);
+        $pilot->assignRole('pilot');
+
+        $plnId = Currency::query()->create([
+            'name' => 'PLN', 'code' => 'PLN', 'symbol' => 'PLN', 'exchange_rate' => 1,
+        ])->id;
+
+        $event = Event::factory()->create([
+            'assigned_to' => $pilot->id,
+            'shared_with_pilot' => true,
+            'status' => Event::STATUS_CONFIRMED,
+            'pilot_funds_paid' => false,
+        ]);
+
+        $this->actingAs($admin);
+
+        Livewire::actingAs($admin)
+            ->test(\App\Filament\Resources\EventResource\Pages\ManageEventPilot::class, [
+                'record' => $event->getKey(),
+            ])
+            ->fillForm([
+                'pilot_advance_planned_lines' => [
+                    ['amount' => 1500, 'currency_id' => $plnId],
+                ],
+                'pilot_funds_paid' => true,
+            ])
+            ->call('save')
+            ->assertHasNoFormErrors()
+            ->assertSuccessful();
+
+        $event->refresh();
+        $this->assertSame($pilot->id, $event->assigned_to);
+        $this->assertTrue((bool) $event->pilot_funds_paid);
+        $this->assertNotNull($event->pilot_funds_paid_at);
+
+        $settlement = \App\Models\EventSettlement::findActiveForEvent($event);
+        $this->assertNotNull($settlement);
+        $this->assertSame(1500.0, (float) $settlement->pilotCashPreparations()
+            ->where('currency_id', $plnId)
+            ->value('provided_amount'));
+    }
+
+    public function test_event_finance_pilot_cash_page_records_office_payout(): void
+    {
+        Role::firstOrCreate(['name' => 'admin']);
+        $admin = User::factory()->create(['status' => 'active']);
+        $admin->assignRole('admin');
+
+        $pilot = User::factory()->create(['status' => 'active']);
+        $pilot->assignRole('pilot');
+
+        $plnId = Currency::query()->create([
+            'name' => 'PLN', 'code' => 'PLN', 'symbol' => 'PLN', 'exchange_rate' => 1,
+        ])->id;
+
+        $event = Event::factory()->create([
+            'assigned_to' => $pilot->id,
+            'shared_with_pilot' => true,
+            'status' => Event::STATUS_CONFIRMED,
+            'pilot_funds_paid' => false,
+        ]);
+
+        $this->actingAs($admin);
+
+        Livewire::actingAs($admin)
+            ->test(\App\Filament\Resources\EventResource\Pages\EventFinancePilotCash::class, [
+                'record' => $event->getKey(),
+            ])
+            ->assertSuccessful()
+            ->assertSee('Zaliczki wypłacone pilotowi');
+
+        Livewire::actingAs($admin)
+            ->test(PilotCashDesk::class, [
+                'event' => $event,
+                'context' => 'admin',
+            ])
+            ->set('payoutCurrencyId', $plnId)
+            ->set('payoutAmount', '1500')
+            ->set('payoutProvidedAt', '2026-09-06')
+            ->call('saveOfficePayout')
+            ->assertHasNoErrors()
+            ->assertNotified();
+
+        $event->refresh();
+        $this->assertTrue((bool) $event->pilot_funds_paid);
+    }
+
     public function test_manage_event_pilot_can_revoke_paid_funds_via_form_action(): void
     {
         Role::firstOrCreate(['name' => 'admin']);
@@ -564,13 +657,58 @@ class PilotAdvanceMultiCurrencyTest extends TestCase
                 'record' => $event->getKey(),
             ])
             ->assertFormFieldExists('pilot_funds_paid')
-            ->assertSee('Zmień / dopłać / dodaj walutę')
-            ->assertSee('Rozliczenie — gotówka i wymiana walut')
+            ->assertSee('Edytuj / dopłać / dodaj zaliczkę')
+            ->assertSee('Rozliczenie — wypłata, saldo, zwrot, wydatki')
             ->call('revokePilotOfficePayout')
             ->assertNotified();
 
         $event->refresh();
         $this->assertFalse((bool) $event->pilot_funds_paid);
+    }
+
+    public function test_manage_event_pilot_shows_cash_needed_from_settlement_plan(): void
+    {
+        if (! \Illuminate\Support\Facades\Schema::hasTable('event_settlement_costs')
+            || ! \Illuminate\Support\Facades\Schema::hasTable('pilot_cash_preparations')) {
+            $this->markTestSkipped('Brak tabel rozliczenia gotówki.');
+        }
+
+        Role::firstOrCreate(['name' => 'admin']);
+        $admin = User::factory()->create(['status' => 'active']);
+        $admin->assignRole('admin');
+
+        $pilot = User::factory()->create(['status' => 'active']);
+        $pilot->assignRole('pilot');
+
+        $plnId = Currency::query()->create([
+            'name' => 'PLN', 'code' => 'PLN', 'symbol' => 'PLN', 'exchange_rate' => 1,
+        ])->id;
+
+        $event = Event::factory()->create([
+            'assigned_to' => $pilot->id,
+            'shared_with_pilot' => true,
+            'status' => Event::STATUS_CONFIRMED,
+        ]);
+
+        $settlement = \App\Models\EventSettlement::findOrCreateActiveForEvent($event);
+        $settlement->costs()->create([
+            'source_type' => 'manual',
+            'name' => 'Wejściówki',
+            'planned_amount' => 450,
+            'planned_amount_pln' => 450,
+            'planned_currency_id' => $plnId,
+            'paid_by' => 'pilot',
+            'payment_status' => 'advance_required',
+            'order' => 1,
+        ]);
+        $settlement->recalculatePilotCash();
+
+        Livewire::actingAs($admin)
+            ->test(\App\Filament\Resources\EventResource\Pages\ManageEventPilot::class, [
+                'record' => $event->getKey(),
+            ])
+            ->assertSee('Gotówka — do wypłaty (plan)')
+            ->assertSee('450');
     }
 
     public function test_advance_url_for_targets_merged_settlement_tab(): void

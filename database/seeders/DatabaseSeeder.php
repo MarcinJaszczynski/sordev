@@ -97,13 +97,11 @@ class DatabaseSeeder extends Seeder
             'update_own_settlement',
         ]);
         $biuroRole = \Spatie\Permission\Models\Role::where('name', 'biuro')->first();
-        $biuroRole->syncPermissions([
-            'view user', 'edit user', 'view contractor', 'edit contractor',
-            'view event_template',
-            'view event', 'create event', 'edit event',
-            'view transport_cost', 'edit transport_cost', 'create transport_cost', 'delete transport_cost',
-            'view markup', 'edit markup', 'create markup', 'delete markup',
-        ]);
+        $biuroRole->syncPermissions(
+            collect(\App\Support\OfficeRolePermissions::names())
+                ->map(fn (string $name) => \Spatie\Permission\Models\Permission::firstOrCreate(['name' => $name]))
+                ->all()
+        );
         $programistaRole = \Spatie\Permission\Models\Role::where('name', 'programista')->first();
         $programistaRole->syncPermissions([
             'view event_template',

@@ -21,6 +21,7 @@
             </div>
 
     <div class="package pt_20 pb_50">
+        <h1 class="sr-only">Wycieczki szkolne – lista ofert</h1>
         <!-- inline centering overrides removed; styles kept in main CSS -->
         <div class="region-information">
             <div class="text">

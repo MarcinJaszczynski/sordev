@@ -1,10 +1,17 @@
 <div class="space-y-4">
     @if ($selected)
-        <div class="rounded-xl border border-primary-200 bg-primary-50/60 p-4 dark:border-primary-500/30 dark:bg-primary-950/30">
+        <div
+            class="rounded-xl border-2 border-primary-400 bg-primary-50 p-4 shadow-sm dark:border-primary-500/50 dark:bg-primary-950/40"
+            wire:key="selected-client-{{ $selected['contractor_id'] ?? $selected['label'] ?? 'x' }}"
+        >
             <div class="flex items-start justify-between gap-3">
                 <div>
-                    <p class="text-xs font-semibold uppercase tracking-wide text-primary-700 dark:text-primary-300">Wybrany klient</p>
-                    <p class="mt-1 text-sm font-semibold text-gray-900 dark:text-white">{{ $selected['label'] ?? '—' }}</p>
+                    <p class="text-xs font-semibold uppercase tracking-wide text-primary-700 dark:text-primary-300">
+                        Wybrany zamawiający
+                    </p>
+                    <p class="mt-1 text-base font-semibold text-gray-900 dark:text-white">
+                        {{ $selected['label'] ?? '—' }}
+                    </p>
                     <dl class="mt-3 grid gap-1 text-sm text-gray-600 dark:text-gray-300 sm:grid-cols-2">
                         @foreach (['company' => 'Firma', 'person' => 'Osoba', 'department' => 'Dział', 'phone' => 'Telefon', 'email' => 'E-mail', 'address' => 'Adres'] as $key => $label)
                             @if (! empty($selected['preview'][$key] ?? null))
@@ -15,6 +22,16 @@
                             @endif
                         @endforeach
                     </dl>
+                    <label class="mt-3 inline-flex items-center gap-2 text-sm text-gray-800 dark:text-gray-100">
+                        <input
+                            type="radio"
+                            name="trip-contact-primary"
+                            @checked((bool) ($selected['goes_on_trip'] ?? false))
+                            wire:click="setAsTripContact"
+                            class="rounded-full border-gray-400 text-primary-600 focus:ring-primary-500"
+                        />
+                        <span>Jedzie na wyjazd — kontakt dla pilota</span>
+                    </label>
                 </div>
                 <button
                     type="button"
@@ -90,6 +107,15 @@
                                 </li>
                             @endforeach
                         </ul>
+                        <div class="border-t border-gray-100 px-3 py-2 dark:border-white/5">
+                            <button
+                                type="button"
+                                wire:click="openQuickCreate"
+                                class="text-sm font-semibold text-primary-600 hover:text-primary-700 dark:text-primary-400"
+                            >
+                                Nie ma na liście? Dodaj nowego klienta
+                            </button>
+                        </div>
                     @else
                         <div class="px-3 py-3 text-sm text-gray-600 dark:text-gray-300">
                             Brak dopasowań dla „{{ $searchQuery }}”.
@@ -98,7 +124,7 @@
                             <button
                                 type="button"
                                 wire:click="openQuickCreate"
-                                class="text-sm font-medium text-primary-600 hover:text-primary-700 dark:text-primary-400"
+                                class="text-sm font-semibold text-primary-600 hover:text-primary-700 dark:text-primary-400"
                             >
                                 Dodaj nowego klienta
                             </button>
@@ -108,21 +134,31 @@
             @endif
         </div>
 
-        <div class="flex flex-wrap items-center gap-3">
-            @if (! $showQuickCreate)
-                <button
-                    type="button"
-                    wire:click="openQuickCreate"
-                    class="text-sm font-medium text-gray-600 hover:text-gray-800 dark:text-gray-400 dark:hover:text-gray-200"
-                >
-                    Klienta nie ma w bazie? Wprowadź ręcznie (telefon lub e-mail)
-                </button>
-            @endif
-        </div>
+        @if (! $showQuickCreate)
+            <div class="rounded-lg border border-dashed border-primary-300 bg-primary-50/40 px-4 py-3 dark:border-primary-500/40 dark:bg-primary-950/20">
+                <p class="text-sm text-gray-700 dark:text-gray-200">
+                    Klienta nie ma w bazie?
+                </p>
+                <div class="mt-2">
+                    <x-filament::button type="button" wire:click="openQuickCreate" size="sm" color="primary" outlined>
+                        Dodaj nowego klienta
+                    </x-filament::button>
+                </div>
+            </div>
+        @endif
 
         @if ($showQuickCreate)
-            <div class="rounded-xl border border-dashed border-gray-300 p-4 dark:border-white/10">
-                <p class="mb-3 text-sm font-medium text-gray-800 dark:text-gray-100">Dane zamawiającego (ręcznie)</p>
+            <div
+                class="rounded-xl border-2 border-primary-300 bg-white p-4 shadow-sm dark:border-primary-500/40 dark:bg-gray-900"
+                x-data
+                @keydown.enter.prevent="$wire.quickCreate()"
+            >
+                <p class="mb-1 text-sm font-semibold text-gray-900 dark:text-white">
+                    Nowy zamawiający
+                </p>
+                <p class="mb-3 text-xs text-gray-500 dark:text-gray-400">
+                    Uzupełnij dane, potem kliknij „Zapisz klienta i wybierz go” (albo Enter). Dopiero potem zapisuj imprezę.
+                </p>
                 <div class="grid gap-3 sm:grid-cols-2">
                     <div class="sm:col-span-2">
                         <label class="mb-1 block text-sm font-medium text-gray-700 dark:text-gray-200">Firma / instytucja</label>
@@ -147,8 +183,8 @@
                 </div>
                 <p class="mt-2 text-xs text-gray-500 dark:text-gray-400">Wymagany jest telefon lub e-mail. Firma, imię i nazwisko są opcjonalne.</p>
                 <div class="mt-3 flex flex-wrap gap-2">
-                    <x-filament::button type="button" wire:click="quickCreate" size="sm">
-                        Użyj jako zamawiający
+                    <x-filament::button type="button" wire:click="quickCreate" size="sm" color="primary">
+                        Zapisz klienta i wybierz go
                     </x-filament::button>
                     <x-filament::button type="button" wire:click="$set('showQuickCreate', false)" color="gray" size="sm">
                         Anuluj

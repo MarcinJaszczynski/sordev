@@ -25,7 +25,7 @@ class EventSettlementReportExport implements WithMultipleSheets
     }
 }
 
-final class EventSettlementReportSummarySheet implements \Maatwebsite\Excel\Concerns\FromArray, \Maatwebsite\Excel\Concerns\WithTitle, \Maatwebsite\Excel\Concerns\WithHeadings
+final class EventSettlementReportSummarySheet implements \Maatwebsite\Excel\Concerns\FromArray, \Maatwebsite\Excel\Concerns\WithHeadings, \Maatwebsite\Excel\Concerns\WithTitle
 {
     public function __construct(private array $report) {}
 
@@ -51,7 +51,7 @@ final class EventSettlementReportSummarySheet implements \Maatwebsite\Excel\Conc
             ['Impreza', ($event['code'] ?? '').' — '.($event['name'] ?? '')],
             ['Uczestnicy', (int) ($event['participant_count'] ?? 0)],
             ['Plan kosztów', $labels['planned_cost'] ?? ''],
-            ['Wpłacono wykonawcom', $labels['actual_cost'] ?? ''],
+            ['Zapłacono dostawcom', $labels['actual_cost'] ?? ''],
             ['Należne od klientów', $labels['participant_due'] ?? ''],
             ['Wpłacono od klientów', $labels['participant_paid'] ?? ''],
             ['Wynik netto', $labels['net_result'] ?? ''],
@@ -65,7 +65,7 @@ final class EventSettlementReportSummarySheet implements \Maatwebsite\Excel\Conc
     }
 }
 
-final class EventSettlementReportCostsSheet implements \Maatwebsite\Excel\Concerns\FromArray, \Maatwebsite\Excel\Concerns\WithTitle, \Maatwebsite\Excel\Concerns\WithHeadings
+final class EventSettlementReportCostsSheet implements \Maatwebsite\Excel\Concerns\FromArray, \Maatwebsite\Excel\Concerns\WithHeadings, \Maatwebsite\Excel\Concerns\WithTitle
 {
     public function __construct(private array $report) {}
 
@@ -76,7 +76,7 @@ final class EventSettlementReportCostsSheet implements \Maatwebsite\Excel\Concer
 
     public function headings(): array
     {
-        return ['Pozycja', 'Źródło', 'Płatnik', 'Plan PLN', 'Wpłacono PLN', 'Brakuje PLN', 'Semafor'];
+        return ['Pozycja', 'Źródło', 'Płatnik', 'Planowane PLN', 'Zapłacono PLN', 'Brakuje PLN', 'Semafor'];
     }
 
     public function array(): array
@@ -99,7 +99,7 @@ final class EventSettlementReportCostsSheet implements \Maatwebsite\Excel\Concer
     }
 }
 
-final class EventSettlementReportParticipantsSheet implements \Maatwebsite\Excel\Concerns\FromArray, \Maatwebsite\Excel\Concerns\WithTitle, \Maatwebsite\Excel\Concerns\WithHeadings
+final class EventSettlementReportParticipantsSheet implements \Maatwebsite\Excel\Concerns\FromArray, \Maatwebsite\Excel\Concerns\WithHeadings, \Maatwebsite\Excel\Concerns\WithTitle
 {
     public function __construct(private array $report) {}
 

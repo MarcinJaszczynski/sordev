@@ -25,7 +25,7 @@ final class SettlementFinanceFormSupport
     public static function notificationBody(array $summary): string
     {
         return sprintf(
-            'Plan: %s • Wpłacono: %s • Zaliczki: %s • Pozostało: %s',
+            'Planowane: %s • Zapłacono: %s • Zaliczki: %s • Pozostało: %s',
             $summary['planned_label'],
             $summary['paid_label'],
             $summary['advance_label'],
@@ -80,9 +80,9 @@ final class SettlementFinanceFormSupport
             : htmlspecialchars(number_format($amount, 2, ',', ' ').' PLN');
 
         $html = '<div class="space-y-2 text-sm">'
-            .'<div><strong>Plan rozliczenia:</strong> '.$fmt($plannedAmount).'</div>'
-            .'<div><strong>Wpłacono łącznie:</strong> '.$fmt($paidForeign > 0 ? $paidForeign : $paidPln).' <span class="text-gray-500">(biuro: '.$fmtPln($officePaid > 0 ? $officePaid : null).', pilot: '.$fmtPln($pilotPaid > 0 ? $pilotPaid : null).')</span></div>'
-            .'<div><strong>Zaliczka:</strong> '.$fmt($advanceAmount).' <span class="text-gray-500">(wpłacono: '.$fmt($advancePaidForeign > 0 ? $advancePaidForeign : $advancePaidPln).')</span></div>'
+            .'<div><strong>Planowane:</strong> '.$fmt($plannedAmount).'</div>'
+            .'<div><strong>Zapłacono łącznie:</strong> '.$fmt($paidForeign > 0 ? $paidForeign : $paidPln).' <span class="text-gray-500">(biuro: '.$fmtPln($officePaid > 0 ? $officePaid : null).', pilot: '.$fmtPln($pilotPaid > 0 ? $pilotPaid : null).')</span></div>'
+            .'<div><strong>Zaliczka:</strong> '.$fmt($advanceAmount).' <span class="text-gray-500">(zapłacono: '.$fmt($advancePaidForeign > 0 ? $advancePaidForeign : $advancePaidPln).')</span></div>'
             .'<div><strong>Pozostało do zapłaty:</strong> '.$fmt($remainingForeign).($remainingPln !== null ? ' <span class="text-gray-500">('.$fmtPln($remainingPln).')</span>' : '').'</div>'
             .'<div><strong>Status (szacunek):</strong> '.htmlspecialchars($statusLabel).'</div>'
             .'</div>';

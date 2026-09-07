@@ -384,7 +384,9 @@
                                                         <span>
                                                             {{ number_format($entryForeign, 2, ',', ' ') }}
                                                             {{ $entry->currency?->code ?: $entry->currency?->symbol ?: '' }}
-                                                            <span class="text-gray-500">(≈ {!! \App\Support\MoneyFormatter::html($entry->amount_pln) !!})</span>
+                                                            @if ((float) ($entry->amount_pln ?? 0) > 0.009)
+                                                                <span class="text-gray-500">(≈ {!! \App\Support\MoneyFormatter::html($entry->amount_pln) !!})</span>
+                                                            @endif
                                                         </span>
                                                     @else
                                                         <span>{!! \App\Support\MoneyFormatter::html($entry->amount_pln) !!}</span>

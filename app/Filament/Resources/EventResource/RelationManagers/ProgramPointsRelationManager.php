@@ -18,6 +18,7 @@ use App\Models\Reservation;
 use App\Services\ContractorLocationService;
 use App\Services\EventPaymentScheduleService;
 use App\Services\EventProgramPointCreator;
+use App\Services\EventProgramPointDeletionService;
 use App\Services\EventProgramPointOrderService;
 use App\Services\EventProgramScheduleService;
 use App\Services\ProgramPointContractorBulkAssignService;
@@ -25,12 +26,13 @@ use App\Services\ProgramPointListFinanceDisplay;
 use App\Services\ProgramPointSetFinanceAggregator;
 use App\Services\ProgramPointSetTimePropagator;
 use App\Services\ProgramPointSettlementCostCache;
-use App\Support\EventProgramPointPaymentDueColumn;
 use App\Support\ProgramPointCostPricing;
 use App\Support\ProgramTimeSlots;
 use App\Support\Reservations\ReservationWorkflowDisplay;
 use Filament\Forms;
 use Filament\Forms\Form;
+use Filament\Notifications\Actions\Action as NotificationAction;
+use Filament\Notifications\Notification;
 use Filament\Resources\RelationManagers\RelationManager;
 use Filament\Tables;
 use Filament\Tables\Enums\FiltersLayout;
@@ -88,8 +90,9 @@ class ProgramPointsRelationManager extends RelationManager
     public function mount(): void
     {
         parent::mount();
-        $this->mountInteractsWithTaskEditModal();
         $this->initializeSettlementCostDrawerForms();
+
+        app(EventProgramPointDeletionService::class)->cleanupOrphans($this->getOwnerRecord());
 
         $stored = session($this->expandedSetsSessionKey(), []);
         $storedIds = is_array($stored)
@@ -105,6 +108,38 @@ class ProgramPointsRelationManager extends RelationManager
         )));
 
         $this->persistExpandedSetIds();
+    }
+
+    #[On('undo-last-program-point-deletion')]
+    public function undoLastProgramPointDeletion(): void
+    {
+        $event = $this->getOwnerRecord();
+        $service = app(EventProgramPointDeletionService::class);
+        $pending = $service->pendingUndo((int) $event->id);
+
+        if ($pending === null) {
+            Notification::make()
+                ->title('Brak usunięcia do cofnięcia')
+                ->body('Ostatnie usunięcie wygasło albo zostało już przywrócone.')
+                ->warning()
+                ->send();
+
+            return;
+        }
+
+        $restored = $service->restoreByIds((int) $event->id, $pending['point_ids']);
+
+        Notification::make()
+            ->title($restored > 0 ? 'Cofnięto usunięcie' : 'Nie przywrócono punktów')
+            ->body($restored > 0
+                ? 'Przywrócono „'.$pending['label'].'”'
+                    .($pending['was_set'] ? ' (set z podpunktami)' : '').'.'
+                : 'Punkty nie były już w koszu.')
+            ->success()
+            ->send();
+
+        $this->resetTable();
+        $this->dispatch('event-program-points-refresh');
     }
 
     /**
@@ -173,9 +208,11 @@ class ProgramPointsRelationManager extends RelationManager
 
     protected function invalidateSettlementCostCaches(): void
     {
+        \App\Services\EventFinanceOverviewService::forgetOverviewCacheForEvent((int) $this->getOwnerRecord()->id);
         unset($this->selectedRow);
         $this->invalidateSettlementCostCache();
         $this->resetTable();
+        $this->dispatchSettlementFinanceChanged();
     }
 
     public function toggleSetExpanded(int $parentId): void
@@ -348,13 +385,18 @@ class ProgramPointsRelationManager extends RelationManager
 
                 ...ContractorWithLocationFields::append([
                     Forms\Components\Select::make('contractor_id')
-                        ->label('Wykonawca/Kontraktor')
+                        ->label(fn (?EventProgramPoint $record): string => $record?->isSetParent()
+                            ? 'Miejsce / kontrahent (set)'
+                            : 'Wykonawca/Kontraktor')
                         ->relationship('contractor', 'name')
                         ->getOptionLabelFromRecordUsing(fn (\App\Models\Contractor $record): string => $record->displayLabel())
                         ->searchable()
                         ->preload()
                         ->nullable()
                         ->live()
+                        ->helperText(fn (?EventProgramPoint $record): ?string => $record?->isSetParent()
+                            ? 'Miejsce / punkt zborny setu — nie nadpisuje płatności ani rezerwacji podpunktów.'
+                            : null)
                         ->afterStateUpdated(function ($state, Forms\Set $set): void {
                             app(ContractorLocationService::class)->syncLocationOnContractorChange(
                                 $set,
@@ -383,7 +425,7 @@ class ProgramPointsRelationManager extends RelationManager
 
                 Forms\Components\Toggle::make('is_hotel_service')
                     ->label('Usługa hotelu')
-                    ->helperText('Dodatkowa usługa świadczona przez hotel (bankiet, obiad, DJ...). Liczona raz w kalkulacji; nie zaznaczaj razem z „Nocleg / Hotel”.')
+                    ->helperText('Dodatkowa usługa świadczona przez hotel (bankiet, obiad, DJ...). Liczona raz w kosztach; nie zaznaczaj razem z „Nocleg / Hotel”.')
                     ->default(false)
                     ->inline(false)
                     ->reactive()
@@ -397,6 +439,9 @@ class ProgramPointsRelationManager extends RelationManager
                     ->label('Dzień')
                     ->numeric()
                     ->minValue(1)
+                    ->maxValue(fn (): int => $this->getOwnerRecord()->facultativeProgramDay())
+                    ->helperText(fn (): string => 'Dni wycieczki: 1–'.$this->getOwnerRecord()->resolveCoreProgramDaysCount()
+                        .'. '.$this->getOwnerRecord()->facultativeProgramDay().' = opcje fakultatywne.')
                     ->required(),
 
                 Forms\Components\TextInput::make('order')
@@ -570,7 +615,9 @@ class ProgramPointsRelationManager extends RelationManager
             ->defaultSort('day')
             ->striped(false)
             ->recordAction('edit')
-            ->recordClasses(fn (EventProgramPoint $record): string => $this->resolveProgramPointRowClass($record))
+            ->recordClasses(fn (EventProgramPoint $record): string => trim(
+                'epp-program-row '.$this->resolveProgramPointRowClass($record)
+            ))
             ->groups(fn (): array => $this->isProgramListView()
                 ? [
                     Group::make('day')
@@ -599,6 +646,7 @@ class ProgramPointsRelationManager extends RelationManager
                     ->label('Punkt programu')
                     ->view('filament.components.program-point-name-cell')
                     ->extraAttributes(['class' => 'epp-name-col'])
+                    ->extraCellAttributes(['class' => 'epp-name-col'])
                     ->searchable(query: function (\Illuminate\Database\Eloquent\Builder $query, string $search): \Illuminate\Database\Eloquent\Builder {
                         return $query->where(function ($q) use ($search) {
                             $q->whereHas('templatePoint', fn ($q) => $q->where('name', 'like', "%{$search}%"))
@@ -616,20 +664,40 @@ class ProgramPointsRelationManager extends RelationManager
                             ->select('event_program_points.*');
                     }),
 
-                Tables\Columns\ViewColumn::make('description_preview')
-                    ->label('Opis')
-                    ->view('filament.components.program-point-description-preview')
-                    ->toggleable(isToggledHiddenByDefault: true),
+                Tables\Columns\ViewColumn::make('contractor_label')
+                    ->label('Kontr.')
+                    ->view('filament.components.program-point-contractor-cell')
+                    ->toggleable()
+                    ->extraAttributes(['class' => 'epp-contractor-col'])
+                    ->extraCellAttributes(['class' => 'epp-contractor-col']),
 
-                Tables\Columns\ViewColumn::make('notes_preview')
-                    ->label('Uwagi biuro / pilot')
-                    ->view('filament.components.program-point-notes-preview')
-                    ->toggleable(),
+                Tables\Columns\ViewColumn::make('reservation_status')
+                    ->label('Rez.')
+                    ->view('filament.components.program-point-reservation-status-cell')
+                    ->toggleable()
+                    ->extraAttributes(['class' => 'epp-status-col epp-rez-col'])
+                    ->extraCellAttributes(['class' => 'epp-status-col epp-rez-col']),
+
+                Tables\Columns\ViewColumn::make('payment_status')
+                    ->label('Płat.')
+                    ->view('filament.components.program-point-payment-status-cell')
+                    ->toggleable()
+                    ->extraAttributes(['class' => 'epp-status-col epp-pay-col'])
+                    ->extraCellAttributes(['class' => 'epp-status-col epp-pay-col']),
+
+                Tables\Columns\ViewColumn::make('finance')
+                    ->label('S/P/Z')
+                    ->tooltip('S = szablon · P = plan · Z = zapłacono')
+                    ->view('filament.components.program-point-finance-cell')
+                    ->toggleable()
+                    ->extraAttributes(['class' => 'epp-finance-col'])
+                    ->extraCellAttributes(['class' => 'epp-finance-col']),
 
                 Tables\Columns\SelectColumn::make('settlement_paid_by')
-                    ->label('Płatnik')
+                    ->label('Pł.')
                     ->options(EventSettlementCost::$paidByOptions)
-                    ->tooltip('Kto płaci brakującą kwotę (plan − wpłaty)')
+                    ->tooltip('Płatnik pozostałej kwoty (plan − wpłaty)')
+                    ->toggleable()
                     ->getStateUsing(function (EventProgramPoint $record): ?string {
                         if ($record->getAttribute('_is_set_parent')) {
                             return null;
@@ -648,19 +716,16 @@ class ProgramPointsRelationManager extends RelationManager
                     })
                     ->placeholder('—')
                     ->disabled(fn (EventProgramPoint $record): bool => (bool) $record->getAttribute('_is_set_parent'))
-                    ->width('5.5rem'),
-
-                Tables\Columns\ViewColumn::make('finance')
-                    ->label('Finanse')
-                    ->view('filament.components.program-point-finance-cell')
-                    ->extraAttributes(['class' => 'epp-finance-col'])
-                    ->extraCellAttributes(['class' => 'epp-finance-col']),
+                    ->extraAttributes(['class' => 'epp-payer-col'])
+                    ->extraCellAttributes(['class' => 'epp-payer-col'])
+                    ->width('4.75rem'),
 
                 Tables\Columns\TextColumn::make('finance_doc')
-                    ->label('Faktura')
+                    ->label('Dok.')
                     ->alignCenter()
                     ->html()
                     ->disabledClick()
+                    ->toggleable()
                     ->extraCellAttributes(['class' => 'epp-doc-col'])
                     ->tooltip(fn (EventProgramPoint $record): ?string => $this->buildProgramPointPricesSummaryViewData($record)['documentStatusLabel'] ?? null)
                     ->state(function (EventProgramPoint $record): string {
@@ -672,76 +737,30 @@ class ProgramPointsRelationManager extends RelationManager
                         $hint = (string) ($s['documentHint'] ?? 'Brak pliku');
                         $url = (string) ($s['documentFirstUrl'] ?? '');
                         $hasFile = ! empty($s['hasUploadedFile']) && $url !== '';
+                        $title = e($s['documentStatusLabel'] ?? $hint);
+                        $badge = e((string) ($s['documentBadgeLabel'] ?? $hint));
 
                         if ($hasFile) {
                             return '<a href="'.e($url).'" target="_blank" rel="noopener noreferrer"'
-                                .' class="epp-invoice-btn"'
-                                .' title="'.e($s['documentStatusLabel'] ?? $hint).'">'
-                                .e($hint)
+                                .' class="epp-doc-badge epp-doc-badge--has"'
+                                .' title="'.$title.'">'
+                                .$badge
                                 .'</a>';
                         }
 
                         if ($hint !== '' && $hint !== 'Brak pliku') {
-                            return '<span class="epp-invoice-btn epp-invoice-btn--warn" title="'.e($hint).'">'.e($hint).'</span>';
+                            return '<span class="epp-doc-badge epp-doc-badge--warn" title="'.$title.'">Nr</span>';
                         }
 
-                        return '<span class="epp-invoice-btn epp-invoice-btn--empty">Brak</span>';
-                    }),
-
-                Tables\Columns\TextColumn::make('payment_due_dates')
-                    ->label('Terminy')
-                    ->html()
-                    ->toggleable(isToggledHiddenByDefault: true)
-                    ->state(function (EventProgramPoint $record): string {
-                        $event = $this->getOwnerRecord();
-
-                        if ($record->getAttribute('_is_set_parent')) {
-                            return '<span style="color:#999">—</span>';
-                        }
-
-                        return EventProgramPointPaymentDueColumn::html(
-                            $record,
-                            app(EventPaymentScheduleService::class)->collectForProgramPoint($record, $event),
-                        );
-                    }),
-
-                Tables\Columns\TextColumn::make('flags')
-                    ->label('Zakres')
-                    ->html()
-                    ->toggleable()
-                    ->state(function (EventProgramPoint $record): string {
-                        $chip = static function (string $onLabel, string $offLabel, bool $on, string $onClass, string $offClass): string {
-                            return sprintf(
-                                '<span class="epp-scope-chip %s" title="%s">%s</span>',
-                                $on ? $onClass : $offClass,
-                                e($on ? $onLabel : $offLabel),
-                                e($on ? $onLabel : $offLabel)
-                            );
-                        };
-
-                        $reservation = $record->latestVisibleReservation();
-                        $reservationHtml = '';
-                        if ($reservation && ! in_array((string) $reservation->status, ['cancelled', 'not_required'], true)) {
-                            $rezLabel = \App\Models\Reservation::$statuses[$reservation->status] ?? $reservation->status;
-                            $rezClass = in_array((string) $reservation->status, ['confirmed', 'completed', 'partially_confirmed'], true)
-                                ? 'epp-scope-chip--rez-ok'
-                                : 'epp-scope-chip--rez-pending';
-                            $reservationHtml = sprintf(
-                                '<span class="epp-scope-chip %s" title="%s">%s</span>',
-                                $rezClass,
-                                e($rezLabel),
-                                e($rezLabel),
-                            );
-                        }
-
-                        return '<div class="epp-scope">'
-                            .$chip('Program', 'Poza programem', (bool) $record->include_in_program, 'epp-scope-chip--program-on', 'epp-scope-chip--program-off')
-                            .$chip('Kalkulacja', 'Poza kalk.', (bool) $record->include_in_calculation, 'epp-scope-chip--calc-on', 'epp-scope-chip--calc-off')
-                            .$reservationHtml
-                            .'</div>';
+                        return '<span class="epp-doc-badge epp-doc-badge--empty" title="Brak pliku">—</span>';
                     })
-                    ->alignStart()
-                    ->width('8.5rem'),
+                    ->width('4.25rem'),
+
+                Tables\Columns\ViewColumn::make('office_pilot_notes')
+                    ->label('Uwagi')
+                    ->view('filament.components.program-point-notes-preview')
+                    ->toggleable(isToggledHiddenByDefault: true)
+                    ->extraCellAttributes(['class' => 'epp-notes-col']),
             ])
             ->filters([
                 Tables\Filters\SelectFilter::make('paid_by_settlement')
@@ -801,10 +820,10 @@ class ProgramPointsRelationManager extends RelationManager
                     ->falseLabel('Nie — poza programem'),
 
                 Tables\Filters\TernaryFilter::make('include_in_calculation')
-                    ->label('Uwzględniony w kalkulacji')
+                    ->label('Uwzględniony w kosztach')
                     ->placeholder('Wszystkie')
-                    ->trueLabel('Tak — w kalkulacji')
-                    ->falseLabel('Nie — poza kalkulacją'),
+                    ->trueLabel('Tak — w kosztach')
+                    ->falseLabel('Nie — poza kosztami'),
 
                 Tables\Filters\TernaryFilter::make('active')
                     ->label('Aktywny')
@@ -817,6 +836,14 @@ class ProgramPointsRelationManager extends RelationManager
                     ->label('Usunięte punkty'),
             ])
             ->headerActions([
+                Tables\Actions\Action::make('undo_last_deletion')
+                    ->label('Cofnij ostatnie usunięcie')
+                    ->icon('heroicon-o-arrow-uturn-left')
+                    ->color('warning')
+                    ->visible(fn (): bool => app(EventProgramPointDeletionService::class)
+                        ->hasPendingUndo((int) $this->getOwnerRecord()->id))
+                    ->action(fn () => $this->undoLastProgramPointDeletion()),
+
                 Tables\Actions\Action::make('sync_from_template')
                     ->label('Przywróć kolejność ze szablonu')
                     ->icon('heroicon-o-arrow-path')
@@ -825,14 +852,20 @@ class ProgramPointsRelationManager extends RelationManager
                     ->visible(fn () => (bool) $this->getOwnerRecord()->event_template_id)
                     ->modalDescription('Ustawia day/order i powiązania setów według szablonu imprezy. Punkty dodane ręcznie (spoza szablonu) pozostają bez zmian.')
                     ->action(function (): void {
+                        $deletionService = app(EventProgramPointDeletionService::class);
+                        $orphans = $deletionService->cleanupOrphans($this->getOwnerRecord());
+
                         $service = app(EventProgramPointOrderService::class);
                         $updated = $service->syncOrderFromTemplate($this->getOwnerRecord());
 
-                        \Filament\Notifications\Notification::make()
+                        Notification::make()
                             ->title('Przywrócono kolejność ze szablonu')
-                            ->body($updated > 0
-                                ? "Zaktualizowano {$updated} pól (kolejność / powiązania)."
-                                : 'Kolejność była już zgodna ze szablonem.')
+                            ->body(trim(
+                                ($updated > 0
+                                    ? "Zaktualizowano {$updated} pól (kolejność / powiązania)."
+                                    : 'Kolejność była już zgodna ze szablonem.')
+                                .($orphans > 0 ? " Usunięto też {$orphans} osieroconych podpunktów." : '')
+                            ))
                             ->success()
                             ->send();
 
@@ -847,14 +880,20 @@ class ProgramPointsRelationManager extends RelationManager
                     ->requiresConfirmation()
                     ->modalDescription('Ustawia kolejność wg godzin rozpoczęcia (punkty bez godziny — na końcu dnia wg bieżącego order).')
                     ->action(function (): void {
+                        $orphans = app(EventProgramPointDeletionService::class)
+                            ->cleanupOrphans($this->getOwnerRecord());
+
                         $service = app(EventProgramPointOrderService::class);
                         $updated = $service->repairOrderByStartTimes($this->getOwnerRecord());
 
-                        \Filament\Notifications\Notification::make()
+                        Notification::make()
                             ->title('Kolejność uporządkowana')
-                            ->body($updated > 0
-                                ? "Zaktualizowano {$updated} pozycji wg godzin."
-                                : 'Kolejność była już zgodna z godzinami.')
+                            ->body(trim(
+                                ($updated > 0
+                                    ? "Zaktualizowano {$updated} pozycji wg godzin."
+                                    : 'Kolejność była już zgodna z godzinami.')
+                                .($orphans > 0 ? " Usunięto też {$orphans} osieroconych podpunktów." : '')
+                            ))
                             ->success()
                             ->send();
 
@@ -916,7 +955,9 @@ class ProgramPointsRelationManager extends RelationManager
                     ->modalSubmitActionLabel('Dodaj punkt')
                     ->modalCancelActionLabel('Anuluj')
                     ->fillForm(function (): array {
-                        $day = max(1, (int) ($this->getActiveProgramDayTab() ?? $this->ownerProgramDay ?? 1));
+                        $day = $this->resolveDayForNewProgramPoint(
+                            max(1, (int) ($this->getActiveProgramDayTab() ?? $this->ownerProgramDay ?? 1))
+                        );
 
                         return [
                             'day' => $day,
@@ -989,21 +1030,19 @@ class ProgramPointsRelationManager extends RelationManager
                             ->schema([
                                 Forms\Components\Select::make('day')
                                     ->label('Dzień')
-                                    ->options(function () {
-                                        $event = $this->getOwnerRecord();
-                                        $maxDay = $event->resolveProgramDaysCount();
-                                        $options = [];
-                                        for ($i = 1; $i <= $maxDay; $i++) {
-                                            $options[$i] = $event->programDayLabel($i);
-                                        }
-
-                                        return $options;
-                                    })
-                                    ->default(fn (): int => max(1, (int) ($this->getActiveProgramDayTab() ?? $this->ownerProgramDay ?? 1)))
+                                    ->options(fn (): array => $this->programDaySelectOptions())
+                                    ->default(fn (): int => $this->resolveDayForNewProgramPoint(
+                                        max(1, (int) ($this->getActiveProgramDayTab() ?? $this->ownerProgramDay ?? 1))
+                                    ))
+                                    ->disabled(fn (): bool => $this->isProgramDaysTabView())
+                                    ->dehydrated()
+                                    ->helperText(fn (): ?string => $this->isProgramDaysTabView()
+                                        ? 'Punkt trafi do aktywnej zakładki dnia.'
+                                        : 'Ostatnia pozycja = opcje fakultatywne (po ostatnim dniu wycieczki).')
                                     ->live()
                                     ->afterStateUpdated(function (mixed $state, Forms\Set $set, Forms\Get $get): void {
                                         $set('order', $this->nextProgramPointOrderForDay(
-                                            max(1, (int) ($state ?? 1)),
+                                            $this->resolveDayForNewProgramPoint(max(1, (int) ($state ?? 1))),
                                             filled($get('parent_id')) ? (int) $get('parent_id') : null,
                                         ));
                                     })
@@ -1014,7 +1053,9 @@ class ProgramPointsRelationManager extends RelationManager
                                     ->numeric()
                                     ->minValue(0)
                                     ->default(fn (): int => $this->nextProgramPointOrderForDay(
-                                        max(1, (int) ($this->getActiveProgramDayTab() ?? $this->ownerProgramDay ?? 1)),
+                                        $this->resolveDayForNewProgramPoint(
+                                            max(1, (int) ($this->getActiveProgramDayTab() ?? $this->ownerProgramDay ?? 1))
+                                        ),
                                     ))
                                     ->required(),
                             ]),
@@ -1104,6 +1145,11 @@ class ProgramPointsRelationManager extends RelationManager
                             $eventPoint = EventProgramPoint::find($id);
                         }
 
+                        $day = $this->resolveDayForNewProgramPoint(
+                            isset($data['day']) ? (int) $data['day'] : null
+                        );
+                        $data['day'] = $day;
+
                         $unitPrice = (float) ($data['unit_price'] ?? ($templatePoint?->unit_price ?? $eventPoint?->unit_price ?? 0));
                         $event = $this->getOwnerRecord();
                         $participantCount = max(1, (int) ($event->participant_count ?? 1));
@@ -1122,7 +1168,7 @@ class ProgramPointsRelationManager extends RelationManager
                             $createdPoint = $creator->addFromTemplate(
                                 $this->getOwnerRecord(),
                                 $templatePoint,
-                                (int) $data['day'],
+                                $day,
                                 $data['parent_id'] ?? null,
                                 cloneTemplateChildren: empty($data['parent_id']),
                                 options: [
@@ -1151,11 +1197,11 @@ class ProgramPointsRelationManager extends RelationManager
                                 ],
                             );
                         } elseif ($eventPoint) {
-                            $cloneRecursive = function ($sourcePoint, $eventId, $parentId = null, $day = null) use (&$cloneRecursive, $data) {
+                            $cloneRecursive = function ($sourcePoint, $eventId, $parentId = null, $day = null) use (&$cloneRecursive) {
                                 $cloned = $sourcePoint->replicate();
                                 $cloned->event_id = $eventId;
                                 $cloned->parent_id = $parentId;
-                                $cloned->day = $day ?? $data['day'];
+                                $cloned->day = (int) $day;
                                 $cloned->order = $sourcePoint->order;
                                 $cloned->save();
                                 foreach ($sourcePoint->children as $child) {
@@ -1164,7 +1210,7 @@ class ProgramPointsRelationManager extends RelationManager
 
                                 return $cloned;
                             };
-                            $createdPoint = $cloneRecursive($eventPoint, $this->getOwnerRecord()->id, $data['parent_id'] ?? null, $data['day']);
+                            $createdPoint = $cloneRecursive($eventPoint, $this->getOwnerRecord()->id, $data['parent_id'] ?? null, $day);
                             $createdPoint->update([
                                 'include_in_program' => (bool) ($data['include_in_program'] ?? true),
                                 'include_in_calculation' => (bool) ($data['include_in_calculation'] ?? true),
@@ -1174,7 +1220,7 @@ class ProgramPointsRelationManager extends RelationManager
                             $createdPoint = $this->getOwnerRecord()->programPoints()->create([
                                 'name' => $data['name'],
                                 'description' => $data['description'] ?? null,
-                                'day' => $data['day'],
+                                'day' => $day,
                                 'order' => $data['order'],
                                 'parent_id' => $data['parent_id'] ?? null,
                                 'start_time' => $data['start_time'] ?? null,
@@ -1256,6 +1302,14 @@ class ProgramPointsRelationManager extends RelationManager
 
                 Tables\Actions\ActionGroup::make([
                     Tables\Actions\EditAction::make('edit')
+                        ->mutateFormDataUsing(function (array $data): array {
+                            if (array_key_exists('day', $data)) {
+                                $data['day'] = $this->getOwnerRecord()
+                                    ->clampProgramPointDay((int) $data['day']);
+                            }
+
+                            return $data;
+                        })
                         ->before(function (EventProgramPoint $record): void {
                             $this->pendingProgramPointTimeEdit = [
                                 'start_time' => $record->start_time ? substr((string) $record->start_time, 0, 5) : null,
@@ -1348,10 +1402,60 @@ class ProgramPointsRelationManager extends RelationManager
                         ]),
 
                     Tables\Actions\DeleteAction::make()
-                        ->before(fn (EventProgramPoint $record) => $this->purgeProgramPointSettlementCosts($record)),
-                    Tables\Actions\RestoreAction::make(),
+                        ->modalHeading(function (EventProgramPoint $record): string {
+                            return app(EventProgramPointDeletionService::class)
+                                ->describeDeletion($record)['heading'];
+                        })
+                        ->modalDescription(function (EventProgramPoint $record): string {
+                            return app(EventProgramPointDeletionService::class)
+                                ->describeDeletion($record)['description'];
+                        })
+                        ->modalSubmitActionLabel('Usuń')
+                        ->successNotification(null)
+                        ->before(fn (EventProgramPoint $record) => $this->purgeProgramPointSettlementCosts($record))
+                        ->using(function (EventProgramPoint $record): void {
+                            $result = app(EventProgramPointDeletionService::class)->softDelete($record);
+                            $this->notifyProgramPointDeletion($result);
+                        }),
+                    Tables\Actions\RestoreAction::make()
+                        ->modalHeading(function (EventProgramPoint $record): string {
+                            $label = $record->name ?? $record->templatePoint?->name ?? ('#'.$record->id);
+                            $childCount = EventProgramPoint::onlyTrashed()
+                                ->where('parent_id', $record->id)
+                                ->count();
+
+                            return $childCount > 0
+                                ? 'Przywrócić set „'.$label.'” z podpunktami?'
+                                : 'Przywrócić punkt „'.$label.'”?';
+                        })
+                        ->modalDescription(function (EventProgramPoint $record): ?string {
+                            $childCount = EventProgramPoint::onlyTrashed()
+                                ->where('parent_id', $record->id)
+                                ->count();
+
+                            return $childCount > 0
+                                ? 'Przywrócisz set wraz z '.$childCount.' usuniętymi podpunktami.'
+                                : null;
+                        })
+                        ->using(function (EventProgramPoint $record): void {
+                            app(EventProgramPointDeletionService::class)->restore($record);
+                            app(EventProgramPointDeletionService::class)->forgetUndo((int) $record->event_id);
+                        }),
                     Tables\Actions\ForceDeleteAction::make()
-                        ->before(fn (EventProgramPoint $record) => $this->purgeProgramPointSettlementCosts($record)),
+                        ->modalHeading(function (EventProgramPoint $record): string {
+                            $label = $record->name ?? $record->templatePoint?->name ?? ('#'.$record->id);
+                            $childCount = EventProgramPoint::withTrashed()
+                                ->where('parent_id', $record->id)
+                                ->count();
+
+                            return $childCount > 0
+                                ? 'Na zawsze usunąć set „'.$label.'”?'
+                                : 'Na zawsze usunąć punkt „'.$label.'”?';
+                        })
+                        ->modalDescription('Tej operacji nie da się cofnąć.')
+                        ->before(fn (EventProgramPoint $record) => $this->purgeProgramPointSettlementCosts($record))
+                        ->using(fn (EventProgramPoint $record) => app(EventProgramPointDeletionService::class)
+                            ->forceDelete($record)),
                 ])
                     ->label('Więcej')
                     ->icon('heroicon-o-ellipsis-vertical'),
@@ -1359,19 +1463,97 @@ class ProgramPointsRelationManager extends RelationManager
             ->bulkActions([
                 Tables\Actions\BulkActionGroup::make([
                     Tables\Actions\DeleteBulkAction::make()
+                        ->modalHeading('Usunąć zaznaczone punkty?')
+                        ->modalDescription('Sety zostaną usunięte wraz z podpunktami. Po usunięciu możesz cofnąć ostatnią operację zbiorczą.')
+                        ->successNotification(null)
                         ->before(function ($records): void {
                             foreach ($records as $record) {
                                 if ($record instanceof EventProgramPoint) {
                                     $this->purgeProgramPointSettlementCosts($record);
                                 }
                             }
+                        })
+                        ->action(function ($records): void {
+                            $service = app(EventProgramPointDeletionService::class);
+                            $allIds = [];
+                            $setCount = 0;
+                            $pointCount = 0;
+
+                            foreach ($records as $record) {
+                                if (! $record instanceof EventProgramPoint) {
+                                    continue;
+                                }
+
+                                if ($record->trashed()) {
+                                    continue;
+                                }
+
+                                $result = $service->softDelete($record);
+                                $allIds = array_merge($allIds, $result['point_ids']);
+                                if ($result['was_set']) {
+                                    $setCount++;
+                                } elseif ($result['point_ids'] !== []) {
+                                    $pointCount++;
+                                }
+                            }
+
+                            $allIds = array_values(array_unique($allIds));
+
+                            if ($allIds === []) {
+                                return;
+                            }
+
+                            $title = 'Usunięto zaznaczone punkty';
+                            $body = trim(
+                                ($setCount > 0 ? "{$setCount} set(ów). " : '')
+                                .($pointCount > 0 ? "{$pointCount} punkt(ów). " : '')
+                                .'Możesz to cofnąć.'
+                            );
+
+                            $service->rememberUndoPayload((int) $this->getOwnerRecord()->id, [
+                                'point_ids' => $allIds,
+                                'was_set' => $setCount > 0,
+                                'child_count' => max(0, count($allIds) - $setCount - $pointCount),
+                                'label' => 'zaznaczenie',
+                                'title' => $title,
+                                'body' => $body,
+                            ]);
+
+                            $this->notifyProgramPointDeletion([
+                                'point_ids' => $allIds,
+                                'was_set' => $setCount > 0,
+                                'child_count' => 0,
+                                'label' => 'zaznaczenie',
+                                'title' => $title,
+                                'body' => $body,
+                            ]);
                         }),
-                    Tables\Actions\RestoreBulkAction::make(),
+                    Tables\Actions\RestoreBulkAction::make()
+                        ->action(function ($records): void {
+                            $service = app(EventProgramPointDeletionService::class);
+
+                            foreach ($records as $record) {
+                                if ($record instanceof EventProgramPoint) {
+                                    $service->restore($record);
+                                }
+                            }
+
+                            $service->forgetUndo((int) $this->getOwnerRecord()->id);
+                        }),
                     Tables\Actions\ForceDeleteBulkAction::make()
                         ->before(function ($records): void {
                             foreach ($records as $record) {
                                 if ($record instanceof EventProgramPoint) {
                                     $this->purgeProgramPointSettlementCosts($record);
+                                }
+                            }
+                        })
+                        ->action(function ($records): void {
+                            $service = app(EventProgramPointDeletionService::class);
+
+                            foreach ($records as $record) {
+                                if ($record instanceof EventProgramPoint) {
+                                    $service->forceDelete($record);
                                 }
                             }
                         }),
@@ -1389,13 +1571,13 @@ class ProgramPointsRelationManager extends RelationManager
                         ->action(fn ($records) => $records->each->update(['include_in_program' => false])),
 
                     Tables\Actions\BulkAction::make('bulk_include_in_calculation_on')
-                        ->label('Zaznacz w kalkulacji')
+                        ->label('Dodaj do kosztów')
                         ->icon('heroicon-o-calculator')
                         ->color('success')
                         ->action(fn ($records) => $records->each->update(['include_in_calculation' => true])),
 
                     Tables\Actions\BulkAction::make('bulk_include_in_calculation_off')
-                        ->label('Odznacz z kalkulacji')
+                        ->label('Wyłącz z kosztów')
                         ->icon('heroicon-o-calculator')
                         ->color('gray')
                         ->action(fn ($records) => $records->each->update(['include_in_calculation' => false])),
@@ -1414,7 +1596,7 @@ class ProgramPointsRelationManager extends RelationManager
                         }),
 
                     Tables\Actions\BulkAction::make('bulk_include_in_settlement')
-                        ->label('Przywróć do rozliczenia')
+                        ->label('W programie i w kosztach')
                         ->icon('heroicon-o-calculator')
                         ->color('success')
                         ->action(function ($records): void {
@@ -1423,6 +1605,24 @@ class ProgramPointsRelationManager extends RelationManager
                                 'include_in_calculation' => true,
                                 'active' => true,
                             ]);
+                        }),
+
+                    Tables\Actions\BulkAction::make('bulk_hide_times_on')
+                        ->label('Ukryj godziny')
+                        ->icon('heroicon-o-eye-slash')
+                        ->color('gray')
+                        ->action(function ($records): void {
+                            $records->each->update(['hide_times' => true]);
+                            $this->dispatch('event-program-points-refresh');
+                        }),
+
+                    Tables\Actions\BulkAction::make('bulk_hide_times_off')
+                        ->label('Pokaż godziny')
+                        ->icon('heroicon-o-clock')
+                        ->color('gray')
+                        ->action(function ($records): void {
+                            $records->each->update(['hide_times' => false]);
+                            $this->dispatch('event-program-points-refresh');
                         }),
 
                     Tables\Actions\BulkAction::make('bulk_set_paid_by')
@@ -1513,6 +1713,49 @@ class ProgramPointsRelationManager extends RelationManager
     protected function resolveProgramDayLabel(int $day): string
     {
         return $this->getOwnerRecord()->programDayLabel($day);
+    }
+
+    /**
+     * Dzień dla nowego punktu: w widoku „Dzień” zawsze aktywna zakładka;
+     * poza tym clamp do core / core+1 (fakultatyw).
+     */
+    protected function resolveDayForNewProgramPoint(?int $requestedDay): int
+    {
+        $event = $this->getOwnerRecord();
+
+        if ($this->isProgramDaysTabView()) {
+            $active = max(1, (int) ($this->getActiveProgramDayTab() ?? $this->ownerProgramDay ?? 1));
+
+            return $event->clampProgramPointDay(
+                $active,
+                allowFacultative: $event->isFacultativeProgramDay($active),
+            );
+        }
+
+        return $event->clampProgramPointDay(
+            max(1, (int) ($requestedDay ?? $this->ownerProgramDay ?? 1)),
+            allowFacultative: true,
+        );
+    }
+
+    /**
+     * Opcje selecta dnia: dni wycieczki + zawsze slot fakultatywny (core+1).
+     *
+     * @return array<int, string>
+     */
+    protected function programDaySelectOptions(): array
+    {
+        $event = $this->getOwnerRecord();
+        $core = $event->resolveCoreProgramDaysCount();
+        $options = [];
+
+        for ($i = 1; $i <= $core; $i++) {
+            $options[$i] = $event->programDayLabel($i);
+        }
+
+        $options[$event->facultativeProgramDay()] = 'Opcje fakultatywne';
+
+        return $options;
     }
 
     protected function updateProgramPointVisibility(
@@ -1736,8 +1979,8 @@ class ProgramPointsRelationManager extends RelationManager
                     ->default(true)
                     ->inline(false),
                 Forms\Components\Toggle::make('include_in_calculation')
-                    ->label('W kalkulacji')
-                    ->helperText('Kosztorys i rozliczenie.')
+                    ->label('W kosztach')
+                    ->helperText('Wchodzi do kosztów i rozliczenia.')
                     ->default(true)
                     ->inline(false),
             ])
@@ -1746,7 +1989,11 @@ class ProgramPointsRelationManager extends RelationManager
 
     private function programPointRichTextField(string $name): \FilamentTiptapEditor\TiptapEditor
     {
-        return \FilamentTiptapEditor\TiptapEditor::make($name)->live(onBlur: true);
+        // TipTap dehydruje pustą treść do null; zapisujemy '' żeby nie włączać
+        // dziedziczenia z szablonu (resolvedDescription / resolved*Notes).
+        return \FilamentTiptapEditor\TiptapEditor::make($name)
+            ->live(onBlur: true)
+            ->mutateDehydratedStateUsing(fn (mixed $state): string => is_string($state) ? $state : '');
     }
 
     /**
@@ -2090,6 +2337,7 @@ class ProgramPointsRelationManager extends RelationManager
             'documentHint' => null,
             'documentStatusLabel' => null,
             'documentFirstUrl' => null,
+            'documentBadgeLabel' => null,
             'hasUploadedFile' => false,
             'statusLabel' => null,
             'statusColor' => 'gray',
@@ -2099,9 +2347,32 @@ class ProgramPointsRelationManager extends RelationManager
             'totalLine' => null,
             'advanceLine' => null,
             'remainingLine' => null,
+            'paymentLines' => [],
             'isSetRollup' => false,
             'hideSetParentFinance' => true,
         ];
+    }
+
+    protected function notifyProgramPointDeletion(array $result): void
+    {
+        if (($result['point_ids'] ?? []) === []) {
+            return;
+        }
+
+        Notification::make()
+            ->title((string) ($result['title'] ?? 'Usunięto punkt programu'))
+            ->body((string) ($result['body'] ?? 'Możesz to cofnąć.'))
+            ->success()
+            ->persistent()
+            ->actions([
+                NotificationAction::make('undo')
+                    ->label('Cofnij')
+                    ->button()
+                    ->dispatch('undo-last-program-point-deletion'),
+            ])
+            ->send();
+
+        $this->dispatch('event-program-points-refresh');
     }
 
     protected function purgeProgramPointSettlementCosts(EventProgramPoint $record): void

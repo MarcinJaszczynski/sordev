@@ -2,6 +2,8 @@
 
 namespace App\Models;
 
+use App\Services\EventHotelOccupancyService;
+use App\Support\EventHotelPlanFormatting;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
@@ -61,14 +63,19 @@ class EventHotelStay extends Model
         return $this->hasMany(EventHotelRoomLine::class)->orderBy('order');
     }
 
-    public function totalPln(?string $eventPricingMode = 'lines'): float
+    public function totalPln(?string $eventPricingMode = 'lines', ?int $peoplePerNight = null): float
     {
-        if ($eventPricingMode === 'flat_stay') {
+        if (EventHotelPlanFormatting::isEventFlatPricing($eventPricingMode)) {
             return 0.0;
         }
 
-        if ($this->pricing_mode === 'flat_night' && $this->flat_amount !== null) {
-            $amount = round((float) $this->flat_amount, 2);
+        if (EventHotelPlanFormatting::isStayFlatPricing($this->pricing_mode) && $this->flat_amount !== null) {
+            $people = $peoplePerNight ?? $this->requiredBedsForPricing();
+            $amount = EventHotelPlanFormatting::resolveFlatNativeAmount(
+                (float) $this->flat_amount,
+                $this->pricing_mode,
+                $people,
+            );
             $currency = $this->flat_currency_id
                 ? Currency::query()->find($this->flat_currency_id)
                 : null;
@@ -85,6 +92,18 @@ class EventHotelStay extends Model
         }
 
         return round((float) $this->roomLines->sum(fn (EventHotelRoomLine $line) => $line->lineTotalPln()), 2);
+    }
+
+    protected function requiredBedsForPricing(): int
+    {
+        $this->loadMissing('event');
+
+        if (! $this->event) {
+            return 0;
+        }
+
+        return (int) app(EventHotelOccupancyService::class)
+            ->forEvent($this->event)['required_beds_per_night'];
     }
 
     public function isComplete(): bool

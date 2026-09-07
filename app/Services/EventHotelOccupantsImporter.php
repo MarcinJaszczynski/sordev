@@ -37,7 +37,9 @@ class EventHotelOccupantsImporter
 
         $stayPayloads = $this->planService->staysToPayload($event);
         $participants = collect($this->planService->availableParticipants($event));
-        $hotelRoomsByName = HotelRoom::query()->get()->keyBy(fn (HotelRoom $room) => $this->normalizeKey($room->name));
+        $hotelRooms = HotelRoom::query()->get();
+        $hotelRoomsById = $hotelRooms->keyBy('id');
+        $hotelRoomsByName = $hotelRooms->keyBy(fn (HotelRoom $room) => $this->normalizeKey($room->name));
 
         $imported = 0;
         $skipped = 0;
@@ -90,7 +92,7 @@ class EventHotelOccupantsImporter
 
             $line = $stayPayloads[$stayIndex]['room_lines'][$lineIndex];
             $maxUnits = max(1, (int) ($line['quantity'] ?? 1));
-            $maxBeds = EventHotelPlanFormatting::linePeopleCount($line, $hotelRoomsByName);
+            $maxBeds = EventHotelPlanFormatting::linePeopleCount($line, $hotelRoomsById);
 
             if ($unitIndex > $maxUnits || $bedIndex > $maxBeds) {
                 $skipped++;

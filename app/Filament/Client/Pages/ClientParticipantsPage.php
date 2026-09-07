@@ -39,6 +39,8 @@ class ClientParticipantsPage extends Page
 
     public string $formLastName = '';
 
+    public string $formGender = '';
+
     public string $formDiet = '';
 
     /** @var array<string, bool> */
@@ -63,7 +65,7 @@ class ClientParticipantsPage extends Page
 
     public function getTitle(): string|Htmlable
     {
-        return 'Uczestnicy: '.$this->event->name;
+        return $this->event->name;
     }
 
     public function getHeading(): string|Htmlable
@@ -244,7 +246,7 @@ class ClientParticipantsPage extends Page
 
         return response()->streamDownload(function (): void {
             $out = fopen('php://output', 'w');
-            fputcsv($out, ['Imię', 'Nazwisko', 'Dieta', 'Zgody', 'Należne', 'Wpłacone', 'Różnica'], ';');
+            fputcsv($out, ['Imię', 'Nazwisko', 'Płeć', 'Dieta', 'Zgody', 'Należne', 'Wpłacone', 'Różnica'], ';');
 
             $balances = app(\App\Services\ParticipantPaymentBalanceService::class);
             foreach ($this->participants as $p) {
@@ -254,6 +256,7 @@ class ClientParticipantsPage extends Page
                 fputcsv($out, [
                     $p->first_name,
                     $p->last_name,
+                    $p->genderLabel(),
                     $p->diet,
                     $p->consentsCompletedLabel(),
                     number_format($due, 2, ',', ''),
@@ -274,6 +277,7 @@ class ClientParticipantsPage extends Page
         $this->editId = $p->id;
         $this->formFirstName = (string) ($p->first_name ?? '');
         $this->formLastName = (string) ($p->last_name ?? '');
+        $this->formGender = (string) ($p->gender ?? '');
         $this->formDiet = (string) ($p->diet ?? '');
         $this->formConsents = EventParticipantConsents::checklist($p->consents);
     }
@@ -283,6 +287,7 @@ class ClientParticipantsPage extends Page
         $this->editId = null;
         $this->formFirstName = '';
         $this->formLastName = '';
+        $this->formGender = '';
         $this->formDiet = '';
         $this->resetConsentForm();
     }
@@ -294,6 +299,7 @@ class ClientParticipantsPage extends Page
         $this->validate([
             'formFirstName' => ['required_without:formLastName', 'nullable', 'string', 'max:120'],
             'formLastName' => ['nullable', 'string', 'max:120'],
+            'formGender' => ['nullable', 'string', 'in:'.implode(',', array_keys(EventParticipant::$genders))],
             'formDiet' => ['nullable', 'string', 'max:255'],
         ]);
 
@@ -316,6 +322,7 @@ class ClientParticipantsPage extends Page
             participant: $participant,
             firstName: trim($this->formFirstName) ?: null,
             lastName: trim($this->formLastName) ?: null,
+            gender: $this->formGender !== '' ? $this->formGender : null,
             diet: trim($this->formDiet) ?: null,
             consentFlags: $flags,
             ensurePayment: false,

@@ -57,6 +57,9 @@ return [
     // Publiczny adres serwisu używany do generowania linków absolutnych.
     'public_url' => env('APP_PUBLIC_URL', env('APP_URL', 'http://localhost')),
 
+    // Bazowy URL w /llms.txt (katalog AI). Domyślnie produkcja bprafa.pl.
+    'llms_url' => env('APP_LLMS_URL', 'https://bprafa.pl'),
+
     /*
     |--------------------------------------------------------------------------
     | Application Timezone

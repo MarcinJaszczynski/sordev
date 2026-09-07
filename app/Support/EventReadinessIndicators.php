@@ -3,6 +3,7 @@
 namespace App\Support;
 
 use App\Models\Event;
+use App\Services\EventHotelOccupancyService;
 use Illuminate\Support\Facades\Schema;
 
 final class EventReadinessIndicators
@@ -12,13 +13,15 @@ final class EventReadinessIndicators
      */
     public static function forEvent(Event $event): array
     {
-        // Kanoniczne karty: odprawa, zaliczka pilota, ubezpieczenie, kierowca, hotel.
+        // Kanoniczne karty: odprawa, zaliczka pilota, ubezpieczenie, kierowca, autokar, hotel, miejsca hotel.
         return [
             self::checkInItem($event),
             self::pilotFundsItem($event),
             self::insuranceItem($event),
             self::driverItem($event),
+            self::busCapacityItem($event),
             self::hotelItem($event),
+            self::hotelBedsItem($event),
         ];
     }
 
@@ -140,7 +143,9 @@ final class EventReadinessIndicators
                 // Polisa / status „Gotowe”: Operacje → Ubezpieczenia.
                 'insurance' => \App\Filament\Resources\EventResource::getUrl('day-insurances', ['record' => $event]),
                 'driver' => \App\Filament\Resources\EventResource::getUrl('transport', ['record' => $event]),
+                'bus_capacity' => \App\Filament\Resources\EventResource::getUrl('transport', ['record' => $event]),
                 'hotel' => \App\Filament\Resources\EventResource::getUrl('hotel-planning', ['record' => $event]),
+                'hotel_beds' => \App\Filament\Resources\EventResource::getUrl('hotel-planning', ['record' => $event]),
                 default => null,
             };
         } catch (\Throwable) {
@@ -155,7 +160,9 @@ final class EventReadinessIndicators
             'pilot_funds' => 'heroicon-o-banknotes',
             'insurance' => 'heroicon-o-shield-check',
             'driver' => 'heroicon-o-truck',
+            'bus_capacity' => 'heroicon-o-users',
             'hotel' => 'heroicon-o-building-office-2',
+            'hotel_beds' => 'heroicon-o-home-modern',
             default => 'heroicon-o-flag',
         };
     }
@@ -169,6 +176,7 @@ final class EventReadinessIndicators
             'OK' => 'Gotowe',
             'w toku' => 'W toku',
             'plan' => 'Zaplanowano',
+            'do potw.' => 'Do potwierdzenia',
             'brak' => 'Do uzupełnienia',
             '—' => 'Nie dotyczy',
             default => (string) $item['short'],
@@ -180,18 +188,21 @@ final class EventReadinessIndicators
      */
     protected static function checkInItem(Event $event): array
     {
-        $status = Schema::hasColumn('events', 'check_in_status')
-            ? (string) ($event->check_in_status ?: 'pending')
-            : 'pending';
-
-        return match ($status) {
-            'completed' => [
+        if ($event->isCheckInCompleted()) {
+            return [
                 'key' => 'check_in',
                 'label' => 'Odprawa',
                 'short' => 'OK',
                 'tone' => 'ok',
                 'title' => 'Odprawa zakończona',
-            ],
+            ];
+        }
+
+        $status = Schema::hasColumn('events', 'check_in_status')
+            ? (string) ($event->check_in_status ?: 'pending')
+            : 'pending';
+
+        return match ($status) {
             'in_progress' => [
                 'key' => 'check_in',
                 'label' => 'Odprawa',
@@ -250,6 +261,11 @@ final class EventReadinessIndicators
             ];
         }
 
+        $busFunding = self::pilotBusCollectionFundingSummary($event);
+        if ($busFunding !== null) {
+            return $busFunding;
+        }
+
         return [
             'key' => 'pilot_funds',
             'label' => 'Zaliczka pilota',
@@ -260,18 +276,77 @@ final class EventReadinessIndicators
     }
 
     /**
+     * Gdy biuro nie wypłaca gotówki — wystarczy plan/zbiórka w autokarze.
+     *
+     * @return array{key: string, label: string, short: string, tone: string, title: string}|null
+     */
+    protected static function pilotBusCollectionFundingSummary(Event $event): ?array
+    {
+        if (! Schema::hasTable('event_bus_collections')) {
+            return null;
+        }
+
+        $rows = \App\Models\EventBusCollection::query()
+            ->where('event_id', $event->id)
+            ->get(['status', 'amount']);
+
+        if ($rows->isEmpty()) {
+            return null;
+        }
+
+        $held = round((float) $rows->whereIn('status', \App\Models\EventBusCollection::HELD_STATUSES)->sum('amount'), 2);
+        $planned = round((float) $rows->where('status', \App\Models\EventBusCollection::STATUS_PLANNED)->sum('amount'), 2);
+        $handed = round((float) $rows->whereIn('status', [
+            \App\Models\EventBusCollection::STATUS_HANDED_TO_OFFICE,
+            \App\Models\EventBusCollection::STATUS_CONFIRMED,
+        ])->sum('amount'), 2);
+
+        if ($held > 0.009) {
+            return [
+                'key' => 'pilot_funds',
+                'label' => 'Zaliczka pilota',
+                'short' => 'zbiórka',
+                'tone' => 'ok',
+                'title' => 'Gotówka z autokaru u pilota: '.number_format($held, 0, ',', ' '),
+            ];
+        }
+
+        if ($planned > 0.009) {
+            return [
+                'key' => 'pilot_funds',
+                'label' => 'Zaliczka pilota',
+                'short' => 'plan zb.',
+                'tone' => 'warn',
+                'title' => 'Zaplanowano zbiórkę w autokarze: '.number_format($planned, 0, ',', ' ').' — bez wypłaty z biura',
+            ];
+        }
+
+        if ($handed > 0.009) {
+            return [
+                'key' => 'pilot_funds',
+                'label' => 'Zaliczka pilota',
+                'short' => 'OK',
+                'tone' => 'ok',
+                'title' => 'Zbiórka w autokarze rozliczona z biurem',
+            ];
+        }
+
+        return null;
+    }
+
+    /**
      * @return array{key: string, label: string, short: string, tone: string, title: string}
      */
     protected static function insuranceItem(Event $event): array
     {
-        // Gotowość: tylko zrobione / nie — bez „nie dotyczy” i bez stanu pośredniego.
-        if (($event->insurance_status ?? 'pending') === 'completed') {
+        // Gotowość: opłacone w kosztach = gotowe.
+        if (app(\App\Services\EventInsuranceOperationalSync::class)->isEventInsurancePaid($event)) {
             return [
                 'key' => 'insurance',
                 'label' => 'Ubezp.',
                 'short' => 'OK',
                 'tone' => 'ok',
-                'title' => 'Ubezpieczenie oznaczone jako gotowe',
+                'title' => 'Ubezpieczenie opłacone w kosztach',
             ];
         }
 
@@ -280,7 +355,7 @@ final class EventReadinessIndicators
             'label' => 'Ubezp.',
             'short' => 'brak',
             'tone' => 'danger',
-            'title' => 'Uzupełnij w Operacje → Ubezpieczenia i ustaw status „Gotowe”',
+            'title' => 'Uzupełnij polisę i opłać pozycje ubezpieczenia w kosztach',
         ];
     }
 
@@ -393,9 +468,165 @@ final class EventReadinessIndicators
         return [
             'key' => 'hotel',
             'label' => 'Hotel',
-            'short' => $confirmed > 0 ? 'w toku' : 'brak',
+            'short' => $confirmed > 0 ? 'w toku' : 'do potw.',
             'tone' => $confirmed > 0 ? 'warn' : 'danger',
             'title' => 'Do potwierdzenia: '.implode(' · ', $pendingLabels),
+        ];
+    }
+
+    /**
+     * @return array{key: string, label: string, short: string, tone: string, title: string}
+     */
+    protected static function busCapacityItem(Event $event): array
+    {
+        $status = self::resolveBusCapacityStatus($event);
+
+        if ($status === null) {
+            return [
+                'key' => 'bus_capacity',
+                'label' => 'Autokar',
+                'short' => '—',
+                'tone' => 'muted',
+                'title' => 'Nie wybrano pojazdu floty',
+            ];
+        }
+
+        $total = (int) $status['total'];
+        $capacity = (int) $status['capacity'];
+        $ratio = "{$total}/{$capacity}";
+
+        if ($status['exceeds']) {
+            return [
+                'key' => 'bus_capacity',
+                'label' => 'Autokar',
+                'short' => $ratio,
+                'tone' => 'danger',
+                'title' => (string) ($status['message'] ?? 'Grupa przekracza pojemność autokaru'),
+            ];
+        }
+
+        return [
+            'key' => 'bus_capacity',
+            'label' => 'Autokar',
+            'short' => 'OK',
+            'tone' => 'ok',
+            'title' => "Miejsca w autokarze wystarczają ({$ratio})",
+        ];
+    }
+
+    /**
+     * @return array{key: string, label: string, short: string, tone: string, title: string}
+     */
+    protected static function hotelBedsItem(Event $event): array
+    {
+        if (! Schema::hasTable('event_hotel_stays')) {
+            return [
+                'key' => 'hotel_beds',
+                'label' => 'Miejsca hotel',
+                'short' => '—',
+                'tone' => 'muted',
+                'title' => 'Brak planu noclegów',
+            ];
+        }
+
+        $analysis = EventHotelBedCapacity::analyzeOccupancy(
+            app(EventHotelOccupancyService::class)->forEvent($event)
+        );
+
+        $required = (int) ($analysis['required'] ?? 0);
+        $minBeds = $analysis['min_beds'] ?? null;
+
+        if ($required <= 0) {
+            return [
+                'key' => 'hotel_beds',
+                'label' => 'Miejsca hotel',
+                'short' => '—',
+                'tone' => 'muted',
+                'title' => 'Brak zaplanowanej liczby uczestników',
+            ];
+        }
+
+        if ($minBeds === null) {
+            return [
+                'key' => 'hotel_beds',
+                'label' => 'Miejsca hotel',
+                'short' => '—',
+                'tone' => 'muted',
+                'title' => 'Brak zaplanowanych pokoi — uzupełnij plan noclegów',
+            ];
+        }
+
+        $ratio = "{$minBeds}/{$required}";
+
+        if ($analysis['has_deficiency']) {
+            $title = collect($analysis['deficient_stays'] ?? [])
+                ->pluck('message')
+                ->filter()
+                ->implode(' · ');
+
+            return [
+                'key' => 'hotel_beds',
+                'label' => 'Miejsca hotel',
+                'short' => $ratio,
+                'tone' => 'danger',
+                'title' => $title !== '' ? $title : "Za mało miejsc w hotelu ({$ratio})",
+            ];
+        }
+
+        return [
+            'key' => 'hotel_beds',
+            'label' => 'Miejsca hotel',
+            'short' => 'OK',
+            'tone' => 'ok',
+            'title' => "Miejsca w hotelu wystarczają ({$ratio})",
+        ];
+    }
+
+    /**
+     * Gotowość operacyjna: tylko pojazd floty (Vehicle.capacity).
+     * Autokar z cennika (Bus) służy do wyceny — nie alarmujemy o miejscach.
+     *
+     * @return array{exceeds: bool, total: int, capacity: int, message: ?string}|null
+     */
+    protected static function resolveBusCapacityStatus(Event $event): ?array
+    {
+        if (! Schema::hasTable('event_vehicles')) {
+            return null;
+        }
+
+        $paying = max(0, (int) $event->participant_count);
+        $gratis = max(0, (int) $event->resolveGratisCountForParticipantCount($paying > 0 ? $paying : null));
+        $total = $paying + $gratis;
+
+        $event->loadMissing(['eventVehicles.vehicle']);
+        $vehicle = $event->mainEventVehicle()?->vehicle;
+        if (! $vehicle) {
+            return null;
+        }
+
+        $capacity = (int) ($vehicle->capacity ?? 0);
+        if ($capacity <= 0) {
+            return null;
+        }
+
+        $name = filled($vehicle->registration_number)
+            ? (string) $vehicle->registration_number
+            : $vehicle->displayLabel();
+
+        if (EventBusSeatCapacity::exceeds($paying, $gratis, $capacity)) {
+            return [
+                'exceeds' => true,
+                'total' => $total,
+                'capacity' => $capacity,
+                'message' => EventBusSeatCapacity::message($paying, $gratis, $capacity, $name),
+            ];
+        }
+
+        return [
+            'exceeds' => false,
+            'total' => $total,
+            'capacity' => $capacity,
+            'message' => null,
         ];
     }
 }

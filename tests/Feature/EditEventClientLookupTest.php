@@ -60,7 +60,7 @@ class EditEventClientLookupTest extends TestCase
         $this->actingAs($admin);
 
         Livewire::test(EditEvent::class, ['record' => $event->getKey()])
-            ->assertSee('Wybrany klient')
+            ->assertSee('Wybrany zamawiający')
             ->assertSee('Anna Kowalska')
             ->assertSee('Szkoła Testowa')
             ->assertSee('601602603')
@@ -138,8 +138,25 @@ class EditEventClientLookupTest extends TestCase
             ],
         ])
             ->assertSet('selected.label', 'Klient X')
-            ->assertSee('Wybrany klient')
+            ->assertSee('Wybrany zamawiający')
             ->assertSee('Klient X');
+    }
+
+    public function test_event_client_lookup_quick_create_shows_selected_card(): void
+    {
+        Livewire::test(EventClientLookup::class)
+            ->assertSee('Dodaj nowego klienta')
+            ->call('openQuickCreate')
+            ->assertSee('Zapisz klienta i wybierz go')
+            ->set('firstName', 'Piotr')
+            ->set('lastName', 'Nowy')
+            ->set('phone', '700701702')
+            ->set('companyName', 'Firma Testowa QC')
+            ->call('quickCreate')
+            ->assertSee('Wybrany zamawiający')
+            ->assertSee('Piotr Nowy')
+            ->assertSee('Firma Testowa QC')
+            ->assertDispatched('client-lookup-applied');
     }
 
     public function test_edit_event_shows_additional_ordering_party_cards(): void
@@ -186,7 +203,7 @@ class EditEventClientLookupTest extends TestCase
         $this->actingAs($admin);
 
         Livewire::test(EditEvent::class, ['record' => $event->getKey()])
-            ->assertSee('Wybrany klient')
+            ->assertSee('Wybrany zamawiający')
             ->assertSee('Dodatkowy kontakt')
             ->assertSee('Piotr Rodzic')
             ->assertSee('Rodzic odpowiedzialny za rozliczenie');

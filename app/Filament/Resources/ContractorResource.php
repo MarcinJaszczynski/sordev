@@ -6,13 +6,16 @@ use App\Filament\Forms\ContractorLocationFields;
 use App\Filament\Forms\PhoneInput;
 use App\Filament\Resources\ContractorResource\Pages;
 use App\Filament\Resources\ContractorResource\RelationManagers\ContactsRelationManager;
+use App\Filament\Resources\ContractorResource\RelationManagers\LegacyEventsRelationManager;
 use App\Filament\Resources\ContractorResource\RelationManagers\LocationsRelationManager;
+use App\Filament\Resources\ContractorResource\RelationManagers\VehiclesRelationManager;
 use App\Filament\Resources\ContractorResource\RelationManagers\VendorInvoicesRelationManager;
 use App\Filament\Resources\TaskResource\RelationManagers\TasksRelationManager;
 use App\Models\Contractor;
 use App\Models\ContractorType;
 use App\Support\ContractorContactDetails;
 use App\Support\FilamentNavigation;
+use App\Support\PhoneValidation;
 use App\Support\PilotIdentityValidation;
 use Filament\Forms;
 use Filament\Forms\Form;
@@ -78,6 +81,23 @@ class ContractorResource extends Resource
     }
 
     /**
+     * Global search: przy frazie wyglądającej jak telefon porównuj cyfry
+     * (ignoruj spacje / separatory), bez dzielenia numeru na tokeny.
+     */
+    protected static function applyGlobalSearchAttributeConstraints(Builder $query, string $search): void
+    {
+        if (PhoneValidation::looksLikePhone($search)) {
+            $query->where(function (Builder $phoneQuery) use ($search): void {
+                PhoneValidation::constrainDigitsLike($phoneQuery, $phoneQuery->qualifyColumn('phone'), $search);
+            });
+
+            return;
+        }
+
+        parent::applyGlobalSearchAttributeConstraints($query, $search);
+    }
+
+    /**
      * Zwraca etykietę pojedynczą modelu
      */
     public static function getModelLabel(): string
@@ -140,6 +160,12 @@ class ContractorResource extends Resource
                     Forms\Components\TextInput::make('nip')
                         ->label('NIP')
                         ->maxLength(20),
+                    Forms\Components\TextInput::make('bank_account')
+                        ->label('Nr konta bankowego')
+                        ->maxLength(64)
+                        ->nullable()
+                        ->helperText('IBAN lub numer konta do przelewów — widoczny w kartach kontrahenta w imprezach.')
+                        ->visible(fn (): bool => \Illuminate\Support\Facades\Schema::hasColumn('contractors', 'bank_account')),
                     Forms\Components\TextInput::make('www')
                         ->label('Strona WWW')
                         ->url()
@@ -169,6 +195,14 @@ class ContractorResource extends Resource
                         ->rules(PilotIdentityValidation::optionalPeselRules())
                         ->visible(fn (Get $get): bool => static::formTypesIncludePilot($get('types')))
                         ->helperText('Widoczne tylko, gdy w typach wybrano „pilot”.'),
+                    Forms\Components\Select::make('settlement_form')
+                        ->label('Forma rozliczenia')
+                        ->options(\App\Enums\ContractorSettlementForm::options())
+                        ->nullable()
+                        ->native(false)
+                        ->visible(fn (Get $get): bool => \Illuminate\Support\Facades\Schema::hasColumn('contractors', 'settlement_form')
+                            && static::formTypesIncludePilot($get('types')))
+                        ->helperText('Umowa o dzieło albo faktura — dziedziczone na imprezę, o ile nie nadpiszesz.'),
                 ]),
 
             Forms\Components\Section::make('Adres rozliczeniowy / siedziba')
@@ -276,7 +310,13 @@ class ContractorResource extends Resource
                     ->toggleable(),
                 Tables\Columns\TextColumn::make('phone')
                     ->label('Telefon')
-                    ->searchable()
+                    ->searchable(query: function (Builder $query, string $search): void {
+                        PhoneValidation::constrainDigitsLike(
+                            $query,
+                            $query->qualifyColumn('phone'),
+                            $search,
+                        );
+                    })
                     ->placeholder('—')
                     ->copyable(),
                 Tables\Columns\TextColumn::make('email')
@@ -289,6 +329,21 @@ class ContractorResource extends Resource
                     ->searchable()
                     ->placeholder('—')
                     ->toggleable(isToggledHiddenByDefault: true),
+                Tables\Columns\TextColumn::make('bank_account')
+                    ->label('Nr konta')
+                    ->searchable()
+                    ->placeholder('—')
+                    ->copyable()
+                    ->toggleable(isToggledHiddenByDefault: true)
+                    ->visible(fn (): bool => \Illuminate\Support\Facades\Schema::hasColumn('contractors', 'bank_account')),
+                Tables\Columns\TextColumn::make('settlement_form')
+                    ->label('Rozliczenie')
+                    ->formatStateUsing(fn ($state): string => $state instanceof \App\Enums\ContractorSettlementForm
+                        ? $state->label()
+                        : (\App\Enums\ContractorSettlementForm::tryFromMixed($state)?->label() ?? '—'))
+                    ->badge()
+                    ->toggleable(isToggledHiddenByDefault: true)
+                    ->visible(fn (): bool => \Illuminate\Support\Facades\Schema::hasColumn('contractors', 'settlement_form')),
                 Tables\Columns\TextColumn::make('city')
                     ->label('Adres')
                     ->searchable(['city', 'street', 'postal_code'])
@@ -368,6 +423,14 @@ class ContractorResource extends Resource
             TasksRelationManager::class,
         ];
 
+        if (\Illuminate\Support\Facades\Schema::hasTable('legacy_events')) {
+            $relations[] = LegacyEventsRelationManager::class;
+        }
+
+        if (\Illuminate\Support\Facades\Schema::hasTable('vehicles')) {
+            $relations[] = VehiclesRelationManager::class;
+        }
+
         if (\Illuminate\Support\Facades\Schema::hasTable('vendor_invoices')) {
             $relations[] = VendorInvoicesRelationManager::class;
         }
@@ -393,14 +456,57 @@ class ContractorResource extends Resource
     public static function canViewAny(): bool
     {
         $user = \Illuminate\Support\Facades\Auth::user();
-        if ($user && $user->roles && $user->roles->contains('name', 'admin')) {
-            return true;
+        if (! $user) {
+            return false;
         }
-        if ($user && $user->roles && $user->roles->flatMap->permissions->contains('name', 'view contractor')) {
+
+        if ($user->hasRole(['admin', 'super_admin', 'biuro', 'ksiegowosc'])) {
             return true;
         }
 
-        return false;
+        return $user->can('view contractor');
+    }
+
+    public static function canCreate(): bool
+    {
+        $user = \Illuminate\Support\Facades\Auth::user();
+        if (! $user) {
+            return false;
+        }
+
+        if ($user->hasRole(['admin', 'super_admin', 'biuro'])) {
+            return true;
+        }
+
+        return $user->can('create contractor');
+    }
+
+    public static function canEdit($record): bool
+    {
+        $user = \Illuminate\Support\Facades\Auth::user();
+        if (! $user) {
+            return false;
+        }
+
+        if ($user->hasRole(['admin', 'super_admin', 'biuro'])) {
+            return true;
+        }
+
+        return $user->can('edit contractor');
+    }
+
+    public static function canDelete($record): bool
+    {
+        $user = \Illuminate\Support\Facades\Auth::user();
+        if (! $user) {
+            return false;
+        }
+
+        if ($user->hasRole(['admin', 'super_admin', 'biuro'])) {
+            return true;
+        }
+
+        return $user->can('delete contractor');
     }
 
     /**

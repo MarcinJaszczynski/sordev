@@ -24,8 +24,8 @@ use Illuminate\Support\Facades\Auth;
 
 class ClientPaymentsPage extends Page
 {
-    use AuthorizesClientTrip;
     use \App\Filament\Concerns\ShowsParticipantPaymentBalance;
+    use AuthorizesClientTrip;
     use HasClientTripNav;
 
     protected static ?string $navigationIcon = 'heroicon-o-banknotes';
@@ -79,7 +79,7 @@ class ClientPaymentsPage extends Page
 
     public function getTitle(): string|Htmlable
     {
-        return 'Płatności: '.$this->event->name;
+        return $this->event->name;
     }
 
     protected function getHeaderActions(): array

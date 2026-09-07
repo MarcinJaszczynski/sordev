@@ -5,7 +5,10 @@ declare(strict_types=1);
 namespace App\Services;
 
 use App\Models\Event;
+use App\Models\EventProgramPoint;
 use App\Models\EventTemplateQty;
+use App\Models\Markup;
+use App\Support\ProgramPointCostPricing;
 use Illuminate\Support\Collection;
 
 /**
@@ -28,6 +31,149 @@ use Illuminate\Support\Collection;
  */
 final class EventCalculationSnapshotBuilder
 {
+    /**
+     * Zamrożony, JSON-bezpieczny zrzut kalkulacji dla bieżącego wariantu imprezy.
+     * Do zapisu w event_snapshots.calculations — bez modeli Eloquent / Collection.
+     *
+     * @return array{
+     *     version: int,
+     *     summary: array{
+     *         total_cost: float,
+     *         total_program_cost: float,
+     *         transport_cost: float,
+     *         price_per_person: float,
+     *         price_per_person_rounded: float,
+     *         participant_count: int,
+     *         cost_per_person: float
+     *     },
+     *     current_variant: array{qty: int, gratis: int, staff: int, driver: int}|null,
+     *     detailed_calculations: array<string, mixed>,
+     *     transport_cost: float,
+     *     event_transport_km: float|null,
+     *     total_program_cost: float,
+     *     points_count: int,
+     *     active_points_count: int,
+     *     included_in_calculation_count: int,
+     *     cost_breakdown_by_day: array<string, mixed>
+     * }
+     */
+    public function buildPersistableCalculation(Event $event): array
+    {
+        $snapshot = $this->build($event);
+        $summaryCalc = is_array($snapshot['calculations'] ?? null) ? $snapshot['calculations'] : [];
+        $currentVariant = is_array($snapshot['current_variant'] ?? null) ? $snapshot['current_variant'] : null;
+        $qty = max(1, (int) ($currentVariant['qty'] ?? $event->participant_count ?? 1));
+
+        $detailedAll = is_array($snapshot['detailed_calculations'] ?? null)
+            ? $snapshot['detailed_calculations']
+            : [];
+        $detailedForVariant = $detailedAll[$qty]
+            ?? $detailedAll[(string) $qty]
+            ?? [];
+        $detailedForVariant = is_array($detailedForVariant) ? $detailedForVariant : [];
+
+        $pln = is_array($detailedForVariant['PLN'] ?? null) ? $detailedForVariant['PLN'] : [];
+        $pricePerPersonRaw = (float) ($pln['price_per_person_raw'] ?? $summaryCalc['cost_per_person'] ?? 0);
+        $pricePerPersonRounded = (float) ($pln['price_per_person_rounded'] ?? $pricePerPersonRaw);
+        $totalFromDetailed = array_key_exists('total', $pln)
+            ? (float) $pln['total']
+            : null;
+        $totalCost = $totalFromDetailed
+            ?? (float) ($summaryCalc['total_cost'] ?? $event->total_cost ?? 0);
+        $transportCost = (float) ($snapshot['transport_cost'] ?? $summaryCalc['transport_cost'] ?? 0);
+        $totalProgramCost = (float) ($summaryCalc['total_program_cost'] ?? 0);
+
+        $programPoints = $snapshot['program_points'] ?? collect();
+        if (! $programPoints instanceof Collection) {
+            $programPoints = collect($programPoints);
+        }
+
+        $activePoints = $programPoints->where('active', true);
+        $included = ProgramPointHelper::filterIncluded($activePoints);
+        $costBreakdownByDay = $included
+            ->groupBy(fn ($point) => (string) ($point->day ?? 0))
+            ->map(function ($points) {
+                return [
+                    'day_total' => (float) $points->sum('total_price'),
+                    'points_count' => $points->count(),
+                    'points' => $points->map(function ($point) {
+                        return [
+                            'name' => $point->templatePoint?->name ?? $point->name ?? ('Punkt #'.($point->id ?? '?')),
+                            'total_price' => (float) ($point->total_price ?? 0),
+                        ];
+                    })->values()->all(),
+                ];
+            })
+            ->all();
+
+        $persistableDetailed = $this->toPersistableArray([
+            (string) $qty => $detailedForVariant,
+        ]);
+
+        return $this->toPersistableArray([
+            'version' => 2,
+            'summary' => [
+                'total_cost' => round($totalCost, 2),
+                'total_program_cost' => round($totalProgramCost, 2),
+                'transport_cost' => round($transportCost, 2),
+                'price_per_person' => round($pricePerPersonRaw, 2),
+                'price_per_person_rounded' => round($pricePerPersonRounded, 2),
+                'participant_count' => $qty,
+                'cost_per_person' => round((float) ($summaryCalc['cost_per_person'] ?? 0), 2),
+            ],
+            'current_variant' => $currentVariant === null ? null : [
+                'qty' => max(1, (int) ($currentVariant['qty'] ?? $qty)),
+                'gratis' => max(0, (int) ($currentVariant['gratis'] ?? 0)),
+                'staff' => max(0, (int) ($currentVariant['staff'] ?? 1)),
+                'driver' => max(0, (int) ($currentVariant['driver'] ?? 1)),
+            ],
+            'detailed_calculations' => $persistableDetailed,
+            'transport_cost' => round($transportCost, 2),
+            'event_transport_km' => isset($snapshot['event_transport_km'])
+                ? (float) $snapshot['event_transport_km']
+                : null,
+            // Legacy keys — kompatybilność ze starym UI szczegółów.
+            'total_program_cost' => round($totalProgramCost, 2),
+            'points_count' => $programPoints->count(),
+            'active_points_count' => $activePoints->count(),
+            'included_in_calculation_count' => ProgramPointHelper::countIncluded($activePoints),
+            'cost_breakdown_by_day' => $costBreakdownByDay,
+        ]);
+    }
+
+    /**
+     * Rekurencyjnie zamienia Collection / modele / stdClass na tablice JSON-safe.
+     */
+    public function toPersistableArray(mixed $value): mixed
+    {
+        if ($value instanceof Collection) {
+            return $this->toPersistableArray($value->all());
+        }
+
+        if ($value instanceof \JsonSerializable) {
+            return $this->toPersistableArray($value->jsonSerialize());
+        }
+
+        if ($value instanceof \Illuminate\Contracts\Support\Arrayable) {
+            return $this->toPersistableArray($value->toArray());
+        }
+
+        if (is_object($value)) {
+            return $this->toPersistableArray((array) $value);
+        }
+
+        if (is_array($value)) {
+            $out = [];
+            foreach ($value as $key => $item) {
+                $out[$key] = $this->toPersistableArray($item);
+            }
+
+            return $out;
+        }
+
+        return $value;
+    }
+
     /**
      * @return Snapshot
      */
@@ -265,10 +411,6 @@ final class EventCalculationSnapshotBuilder
             'transport_cost' => null,
         ];
 
-        if (! $event->eventTemplate) {
-            return $result;
-        }
-
         $participantCount = max(1, (int) ($event->participant_count ?? 1));
         $eventVariants = $event->qtyVariants()->get(['qty', 'gratis', 'staff', 'driver']);
 
@@ -298,6 +440,9 @@ final class EventCalculationSnapshotBuilder
     }
 
     /**
+     * Szczegółowa kalkulacja UI z żywych punktów imprezy (SSoT jak EventCostCalculator).
+     * Nie startuje od programu szablonu — usunięte/zmienione punkty imprezy nie „zostają”.
+     *
      * @param  Collection<int, mixed>  $programPoints
      * @param  list<array{qty: int, gratis: int, staff: int, driver: int}>  $variants
      * @param  array{qty: int, gratis: int, staff: int, driver: int}  $transportReferenceVariant
@@ -322,47 +467,185 @@ final class EventCalculationSnapshotBuilder
             'transport_cost' => null,
         ];
 
-        $template = $event->eventTemplate;
-        if (! $template || $variants === []) {
+        if ($variants === []) {
             return $empty;
         }
 
         try {
-            $resolvedKm = $transportCalculator->resolveTransportKm();
+            $event->loadMissing([
+                'markup',
+                'eventTemplate.markup',
+                'eventTemplate.taxes',
+                'dayInsurances.insurance',
+                'hotelStays.roomLines.currency',
+                'hotelStays.roomLines.hotelRoom',
+            ]);
+
             $qtyVariants = [];
             foreach ($variants as $variant) {
                 $qtyVariants[(int) $variant['qty']] = $variant;
             }
 
-            $detailedCalculations = app(EventTemplateUiCalculationService::class)->calculate(
-                template: $template,
-                startPlaceId: $event->start_place_id,
-                transportKm: $resolvedKm > 0 ? $resolvedKm : null,
-                variantOverrides: array_values($qtyVariants),
-                busOverride: $event->bus ?? $template->bus,
-            );
+            $hasHotelPlan = $event->hotelStays()->exists();
+            $forceConvertForeign = ! ($event->eventTemplate?->isForeignTrip() ?? true);
+            $markupPercent = $this->resolveMarkupPercent($event);
 
-            if ($event->hotelStays()->exists()) {
+            $billablePoints = $programPoints
+                ->filter(function ($point) use ($hasHotelPlan): bool {
+                    if (! $point instanceof EventProgramPoint) {
+                        return false;
+                    }
+                    if (! (bool) ($point->active ?? true) || ! (bool) ($point->include_in_calculation ?? true)) {
+                        return false;
+                    }
+
+                    $isHotelService = (bool) ($point->is_hotel_service ?? false);
+                    if (! $isHotelService && $this->isTransportProgramPoint($point)) {
+                        return false;
+                    }
+                    if (! $isHotelService && $hasHotelPlan && $this->isAccommodationProgramPoint($point)) {
+                        return false;
+                    }
+
+                    return true;
+                })
+                ->sortBy(['day', 'order'])
+                ->values();
+
+            $detailedCalculations = [];
+            $eventOnlyPoints = [];
+
+            foreach ($qtyVariants as $qty => $variant) {
+                $paying = max(1, (int) $variant['qty']);
+                $gratis = max(0, (int) ($variant['gratis'] ?? 0));
+                $staff = max(0, (int) ($variant['staff'] ?? 1));
+                $driver = max(0, (int) ($variant['driver'] ?? 1));
+
+                $plnPoints = [];
+                $plnBase = 0.0;
+                $foreignPoints = [];
+                $foreignTotals = [];
+
+                foreach ($billablePoints as $point) {
+                    $line = $this->programPointDetailLine(
+                        $point,
+                        $paying,
+                        $gratis,
+                        $staff,
+                        $driver,
+                        $forceConvertForeign,
+                    );
+                    if ($line === null) {
+                        continue;
+                    }
+
+                    if ($line['bucket'] === 'PLN') {
+                        $plnPoints[] = $line['point'];
+                        $plnBase += (float) $line['point']['cost'];
+                    } else {
+                        $code = $line['bucket'];
+                        $foreignPoints[$code][] = $line['point'];
+                        $foreignTotals[$code] = ($foreignTotals[$code] ?? 0.0) + (float) $line['point']['cost'];
+                    }
+                }
+
+                $insurance = round((float) $event->insuranceCostPln($paying, $gratis), 2);
+                if ($insurance > 0) {
+                    $insuranceNames = $event->dayInsurances
+                        ->map(fn ($dayInsurance) => $dayInsurance->insurance)
+                        ->filter(fn ($insuranceModel) => InsuranceCostCalculator::isChargeable($insuranceModel))
+                        ->map(fn ($insuranceModel) => $insuranceModel->name)
+                        ->unique()
+                        ->values()
+                        ->all();
+
+                    $plnPoints[] = [
+                        'name' => 'Ubezpieczenie'.(! empty($insuranceNames) ? ' ('.implode(', ', $insuranceNames).')' : ''),
+                        'unit_price' => null,
+                        'group_size' => null,
+                        'cost' => $insurance,
+                        'is_child' => false,
+                        'currency_symbol' => 'PLN',
+                    ];
+                    $plnBase += $insurance;
+                }
+
+                $detailedCalculations[$qty] = [
+                    'PLN' => [
+                        'total' => round($plnBase, 2),
+                        'points' => $plnPoints,
+                    ],
+                ];
+
+                foreach ($foreignTotals as $code => $total) {
+                    $detailedCalculations[$qty][$code] = [
+                        'total' => round($total, 2),
+                        'points' => $foreignPoints[$code] ?? [],
+                    ];
+                }
+
+                $eventOnlyPoints[(string) $qty] = $billablePoints
+                    ->map(function (EventProgramPoint $point) use ($paying, $gratis, $staff, $driver): array {
+                        $name = (string) ($point->templatePoint?->name ?? $point->name ?? 'Bez nazwy');
+                        $costHeadcount = ProgramPointCostPricing::applyIncludedExtras(
+                            $paying,
+                            $gratis,
+                            $staff,
+                            $driver,
+                            (bool) ($point->include_gratis_in_cost ?? false),
+                            (bool) ($point->include_pilot_in_cost ?? false),
+                            (bool) ($point->include_driver_in_cost ?? false),
+                        );
+
+                        return [
+                            'name' => $name,
+                            'day' => (int) ($point->day ?? 0),
+                            'order' => (float) ($point->order ?? 0),
+                            'unit_price' => (float) ($point->unit_price ?? 0),
+                            'quantity' => (float) ($point->quantity ?? 1),
+                            'cost' => (float) $point->resolveEffectiveTotalPrice($costHeadcount),
+                            'currency_symbol' => $point->currency?->symbol ?? 'PLN',
+                        ];
+                    })
+                    ->values()
+                    ->all();
+            }
+
+            if ($hasHotelPlan) {
                 app(EventHotelPlanService::class)
                     ->applyEventHotelStructureToCalculations($detailedCalculations, $event);
             }
 
-            $transportCalculator->syncTransportInDetailedCalculations(
-                $detailedCalculations,
-                $qtyVariants,
-                $transportReferenceVariant,
-                function (int|string $qty, float $delta) use (&$detailedCalculations): void {
-                    $this->applyPlnDeltaToDetailedTotals($detailedCalculations, $qty, $delta);
-                },
-            );
+            foreach ($qtyVariants as $qty => $variant) {
+                $transportCost = round((float) $transportCalculator->effectiveTransportCost($variant), 2);
+                $pln = $detailedCalculations[$qty]['PLN'] ?? ['total' => 0.0, 'points' => []];
+                $points = collect($pln['points'] ?? [])
+                    ->reject(fn (array $point): bool => EventTransportCostCalculator::isTransportPointName(
+                        (string) ($point['name'] ?? '')
+                    ))
+                    ->values();
 
-            $eventOnlyPoints = [];
-            $this->appendEventOnlyPointsToDetailedCalculations(
-                $event,
-                $programPoints,
-                $detailedCalculations,
-                $eventOnlyPoints,
-            );
+                $baseWithoutTransport = round((float) $points->sum(
+                    fn (array $point): float => (float) ($point['cost'] ?? 0)
+                ), 2);
+
+                if ($transportCost > 0) {
+                    $points->push($transportCalculator->transportPointLine(
+                        $transportCost,
+                        $transportCalculator->usesManualTransportCost(),
+                    ));
+                }
+
+                $detailedCalculations[$qty]['PLN']['points'] = $points->all();
+                $detailedCalculations[$qty]['PLN']['total'] = round($baseWithoutTransport + $transportCost, 2);
+
+                $this->finalizeDetailedVariantTotals(
+                    $detailedCalculations,
+                    $qty,
+                    $markupPercent,
+                    $event,
+                );
+            }
 
             $this->recomputePerPersonInDetailedCalculations($detailedCalculations);
 
@@ -380,98 +663,177 @@ final class EventCalculationSnapshotBuilder
     }
 
     /**
-     * @param  Collection<int, mixed>  $programPoints
-     * @param  array<int|string, mixed>  $detailedCalculations
-     * @param  array<string, mixed>  $eventOnlyPointsForDetails
+     * @return array{bucket: string, point: array<string, mixed>}|null
      */
-    private function appendEventOnlyPointsToDetailedCalculations(
-        Event $event,
-        Collection $programPoints,
+    private function programPointDetailLine(
+        EventProgramPoint $point,
+        int $paying,
+        int $gratis,
+        int $staff,
+        int $driver,
+        bool $forceConvertForeign,
+    ): ?array {
+        $costHeadcount = ProgramPointCostPricing::applyIncludedExtras(
+            $paying,
+            $gratis,
+            $staff,
+            $driver,
+            (bool) ($point->include_gratis_in_cost ?? false),
+            (bool) ($point->include_pilot_in_cost ?? false),
+            (bool) ($point->include_driver_in_cost ?? false),
+        );
+        $cost = (float) $point->resolveEffectiveTotalPrice($costHeadcount);
+        if ($cost <= 0) {
+            return null;
+        }
+
+        $name = (string) ($point->templatePoint?->name ?? $point->name ?? 'Pozycja');
+        if ($point->parent_id) {
+            $name = '→ '.$name;
+        }
+
+        $code = strtoupper((string) ($point->currency?->code ?? $point->currency?->symbol ?? 'PLN'));
+        if ($code === '') {
+            $code = 'PLN';
+        }
+        $symbol = (string) ($point->currency?->symbol ?? $code);
+        $rate = (float) ($point->currency?->exchange_rate ?? 0);
+        $convert = $forceConvertForeign || (bool) ($point->convert_to_pln ?? false);
+
+        if ($code === 'PLN') {
+            return [
+                'bucket' => 'PLN',
+                'point' => [
+                    'name' => $name,
+                    'unit_price' => (float) ($point->unit_price ?? 0),
+                    'group_size' => (float) ($point->group_size ?? 1),
+                    'cost' => round($cost, 2),
+                    'is_child' => (bool) ($point->parent_id ?? false),
+                    'currency_symbol' => 'PLN',
+                ],
+            ];
+        }
+
+        if ($convert) {
+            $plnCost = $rate > 0 ? round($cost * $rate, 2) : round($cost, 2);
+
+            return [
+                'bucket' => 'PLN',
+                'point' => [
+                    'name' => $name.' (przeliczone na PLN, kurs: '.$rate.')',
+                    'unit_price' => ($point->unit_price ?? 0).' '.$symbol,
+                    'group_size' => (float) ($point->group_size ?? 1),
+                    'cost' => $plnCost,
+                    'is_child' => (bool) ($point->parent_id ?? false),
+                    'currency_symbol' => 'PLN',
+                    'original_currency' => $symbol,
+                    'exchange_rate' => $rate,
+                ],
+            ];
+        }
+
+        return [
+            'bucket' => $code,
+            'point' => [
+                'name' => $name,
+                'unit_price' => (float) ($point->unit_price ?? 0),
+                'group_size' => (float) ($point->group_size ?? 1),
+                'cost' => round($cost, 2),
+                'is_child' => (bool) ($point->parent_id ?? false),
+                'currency_symbol' => $symbol,
+            ],
+        ];
+    }
+
+    /**
+     * @param  array<int|string, mixed>  $detailedCalculations
+     */
+    private function finalizeDetailedVariantTotals(
         array &$detailedCalculations,
-        array &$eventOnlyPointsForDetails,
+        int|string $qty,
+        float $markupPercent,
+        Event $event,
     ): void {
-        $hasHotelPlan = $event->hotelStays()->exists();
+        $plnBase = round((float) ($detailedCalculations[$qty]['PLN']['total'] ?? 0), 2);
+        $markupAmount = round($plnBase * ($markupPercent / 100), 2);
 
-        $eventPoints = $programPoints
-            ->filter(function ($point) use ($hasHotelPlan) {
-                if (! (bool) ($point->active ?? true) || ! (bool) ($point->include_in_calculation ?? true)) {
-                    return false;
-                }
-
-                if ($hasHotelPlan && $this->isAccommodationProgramPoint($point)) {
-                    return false;
-                }
-
-                return true;
-            })
-            ->sortBy(['day', 'order'])
-            ->values();
-
-        if ($eventPoints->isEmpty() || empty($detailedCalculations)) {
-            return;
-        }
-
-        foreach ($detailedCalculations as $qty => $currencies) {
-            $plnPoints = collect($currencies['PLN']['points'] ?? []);
-            $existingNames = $plnPoints
-                ->map(fn ($point) => $this->normalizePointName((string) ($point['name'] ?? '')))
-                ->filter()
-                ->values();
-
-            $missingForPln = collect();
-
-            $pointsForVariant = $eventPoints
-                ->map(function ($point) use ($existingNames, $missingForPln) {
-                    $name = (string) ($point->templatePoint?->name ?? $point->name ?? 'Bez nazwy');
-
-                    $normalized = $this->normalizePointName($name);
-                    $isMissingInPln = $normalized !== '' && ! $existingNames->contains($normalized);
-
-                    if ($isMissingInPln) {
-                        $missingForPln->push([
-                            'name' => $name,
-                            'unit_price' => (float) ($point->unit_price ?? 0),
-                            'group_size' => (float) ($point->group_size ?? 1),
-                            'cost' => (float) ($point->total_price ?? 0),
-                            'is_child' => (bool) ($point->parent_id ?? false),
-                            'currency_symbol' => $point->currency?->symbol ?? 'PLN',
-                        ]);
-                    }
-
-                    return [
-                        'name' => $name,
-                        'day' => (int) ($point->day ?? 0),
-                        'order' => (float) ($point->order ?? 0),
-                        'unit_price' => (float) ($point->unit_price ?? 0),
-                        'quantity' => (float) ($point->quantity ?? 1),
-                        'cost' => (float) ($point->total_price ?? 0),
-                        'currency_symbol' => $point->currency?->symbol ?? 'PLN',
-                    ];
-                })
-                ->values()
-                ->all();
-
-            if (! empty($pointsForVariant)) {
-                $eventOnlyPointsForDetails[(string) $qty] = $pointsForVariant;
+        $taxCalculations = [];
+        $totalTaxAmount = 0.0;
+        $taxes = $event->eventTemplate?->taxes ?? collect();
+        foreach ($taxes as $tax) {
+            if (! $tax->is_active) {
+                continue;
             }
 
-            if ($missingForPln->isNotEmpty()) {
-                $baseDelta = (float) $missingForPln
-                    ->filter(fn ($point) => ($point['currency_symbol'] ?? 'PLN') === 'PLN')
-                    ->sum('cost');
-
-                $mergedPlnPoints = $plnPoints
-                    ->concat($missingForPln->filter(fn ($point) => ($point['currency_symbol'] ?? 'PLN') === 'PLN')->values())
-                    ->values()
-                    ->all();
-
-                $detailedCalculations[$qty]['PLN']['points'] = $mergedPlnPoints;
-
-                if ($baseDelta > 0) {
-                    $this->applyPlnDeltaToDetailedTotals($detailedCalculations, $qty, $baseDelta);
-                }
+            $taxAmount = round((float) $tax->calculateTaxAmount($plnBase, $markupAmount), 2);
+            if ($taxAmount <= 0) {
+                continue;
             }
+
+            $taxCalculations[] = [
+                'name' => $tax->name,
+                'percentage' => $tax->percentage,
+                'amount' => $taxAmount,
+                'apply_to_base' => (bool) ($tax->apply_to_base ?? false),
+                'apply_to_markup' => (bool) ($tax->apply_to_markup ?? false),
+            ];
+            $totalTaxAmount += $taxAmount;
         }
+
+        $detailedCalculations[$qty]['markup'] = [
+            'amount' => $markupAmount,
+            'percent_applied' => $markupPercent,
+            'discount_applied' => false,
+            'discount_percent' => 0,
+            'min_daily_applied' => false,
+        ];
+        $detailedCalculations[$qty]['taxes'] = [
+            'total_amount' => round($totalTaxAmount, 2),
+            'breakdown' => $taxCalculations,
+        ];
+
+        $plnTotal = round($plnBase + $markupAmount + $totalTaxAmount, 2);
+        $detailedCalculations[$qty]['PLN']['total_before_markup'] = $plnBase;
+        $detailedCalculations[$qty]['PLN']['total_before_tax'] = round($plnBase + $markupAmount, 2);
+        $detailedCalculations[$qty]['PLN']['total'] = $plnTotal;
+
+        foreach ($detailedCalculations[$qty] as $code => $data) {
+            if ($code === 'PLN' || $code === 'markup' || $code === 'taxes' || $code === 'hotel_structure') {
+                continue;
+            }
+            if (! is_array($data) || ! array_key_exists('total', $data)) {
+                continue;
+            }
+
+            $foreignBase = round((float) ($data['total'] ?? 0), 2);
+            // Po applyEventHotelStructure total może już zawierać hotel — traktujemy to jako bazę.
+            $pointsSum = round((float) collect($data['points'] ?? [])
+                ->sum(fn (array $point): float => (float) ($point['cost'] ?? 0)), 2);
+            $foreignBase = $pointsSum > 0 ? $pointsSum : $foreignBase;
+            $foreignMarkup = round($foreignBase * ($markupPercent / 100), 2);
+            $foreignTotal = round($foreignBase + $foreignMarkup, 2);
+
+            $detailedCalculations[$qty][$code]['total_before_markup'] = $foreignBase;
+            $detailedCalculations[$qty][$code]['total_before_tax'] = $foreignTotal;
+            $detailedCalculations[$qty][$code]['markup_amount'] = $foreignMarkup;
+            $detailedCalculations[$qty][$code]['tax_amount'] = 0.0;
+            $detailedCalculations[$qty][$code]['total'] = $foreignTotal;
+        }
+    }
+
+    private function resolveMarkupPercent(Event $event): float
+    {
+        if ($event->markup?->percent !== null) {
+            return (float) $event->markup->percent;
+        }
+
+        if ($event->eventTemplate?->markup?->percent !== null) {
+            return (float) $event->eventTemplate->markup->percent;
+        }
+
+        $default = Markup::query()->where('is_default', true)->first();
+
+        return (float) ($default?->percent ?? 0);
     }
 
     private function isAccommodationProgramPoint(mixed $point): bool
@@ -489,6 +851,17 @@ final class EventCalculationSnapshotBuilder
         }
 
         return false;
+    }
+
+    private function isTransportProgramPoint(mixed $point): bool
+    {
+        if ((bool) ($point->is_transport ?? false)) {
+            return true;
+        }
+
+        return EventTransportCostCalculator::isTransportPointName(
+            (string) ($point->templatePoint?->name ?? $point->name ?? '')
+        );
     }
 
     /**
@@ -517,81 +890,5 @@ final class EventCalculationSnapshotBuilder
                     PriceRoundingService::roundPerPerson($raw, (string) $code);
             }
         }
-    }
-
-    private function normalizePointName(string $name): string
-    {
-        $name = trim($name);
-        $name = ltrim($name, "\xE2\x86\x92 ");
-        $name = rtrim($name, '.');
-
-        return mb_strtolower(trim($name));
-    }
-
-    /**
-     * @param  array<int|string, mixed>  $detailedCalculations
-     */
-    private function applyPlnDeltaToDetailedTotals(array &$detailedCalculations, int|string $qty, float $baseDelta): void
-    {
-        $pln = $detailedCalculations[$qty]['PLN'] ?? null;
-        if (! is_array($pln)) {
-            return;
-        }
-
-        $markupPercent = (float) ($detailedCalculations[$qty]['markup']['percent_applied'] ?? 0);
-        $markupDelta = round($baseDelta * ($markupPercent / 100), 2);
-
-        if (isset($detailedCalculations[$qty]['markup']['amount'])) {
-            $detailedCalculations[$qty]['markup']['amount'] = round(
-                (float) $detailedCalculations[$qty]['markup']['amount'] + $markupDelta,
-                2
-            );
-        }
-
-        $taxDeltaTotal = 0.0;
-        if (! empty($detailedCalculations[$qty]['taxes']['breakdown']) && is_array($detailedCalculations[$qty]['taxes']['breakdown'])) {
-            foreach ($detailedCalculations[$qty]['taxes']['breakdown'] as $idx => $tax) {
-                $percent = (float) ($tax['percentage'] ?? 0);
-                $applyToBase = (bool) ($tax['apply_to_base'] ?? false);
-                $applyToMarkup = (bool) ($tax['apply_to_markup'] ?? false);
-
-                $taxDelta = 0.0;
-                if ($applyToBase) {
-                    $taxDelta += $baseDelta * ($percent / 100);
-                }
-                if ($applyToMarkup) {
-                    $taxDelta += $markupDelta * ($percent / 100);
-                }
-
-                if ($taxDelta > 0) {
-                    $taxDelta = round($taxDelta, 2);
-                    $taxDeltaTotal += $taxDelta;
-                    $detailedCalculations[$qty]['taxes']['breakdown'][$idx]['amount'] = round(
-                        (float) ($tax['amount'] ?? 0) + $taxDelta,
-                        2
-                    );
-                }
-            }
-        }
-
-        if (isset($detailedCalculations[$qty]['taxes']['total_amount'])) {
-            $detailedCalculations[$qty]['taxes']['total_amount'] = round(
-                (float) $detailedCalculations[$qty]['taxes']['total_amount'] + $taxDeltaTotal,
-                2
-            );
-        }
-
-        $detailedCalculations[$qty]['PLN']['total_before_markup'] = round(
-            (float) ($pln['total_before_markup'] ?? 0) + $baseDelta,
-            2
-        );
-        $detailedCalculations[$qty]['PLN']['total_before_tax'] = round(
-            (float) ($pln['total_before_tax'] ?? 0) + $baseDelta + $markupDelta,
-            2
-        );
-        $detailedCalculations[$qty]['PLN']['total'] = round(
-            (float) ($pln['total'] ?? 0) + $baseDelta + $markupDelta + $taxDeltaTotal,
-            2
-        );
     }
 }

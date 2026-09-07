@@ -145,9 +145,12 @@ trait InteractsWithTaskListQuickActions
                 Forms\Components\FileUpload::make('files')
                     ->label('Pliki')
                     ->disk('public')
+                    ->visibility('public')
                     ->multiple()
                     ->directory('task-attachments')
                     ->preserveFilenames()
+                    ->openable()
+                    ->downloadable()
                     ->required()
                     ->columnSpanFull(),
             ])

@@ -86,6 +86,7 @@ class EventParticipantImporter
             $participant = new EventParticipant([
                 'first_name' => $firstName,
                 'last_name' => $lastName,
+                'gender' => EventParticipant::normalizeGender($mapped['plec'] ?? $mapped['gender'] ?? ''),
                 'birth_date' => $birthDate,
                 'pesel' => $this->normalizePesel($mapped['pesel'] ?? ''),
                 'email' => $mapped['email'] ?? $mapped['e_mail'] ?? null,
@@ -273,6 +274,7 @@ class EventParticipantImporter
             'nazwisko', 'last name', 'lastname', 'surname' => 'nazwisko',
             'imie i nazwisko', 'imie nazwisko', 'uczestnik', 'osoba', 'name', 'participant' => 'imie_i_nazwisko',
             'data urodzenia', 'data_urodzenia', 'urodzenie', 'birth date', 'birthdate', 'birth_date' => 'data_urodzenia',
+            'plec', 'płeć', 'gender', 'sex' => 'plec',
             'pesel' => 'pesel',
             'email', 'e mail', 'e-mail' => 'email',
             'telefon', 'phone', 'tel' => 'telefon',

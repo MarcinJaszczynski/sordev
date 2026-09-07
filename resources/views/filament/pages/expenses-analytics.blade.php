@@ -16,7 +16,7 @@
                 </div>
             </x-slot>
             <form class="max-w-full space-y-4">
-                <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-6 gap-4">
+                <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-7 gap-4">
                     <div>
                         <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
                             {{ __('od daty') }}
@@ -37,6 +37,20 @@
                             wire:model.lazy="selectedDateTo"
                             class="w-full px-3 py-2 border border-gray-300 rounded-md dark:border-gray-600 dark:bg-gray-700 dark:text-white"
                         />
+                    </div>
+
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                            Oś czasu
+                        </label>
+                        <select
+                            wire:model.lazy="selectedDateAxis"
+                            class="w-full px-3 py-2 border border-gray-300 rounded-md dark:border-gray-600 dark:bg-gray-700 dark:text-white"
+                        >
+                            <option value="paid_at">Data płatności</option>
+                            <option value="created_at">Data utworzenia wpisu</option>
+                            <option value="event_start">Data wyjazdu imprezy</option>
+                        </select>
                     </div>
 
                     <div>

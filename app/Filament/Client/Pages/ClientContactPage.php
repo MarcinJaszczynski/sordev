@@ -59,7 +59,7 @@ class ClientContactPage extends Page
 
     public function getTitle(): string|Htmlable
     {
-        return 'Kontakt: '.$this->event->name;
+        return $this->event->name;
     }
 
     public function getHeading(): string|Htmlable

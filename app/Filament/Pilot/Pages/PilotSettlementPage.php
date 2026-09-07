@@ -6,6 +6,7 @@ use App\Filament\Actions\HelpArticleAction;
 use App\Filament\Pilot\Concerns\AuthorizesPilotTrip;
 use App\Filament\Pilot\Concerns\HasPilotTripNav;
 use App\Models\Event;
+use App\Services\PilotAccessService;
 use Filament\Actions\Action;
 use Filament\Pages\Page;
 use Illuminate\Contracts\Support\Htmlable;
@@ -40,7 +41,7 @@ class PilotSettlementPage extends Page
 
     public function getTitle(): string|Htmlable
     {
-        return 'Gotówka i rozliczenie: '.$this->event->name;
+        return $this->event->name;
     }
 
     protected function getHeaderActions(): array
@@ -66,11 +67,7 @@ class PilotSettlementPage extends Page
             return true;
         }
 
-        if ($user->hasRole(['admin', 'super_admin', 'biuro']) && \App\Http\Middleware\PilotPreviewMiddleware::isActive()) {
-            return true;
-        }
-
-        return false;
+        return app(PilotAccessService::class)->canStaffPreviewPortal($user);
     }
 
     public static function settleUrl(Event|int $event, bool $isAbsolute = true): string

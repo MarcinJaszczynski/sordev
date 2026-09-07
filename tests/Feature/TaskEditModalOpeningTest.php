@@ -65,6 +65,19 @@ class TaskEditModalOpeningTest extends TestCase
             ->assertSee('Modal regression task');
     }
 
+    public function test_list_tasks_deep_link_mount_hook_is_idempotent(): void
+    {
+        $component = Livewire::actingAs($this->user)
+            ->withQueryParams(['editTask' => $this->task->id])
+            ->test(ListTasks::class);
+
+        $component->instance()->mountInteractsWithTaskEditModal();
+
+        $component
+            ->assertSet('editingTaskId', $this->task->id)
+            ->assertSet('mountedActions', ['editTask']);
+    }
+
     public function test_list_tasks_title_cell_wires_open_edit_modal(): void
     {
         Livewire::actingAs($this->user)

@@ -253,6 +253,58 @@ class EventFinanceOverviewTest extends TestCase
         $this->assertSame('transport', $group?->key);
     }
 
+    public function test_group_filter_keeps_counts_for_all_groups(): void
+    {
+        if (! Schema::hasTable('event_settlement_cost_groups')) {
+            $this->markTestSkipped('Brak tabeli grup.');
+        }
+
+        $event = Event::factory()->create();
+        $settlement = EventSettlement::findOrCreateActiveForEvent($event);
+
+        $settlement->costs()->create([
+            'source_type' => 'transport',
+            'name' => 'Autokar',
+            'planned_amount' => 1000,
+            'planned_amount_pln' => 1000,
+            'paid_by' => 'office',
+            'payment_status' => 'planned',
+            'order' => 1,
+        ]);
+        $settlement->costs()->create([
+            'source_type' => 'program_point',
+            'source_id' => 1,
+            'name' => 'Muzeum',
+            'planned_amount' => 200,
+            'planned_amount_pln' => 200,
+            'paid_by' => 'office',
+            'payment_status' => 'planned',
+            'order' => 2,
+        ]);
+
+        $all = app(EventFinanceOverviewService::class)->forEvent($event->fresh(), hideZero: false);
+        $transportGroup = collect($all['groups'])->firstWhere('key', 'transport');
+        $this->assertNotNull($transportGroup);
+        $this->assertGreaterThanOrEqual(1, (int) $transportGroup['count']);
+
+        $filtered = app(EventFinanceOverviewService::class)->forEvent(
+            $event->fresh(),
+            groupFilter: (int) $transportGroup['id'],
+            hideZero: false,
+        );
+
+        $transportFiltered = collect($filtered['groups'])->firstWhere('key', 'transport');
+        $programFiltered = collect($filtered['groups'])->first(
+            fn (array $g): bool => in_array($g['key'] ?? '', ['program', 'other'], true) && (int) ($g['count'] ?? 0) > 0
+        ) ?? collect($filtered['groups'])->first(
+            fn (array $g): bool => ($g['key'] ?? '') !== 'transport' && (int) ($g['count'] ?? 0) > 0
+        );
+
+        $this->assertSame((int) $transportGroup['count'], (int) $transportFiltered['count']);
+        $this->assertNotNull($programFiltered);
+        $this->assertGreaterThan(0, (int) $programFiltered['count']);
+    }
+
     public function test_overview_without_settlement_does_not_create_one(): void
     {
         if (! Schema::hasTable('event_settlements')) {

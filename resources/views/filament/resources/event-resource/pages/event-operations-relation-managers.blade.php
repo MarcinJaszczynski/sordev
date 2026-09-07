@@ -1,6 +1,4 @@
 <x-filament-panels::page>
-    @include('filament.resources.event-resource.components.operations-sub-navigation', ['record' => $record])
-
     @php
         $relationManagers = $this->getRelationManagers();
     @endphp

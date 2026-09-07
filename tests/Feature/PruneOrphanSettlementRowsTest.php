@@ -56,16 +56,6 @@ class PruneOrphanSettlementRowsTest extends TestCase
             'paid_by' => 'office',
         ]);
 
-        EventSettlementCost::create([
-            'settlement_id' => $settlement->id,
-            'source_type' => 'program_point_payment',
-            'source_id' => $point->id,
-            'name' => 'Muzeum • zaliczka',
-            'planned_amount_pln' => 0,
-            'advance_amount' => 25,
-            'paid_by' => 'office',
-        ]);
-
         $this->assertDatabaseHas('event_settlement_costs', [
             'source_type' => 'program_point',
             'source_id' => $point->id,
@@ -74,7 +64,7 @@ class PruneOrphanSettlementRowsTest extends TestCase
         $point->delete();
 
         $this->assertSame(0, EventSettlementCost::query()
-            ->whereIn('source_type', ['program_point', 'program_point_payment'])
+            ->where('source_type', 'program_point')
             ->where('source_id', $point->id)
             ->count());
     }

@@ -31,6 +31,7 @@
 
     @include('pdf.packages._package_overrides_intro')
 
+
     <div class="section">
         <div class="section-title">Podsumowanie</div>
         <div class="section-body">
@@ -44,15 +45,11 @@
         </div>
     </div>
 
-    @unless(in_array('program', $hide_sections ?? [], true))
-        @include('pdf.packages._program_imprezy')
-    @endunless
+    @include('pdf.packages._program_imprezy')
 
-    @unless(in_array('pilot_set_finance', $hide_sections ?? [], true))
-        @include('pdf.packages._pilot_set_finances', ['pilotSetFinanceCards' => $pilotSetFinanceCards ?? []])
-    @endunless
+    @include('pdf.packages._pilot_set_finances', ['pilotSetFinanceCards' => $pilotSetFinanceCards ?? []])
 
-    @if(! in_array('hotel_plan', $hide_sections ?? [], true) && (!empty($hotelNotes) || (isset($hotelProgramPoints) && $hotelProgramPoints->isNotEmpty()) || (isset($hotelPlan) && $hotelPlan->isNotEmpty())))
+    @if(!empty($hotelNotes) || (isset($hotelProgramPoints) && $hotelProgramPoints->isNotEmpty()) || (isset($hotelPlan) && $hotelPlan->isNotEmpty()))
         <div class="section">
             <div class="section-title">Hotele</div>
             <div class="section-body">
@@ -70,30 +67,10 @@
                         </thead>
                         <tbody>
                             @foreach($hotelProgramPoints as $hp)
-                                @php
-                                    $hpMeta = $hp->contractor
-                                        ? \App\Support\ContractorContactDetails::operationalMeta($hp->contractor, $hp->contractorLocation)
-                                        : ['branch_name' => null, 'address' => null, 'phone' => null, 'email' => null];
-                                @endphp
                                 <tr>
                                     <td>{{ (int) ($hp->day ?? 1) }}</td>
                                     <td>{{ $hp->name ?: ($hp->templatePoint?->name ?? '—') }}</td>
-                                    <td>
-                                        {{ $hp->contractor?->name ?? '—' }}
-                                        @if(! empty($hpMeta['branch_name']))
-                                            <br><small>{{ $hpMeta['branch_name'] }}</small>
-                                        @endif
-                                        @if(! empty($hpMeta['address']))
-                                            <br><small>{{ $hpMeta['address'] }}</small>
-                                        @endif
-                                        @if(! empty($hpMeta['phone']) || ! empty($hpMeta['email']))
-                                            <br><small>
-                                                @if(! empty($hpMeta['phone']))tel. {{ $hpMeta['phone'] }}@endif
-                                                @if(! empty($hpMeta['phone']) && ! empty($hpMeta['email'])) · @endif
-                                                @if(! empty($hpMeta['email'])){{ $hpMeta['email'] }}@endif
-                                            </small>
-                                        @endif
-                                    </td>
+                                    <td>{{ $hp->contractor?->name ?? '—' }}</td>
                                 </tr>
                             @endforeach
                         </tbody>
@@ -101,7 +78,6 @@
                 @endif
                 @foreach($hotelPlan as $day)
                     <div class="program-day-title" style="margin-top:8px;">Dzień {{ $day['day'] }} — pokoje</div>
-                    @include('pdf.packages._hotel_night_contact', ['day' => $day])
                     <table class="program-table">
                         <thead>
                             <tr><th>Uczestnicy</th><th>{{ \App\Support\EventParticipantGroupLabels::GRATIS }}</th><th>Obsługa</th><th>Kierowca</th></tr>
@@ -169,11 +145,9 @@
         </div>
     </div>
 
-    @include('pdf.packages._package_overrides_extra')
+        @include('pdf.packages._package_overrides_extra')
 
-    @unless(in_array('attachments_list', $hide_sections ?? [], true))
-        @include('pdf.packages._attachments')
-    @endunless
+    @include('pdf.packages._attachments')
     @include('pdf.packages._footer')
 </div>
 </body>

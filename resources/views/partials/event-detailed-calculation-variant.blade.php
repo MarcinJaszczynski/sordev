@@ -50,7 +50,9 @@
                                                                 $warnings[] = $roomInfo['warning'] . ' Liczba osób: ' . $roomInfo['total_people'];
                                                                 continue;
                                                             }
-                                                            $roomModel = $roomInfo['room'] ?? null;
+                                                            $roomRaw = $roomInfo['room'] ?? null;
+                                                            // Migawki trzymają room jako tablicę (JSON); żywa kalkulacja — jako model/stdClass.
+                                                            $roomModel = is_array($roomRaw) ? (object) $roomRaw : $roomRaw;
                                                             if (! $roomModel) {
                                                                 $warnings[] = 'Brak typu pokoju (hotel_rooms) dla pozycji w strukturze noclegów. Liczba osób: ' . ($roomInfo['total_people'] ?? '?');
                                                                 continue;

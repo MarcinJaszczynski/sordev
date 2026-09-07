@@ -44,6 +44,10 @@ final class UpsertEventParticipantAction
                 'diet' => ($diet = trim((string) ($data->diet ?? ''))) !== '' ? $diet : null,
             ];
 
+            if (Schema::hasColumn('event_participants', 'gender')) {
+                $payload['gender'] = EventParticipant::normalizeGender($data->gender);
+            }
+
             if (Schema::hasColumn('event_participants', 'consents')) {
                 $flags = $data->consentFlags;
                 if ($flags === null && $data->parentConsent) {

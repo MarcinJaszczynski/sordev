@@ -5,6 +5,8 @@ namespace App\Services;
 use App\Models\Currency;
 use App\Models\Event;
 use App\Models\EventPricePerPerson;
+use App\Models\EventQty;
+use App\Models\EventTemplateQty;
 
 class EventPriceCalculator
 {
@@ -39,22 +41,39 @@ class EventPriceCalculator
                 return;
             }
 
-            $this->storeRow($event, null, $plnCurrencyId, $calculator->calculate($event->participant_count));
+            $this->storeRow(
+                $event,
+                null,
+                $plnCurrencyId,
+                $calculator->calculate((int) ($event->participant_count ?? 1)),
+            );
 
             return;
         }
 
         foreach ($qtys as $qty) {
-            $hasManualForQty = $manualRows->contains(function (EventPricePerPerson $row) use ($qty) {
-                return (int) ($row->event_template_qty_id ?? 0) === (int) $qty->id
-                    || (int) optional($row->eventTemplateQty)->qty === (int) $qty->qty;
+            $templateQtyId = $this->resolveTemplateQtyId($qty);
+
+            $hasManualForQty = $manualRows->contains(function (EventPricePerPerson $row) use ($qty, $templateQtyId) {
+                if ($templateQtyId !== null && (int) ($row->event_template_qty_id ?? 0) === $templateQtyId) {
+                    return true;
+                }
+
+                return (int) optional($row->eventTemplateQty)->qty === (int) $qty->qty;
             });
 
             if ($hasManualForQty) {
                 continue;
             }
 
-            $this->storeRow($event, $qty->id, $plnCurrencyId, $calculator->calculate((int) $qty->qty));
+            $result = $calculator->calculate(
+                (int) $qty->qty,
+                (int) ($qty->gratis ?? 0),
+                (int) ($qty->staff ?? 0),
+                (int) ($qty->driver ?? 0),
+            );
+
+            $this->storeRow($event, $templateQtyId, $plnCurrencyId, $result);
         }
     }
 
@@ -66,8 +85,16 @@ class EventPriceCalculator
     private function syncManualRowCosts(Event $event, EventCostCalculator $calculator, $manualRows, ?int $plnCurrencyId): void
     {
         foreach ($manualRows as $row) {
+            $qtyModel = $event->qtyVariants
+                ->first(fn (EventQty $q) => (int) $q->qty === (int) (optional($row->eventTemplateQty)->qty ?? 0));
+
             $qty = (int) (optional($row->eventTemplateQty)->qty ?? $event->participant_count ?? 1);
-            $result = $calculator->calculate($qty);
+            $result = $calculator->calculate(
+                $qty,
+                $qtyModel !== null ? (int) ($qtyModel->gratis ?? 0) : null,
+                $qtyModel !== null ? (int) ($qtyModel->staff ?? 0) : null,
+                $qtyModel !== null ? (int) ($qtyModel->driver ?? 0) : null,
+            );
 
             $transportCost = (float) collect($result['lines'] ?? [])
                 ->where('category', 'transport')
@@ -88,7 +115,7 @@ class EventPriceCalculator
     /**
      * @param  array<string, mixed>  $result
      */
-    private function storeRow(Event $event, ?int $qtyId, ?int $currencyId, array $result): void
+    private function storeRow(Event $event, ?int $templateQtyId, ?int $currencyId, array $result): void
     {
         $transportCost = (float) collect($result['lines'] ?? [])
             ->where('category', 'transport')
@@ -96,7 +123,7 @@ class EventPriceCalculator
 
         EventPricePerPerson::create([
             'event_id' => $event->id,
-            'event_template_qty_id' => $qtyId,
+            'event_template_qty_id' => $templateQtyId,
             'currency_id' => $currencyId,
             'start_place_id' => $event->start_place_id ?? null,
             'price_per_person' => $result['price_per_person'] ?? 0,
@@ -108,6 +135,15 @@ class EventPriceCalculator
             'tax_breakdown' => $result['tax_breakdown'] ?? null,
             'is_manual' => false,
         ]);
+    }
+
+    private function resolveTemplateQtyId(EventQty $qty): ?int
+    {
+        $id = EventTemplateQty::query()
+            ->where('qty', (int) $qty->qty)
+            ->value('id');
+
+        return $id !== null ? (int) $id : null;
     }
 
     private function plnCurrencyId(): ?int

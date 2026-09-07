@@ -1,0 +1,314 @@
+<!--
+  PLIK REFERENCYJNY — nie wdrażać 1:1 do produkcji.
+  Cel: pokazać Cursorowi dokładny układ wizualny (mobile-first, karty, przewijany pasek
+  zakładek, uproszczona siatka pokoi), który ma odwzorować, PODPINAJĄC pod niego
+  prawdziwe dane z portalu pilota/biura. To NIE jest panel Filament (backoffice) —
+  to widok KLIENCKI/PILOTA, więc styl jest bardziej "konsumencki": karty ze zdjęciem,
+  zaokrąglone pigułki, awatary z inicjałami, mniej gęstych tabel.
+
+  Paleta zgodna z resztą modułu Operacje (mockup-reference-transport/hotele/pilot.html),
+  żeby panel biura i portal pilota trzymały tę samą tożsamość wizualną:
+  - tło strony:        #F5F4EF
+  - karta/panel:        #FFFFFF, border 1px solid #E5E3DA, border-radius 12-14px
+  - karta wyciszona:    #F1EFE8, border-radius 8-10px
+  - tekst główny:       #2C2C2A
+  - tekst drugorzędny:  #5F5E5A
+  - tekst muted:        #888780
+  - accent (aktywne):   #E6F1FB tło, #0C447C tekst
+  - success (pilot):    #EAF3DE tło, #27500A tekst
+  - czcionka: system-ui / sans-serif
+  - promienie: karty 12-14px, pigułki zakładek 20px (pełne zaokrąglenie), kontrolki 8px
+
+  ZASADA MOBILE-FIRST: layout bazowy (bez media query) to wąska kolumna (max-width 420px,
+  jak w telefonie). Media query (min-width: 640px) rozszerza do wielokolumnowego layoutu
+  na desktopie — czyli budujemy od telefonu w górę, nie odwrotnie.
+
+  KLUCZOWA ZMIANA: sekcja "Hotele" w oryginale to tabela z JEDNYM WIERSZEM NA OSOBĘ
+  (np. 44 identyczne wiersze "Nocleg autokar (1/44)" … "(44/44)", każdy z polem
+  "Nr pokoju"). Zastąpione zwartą siatką ponumerowanych pól (grid 4 kolumny na mobile,
+  więcej na desktopie) pogrupowaną per typ pokoju/noc — ta sama funkcja (wpisanie numeru
+  pokoju dla każdej osoby), dużo mniej przewijania.
+-->
+<!DOCTYPE html>
+<html lang="pl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Referencja wizualna — Portal pilota/biura</title>
+<style>
+  * { box-sizing: border-box; }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    background: #F5F4EF;
+    color: #2C2C2A;
+    margin: 0;
+    padding: 16px;
+  }
+  .wrap { max-width: 420px; margin: 0 auto; }
+  @media (min-width: 640px) {
+    body { padding: 24px; }
+    .wrap { max-width: 900px; }
+    .desktop-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; align-items: start; }
+  }
+
+  input, select, textarea, button {
+    font-family: inherit;
+    font-size: 13px;
+    border: 1px solid #D3D1C7;
+    border-radius: 8px;
+    padding: 8px 10px;
+    background: #FFFFFF;
+    color: #2C2C2A;
+  }
+  button { cursor: pointer; }
+  button:hover { background: #F1EFE8; }
+
+  /* ===== Banner podglądu ===== */
+  .preview-banner {
+    background: #E6F1FB; border-radius: 10px; padding: 10px 12px; margin-bottom: 12px;
+    display: flex; justify-content: space-between; align-items: center; gap: 8px; flex-wrap: wrap;
+  }
+  .preview-banner p:first-child { margin: 0; font-size: 12px; font-weight: 500; color: #0C447C; }
+  .preview-banner p:last-child { margin: 2px 0 0; font-size: 11px; color: #0C447C; }
+  .preview-banner button { font-size: 12px; padding: 5px 10px; background: #FFFFFF; }
+
+  /* ===== Hero z kartą wycieczki ===== */
+  .hero {
+    position: relative; border-radius: 14px; overflow: hidden; margin-bottom: 12px;
+    height: 150px; background: linear-gradient(0deg, rgba(0,0,0,0.6), rgba(0,0,0,0.05)), #D3D1C7;
+    background-size: cover; background-position: center;
+  }
+  .hero .caption { position: absolute; bottom: 12px; left: 16px; color: #fff; }
+  .hero .caption p:first-child { margin: 0; font-size: 18px; font-weight: 500; }
+  .hero .caption p:last-child { margin: 0; font-size: 12px; opacity: 0.9; }
+
+  /* ===== Pasek zakładek — przewijane pigułki na mobile ===== */
+  .tabs {
+    display: flex; gap: 6px; overflow-x: auto; padding-bottom: 6px; margin-bottom: 14px;
+    -ms-overflow-style: none; scrollbar-width: none;
+  }
+  .tabs::-webkit-scrollbar { display: none; }
+  .tabs .pill {
+    font-size: 12px; padding: 7px 14px; border-radius: 20px; white-space: nowrap; cursor: pointer;
+    background: #F1EFE8; color: #5F5E5A; flex-shrink: 0;
+  }
+  .tabs .pill.active { background: #2C2C2A; color: #FFFFFF; }
+  @media (min-width: 640px) {
+    .tabs { overflow-x: visible; flex-wrap: wrap; }
+  }
+
+  /* ===== Karty ===== */
+  .card { background: #FFFFFF; border: 1px solid #E5E3DA; border-radius: 12px; padding: 14px 16px; margin-bottom: 12px; }
+  .card-title { display: flex; align-items: center; justify-content: space-between; margin-bottom: 10px; }
+  .card-title p { margin: 0; font-size: 14px; font-weight: 500; }
+  .status-pill { font-size: 11px; padding: 2px 8px; border-radius: 8px; background: #E6F1FB; color: #0C447C; }
+
+  .info-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; font-size: 13px; }
+  .info-grid .label { margin: 0 0 2px; font-size: 11px; color: #888780; }
+  .info-grid .value { margin: 0; }
+
+  /* ===== Trasy przejazdu (rozwijana lista) ===== */
+  .route-row { display: flex; justify-content: space-between; font-size: 13px; padding: 4px 0; }
+  .route-row .day { color: #5F5E5A; }
+  .route-row .empty { color: #888780; }
+
+  /* ===== Kontakty z awatarami ===== */
+  .contact-row { display: flex; align-items: center; gap: 10px; margin-bottom: 10px; }
+  .contact-row:last-child { margin-bottom: 0; }
+  .avatar { width: 36px; height: 36px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 13px; font-weight: 500; flex-shrink: 0; }
+  .avatar.client { background: #E6F1FB; color: #0C447C; }
+  .avatar.pilot { background: #EAF3DE; color: #27500A; }
+  .contact-row p:first-child { margin: 0; font-size: 13px; font-weight: 500; }
+  .contact-row p:last-child { margin: 0; font-size: 12px; color: #5F5E5A; }
+
+  /* ===== Program: akordeon dni ===== */
+  .day-accordion { border-top: 1px solid #E5E3DA; padding-top: 10px; margin-top: 10px; }
+  .day-accordion:first-child { border-top: none; margin-top: 0; padding-top: 0; }
+  .day-accordion summary { cursor: pointer; list-style: none; display: flex; justify-content: space-between; align-items: center; }
+  .day-accordion summary::-webkit-details-marker { display: none; }
+  .day-accordion summary p:first-child { margin: 0; font-size: 14px; font-weight: 500; }
+  .day-accordion summary p:last-child { margin: 0; font-size: 12px; color: #888780; }
+  .day-item { padding: 10px 0 0 0; }
+  .day-item p:first-child { margin: 0; font-size: 13px; font-weight: 500; }
+  .day-item p:last-child { margin: 2px 0 0; font-size: 12px; color: #5F5E5A; }
+
+  /* ===== Hotele: siatka numerów pokoi zamiast tabeli 1-wiersz-na-osobę ===== */
+  .room-group-header { margin-bottom: 12px; }
+  .room-group-header p:first-child { margin: 0 0 2px; font-size: 14px; font-weight: 500; }
+  .room-group-header p:last-child { margin: 0; font-size: 12px; color: #5F5E5A; }
+  .room-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 6px; }
+  @media (min-width: 640px) { .room-grid { grid-template-columns: repeat(8, 1fr); } }
+  .room-slot { background: #F1EFE8; border-radius: 8px; padding: 6px; text-align: center; }
+  .room-slot .idx { margin: 0; font-size: 10px; color: #888780; }
+  .room-slot input { width: 100%; text-align: center; font-size: 12px; padding: 4px 2px; border: none; background: transparent; }
+  .room-more { margin: 10px 0 0; font-size: 12px; color: #888780; text-align: center; }
+
+  /* ===== Checklista prosta lista ===== */
+  .check-row { display: flex; align-items: center; gap: 8px; font-size: 13px; padding: 6px 0; border-top: 1px solid #E5E3DA; }
+  .check-row:first-of-type { border-top: none; }
+
+  /* ===== Dolna nawigacja mobilna (alternatywa dla pigułek na bardzo wąskim ekranie) ===== */
+  .bottom-nav {
+    display: none;
+  }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <div class="preview-banner">
+    <div>
+      <p>Podgląd: biuro · tylko odczyt</p>
+      <p>Wybierz "Podgląd jako pilot", by zobaczyć edycję.</p>
+    </div>
+    <button>Zakończ podgląd</button>
+  </div>
+
+  <div class="hero" style="background-image:url('https://images.unsplash.com/photo-1502602898param');">
+    <div class="caption">
+      <p>Paryż 22</p>
+      <p>03.09 – 07.09.2026 · Warszawa</p>
+    </div>
+  </div>
+
+  <div class="tabs">
+    <span class="pill active">Informacje</span>
+    <span class="pill">Program</span>
+    <span class="pill">Checklista</span>
+    <span class="pill">Obecność</span>
+    <span class="pill">Rozliczenie</span>
+    <span class="pill">Hotele</span>
+    <span class="pill">Dokumenty</span>
+    <span class="pill">Kontakt</span>
+  </div>
+
+  <!-- ===== ZAKŁADKA: INFORMACJE ===== -->
+  <div class="desktop-grid">
+    <div>
+      <div class="card">
+        <div class="card-title">
+          <p>Podstawienie i wyjazd</p>
+          <span class="status-pill">Inquiry</span>
+        </div>
+        <div class="info-grid">
+          <div><p class="label">Podstawienie</p><p class="value">07:30</p></div>
+          <div><p class="label">Wyjazd</p><p class="value">07:45</p></div>
+          <div><p class="label">Powrót</p><p class="value">19:00</p></div>
+          <div><p class="label">Osoby</p><p class="value">44 + 4</p></div>
+        </div>
+        <p style="margin:10px 0 0; font-size:13px; color:#5F5E5A;">📍 Warszawa</p>
+      </div>
+
+      <div class="card">
+        <div class="card-title"><p>Trasy przejazdu</p></div>
+        <div class="route-row"><span class="day">Dzień 1 (03.09)</span><span class="empty">brak trasy</span></div>
+        <div class="route-row"><span class="day">Dzień 2 (04.09)</span><span class="empty">brak trasy</span></div>
+        <div class="route-row"><span class="day">Dzień 3 (05.09)</span><span class="empty">brak trasy</span></div>
+        <div class="route-row"><span class="day">Dzień 4 (06.09)</span><span class="empty">brak trasy</span></div>
+        <div class="route-row"><span class="day">Dzień 5 (07.09)</span><span class="empty">brak trasy</span></div>
+      </div>
+    </div>
+
+    <div>
+      <div class="card">
+        <div class="card-title"><p>Transport</p></div>
+        <div class="info-grid">
+          <div><p class="label">Firma transportowa</p><p class="value">—</p></div>
+          <div><p class="label">Kierowca</p><p class="value">—</p></div>
+          <div><p class="label">Telefon kierowcy</p><p class="value">—</p></div>
+          <div><p class="label">Rejestracja</p><p class="value">—</p></div>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="card-title"><p>Kontakty</p></div>
+        <div class="contact-row">
+          <div class="avatar client">MJ</div>
+          <div>
+            <p>Marcin Jaszczyński</p>
+            <p>Klient · +48690674114</p>
+          </div>
+        </div>
+        <div class="contact-row">
+          <div class="avatar pilot">AJ</div>
+          <div>
+            <p>Aleksander Jaszczynski</p>
+            <p>Pilot</p>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ===== ZAKŁADKA: PROGRAM (akordeon dni zamiast jednego długiego scrolla) ===== -->
+  <div class="card">
+    <div class="card-title"><p>Program — Paryż 22</p></div>
+
+    <details class="day-accordion" open>
+      <summary>
+        <p>Dzień 1 · 03.09 (czwartek)</p>
+        <p>3 punkty</p>
+      </summary>
+      <div class="day-item">
+        <p>Zbiórka uczestników</p>
+        <p>08:00 – 09:00</p>
+      </div>
+      <div class="day-item">
+        <p>Przejazd autokarem do Paryża (nocny przejazd)</p>
+        <p>09:00 – 10:00</p>
+      </div>
+    </details>
+
+    <details class="day-accordion">
+      <summary>
+        <p>Dzień 2 · 04.09 (piątek)</p>
+        <p>5 punktów</p>
+      </summary>
+      <div class="day-item">
+        <p>Dojazd do Paryża w godzinach porannych</p>
+        <p>08:00 – 09:00</p>
+      </div>
+      <div class="day-item">
+        <p>Zwiedzanie: Dzielnica Łacińska</p>
+        <p>11:00 – 12:30</p>
+      </div>
+    </details>
+
+    <details class="day-accordion">
+      <summary>
+        <p>Dzień 3 · 05.09 (sobota)</p>
+        <p>— brak wpisów</p>
+      </summary>
+    </details>
+  </div>
+
+  <!-- ===== ZAKŁADKA: HOTELE — zwarta siatka pokoi zamiast 44 wierszy tabeli ===== -->
+  <div class="card">
+    <div class="room-group-header">
+      <p>Noc 1 — numery pokoi</p>
+      <p>Nocleg autokar · 44 miejsca · 1 os./pokój</p>
+    </div>
+    <div class="room-grid">
+      <div class="room-slot"><p class="idx">1</p><input placeholder="np. 214"></div>
+      <div class="room-slot"><p class="idx">2</p><input placeholder="np. 214"></div>
+      <div class="room-slot"><p class="idx">3</p><input placeholder="np. 214"></div>
+      <div class="room-slot"><p class="idx">4</p><input placeholder="np. 214"></div>
+      <div class="room-slot"><p class="idx">5</p><input placeholder="np. 214"></div>
+      <div class="room-slot"><p class="idx">6</p><input placeholder="np. 214"></div>
+      <div class="room-slot"><p class="idx">7</p><input placeholder="np. 214"></div>
+      <div class="room-slot"><p class="idx">8</p><input placeholder="np. 214"></div>
+    </div>
+    <p class="room-more">+ 36 kolejnych miejsc, ta sama siatka (scroll w dół)</p>
+  </div>
+
+  <!-- ===== ZAKŁADKA: CHECKLISTA (przykład prostszej listy) ===== -->
+  <div class="card">
+    <div class="card-title"><p>Checklista</p></div>
+    <div class="check-row"><span>☐</span><span>Potwierdzić autokar i dane kierowcy</span></div>
+    <div class="check-row"><span>☐</span><span>Sprawdzić rezerwacje hoteli</span></div>
+    <div class="check-row"><span>☑</span><span style="text-decoration:line-through; color:#888780;">Przygotować gotówkę / zaliczkę pilota</span></div>
+  </div>
+
+</div>
+</body>
+</html>

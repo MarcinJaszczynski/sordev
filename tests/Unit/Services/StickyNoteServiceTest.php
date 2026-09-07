@@ -115,4 +115,28 @@ class StickyNoteServiceTest extends TestCase
 
         $service->updateNote($note->fresh(), $author, 'Próba edycji');
     }
+
+    public function test_count_for_respects_category_filter(): void
+    {
+        $event = Event::factory()->create();
+        $author = User::factory()->create();
+        $service = app(StickyNoteService::class);
+
+        $service->addNote($event, $author, 'Hotel A', StickyNoteCategory::HOTEL);
+        $service->addNote($event, $author, 'Hotel B', StickyNoteCategory::HOTEL);
+        $service->addNote($event, $author, 'Transport', StickyNoteCategory::TRANSPORT);
+
+        $this->assertSame(2, $service->countFor($event, StickyNoteCategory::HOTEL));
+        $this->assertSame(1, $service->countFor($event, StickyNoteCategory::TRANSPORT));
+        $this->assertSame(3, $service->countFor($event));
+    }
+
+    public function test_count_label_uses_polish_pluralization(): void
+    {
+        $this->assertSame('1 notatka', StickyNoteService::countLabel(1));
+        $this->assertSame('2 notatki', StickyNoteService::countLabel(2));
+        $this->assertSame('5 notatek', StickyNoteService::countLabel(5));
+        $this->assertSame('12 notatek', StickyNoteService::countLabel(12));
+        $this->assertSame('22 notatki', StickyNoteService::countLabel(22));
+    }
 }

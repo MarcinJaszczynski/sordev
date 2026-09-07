@@ -24,8 +24,8 @@
             <div class="epp-bulk-bar__actions">
                 <button type="button" wire:click="bulkSetProperty('include_in_program', true)" class="epp-bulk-btn">+ Program</button>
                 <button type="button" wire:click="bulkSetProperty('include_in_program', false)" class="epp-bulk-btn">− Program</button>
-                <button type="button" wire:click="bulkSetProperty('include_in_calculation', true)" class="epp-bulk-btn">+ Kalkulacja</button>
-                <button type="button" wire:click="bulkSetProperty('include_in_calculation', false)" class="epp-bulk-btn">− Kalkulacja</button>
+                <button type="button" wire:click="bulkSetProperty('include_in_calculation', true)" class="epp-bulk-btn">+ W kosztach</button>
+                <button type="button" wire:click="bulkSetProperty('include_in_calculation', false)" class="epp-bulk-btn">− Poza kosztami</button>
                 <button type="button" wire:click="bulkSetProperty('active', true)" class="epp-bulk-btn">+ Aktywne</button>
                 <button type="button" wire:click="bulkSetProperty('active', false)" class="epp-bulk-btn">− Aktywne</button>
                 <button type="button" wire:click="clearSelection" class="epp-bulk-btn epp-bulk-btn--muted">Wyczyść</button>
@@ -209,7 +209,7 @@
                             </label>
                             <label class="inline-flex items-center gap-2 text-sm font-medium text-gray-800 dark:text-gray-100">
                                 <input type="checkbox" wire:model="addForm.include_in_calculation" class="rounded border-gray-300 text-primary-600">
-                                W kalkulacji
+                                W kosztach
                             </label>
                         </div>
                     </fieldset>

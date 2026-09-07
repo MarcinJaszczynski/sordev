@@ -22,10 +22,13 @@ final class FilamentNavigation
     /** Kontrahenci, kontakty, czat */
     public const GROUP_CONTACTS = 'Kontakty';
 
+    /** Konta: piloci, uczestnicy portalu, biuro/admini */
+    public const GROUP_PEOPLE = 'Osoby';
+
     /** Słowniki i konfiguracja operacyjna (zwinięte domyślnie) */
     public const GROUP_DICTIONARIES = 'Słowniki';
 
-    /** Użytkownicy systemu, role, narzędzia IT */
+    /** Role, narzędzia IT, archiwum */
     public const GROUP_SYSTEM = 'System';
 
     /** @deprecated Use GROUP_EVENTS */
@@ -67,6 +70,7 @@ final class FilamentNavigation
             self::GROUP_FINANCE => false,
             self::GROUP_EXECUTIVE => true,
             self::GROUP_CONTACTS => true,
+            self::GROUP_PEOPLE => false,
             self::GROUP_DICTIONARIES => true,
             self::GROUP_SYSTEM => true,
         ];
@@ -80,6 +84,7 @@ final class FilamentNavigation
             self::GROUP_FINANCE => 'heroicon-o-banknotes',
             self::GROUP_EXECUTIVE => 'heroicon-o-chart-bar-square',
             self::GROUP_CONTACTS => 'heroicon-o-users',
+            self::GROUP_PEOPLE => 'heroicon-o-user-group',
             self::GROUP_DICTIONARIES => 'heroicon-o-book-open',
             self::GROUP_SYSTEM => 'heroicon-o-cog-6-tooth',
             default => 'heroicon-o-folder',
@@ -94,6 +99,7 @@ final class FilamentNavigation
             self::GROUP_FINANCE => 'sor-nav-group sor-nav-group--finance',
             self::GROUP_EXECUTIVE => 'sor-nav-group sor-nav-group--executive',
             self::GROUP_CONTACTS => 'sor-nav-group sor-nav-group--contacts',
+            self::GROUP_PEOPLE => 'sor-nav-group sor-nav-group--people',
             self::GROUP_DICTIONARIES => 'sor-nav-group sor-nav-group--dictionaries',
             self::GROUP_SYSTEM => 'sor-nav-group sor-nav-group--system',
             default => 'sor-nav-group',

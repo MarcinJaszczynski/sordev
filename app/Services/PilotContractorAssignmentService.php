@@ -102,6 +102,87 @@ class PilotContractorAssignmentService
         );
     }
 
+    /**
+     * Zapis PESEL/daty z konta pilota: kanonicznie na Contractor (gdy jest karta), potem kopia na User.
+     * Bez kontrahenta — tylko profil User.
+     */
+    public function persistPilotDemographicsFromPortalUser(User $user, $birthDate, ?string $pesel, ?string $phone = null): void
+    {
+        $contractor = $this->findPilotContractorByEmail($user->email);
+
+        if ($contractor) {
+            $this->syncContractorDemographics(
+                (int) $contractor->getKey(),
+                filled($birthDate) ? (is_string($birthDate) ? $birthDate : $birthDate->format('Y-m-d')) : null,
+                $pesel,
+            );
+
+            if (Schema::hasColumn('contractors', 'phone') && $phone !== null) {
+                Contractor::query()->whereKey($contractor->getKey())->update([
+                    'phone' => filled($phone) ? trim($phone) : null,
+                ]);
+            }
+
+            $this->syncPortalUserDemographicsFromContractor((int) $contractor->getKey(), (int) $user->getKey());
+
+            return;
+        }
+
+        User::syncPilotDemographics((int) $user->getKey(), $birthDate, $pesel, $phone);
+    }
+
+    /**
+     * Po edycji karty kontrahenta-pilota — skopiuj dane osobowe na powiązane konto portalu.
+     */
+    public function syncPortalUserDemographicsFromContractorRecord(Contractor $contractor): void
+    {
+        if (! $contractor->hasPilotType()) {
+            return;
+        }
+
+        $userId = $this->resolvePortalUserId($contractor);
+
+        if (! $userId) {
+            return;
+        }
+
+        $this->syncPortalUserDemographicsFromContractor((int) $contractor->getKey(), $userId);
+    }
+
+    public function findPilotContractorByEmail(?string $email): ?Contractor
+    {
+        if (! filled($email)) {
+            return null;
+        }
+
+        return Contractor::query()
+            ->where('email', $email)
+            ->withAnyTypeName(['pilot'])
+            ->first();
+    }
+
+    /**
+     * @return array{birth_date: mixed, pesel: ?string, contractor_label: ?string}
+     */
+    public function demographicsFormStateForPortalUser(User $user): array
+    {
+        $contractor = $this->findPilotContractorByEmail($user->email);
+
+        if ($contractor) {
+            return [
+                'birth_date' => $contractor->birth_date?->format('Y-m-d'),
+                'pesel' => $contractor->pesel,
+                'contractor_label' => $contractor->name,
+            ];
+        }
+
+        return [
+            'birth_date' => $user->birth_date?->format('Y-m-d'),
+            'pesel' => $user->pesel,
+            'contractor_label' => null,
+        ];
+    }
+
     public function assignedUserLabel(?Contractor $contractor): string
     {
         if (! $contractor) {
@@ -111,7 +192,7 @@ class PilotContractorAssignmentService
         $userId = $this->resolvePortalUserId($contractor);
 
         if (! $userId) {
-            return 'Brak konta użytkownika — utwórz w «Zespół (piloci)» z tym samym e-mailem, aby pilot miał dostęp do panelu.';
+            return 'Brak konta użytkownika — utwórz w «Piloci» z tym samym e-mailem, aby pilot miał dostęp do panelu.';
         }
 
         $user = User::query()->find($userId);
@@ -126,5 +207,42 @@ class PilotContractorAssignmentService
         ]);
 
         return implode(' ', $details);
+    }
+
+    /**
+     * Konto portalu pilota dla imprezy — kontrahent (pilot_contractor_id) ma pierwszeństwo
+     * przed legacy assigned_to, żeby podgląd biura zgadzał się z przypisaniem w formularzu.
+     */
+    public function resolvePortalUserIdForEvent(Event $event): ?int
+    {
+        $event->loadMissing(['pilotContractor', 'assignedUser']);
+
+        if (Schema::hasColumn('events', 'pilot_contractor_id') && filled($event->pilot_contractor_id)) {
+            $fromContractor = $this->resolvePortalUserId($event->pilotContractor);
+
+            if ($fromContractor) {
+                return $fromContractor;
+            }
+        }
+
+        return filled($event->assigned_to) ? (int) $event->assigned_to : null;
+    }
+
+    /**
+     * Etykieta pilota w UI — nazwa kontrahenta, gdy wybrany w polu „Pilot”.
+     */
+    public function pilotDisplayNameForEvent(Event $event): ?string
+    {
+        $event->loadMissing(['pilotContractor', 'assignedUser']);
+
+        $name = $event->pilotContractor?->name ?? $event->assignedUser?->name;
+
+        return filled($name) ? trim((string) $name) : null;
+    }
+
+    public function eventHasAssignedPilot(Event $event): bool
+    {
+        return $this->resolvePortalUserIdForEvent($event) !== null
+            || (Schema::hasColumn('events', 'pilot_contractor_id') && filled($event->pilot_contractor_id));
     }
 }

@@ -111,7 +111,6 @@ final class EventStatusAutomationService
             title: $title,
             description: $description,
             priority: $priority,
-            dueDate: now()->addDay(),
             eventForAssignee: $event,
             url: AdminPanelUrls::eventEdit($event),
             onlyOpenWhenFinding: false,

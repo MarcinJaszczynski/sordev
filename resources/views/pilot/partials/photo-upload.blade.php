@@ -28,6 +28,7 @@
             capture="environment"
             class="sr-only"
             wire:model.live.debounce.500ms="{{ $wireModel }}"
+            @if($multiple) multiple @endif
         />
 
         <label for="{{ $uid }}-file" class="{{ $btnClass }}">
@@ -51,6 +52,9 @@
     </div>
 
     @error($wireModel)
+        <p class="text-xs text-red-600">{{ $message }}</p>
+    @enderror
+    @error($wireModel.'.*')
         <p class="text-xs text-red-600">{{ $message }}</p>
     @enderror
 </div>

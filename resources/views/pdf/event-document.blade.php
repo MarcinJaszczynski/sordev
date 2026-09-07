@@ -181,8 +181,12 @@
                     @forelse($points as $point)
                         <tr>
                             <td>
-                                @if($point->start_time || $point->end_time)
-                                    {{ $point->start_time ?: '—' }} - {{ $point->end_time ?: '—' }}
+                                @php
+                                    $displayStart = $point->displayStartTime();
+                                    $displayEnd = $point->displayEndTime();
+                                @endphp
+                                @if($displayStart || $displayEnd)
+                                    {{ $displayStart ?: '—' }} - {{ $displayEnd ?: '—' }}
                                 @else
                                     —
                                 @endif

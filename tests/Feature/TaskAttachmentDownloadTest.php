@@ -50,9 +50,45 @@ class TaskAttachmentDownloadTest extends TestCase
             'size' => 5,
         ]);
 
-        $this->actingAs($assignee)
-            ->get(route('admin.task-attachments.download', ['attachment' => $attachment->id]))
-            ->assertOk();
+        $response = $this->actingAs($assignee)
+            ->get(route('admin.task-attachments.download', ['attachment' => $attachment->id]));
+
+        $response->assertOk();
+        $this->assertStringContainsString('inline', strtolower((string) $response->headers->get('content-disposition')));
+    }
+
+    public function test_download_query_forces_attachment_disposition(): void
+    {
+        $author = User::factory()->create();
+        $author->assignRole('admin');
+
+        $task = Task::create([
+            'title' => 'Zadanie z plikiem',
+            'status_id' => Task::getDefaultStatusId(),
+            'priority' => 'normal',
+            'author_id' => $author->id,
+            'assignee_id' => $author->id,
+        ]);
+
+        Storage::disk('public')->put('task-attachments/test.txt', 'hello');
+
+        $attachment = TaskAttachment::create([
+            'task_id' => $task->id,
+            'user_id' => $author->id,
+            'name' => 'test.txt',
+            'file_path' => 'task-attachments/test.txt',
+            'mime_type' => 'text/plain',
+            'size' => 5,
+        ]);
+
+        $response = $this->actingAs($author)
+            ->get(route('admin.task-attachments.download', [
+                'attachment' => $attachment->id,
+                'download' => 1,
+            ]));
+
+        $response->assertOk();
+        $this->assertStringContainsString('attachment', strtolower((string) $response->headers->get('content-disposition')));
     }
 
     public function test_unrelated_user_cannot_download_task_attachment(): void

@@ -14,7 +14,7 @@
         <div class="doc-sub">{{ $event->name }}</div>
         <div class="doc-meta">
             @if($event->code)
-                Nr / kod: <strong>{{ $event->code }}</strong>
+                Nr wycieczki: <strong>{{ $event->code }}</strong>
                 &nbsp;·&nbsp;
             @endif
             Termin:
@@ -51,7 +51,7 @@
                     <td class="val">
                         {{ $event->client_name ?: '—' }}
                         @if($event->client_phone)
-                            <br>{{ $event->client_phone }}
+                            , {{ $event->client_phone }}
                         @endif
                         @if($event->client_email)
                             <br><small>{{ $event->client_email }}</small>
@@ -70,58 +70,45 @@
                     </td>
                 </tr>
                 <tr>
-                    <td class="lbl">Hotel / nocleg</td>
+                    <td class="lbl">Hotel</td>
                     <td class="val">
-                        @if(isset($hotelPlan) && $hotelPlan->isNotEmpty())
-                            @foreach($hotelPlan as $day)
-                                <div style="margin-bottom:6px;">
-                                    <strong>Noc {{ $day['day'] }}</strong>
-                                    @include('pdf.packages._hotel_night_contact', ['day' => $day])
-                                </div>
-                            @endforeach
-                        @else
-                            @php $hp0 = $hotelProgramPoints->first(); @endphp
-                            @if($hp0 && $hp0->contractor)
-                                @php
-                                    $hotelMeta = \App\Support\ContractorContactDetails::operationalMeta($hp0->contractor, $hp0->contractorLocation);
-                                @endphp
-                                {{ $hp0->contractor->name }}
-                                @if(! empty($hotelMeta['branch_name']))
-                                    , {{ $hotelMeta['branch_name'] }}
-                                @endif
-                                @if(! empty($hotelMeta['phone']))
-                                    , {{ $hotelMeta['phone'] }}
-                                @endif
-                                @if(! empty($hotelMeta['email']))
-                                    , {{ $hotelMeta['email'] }}
-                                @endif
-                                @if(! empty($hotelMeta['address']))
-                                    <br><small>{{ $hotelMeta['address'] }}</small>
-                                @endif
-                            @elseif($hp0)
-                                {{ $hp0->name ?: ($hp0->templatePoint?->name ?? '—') }}
-                            @else
-                                —
+                        @php
+                            $hp0 = $hotelProgramPoints->first();
+                            $hotelNight0 = collect($hotelPlan ?? [])->first(fn ($day) => filled($day['hotel_name'] ?? null) || filled($day['hotel_address'] ?? null));
+                        @endphp
+                        @if($hotelNight0)
+                            @include('pdf.packages._hotel_night_contact', ['day' => $hotelNight0])
+                        @elseif($hp0 && $hp0->contractor)
+                            @php
+                                $hotelMeta = \App\Support\ContractorContactDetails::operationalMeta($hp0->contractor, $hp0->contractorLocation);
+                            @endphp
+                            {{ $hp0->contractor->name }}
+                            @if(! empty($hotelMeta['branch_name']))
+                                , {{ $hotelMeta['branch_name'] }}
                             @endif
+                            @if(! empty($hotelMeta['phone']))
+                                , {{ $hotelMeta['phone'] }}
+                            @endif
+                            @if(! empty($hotelMeta['address']))
+                                <br><small>{{ $hotelMeta['address'] }}</small>
+                            @endif
+                        @elseif($hp0)
+                            {{ $hp0->name ?: ($hp0->templatePoint?->name ?? '—') }}
+                        @else
+                            —
                         @endif
                     </td>
                 </tr>
                 <tr>
-                    <td class="lbl">Uczestnicy</td>
+                    <td class="lbl">Uczestnicy łącznie</td>
                     <td class="val">{{ $participantSummaryLine ?? '' }}</td>
                 </tr>
                 <tr>
                     <td class="lbl">Pilot</td>
                     <td class="val">
                         {{ $event->assignedUser?->name ?: '—' }}
-                        @if($event->assignedUser?->birth_date)
-                            <br><small>Data ur.: {{ $event->assignedUser->birth_date->format('d.m.Y') }}</small>
-                        @endif
-                        @if(filled($event->assignedUser?->pesel))
-                            <br><small>PESEL: {{ $event->assignedUser->pesel }}</small>
-                        @endif
                         @if(filled($event->assignedUser?->phone))
-                            <br><small>Tel.: {{ $event->assignedUser->phone }}</small>
+                            , {{ $event->assignedUser->phone }}
                         @endif
                     </td>
                 </tr>
@@ -139,7 +126,7 @@
                 </tr>
                 <tr>
                     <td class="lbl">Miejsce podstawienia</td>
-                    <td class="val">{!! nl2br(e($event->pickup_place_details ? strip_tags($event->pickup_place_details) : ($event->startPlace?->name ?? '—'))) !!}</td>
+                    <td class="val">{!! nl2br(e($event->adress_transport_start ? strip_tags($event->adress_transport_start) : ($event->pickup_place_details ? strip_tags($event->pickup_place_details) : ($event->startPlace?->name ?? '—')))) !!}</td>
                 </tr>
                 <tr>
                     <td class="lbl">Szkoła / zamawiający</td>
@@ -161,12 +148,12 @@
         <div class="section-body">
             <table class="rows">
                 <tr>
-                    <td class="lbl">Odjazd / start</td>
+                    <td class="lbl">Odjazd</td>
                     <td class="val">{{ $travelLegends['departure'] ?? '—' }}</td>
                 </tr>
                 <tr>
-                    <td class="lbl">Docelowe miejsce (pierwszy nocleg)</td>
-                    <td class="val">{!! nl2br(e($travelLegends['destination'] ?? '—')) !!}</td>
+                    <td class="lbl">Docelowe miejsce</td>
+                    <td class="val">{!! nl2br(e($event->adress_transport_end ? strip_tags($event->adress_transport_end) : ($travelLegends['destination'] ?? '—'))) !!}</td>
                 </tr>
                 <tr>
                     <td class="lbl">Powrót</td>
@@ -180,9 +167,29 @@
         </div>
     </div>
 
-    @if(isset($hotelPlan) && $hotelPlan->isNotEmpty() && ! in_array('hotel_plan', $hide_sections ?? [], true))
+    @php
+        $dietLines = $dietInfoLines ?? [];
+        if ($dietLines === [] && filled($event->diet_info ?? null)) {
+            $dietLines = array_values(array_filter(array_map(
+                static fn (string $line): string => trim($line),
+                preg_split("/\r\n|\n|\r/", (string) $event->diet_info) ?: [],
+            )));
+        }
+    @endphp
+    <div class="section">
+        <div class="section-title">Diety</div>
+        <div class="section-body">
+            @forelse($dietLines as $dietLine)
+                <div style="font-size:11px; font-weight:bold; color:#111827; padding:2px 0;">{{ $dietLine }}</div>
+            @empty
+                <p class="muted">—</p>
+            @endforelse
+        </div>
+    </div>
+
+    @if(isset($hotelPlan) && $hotelPlan->isNotEmpty())
         <div class="section">
-            <div class="section-title">Pokoje (szablon noclegów)</div>
+            <div class="section-title">Pokoje</div>
             <div class="section-body">
                 <table class="rows" style="width:100%;">
                     <thead>
@@ -196,15 +203,7 @@
                     <tbody>
                     @foreach($hotelPlan as $day)
                         <tr>
-                            <td colspan="4" style="font-weight: bold; padding-top:8px;">
-                                Noc {{ $day['day'] }}
-                                @if(!empty($day['hotel_name']))
-                                    — {{ $day['hotel_name'] }}
-                                    @if(!empty($day['hotel_branch']))
-                                        ({{ $day['hotel_branch'] }})
-                                    @endif
-                                @endif
-                            </td>
+                            <td colspan="4" style="font-weight:700; padding-top:8px;">Dzień {{ $day['day'] }}</td>
                         </tr>
                         <tr>
                             <td colspan="4">
@@ -214,28 +213,28 @@
                         <tr>
                             <td style="text-align:center; vertical-align:top;">
                                 @forelse($day['qty'] as $room)
-                                    {{ $room['name'] }}@if($room['people_count']) ({{ $room['people_count'] }} os.)@endif<br>
+                                    {{ $room['quantity'] ?? 1 }} x {{ $room['name'] }}@if($room['people_count']) ({{ $room['people_count'] }} os.)@endif<br>
                                 @empty
                                     —
                                 @endforelse
                             </td>
                             <td style="text-align:center; vertical-align:top;">
                                 @forelse($day['gratis'] as $room)
-                                    {{ $room['name'] }}@if($room['people_count']) ({{ $room['people_count'] }} os.)@endif<br>
+                                    {{ $room['quantity'] ?? 1 }} x {{ $room['name'] }}@if($room['people_count']) ({{ $room['people_count'] }} os.)@endif<br>
                                 @empty
                                     —
                                 @endforelse
                             </td>
                             <td style="text-align:center; vertical-align:top;">
                                 @forelse($day['staff'] as $room)
-                                    {{ $room['name'] }}@if($room['people_count']) ({{ $room['people_count'] }} os.)@endif<br>
+                                    {{ $room['quantity'] ?? 1 }} x {{ $room['name'] }}@if($room['people_count']) ({{ $room['people_count'] }} os.)@endif<br>
                                 @empty
                                     —
                                 @endforelse
                             </td>
                             <td style="text-align:center; vertical-align:top;">
                                 @forelse($day['driver'] as $room)
-                                    {{ $room['name'] }}@if($room['people_count']) ({{ $room['people_count'] }} os.)@endif<br>
+                                    {{ $room['quantity'] ?? 1 }} x {{ $room['name'] }}@if($room['people_count']) ({{ $room['people_count'] }} os.)@endif<br>
                                 @empty
                                     —
                                 @endforelse
@@ -253,37 +252,38 @@
         </div>
     @endif
 
-    @unless(in_array('program', $hide_sections ?? [], true))
-        @include('pdf.packages._program_imprezy')
-    @endunless
+    @include('pdf.packages._program_imprezy')
 
-    @unless(in_array('pilot_set_finance', $hide_sections ?? [], true))
-        @include('pdf.packages._pilot_set_finances', ['pilotSetFinanceCards' => $pilotSetFinanceCards ?? []])
-    @endunless
+    @include('pdf.packages._pilot_contacts', ['pilotContactPlaces' => $pilotContactPlaces ?? []])
 
-    @unless(in_array('notes', $hide_sections ?? [], true))
-        <div class="section">
-            <div class="section-title">Notatki dla pilota</div>
-            <div class="section-body">
-                <div class="notes-field">
-                    @php
-                        $pn = trim(strip_tags((string) ($event->pilot_notes ?? '')));
-                    @endphp
-                    @if($pn === '')
-                        —
-                    @else
+    @include('pdf.packages._pilot_expenses', ['pilotExpenseRows' => $pilotExpenseRows ?? []])
+
+    <div class="section">
+        <div class="section-title">Notatki dla pilota</div>
+        <div class="section-body">
+            <div class="notes-field">
+                @php
+                    $pn = trim(strip_tags((string) ($event->pilot_notes ?? '')));
+                    $on = trim(strip_tags((string) ($event->office_notes ?? '')));
+                @endphp
+                @if($pn === '' && $on === '')
+                    —
+                @else
+                    @if($pn !== '')
                         {!! nl2br(e($pn)) !!}
                     @endif
-                </div>
+                    @if($on !== '')
+                        @if($pn !== '')<br><br>@endif
+                        <strong>Biuro:</strong> {!! nl2br(e($on)) !!}
+                    @endif
+                @endif
             </div>
         </div>
-    @endunless
+    </div>
 
-    @include('pdf.packages._package_overrides_extra')
+        @include('pdf.packages._package_overrides_extra')
 
-    @unless(in_array('attachments_list', $hide_sections ?? [], true))
-        @include('pdf.packages._attachments')
-    @endunless
+    @include('pdf.packages._attachments')
     @include('pdf.packages._footer')
 </div>
 </body>

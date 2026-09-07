@@ -38,7 +38,7 @@ class HistoryRelationManager extends RelationManager
                     ->label('Nowa wartość')
                     ->readOnly(),
 
-                \FilamentTiptapEditor\TiptapEditor::make('description')
+                Forms\Components\Textarea::make('description')
                     ->label('Opis')
                     ->readOnly(),
 

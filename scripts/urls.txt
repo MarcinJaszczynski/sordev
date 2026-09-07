@@ -1,0 +1,4 @@
+# Base URL środowisk — użyj z --catalog (cała oferta, miasto po mieście)
+local|http://127.0.0.1:8000
+prod|https://bprafa.pl
+dev|https://sor41.webgarage.pl

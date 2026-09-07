@@ -13,6 +13,7 @@ use App\Models\EventProgramPoint;
 use App\Models\Reservation;
 use App\Support\FilamentNavigation;
 use App\Support\MoneyFormatter;
+use App\Support\PhoneValidation;
 use App\Support\ReservationPricingLabel;
 use Filament\Forms;
 use Filament\Forms\Form;
@@ -289,19 +290,25 @@ class ReservationResource extends Resource
                 static::applyDateSearchConstraints($eventQuery, $term, 'start_date', 'end_date');
             });
 
-            $inner->orWhereHas('contractor', fn (Builder $contractorQuery): Builder => $contractorQuery
-                ->where('name', 'like', $like)
-                ->orWhere('phone', 'like', $like)
-                ->orWhere('email', 'like', $like));
+            $inner->orWhereHas('contractor', function (Builder $contractorQuery) use ($like, $term): void {
+                $contractorQuery
+                    ->where('name', 'like', $like)
+                    ->orWhere('email', 'like', $like);
 
-            $inner->orWhereHas('programPoint', function (Builder $pointQuery) use ($like): void {
+                PhoneValidation::orWhereDigitsLike($contractorQuery, 'phone', $term);
+            });
+
+            $inner->orWhereHas('programPoint', function (Builder $pointQuery) use ($like, $term): void {
                 $pointQuery->where('name', 'like', $like)
                     ->orWhereHas('templatePoint', fn (Builder $templateQuery) => $templateQuery
                         ->where('name', 'like', $like))
-                    ->orWhereHas('contractor', fn (Builder $contractorQuery) => $contractorQuery
-                        ->where('name', 'like', $like)
-                        ->orWhere('phone', 'like', $like)
-                        ->orWhere('email', 'like', $like));
+                    ->orWhereHas('contractor', function (Builder $contractorQuery) use ($like, $term): void {
+                        $contractorQuery
+                            ->where('name', 'like', $like)
+                            ->orWhere('email', 'like', $like);
+
+                        PhoneValidation::orWhereDigitsLike($contractorQuery, 'phone', $term);
+                    });
             });
 
             $inner->orWhereHas('settlementCost', fn (Builder $costQuery): Builder => $costQuery

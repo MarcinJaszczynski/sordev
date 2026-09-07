@@ -1,7 +1,7 @@
 <x-filament-panels::page>
     <div class="mb-5">
         <p class="client-portal-kicker">Portal klienta</p>
-        <p class="mt-1 text-sm text-slate-600">Wybierz wycieczkę, żeby zobaczyć program, umowę i płatności.</p>
+        <p class="mt-1 text-sm text-[#5F5E5A]">Wybierz wycieczkę, żeby zobaczyć program, umowę i płatności.</p>
     </div>
 
     @include('filament.client.components.trip-cards', ['trips' => $this->trips])

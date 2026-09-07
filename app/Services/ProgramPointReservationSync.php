@@ -74,21 +74,63 @@ class ProgramPointReservationSync
             $ids = [(int) $point->id];
         }
 
-        EventProgramPoint::query()
-            ->whereIn('id', $ids)
-            ->update(['reservation_id' => $reservation->id]);
+        $linkableIds = $this->reservationLinkablePointIds($ids);
+
+        if ($linkableIds !== []) {
+            EventProgramPoint::query()
+                ->whereIn('id', $linkableIds)
+                ->update(['reservation_id' => $reservation->id]);
+        }
 
         EventProgramPoint::query()
             ->where('reservation_id', $reservation->id)
-            ->whereNotIn('id', $ids)
+            ->when(
+                $linkableIds !== [],
+                fn ($query) => $query->whereNotIn('id', $linkableIds),
+                fn ($query) => $query
+            )
+            ->update(['reservation_id' => null]);
+
+        // Dojazdy do hotelu nie są częścią rezerwacji noclegowej — odłącz.
+        EventProgramPoint::query()
+            ->whereIn('id', $ids)
+            ->whereNotIn('id', $linkableIds)
+            ->whereNotNull('reservation_id')
             ->update(['reservation_id' => null]);
 
         if (filled($reservation->contractor_id)) {
             EventProgramPoint::query()
-                ->whereIn('id', $ids)
+                ->whereIn('id', $linkableIds)
                 ->whereNull('contractor_id')
-                ->update(['contractor_id' => $reservation->contractor_id]);
+                ->where('is_hotel', true)
+                ->get()
+                ->reject(fn (EventProgramPoint $point): bool => Event::isHotelTransferProgramPoint($point))
+                ->each(function (EventProgramPoint $point) use ($reservation): void {
+                    $point->forceFill(['contractor_id' => (int) $reservation->contractor_id])->saveQuietly();
+                });
         }
+    }
+
+    /**
+     * @param  list<int>  $ids
+     * @return list<int>
+     */
+    private function reservationLinkablePointIds(array $ids): array
+    {
+        if ($ids === []) {
+            return [];
+        }
+
+        return EventProgramPoint::query()
+            ->whereIn('id', $ids)
+            ->withCount('children')
+            ->get()
+            ->reject(fn (EventProgramPoint $point): bool => Event::isHotelTransferProgramPoint($point))
+            ->reject(fn (EventProgramPoint $point): bool => $point->isSetParent())
+            ->pluck('id')
+            ->map(fn ($id): int => (int) $id)
+            ->values()
+            ->all();
     }
 
     public function backfillForEvent(Event $event): int

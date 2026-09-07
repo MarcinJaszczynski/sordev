@@ -51,6 +51,13 @@ class TaskContextRegistry
         return static::types()[$type] ?? null;
     }
 
+    public static function typedName(string $kind, ?string $name): string
+    {
+        $name = trim((string) $name);
+
+        return $name !== '' ? $kind.': '.$name : $kind;
+    }
+
     public static function recordOptions(?string $type): array
     {
         if (! static::isSupported($type)) {
@@ -347,17 +354,23 @@ class TaskContextRegistry
         try {
             return CalendarEventLinks::compact(match (true) {
                 $record instanceof Event => [
-                    CalendarEventLinks::event($record->getKey()),
+                    CalendarEventLinks::event(
+                        $record->getKey(),
+                        static::typedName('Impreza', $record->name),
+                    ),
                 ],
                 $record instanceof EventTemplate => [
                     CalendarEventLinks::link(
                         \App\Filament\Resources\EventTemplateResource::getUrl('edit', ['record' => $record]),
-                        'Szablon imprezy',
+                        static::typedName('Szablon imprezy', $record->name),
                         'heroicon-o-document-duplicate',
                     ),
                 ],
                 $record instanceof Contractor => [
-                    CalendarEventLinks::contractor($record->getKey()),
+                    CalendarEventLinks::contractor(
+                        $record->getKey(),
+                        static::typedName('Kontrahent', $record->name),
+                    ),
                 ],
                 $record instanceof EventProgramPoint => static::eventProgramPointLinks($record),
                 $record instanceof EventTemplateProgramPoint => [
@@ -365,37 +378,40 @@ class TaskContextRegistry
                         $record->event_template_id
                             ? \App\Filament\Resources\EventTemplateResource::getUrl('edit', ['record' => $record->event_template_id])
                             : null,
-                        'Szablon imprezy',
+                        static::typedName('Punkt programu szablonu', $record->name),
                         'heroicon-o-document-duplicate',
                     ),
                 ],
                 $record instanceof EventDocument => [
-                    CalendarEventLinks::event($record->event_id),
+                    CalendarEventLinks::event(
+                        $record->event_id,
+                        static::typedName('Impreza', $record->event?->name),
+                    ),
                     CalendarEventLinks::eventDocuments($record->event_id),
                 ],
                 $record instanceof EventSettlementCost => static::settlementContextLinks(
                     $record->settlement_id,
                     \App\Filament\Resources\EventSettlementResource::getEventFinanceUrlForSettlement($record->settlement_id),
-                    'Finanse imprezy',
+                    static::typedName('Pozycja kosztu', $record->name ?? null),
                     'heroicon-o-receipt-percent',
                 ),
                 $record instanceof EventSettlementDocument => static::settlementContextLinks(
                     $record->settlement_id,
                     \App\Filament\Resources\EventSettlementResource::getEventFinanceUrlForSettlement($record->settlement_id),
-                    'Finanse imprezy',
+                    'Dokument rozliczenia',
                     'heroicon-o-document',
                 ),
                 $record instanceof EventSettlementParticipantPayment => static::settlementContextLinks(
                     $record->settlement_id,
                     \App\Filament\Resources\EventSettlementResource::getEventFinanceUrlForSettlement($record->settlement_id),
-                    'Finanse imprezy',
+                    static::typedName('Wpłata uczestnika', $record->participant_name ?? null),
                     'heroicon-o-banknotes',
                 ),
                 $record instanceof Reservation => static::reservationLinks($record),
                 $record instanceof PilotCashPreparation => static::settlementContextLinks(
                     $record->settlement_id,
                     \App\Filament\Resources\EventSettlementResource::getEventFinanceUrlForSettlement($record->settlement_id),
-                    'Finanse imprezy',
+                    'Gotówka pilota',
                     'heroicon-o-wallet',
                 ),
                 default => [],
@@ -411,24 +427,47 @@ class TaskContextRegistry
     protected static function reservationLinks(Reservation $reservation): array
     {
         $reservation->loadMissing([
-            'event:id',
-            'contractor:id',
-            'programPoint:id,event_id,contractor_id',
+            'event:id,name',
+            'contractor:id,name',
+            'programPoint:id,name,event_id,contractor_id',
             'settlementCost:id,settlement_id',
         ]);
 
+        $eventName = $reservation->event?->name;
+        $pointName = $reservation->programPoint?->name;
+        $contractorName = $reservation->contractor?->name;
+        $reference = $reservation->booking_reference;
+        $programLabel = filled($pointName)
+            ? static::typedName('Punkt programu', $pointName)
+            : ($eventName ? 'Program: '.$eventName : 'Program imprezy');
+
         return [
-            CalendarEventLinks::reservation($reservation->getKey()),
-            CalendarEventLinks::event($reservation->event_id),
-            CalendarEventLinks::eventProgram($reservation->event_id),
-            CalendarEventLinks::eventReservations($reservation->event_id),
-            CalendarEventLinks::contractor($reservation->contractor_id),
+            CalendarEventLinks::reservation(
+                $reservation->getKey(),
+                static::typedName('Rezerwacja', $reference),
+            ),
+            CalendarEventLinks::event(
+                $reservation->event_id,
+                static::typedName('Impreza', $eventName),
+            ),
+            CalendarEventLinks::eventProgram(
+                $reservation->event_id,
+                $programLabel,
+            ),
+            CalendarEventLinks::eventReservations(
+                $reservation->event_id,
+                $eventName ? 'Rezerwacje: '.$eventName : 'Rezerwacje imprezy',
+            ),
+            CalendarEventLinks::contractor(
+                $reservation->contractor_id,
+                static::typedName('Kontrahent', $contractorName),
+            ),
             $reservation->settlementCost?->settlement_id
                 ? CalendarEventLinks::link(
                     \App\Filament\Resources\EventSettlementResource::getEventFinanceUrlForSettlement(
                         $reservation->settlementCost->settlement_id
                     ),
-                    'Finanse imprezy',
+                    $eventName ? 'Finanse: '.$eventName : 'Finanse imprezy',
                     'heroicon-o-receipt-percent',
                 )
                 : null,
@@ -440,12 +479,27 @@ class TaskContextRegistry
      */
     protected static function eventProgramPointLinks(EventProgramPoint $programPoint): array
     {
-        $programPoint->loadMissing(['event:id', 'contractor:id']);
+        $programPoint->loadMissing(['event:id,name', 'contractor:id,name', 'templatePoint:id,name']);
+
+        $pointName = $programPoint->name
+            ?: $programPoint->templatePoint?->name
+            ?: null;
+        $eventName = $programPoint->event?->name;
+        $contractorName = $programPoint->contractor?->name;
 
         return [
-            CalendarEventLinks::event($programPoint->event_id),
-            CalendarEventLinks::eventProgram($programPoint->event_id),
-            CalendarEventLinks::contractor($programPoint->contractor_id),
+            CalendarEventLinks::eventProgram(
+                $programPoint->event_id,
+                static::typedName('Punkt programu', $pointName),
+            ),
+            CalendarEventLinks::event(
+                $programPoint->event_id,
+                static::typedName('Impreza', $eventName),
+            ),
+            CalendarEventLinks::contractor(
+                $programPoint->contractor_id,
+                static::typedName('Kontrahent', $contractorName),
+            ),
         ];
     }
 
@@ -459,11 +513,16 @@ class TaskContextRegistry
         }
 
         $settlement = \App\Models\EventSettlement::query()
-            ->select(['id', 'event_id'])
+            ->with(['event:id,name'])
             ->find($settlementId);
 
+        $eventName = $settlement?->event?->name;
+
         return [
-            CalendarEventLinks::event($settlement?->event_id),
+            CalendarEventLinks::event(
+                $settlement?->event_id,
+                static::typedName('Impreza', $eventName),
+            ),
             CalendarEventLinks::settlement($settlementId),
             CalendarEventLinks::link($detailUrl, $detailLabel, $detailIcon),
         ];

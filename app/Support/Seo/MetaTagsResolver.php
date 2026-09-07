@@ -4,6 +4,7 @@ namespace App\Support\Seo;
 
 use App\Models\EventTemplate;
 use App\Models\SeoSetting;
+use App\Support\Region;
 use Illuminate\Support\Arr;
 
 class MetaTagsResolver
@@ -48,7 +49,7 @@ class MetaTagsResolver
         $canonical = $meta['canonical']
             ?? Arr::get($context, 'canonical')
             ?? ($template ? $template->prettyUrl(Arr::get($context, 'start_place_id')) : null)
-            ?? request()->getUri();
+            ?? self::resolveCanonicalFromRoute();
 
         $keywords = $meta['keywords'] ?? null;
 
@@ -112,5 +113,29 @@ class MetaTagsResolver
         }
 
         return trim(preg_replace('/\s+/u', ' ', strip_tags($html)) ?? '');
+    }
+
+    private static function resolveCanonicalFromRoute(): string
+    {
+        $request = request();
+        $defaultRegionSlug = Region::slugForLinks(null);
+
+        if ($request->routeIs('home')) {
+            return route('home', ['regionSlug' => $defaultRegionSlug]);
+        }
+
+        if ($request->routeIs('faq')) {
+            return route('faq', ['regionSlug' => $defaultRegionSlug]);
+        }
+
+        if ($request->routeIs('contact')) {
+            return route('contact', ['regionSlug' => $defaultRegionSlug]);
+        }
+
+        if ($request->routeIs('insurance')) {
+            return route('insurance', ['regionSlug' => $defaultRegionSlug]);
+        }
+
+        return $request->getUri();
     }
 }

@@ -51,12 +51,7 @@ class PilotContactPage extends Page
 
     public function getTitle(): string|Htmlable
     {
-        return 'Kontakt: '.$this->event->name;
-    }
-
-    public function getHeading(): string|Htmlable
-    {
-        return '';
+        return $this->event->name;
     }
 
     public static function urlFor(Event $event): string

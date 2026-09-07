@@ -12,6 +12,8 @@ use Illuminate\Support\Facades\Schema;
 /**
  * Grupa punktów z jedną rezerwacją u dostawcy: wyłącznie ten sam kontrahent w imprezie.
  * Bez kontrahenta punkt nie jest scalany (przewodnik w każdym mieście może być inny).
+ *
+ * Sety nadrzędne są wyłączone: ich contractor_id = miejsce/punkt zborny, nie dostawca rezerwacji.
  */
 final class ProgramPointReservationGroup
 {
@@ -36,7 +38,7 @@ final class ProgramPointReservationGroup
 
     public static function coverageLabel(EventProgramPoint $point): ?string
     {
-        if (blank($point->contractor_id)) {
+        if (blank($point->contractor_id) || $point->isSetParent()) {
             return null;
         }
 
@@ -59,11 +61,14 @@ final class ProgramPointReservationGroup
     {
         $query = EventProgramPoint::query()->where('event_id', $point->event_id);
 
-        if (blank($point->contractor_id)) {
+        // Set nadrzędny nie uczestniczy we wspólnej rezerwacji po kontrahencie.
+        if ($point->isSetParent() || blank($point->contractor_id)) {
             return $query->whereKey($point->id);
         }
 
-        return $query->where('contractor_id', $point->contractor_id);
+        return $query
+            ->where('contractor_id', $point->contractor_id)
+            ->whereDoesntHave('children');
     }
 
     public static function hasColumn(): bool

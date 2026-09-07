@@ -36,6 +36,12 @@ class ListEventTemplates extends ListRecords
     {
         return [
             Actions\CreateAction::make(),
+            Action::make('priceComparison')
+                ->label('Porównanie cen')
+                ->icon('heroicon-o-scale')
+                ->color('gray')
+                ->url(fn (): string => \App\Filament\Pages\EventTemplatePriceComparisonPage::getUrl())
+                ->visible(fn (): bool => \App\Filament\Pages\EventTemplatePriceComparisonPage::canAccess()),
             Action::make('removeDuplicates')
                 ->label('Usuń duplikaty cen')
                 ->icon('heroicon-o-scissors')
@@ -77,7 +83,8 @@ class ListEventTemplates extends ListRecords
                     $userId = (int) (Auth::id() ?? 0);
                     // zainicjuj stan postępu, żeby widget od razu się pojawił
                     \App\Services\PriceRecalcProgress::start($userId, \App\Models\EventTemplate::count());
-                    \App\Jobs\RecalculateAllEventTemplatePricesJob::dispatch($userId)->afterResponse();
+                    \App\Jobs\RecalculateAllEventTemplatePricesJob::dispatch($userId);
+                    $this->dispatch('priceRecalcStarted');
 
                     \Filament\Notifications\Notification::make()
                         ->title('Przeliczanie cen uruchomione')
@@ -131,8 +138,6 @@ class ListEventTemplates extends ListRecords
                         }
 
                         $userId = (int) (Auth::id() ?? 0);
-                        // Zainicjuj progress dla użytkownika
-                        \App\Services\PriceRecalcProgress::start($userId, count($ids));
                         if ($userId <= 0) {
                             \Filament\Notifications\Notification::make()
                                 ->title('Brak użytkownika')
@@ -143,11 +148,21 @@ class ListEventTemplates extends ListRecords
                             return;
                         }
 
+                        // Zainicjuj progress dla użytkownika
+                        \App\Services\PriceRecalcProgress::start($userId, count($ids));
+
                         $chunkSize = 250;
                         $chunks = array_chunk($ids, $chunkSize);
-                        foreach ($chunks as $chunk) {
-                            \App\Jobs\RecalculateSelectedEventTemplatePricesJob::dispatch($chunk, $userId)->afterResponse();
+                        $lastChunkIndex = count($chunks) - 1;
+                        foreach ($chunks as $index => $chunk) {
+                            \App\Jobs\RecalculateSelectedEventTemplatePricesJob::dispatch(
+                                $chunk,
+                                $userId,
+                                false,
+                                $index === $lastChunkIndex,
+                            );
                         }
+                        $this->dispatch('priceRecalcStarted');
 
                         \Filament\Notifications\Notification::make()
                             ->title('Przeliczanie cen zlecone')
@@ -185,9 +200,16 @@ class ListEventTemplates extends ListRecords
                         $chunks = array_chunk($ids, $chunkSize);
                         // Zainicjuj progress
                         \App\Services\PriceRecalcProgress::start($userId, count($ids));
-                        foreach ($chunks as $chunk) {
-                            \App\Jobs\RecalculateSelectedEventTemplatePricesJob::dispatch($chunk, $userId, true)->afterResponse();
+                        $lastChunkIndex = count($chunks) - 1;
+                        foreach ($chunks as $index => $chunk) {
+                            \App\Jobs\RecalculateSelectedEventTemplatePricesJob::dispatch(
+                                $chunk,
+                                $userId,
+                                true,
+                                $index === $lastChunkIndex,
+                            );
                         }
+                        $this->dispatch('priceRecalcStarted');
 
                         \Filament\Notifications\Notification::make()
                             ->title('Wymuszone przeliczanie zlecone')

@@ -2,7 +2,6 @@
 
 namespace App\Services;
 
-use App\Enums\TaskSource;
 use App\Models\ClientInvoiceRequest;
 use App\Models\Event;
 use App\Models\Task;
@@ -11,7 +10,6 @@ use App\Models\User;
 use App\Models\UserNotificationRead;
 use App\Support\AdminPanelUrls;
 use App\Support\Tasks\OfficeTaskRecipients;
-use App\Support\Tasks\SystemTaskPolicy;
 use App\Support\Tasks\TaskListColumn;
 use App\Support\Tasks\TaskNavigation;
 use App\Support\Tasks\TaskQueryFilters;
@@ -196,7 +194,7 @@ class NotificationService
     }
 
     /**
-     * Zadania widoczne w topbarze: moje + wspólne systemowe (dla biura/admina).
+     * Zadania widoczne w topbarze — ta sama reguła co lista/kanban (inboxFor).
      * Podzadania są pełnoprawnymi Task — wchodzą do listy i licznika.
      */
     private static function visibleTasksQueryFor(User $user)
@@ -206,17 +204,7 @@ class NotificationService
         TaskQueryFilters::excludeCompleted($query);
         TaskQueryFilters::excludeArchived($query);
 
-        return $query->where(function ($inner) use ($user): void {
-            $inner->where('author_id', $user->id)
-                ->orWhere('assignee_id', $user->id);
-
-            if ($user->hasRole(['super_admin', 'admin', 'biuro'])) {
-                $inner->orWhere(function ($system) {
-                    $system->where('source', TaskSource::System->value);
-                    SystemTaskPolicy::constrainAllowedSystem($system);
-                });
-            }
-        });
+        return TaskQueryFilters::inboxFor($query, $user);
     }
 
     /**
@@ -260,7 +248,7 @@ class NotificationService
     private static function taskNotificationsFor(User $user, int $queryLimit = 30): array
     {
         return static::visibleTasksQueryFor($user)
-            ->with(['status', 'parent:id,title'])
+            ->with(['status', 'author', 'assignee', 'parent:id,title'])
             ->orderByDesc('updated_at')
             ->limit($queryLimit)
             ->get()
@@ -276,6 +264,7 @@ class NotificationService
                         : 'Podzadanie';
                 }
 
+                $metaParts[] = TaskListColumn::ownershipLine($task);
                 $metaParts[] = 'Termin: '.$due;
                 $metaParts[] = 'Status: '.($task->status->name ?? 'brak');
 
@@ -430,7 +419,7 @@ class NotificationService
         }
 
         return static::eventQueryForUser($user)
-            ->whereIn('status', [Event::STATUS_CONFIRMED, Event::STATUS_TO_SETTLE])
+            ->whereIn('status', [...Event::getConfirmedLikeStatuses(), Event::STATUS_TO_SETTLE])
             ->whereHas('dayInsurances', fn ($query) => $query->whereNotNull('insurance_id'))
             ->orderByDesc('updated_at')
             ->limit($queryLimit)

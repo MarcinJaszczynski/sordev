@@ -102,7 +102,7 @@
                             type="text"
                             wire:key="program-day-route-{{ $programDay }}"
                             wire:model="programDayRoute"
-                            wire:change="updateProgramDayRoute"
+                            wire:change="updateProgramDayRoute($event.target.value)"
                             placeholder="Wpisz trasę przejazdu"
                             maxlength="500"
                             class="fi-input block w-full rounded-lg border-gray-300 text-sm shadow-sm transition focus:border-primary-500 focus:ring-primary-500 dark:border-gray-600 dark:bg-gray-800 dark:text-white"
@@ -126,7 +126,7 @@
                         id="program-day-start-time"
                         wire:key="program-day-start-{{ $programDay }}"
                         wire:model="programDayStartTime"
-                        wire:change="updateProgramDayStartTime"
+                        wire:change="updateProgramDayStartTime($event.target.value)"
                         class="fi-select-input block w-full rounded-lg border-gray-300 text-sm shadow-sm transition focus:border-primary-500 focus:ring-primary-500 dark:border-gray-600 dark:bg-gray-800 dark:text-white"
                     >
                         @foreach ($this->getProgramDayStartTimeOptions() as $value => $label)

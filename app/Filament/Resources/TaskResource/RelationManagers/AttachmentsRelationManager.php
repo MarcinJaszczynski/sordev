@@ -37,9 +37,12 @@ class AttachmentsRelationManager extends RelationManager
                     ->label('Plik')
                     ->required()
                     ->disk('public')
+                    ->visibility('public')
                     ->directory('task-attachments')
                     ->storeFileNamesIn('name')
-                    ->preserveFilenames(),
+                    ->preserveFilenames()
+                    ->openable()
+                    ->downloadable(),
             ]);
     }
 
@@ -50,22 +53,25 @@ class AttachmentsRelationManager extends RelationManager
             ->paginated($this->panelMode ? false : true)
             ->searchable(! $this->panelMode)
             ->columns([
-            Tables\Columns\TextColumn::make('name')
-                ->label('Plik')
-                ->searchable(! $this->panelMode)
-                ->wrap(),
-            Tables\Columns\TextColumn::make('readable_size')
-                ->label('Rozm.')
-                ->placeholder('—')
-                ->toggleable(isToggledHiddenByDefault: ! $this->panelMode),
-            Tables\Columns\TextColumn::make('user.name')
-                ->label('Dodane przez')
-                ->toggleable(isToggledHiddenByDefault: true),
-            Tables\Columns\TextColumn::make('created_at')
-                ->label('Data dodania')
-                ->dateTime()
-                ->toggleable(isToggledHiddenByDefault: true),
-        ])
+                Tables\Columns\TextColumn::make('name')
+                    ->label('Plik')
+                    ->searchable(! $this->panelMode)
+                    ->wrap()
+                    ->color('primary')
+                    ->url(fn ($record) => $record->preview_url)
+                    ->openUrlInNewTab(),
+                Tables\Columns\TextColumn::make('readable_size')
+                    ->label('Rozm.')
+                    ->placeholder('—')
+                    ->toggleable(isToggledHiddenByDefault: ! $this->panelMode),
+                Tables\Columns\TextColumn::make('user.name')
+                    ->label('Dodane przez')
+                    ->toggleable(isToggledHiddenByDefault: true),
+                Tables\Columns\TextColumn::make('created_at')
+                    ->label('Data dodania')
+                    ->dateTime()
+                    ->toggleable(isToggledHiddenByDefault: true),
+            ])
             ->filters([
                 //
             ])
@@ -89,12 +95,20 @@ class AttachmentsRelationManager extends RelationManager
                     })
                     ->after(fn () => $this->dispatchPanelUpdated()),
             ])->actions([
+                Tables\Actions\Action::make('preview')
+                    ->label('Podgląd')
+                    ->icon('heroicon-o-eye')
+                    ->url(fn ($record) => $record->preview_url)
+                    ->openUrlInNewTab()
+                    ->when($this->panelMode, fn (Tables\Actions\Action $action) => $action->iconButton()),
                 Tables\Actions\Action::make('download')
                     ->label('Pobierz')
                     ->icon('heroicon-o-arrow-down-tray')
                     ->url(fn ($record) => $record->download_url)
-                    ->openUrlInNewTab(),
+                    ->openUrlInNewTab()
+                    ->when($this->panelMode, fn (Tables\Actions\Action $action) => $action->iconButton()),
                 Tables\Actions\DeleteAction::make()
+                    ->when($this->panelMode, fn (Tables\Actions\DeleteAction $action) => $action->iconButton())
                     ->after(fn () => $this->dispatchPanelUpdated()),
             ])
             ->bulkActions($this->panelMode ? [] : [

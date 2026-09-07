@@ -2,8 +2,8 @@
 
 @section('head')
     @include('front.partials.seo', ($guideMode ?? false) ? [
-        'pageTitle' => 'Poradnik turystyczny – wycieczki szkolne i wyjazdy firmowe | Biuro Podróży RAFA',
-        'pageDescription' => 'Praktyczne porady dla nauczycieli, opiekunów i firm: jak zaplanować wycieczkę szkolną, wyjazd integracyjny, transport autokarowy i formalności.',
+        'pageTitle' => 'Poradnik | Wycieczki szkolne i wyjazdy firmowe – Biuro Podróży RAFA',
+        'pageDescription' => 'Praktyczne poradniki dla szkół i firm: organizacja wycieczki szkolnej, wyjazdu integracyjnego, ubezpieczenia, dokumenty i przygotowanie grupy krok po kroku.',
         'canonical' => route('guide.global'),
     ] : [])
 @endsection
@@ -14,7 +14,7 @@
     $listRoute = $isGuide ? route('guide.global') : route('blog.global');
     $pageHeading = $isGuide ? 'Poradnik turystyczny' : 'Aktualności';
     $pageLead = $isGuide
-        ? 'Praktyczna wiedza o organizacji wycieczek szkolnych i wyjazdów firmowych.'
+        ? 'Praktyczne wskazówki dla nauczycieli, organizatorów i firm planujących wyjazd grupowy.'
         : 'Najnowsze wpisy, porady i aktualizacje z naszej działalności.';
     $breadcrumbLabel = $isGuide ? 'Poradnik' : 'Aktualności';
 @endphp
@@ -76,33 +76,52 @@
         </div>
 
         {{-- Masonry grid of posts --}}
+        @php
+            $guideCategoryLabels = [
+                'wycieczki-szkolne' => 'Wycieczki szkolne',
+                'wyjazdy-firmowe' => 'Wyjazdy firmowe',
+                'bezpieczenstwo-i-ubezpieczenia' => 'Ubezpieczenia',
+                'organizacja-grupy' => 'Organizacja',
+                'transport' => 'Transport',
+            ];
+        @endphp
         <div class="row">
             <div class="col-12">
                 @if(isset($posts) && $posts->count() > 0)
                     <div class="masonry-grid">
                         @foreach($posts as $post)
+                            @php
+                                $categoryLabel = $guideCategoryLabels[$post->guide_category ?? ''] ?? null;
+                            @endphp
                             <div class="masonry-item">
-                                <div class="card blog-card border-0 shadow-sm h-100 position-relative">
-                                    <div class="blog-card-image">
-                                        @if($post->featured_image)
-                                            <img src="{{ asset('storage/' . $post->featured_image) }}" alt="{{ $post->title }}" class="w-100 h-100" loading="lazy" onerror="this.closest('.blog-card-image').classList.add('no-image'); this.remove();">
-                                        @else
-                                            <img src="{{ asset('uploads/blog-placeholder.jpg') }}" alt="Brak zdjęcia" class="w-100 h-100" loading="lazy">
-                                        @endif
-                                    </div>
+                                {{-- Uwaga: nie używamy klasy h-100 — w style.css frontu jest .h-100 { height: 100px !important } --}}
+                                <article class="card blog-card border-0 shadow-sm">
+                                    <a href="{{ route('blog.post.global', $post->slug) }}" class="blog-card-link" aria-label="Przejdź do wpisu: {{ $post->title }}">
+                                        <div class="blog-card-image {{ $post->featured_image ? '' : 'blog-card-image--placeholder' }}">
+                                            @if($post->featured_image)
+                                                <img src="{{ asset('storage/' . $post->featured_image) }}" alt="{{ $post->featured_image_alt ?: $post->title }}" class="blog-card-img" loading="lazy" onerror="this.closest('.blog-card-image').classList.add('blog-card-image--placeholder','no-image'); this.remove();">
+                                            @endif
+                                        </div>
+                                    </a>
                                     <div class="card-body p-3">
-                                        <h5 class="card-title mb-2">{{ $post->title }}</h5>
+                                        @if($categoryLabel)
+                                            <div class="blog-card-category mb-2">{{ $categoryLabel }}</div>
+                                        @elseif($isGuide)
+                                            <div class="blog-card-category mb-2">Poradnik</div>
+                                        @endif
+                                        <h2 class="card-title blog-card-heading mb-2">
+                                            <a href="{{ route('blog.post.global', $post->slug) }}" class="blog-title-link">{{ $post->title }}</a>
+                                        </h2>
                                         <p class="card-text text-muted small mb-3">{{ $post->excerpt ?: \Illuminate\Support\Str::limit(strip_tags($post->content), 120) }}</p>
                                         <div class="d-flex justify-content-between align-items-center pt-2 border-top">
                                             <small class="text-muted">
                                                 <i class="far fa-calendar-alt me-1"></i>
                                                 {{ $post->published_at ? $post->published_at->format('d.m.Y') : $post->created_at->format('d.m.Y') }}
                                             </small>
-                                            <span class="btn btn-primary btn-sm">Czytaj</span>
+                                            <a href="{{ route('blog.post.global', $post->slug) }}" class="btn btn-primary btn-sm">Czytaj</a>
                                         </div>
-                                        <a href="{{ route('blog.post.global', $post->slug) }}" class="card-link-overlay" aria-label="Przejdź do wpisu: {{ $post->title }}"></a>
                                     </div>
-                                </div>
+                                </article>
                             </div>
                         @endforeach
                     </div>
@@ -180,10 +199,28 @@
         margin-bottom: 1.5rem;
     }
     
+    .blog-card-link {
+        display: block;
+        text-decoration: none;
+    }
+
+    .blog-title-link {
+        color: inherit;
+        text-decoration: none;
+    }
+
+    .blog-title-link:hover {
+        text-decoration: underline;
+    }
+
     .blog-card {
+        height: auto !important; /* chroni przed globalnym .h-100 { height: 100px } */
         transition: transform 0.2s, box-shadow 0.2s;
         border-radius: 12px;
         overflow: hidden;
+        display: flex;
+        flex-direction: column;
+        background: #fff;
     }
     
     .blog-card:hover {
@@ -191,14 +228,13 @@
         box-shadow: 0 12px 28px rgba(0,0,0,0.15) !important;
     }
     
-    /* Square images */
     .blog-card-image {
-        height: 220px; /* square */
+        height: 160px;
         overflow: hidden;
-        background: #f8f9fa;
+        background: #eef2f6;
     }
     
-    .blog-card-image img {
+    .blog-card-image .blog-card-img {
         width: 100%;
         height: 100%;
         object-fit: cover;
@@ -206,47 +242,51 @@
         transition: transform 0.3s;
     }
     
-    .blog-card:hover .blog-card-image img {
+    .blog-card:hover .blog-card-image .blog-card-img {
         transform: scale(1.05);
     }
-    /* ensure stretched-link doesn't cover the image anchor (we already link the image) */
-    .blog-card .stretched-link { z-index: 1; }
-    .blog-card-image a { position: relative; z-index: 2; display: block; }
-    
-    .blog-card-placeholder {
-        height: 220px; /* square */
-    }
-    /* Full-card clickable overlay */
-    .card-link-overlay {
-        position: absolute;
-        inset: 0;
-        z-index: 10;
-    }
-    
-    .blog-card .card-body * {
-        position: relative;
-        z-index: 1;
-    }
-    
-    /* Make "Czytaj" button visual only, not interactive */
-    .blog-card .btn {
-        pointer-events: none;
-    }
 
-    /* When image fails, show placeholder styling */
+    .blog-card-image--placeholder,
     .blog-card-image.no-image {
-        height: 220px;
-        background: #f1f3f5;
         display: flex;
         align-items: center;
         justify-content: center;
+        background: linear-gradient(145deg, #d9e6f2 0%, #eef4f9 55%, #f7fafc 100%);
+    }
+
+    .blog-card-placeholder-label {
+        font-size: 0.85rem;
+        font-weight: 700;
+        letter-spacing: 0.02em;
+        color: #3a5168;
+        text-transform: uppercase;
+        padding: 8px 12px;
+        border: 1px solid rgba(58, 81, 104, 0.18);
+        border-radius: 999px;
+        background: rgba(255, 255, 255, 0.65);
+    }
+
+    .blog-card-category {
+        display: inline-block;
+        font-size: 0.72rem;
+        font-weight: 700;
+        letter-spacing: 0.03em;
+        text-transform: uppercase;
+        color: #2f6fed;
+    }
+
+    .blog-card .card-body {
+        flex: 1 1 auto;
+        background: #fff;
     }
     
-    .card-title {
-        font-size: 1rem;
-        font-weight: 600;
-        line-height: 1.4;
-        color: #333;
+    .blog-card-heading,
+    .blog-card .card-title {
+        font-size: 1.05rem;
+        font-weight: 700;
+        line-height: 1.35;
+        color: #1f2a37;
+        margin: 0;
     }
 
     /* Responsive */
@@ -255,9 +295,8 @@
             column-count: 3;
         }
         
-        .blog-card-image,
-        .blog-card-placeholder {
-            height: 200px;
+        .blog-card-image {
+            height: 150px;
         }
     }
     
@@ -275,9 +314,8 @@
             max-width: 60%;
         }
         
-        .blog-card-image,
-        .blog-card-placeholder {
-            height: 180px;
+        .blog-card-image {
+            height: 140px;
         }
     }
     
@@ -305,9 +343,8 @@
             display: none; 
         }
         
-        .blog-card-image,
-        .blog-card-placeholder {
-            height: 160px;
+        .blog-card-image {
+            height: 130px;
         }
         
         .blog-sections .container {

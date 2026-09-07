@@ -8,6 +8,8 @@ use App\Filament\Concerns\DispatchesTopbarNotificationRefresh;
 use App\Filament\Resources\TaskResource;
 use App\Models\Task;
 use App\Services\NotificationService;
+use App\Support\Tasks\TaskDueDates;
+use App\Support\Tasks\TaskListColumn;
 use Filament\Forms;
 use Filament\Forms\Form;
 use Filament\Resources\RelationManagers\RelationManager;
@@ -68,7 +70,8 @@ class SubtasksRelationManager extends RelationManager
                     ->searchable()
                     ->preload(),
                 Forms\Components\DateTimePicker::make('due_date')
-                    ->label('Termin'),
+                    ->label('Termin')
+                    ->default(fn () => TaskDueDates::defaultForNew()),
             ]);
     }
 
@@ -78,9 +81,14 @@ class SubtasksRelationManager extends RelationManager
             ->heading($this->panelMode ? static::$title : null)
             ->paginated($this->panelMode ? false : true)
             ->searchable(! $this->panelMode)
+            ->modifyQueryUsing(fn ($query) => $query->with(['author', 'assignee', 'status']))
             ->columns($this->panelMode ? [
                 Tables\Columns\TextColumn::make('title')
                     ->label('Tytuł')
+                    ->wrap(),
+                Tables\Columns\TextColumn::make('ownership')
+                    ->label('Od / dla')
+                    ->state(fn (Task $record): string => TaskListColumn::ownershipLine($record))
                     ->wrap(),
                 Tables\Columns\TextColumn::make('status.name')
                     ->label('Status')
@@ -93,9 +101,10 @@ class SubtasksRelationManager extends RelationManager
                 Tables\Columns\TextColumn::make('status.name')
                     ->label('Status')
                     ->badge(),
-                Tables\Columns\TextColumn::make('assignee.name')
-                    ->label('Przypisane do')
-                    ->placeholder('—'),
+                Tables\Columns\TextColumn::make('ownership')
+                    ->label('Od / dla')
+                    ->state(fn (Task $record): string => TaskListColumn::ownershipLine($record))
+                    ->wrap(),
                 Tables\Columns\TextColumn::make('due_date')
                     ->label('Termin')
                     ->dateTime()

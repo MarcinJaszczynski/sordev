@@ -27,7 +27,7 @@ class ReservationFormDefaultsTest extends TestCase
 
         $this->assertSame(3500.0, $defaults['reserved_amount']);
         $this->assertSame(22, $defaults['participant_count']);
-        $this->assertSame('Z planu / kalkulacji punktu', $defaults['amount_hint']);
+        $this->assertSame('Z planowanych / szablonu punktu', $defaults['amount_hint']);
     }
 
     public function test_prefers_existing_advance_amount_from_cost(): void

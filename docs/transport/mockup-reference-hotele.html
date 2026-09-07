@@ -1,0 +1,441 @@
+<!--
+  PLIK REFERENCYJNY — nie wdrażać 1:1 do produkcji.
+  Cel: pokazać Cursorowi dokładny układ wizualny (siatka, karty, kolory, zakładki),
+  który ma odwzorować, PODPINAJĄC pod niego prawdziwe pola formularza Filament.
+  Nazwy pól, walidację, logikę wyliczania cen, relacje itd. zostawić bez zmian.
+
+  Ta sama paleta co w mockup-reference-transport.html (dla spójności między zakładkami Operacji):
+  - tło strony:        #F5F4EF
+  - karta/panel:        #FFFFFF, border 1px solid #E5E3DA, border-radius 12px
+  - karta wyciszona:    #F1EFE8, border-radius 8px
+  - tekst główny:       #2C2C2A
+  - tekst drugorzędny:  #5F5E5A
+  - tekst muted:        #888780
+  - accent (aktywne/hotel wybrany): #E6F1FB tło, #0C447C tekst
+  - danger (niska zajętość/brak płatności): #FCEBEB tło, #791F1F tekst
+  - fill-primary (Zapisz): #2C2C2A tło, #FFFFFF tekst
+  - czcionka: system-ui / sans-serif
+  - promienie: 12px karty, 8px kontrolki/kafelki
+
+  STRUKTURA (3 zakładki wewnątrz "Hotele", zamiast jednego długiego scrolla):
+  1. Przegląd nocy      — połączona tabela zajętości + finansów (1 wiersz = 1 noc)
+  2. Planowanie pokoi    — wybór nocy (sidebar) + Krok 1 (struktura pokoi) / Krok 2 (lista osób)
+  3. Usługi i dokumenty  — dodatkowe usługi, dokumenty, log korespondencji (w akordeonie), notatki
+-->
+<!DOCTYPE html>
+<html lang="pl">
+<head>
+<meta charset="UTF-8">
+<title>Referencja wizualna — Hotele</title>
+<style>
+  * { box-sizing: border-box; }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    background: #F5F4EF;
+    color: #2C2C2A;
+    margin: 0;
+    padding: 24px;
+  }
+  .wrap { max-width: 1180px; margin: 0 auto; }
+
+  input, select, textarea, button {
+    font-family: inherit;
+    font-size: 13px;
+    border: 1px solid #D3D1C7;
+    border-radius: 8px;
+    padding: 8px 10px;
+    background: #FFFFFF;
+    color: #2C2C2A;
+  }
+  input, select, textarea { width: 100%; }
+  input:focus, select:focus, textarea:focus {
+    outline: none;
+    border-color: #378ADD;
+    box-shadow: 0 0 0 2px rgba(55,138,221,0.15);
+  }
+  button { cursor: pointer; background: #FFFFFF; }
+  button:hover { background: #F1EFE8; }
+  label { display: block; font-size: 12px; color: #5F5E5A; margin-bottom: 4px; }
+
+  /* ===== Pasek statusu ===== */
+  .status-bar {
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 14px 16px; background: #F1EFE8; border-radius: 12px;
+    margin-bottom: 12px; flex-wrap: wrap; gap: 10px;
+  }
+  .status-bar .title { display: flex; align-items: center; gap: 10px; }
+  .status-bar .title p:first-child { margin: 0; font-size: 15px; font-weight: 500; }
+  .status-bar .title p:last-child { margin: 0; font-size: 13px; color: #5F5E5A; }
+  .status-bar .actions { display: flex; gap: 8px; }
+  .status-bar .actions button { font-size: 13px; padding: 6px 10px; }
+  .status-bar .actions button.primary { background: #2C2C2A; color: #FFFFFF; border: none; }
+
+  /* ===== Kafelki statystyk ===== */
+  .stat-grid {
+    display: grid; grid-template-columns: repeat(4, minmax(0, 1fr));
+    gap: 10px; margin-bottom: 16px;
+  }
+  .stat-card { background: #F1EFE8; border-radius: 8px; padding: 12px; }
+  .stat-card.danger { background: #FCEBEB; }
+  .stat-card p:first-child { margin: 0 0 4px; font-size: 12px; color: #5F5E5A; }
+  .stat-card.danger p:first-child { color: #791F1F; }
+  .stat-card p:last-child { margin: 0; font-size: 18px; font-weight: 500; }
+  .stat-card.danger p:last-child { color: #791F1F; }
+
+  /* ===== Zakładki wewnętrzne (Przegląd / Planowanie / Usługi) ===== */
+  .subtabs {
+    display: flex; gap: 6px; margin-bottom: 14px;
+    border-bottom: 1px solid #E5E3DA;
+  }
+  .subtabs .tab {
+    padding: 8px 14px; font-size: 13px; color: #5F5E5A;
+    border-bottom: 2px solid transparent; cursor: pointer;
+  }
+  .subtabs .tab.active { color: #0C447C; border-bottom-color: #0C447C; font-weight: 500; }
+
+  /* ===== Karty ===== */
+  .card {
+    background: #FFFFFF; border: 1px solid #E5E3DA; border-radius: 12px;
+    padding: 16px 20px; margin-bottom: 16px;
+  }
+  .card-header { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-bottom: 12px; flex-wrap: wrap; }
+  .card-header .left { display: flex; align-items: center; gap: 8px; }
+  .card-header .icon { width: 18px; height: 18px; color: #5F5E5A; flex-shrink: 0; }
+  .card-header p { margin: 0; font-size: 15px; font-weight: 500; }
+  .card-header .quick-actions { display: flex; gap: 6px; }
+  .card-header .quick-actions button { font-size: 12px; padding: 4px 8px; }
+
+  /* ===== Tabela: Przegląd nocy (połączona zajętość+finanse) ===== */
+  table.overview { width: 100%; font-size: 13px; border-collapse: collapse; }
+  table.overview th { font-weight: 400; text-align: left; color: #5F5E5A; padding: 6px 4px; }
+  table.overview td { padding: 8px 4px; border-top: 1px solid #E5E3DA; }
+  table.overview td.muted { color: #888780; }
+  .pill { font-size: 12px; padding: 2px 8px; border-radius: 8px; }
+  .pill.danger { background: #FCEBEB; color: #791F1F; }
+  .pill.success { background: #EAF3DE; color: #27500A; }
+  .row-action { font-size: 12px; padding: 4px 8px; }
+  .note-caption { margin: 10px 0 0; font-size: 12px; color: #888780; }
+
+  /* ===== Planowanie pokoi: sidebar nocy + panel główny ===== */
+  .planning-grid { display: grid; grid-template-columns: 200px 1fr; gap: 14px; }
+  @media (max-width: 760px) { .planning-grid { grid-template-columns: 1fr; } }
+
+  .night-list { display: flex; flex-direction: column; gap: 8px; }
+  .night-card { border-radius: 8px; padding: 10px 12px; background: #F1EFE8; cursor: pointer; }
+  .night-card.active { background: #E6F1FB; }
+  .night-card p:first-child { margin: 0; font-size: 13px; font-weight: 500; }
+  .night-card.active p:first-child { color: #0C447C; }
+  .night-card p:last-child { margin: 0; font-size: 12px; color: #5F5E5A; }
+  .night-card.active p:last-child { color: #0C447C; }
+  .night-card.empty p:last-child { color: #888780; }
+
+  .field-grid-2 { display: grid; grid-template-columns: repeat(2, minmax(0,1fr)); gap: 10px; margin-bottom: 12px; }
+
+  .pricing-toggle { display: flex; gap: 6px; }
+  .pricing-toggle span { font-size: 12px; padding: 5px 10px; border-radius: 8px; }
+  .pricing-toggle span.selected { background: #E6F1FB; color: #0C447C; }
+  .pricing-toggle span:not(.selected) { background: #F1EFE8; color: #5F5E5A; }
+
+  table.rooms { width: 100%; font-size: 12px; border-collapse: collapse; margin-bottom: 8px; }
+  table.rooms th { font-weight: 400; text-align: left; color: #5F5E5A; padding: 5px 4px; }
+  table.rooms td { padding: 6px 4px; border-top: 1px solid #E5E3DA; }
+
+  .rooms-footer { display: flex; justify-content: space-between; align-items: center; }
+  .rooms-footer .add-room { font-size: 12px; padding: 5px 10px; }
+  .rooms-footer .total { font-size: 13px; font-weight: 500; }
+
+  .copy-bar {
+    background: #F1EFE8; border-radius: 12px; padding: 12px 16px;
+    display: flex; align-items: center; justify-content: space-between;
+    gap: 10px; flex-wrap: wrap; margin-bottom: 16px;
+  }
+  .copy-bar .left { display: flex; align-items: center; gap: 8px; font-size: 13px; color: #5F5E5A; flex-wrap: wrap; }
+  .copy-bar .chip { background: #FFFFFF; border: 1px solid #E5E3DA; padding: 3px 8px; border-radius: 8px; font-size: 12px; }
+  .copy-bar button { font-size: 12px; padding: 5px 10px; }
+
+  .action-row { display: flex; gap: 8px; }
+  .action-row button { flex: 1; font-size: 13px; }
+  .action-row button.primary { background: #2C2C2A; color: #FFFFFF; border: none; }
+
+  /* ===== Usługi i dokumenty: siatka podsumowań ===== */
+  .services-grid { display: grid; grid-template-columns: repeat(3, minmax(0,1fr)); gap: 10px; }
+  .service-summary { background: #F1EFE8; border-radius: 8px; padding: 10px 12px; }
+  .service-summary p:first-child { margin: 0 0 4px; font-size: 13px; font-weight: 500; }
+  .service-summary p:last-child { margin: 0; font-size: 12px; color: #888780; }
+
+  .accordion { border-top: 1px solid #E5E3DA; margin-top: 12px; padding-top: 12px; }
+  .accordion summary { cursor: pointer; font-size: 13px; color: #0C447C; }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <!-- PASEK STATUSU -->
+  <div class="status-bar">
+    <div class="title">
+      <span>🛏️</span>
+      <div>
+        <p>Hotele — Paryż · 4 noce</p>
+        <p>51 miejsc potrzebnych na noc · Carnet de Paris</p>
+      </div>
+    </div>
+    <div class="actions">
+      <button>Przywróć z szablonu</button>
+      <button class="primary">Zapisz plan</button>
+    </div>
+  </div>
+
+  <!-- KAFELKI STATYSTYK -->
+  <div class="stat-grid">
+    <div class="stat-card">
+      <p>Uczestnicy / opiekunowie</p>
+      <p>44 + 4</p>
+    </div>
+    <div class="stat-card">
+      <p>Obsługa / pilot / kierowcy</p>
+      <p>1 / 1 / 1</p>
+    </div>
+    <div class="stat-card">
+      <p>Suma noclegów</p>
+      <p>37 775 zł</p>
+    </div>
+    <div class="stat-card danger">
+      <p>Zapłacono</p>
+      <p>0 zł</p>
+    </div>
+  </div>
+
+  <!-- ZAKŁADKI WEWNĘTRZNE -->
+  <div class="subtabs">
+    <div class="tab active">Przegląd nocy</div>
+    <div class="tab">Planowanie pokoi</div>
+    <div class="tab">Usługi i dokumenty</div>
+  </div>
+
+  <!-- ZAKŁADKA 1: PRZEGLĄD NOCY (połączona tabela) -->
+  <div class="card">
+    <div class="card-header">
+      <div class="left">
+        <span class="icon">📊</span>
+        <p>Noce — zajętość i finanse w jednym miejscu</p>
+      </div>
+    </div>
+    <table class="overview">
+      <tr>
+        <th>Noc</th>
+        <th>Hotel</th>
+        <th>Miejsca / przypisani</th>
+        <th>Zajętość</th>
+        <th>Koszt planu</th>
+        <th>Zapłacono</th>
+        <th></th>
+      </tr>
+      <tr>
+        <td>1 (10.09)</td>
+        <td class="muted">brak</td>
+        <td>51 / 5</td>
+        <td><span class="pill danger">9,8%</span></td>
+        <td>0,00 zł</td>
+        <td>—</td>
+        <td><button class="row-action">Płatności</button></td>
+      </tr>
+      <tr>
+        <td>2 (11.09)</td>
+        <td>Carnet de Paris</td>
+        <td>52 / 5</td>
+        <td><span class="pill danger">9,6%</span></td>
+        <td>21 628,20 zł</td>
+        <td>—</td>
+        <td><button class="row-action">Płatności</button></td>
+      </tr>
+      <tr>
+        <td>3 (12.09)</td>
+        <td>Carnet de Paris</td>
+        <td>52 / 5</td>
+        <td><span class="pill danger">9,6%</span></td>
+        <td>16 147,20 zł</td>
+        <td>—</td>
+        <td><button class="row-action">Płatności</button></td>
+      </tr>
+      <tr>
+        <td>4 (13.09)</td>
+        <td class="muted">brak</td>
+        <td>51 / 5</td>
+        <td><span class="pill danger">9,8%</span></td>
+        <td>0,00 zł</td>
+        <td>—</td>
+        <td><button class="row-action">Płatności</button></td>
+      </tr>
+    </table>
+    <p class="note-caption">Zastępuje dwie osobne tabele z oryginału (Zajętość + Finanse noclegów) — jeden wiersz na noc, jeden przycisk akcji zamiast osobnej tabeli i osobnego przycisku "Płatności i rezerwacja" per wiersz.</p>
+  </div>
+
+  <!-- ZAKŁADKA 2: PLANOWANIE POKOI -->
+  <div class="planning-grid">
+
+    <!-- sidebar wyboru nocy -->
+    <div class="night-list">
+      <div class="night-card active">
+        <p>Noc 2</p>
+        <p>Carnet de Paris · 21 628 zł</p>
+      </div>
+      <div class="night-card">
+        <p>Noc 3</p>
+        <p>Carnet de Paris · 16 147 zł</p>
+      </div>
+      <div class="night-card empty">
+        <p>Noc 1</p>
+        <p>Hotel nie wybrany</p>
+      </div>
+      <div class="night-card empty">
+        <p>Noc 4</p>
+        <p>Hotel nie wybrany</p>
+      </div>
+    </div>
+
+    <!-- panel konfiguracji nocy -->
+    <div>
+      <div class="card">
+        <div class="card-header">
+          <div class="left">
+            <span class="icon">🏨</span>
+            <p>Noc 2 — hotel i pokoje</p>
+          </div>
+          <div class="quick-actions">
+            <button>Ten sam hotel na wszystkie noce</button>
+            <button>Kopiuj strukturę</button>
+          </div>
+        </div>
+
+        <div style="margin-bottom:10px;">
+          <label>Hotel / kontrahent</label>
+          <input placeholder="Wyszukaj hotel po nazwie, mieście, NIP…">
+        </div>
+
+        <div class="field-grid-2">
+          <div>
+            <label>Co hotel oferuje w cenie</label>
+            <textarea rows="2" placeholder="Śniadanie, kolacja, parking…"></textarea>
+          </div>
+          <div>
+            <label>Uwagi do tej nocy</label>
+            <textarea rows="2" placeholder="Preferowany hotel, kontakt do rezerwacji…"></textarea>
+          </div>
+        </div>
+
+        <div style="border-top:1px solid #E5E3DA; padding-top:12px; margin-bottom:12px;">
+          <p style="margin:0 0 8px; font-size:12px; color:#5F5E5A;">Cennik: cała impreza</p>
+          <div class="pricing-toggle">
+            <span class="selected">Z linii pokoi (ilość × cena)</span>
+            <span>Stała kwota za cały pobyt</span>
+          </div>
+        </div>
+
+        <table class="rooms">
+          <tr>
+            <th>Typ pokoju</th>
+            <th>Ilość</th>
+            <th>Cena/os.</th>
+            <th>Rola</th>
+            <th>Suma</th>
+            <th></th>
+          </tr>
+          <tr>
+            <td>Twin (2 os.)</td>
+            <td>14</td>
+            <td>140 zł</td>
+            <td>Uczestnik</td>
+            <td>3 920 zł</td>
+            <td>🗑</td>
+          </tr>
+          <tr>
+            <td>Triple (3 os.)</td>
+            <td>3</td>
+            <td>300 zł</td>
+            <td>Uczestnik</td>
+            <td>900 zł</td>
+            <td>🗑</td>
+          </tr>
+        </table>
+
+        <div class="rooms-footer">
+          <button class="add-room">+ Dodaj typ pokoju</button>
+          <span class="total">Razem noc 2: 21 628 zł</span>
+        </div>
+      </div>
+
+      <!-- szybkie kopiowanie -->
+      <div class="copy-bar">
+        <div class="left">
+          Skopiuj strukturę noc 2 na:
+          <span class="chip">Noc 3</span>
+          <span class="chip">Noc 4</span>
+        </div>
+        <button>Wykonaj kopiowanie</button>
+      </div>
+
+      <div class="action-row">
+        <button>Zapisz</button>
+        <button class="primary">Zapisz i przejdź do listy osób</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ZAKŁADKA 3: USŁUGI I DOKUMENTY (pokazana tu w formie zwiniętej/podsumowania) -->
+  <div class="card" style="margin-top:16px;">
+    <div class="card-header">
+      <div class="left">
+        <span class="icon">📁</span>
+        <p>Usługi i dokumenty</p>
+      </div>
+    </div>
+    <div class="services-grid">
+      <div class="service-summary">
+        <p>Dodatkowe usługi</p>
+        <p>Brak — dodaj bankiet, DJ…</p>
+      </div>
+      <div class="service-summary">
+        <p>Dokumenty i korespondencja</p>
+        <p>4 dokumenty · log korespondencji</p>
+      </div>
+      <div class="service-summary">
+        <p>Karteczki hotelowe</p>
+        <p>Brak notatek — dodaj pierwszą</p>
+      </div>
+    </div>
+    <!-- Log korespondencji jako akordeon zamiast zawsze-widocznego formularza -->
+    <details class="accordion">
+      <summary>+ Dodaj wpis do logu korespondencji</summary>
+      <div class="field-grid-2" style="margin-top:12px;">
+        <div>
+          <label>Kierunek</label>
+          <select><option>Wysłane przez biuro</option></select>
+        </div>
+        <div>
+          <label>Data kontaktu</label>
+          <input value="19.08.2026, 16:22" readonly>
+        </div>
+        <div>
+          <label>Hotel / kontrahent</label>
+          <select><option>— wybierz —</option></select>
+        </div>
+        <div>
+          <label>Noc (opcjonalnie)</label>
+          <select><option>— cała impreza —</option></select>
+        </div>
+      </div>
+      <div style="margin-bottom:10px;">
+        <label>Temat</label>
+        <input placeholder="np. Potwierdzenie listy pokoi">
+      </div>
+      <div style="margin-bottom:10px;">
+        <label>Treść / ustalenia</label>
+        <textarea rows="3"></textarea>
+      </div>
+      <button style="font-size:13px;">Dodaj wpis</button>
+    </details>
+  </div>
+
+</div>
+</body>
+</html>

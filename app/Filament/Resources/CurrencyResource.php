@@ -50,7 +50,11 @@ class CurrencyResource extends Resource
                 ->required(),
             Forms\Components\TextInput::make('symbol')
                 ->label('Symbol / kod')
-                ->required(),
+                ->required()
+                ->unique(ignoreRecord: true)
+                ->dehydrateStateUsing(fn (?string $state): ?string => $state !== null
+                    ? strtoupper(trim($state))
+                    : null),
             Forms\Components\TextInput::make('exchange_rate')
                 ->label('Kurs wymiany (do PLN)')
                 ->numeric()

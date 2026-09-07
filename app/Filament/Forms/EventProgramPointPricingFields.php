@@ -174,21 +174,21 @@ class EventProgramPointPricingFields
         if (! $forTemplate) {
             $pricingFields = array_merge($pricingFields, [
                 Forms\Components\TextInput::make('calculated_price')
-                    ->label('Kalkulacja')
+                    ->label('Szablon')
                     ->numeric()
                     ->disabled()
                     ->dehydrated()
                     ->helperText('Zapis przy zapisie punktu.'),
 
                 Forms\Components\TextInput::make('planned_price')
-                    ->label('Planowana')
+                    ->label('Planowane')
                     ->numeric()
                     ->minValue(0)
                     ->step(0.01)
                     ->live(onBlur: true),
 
                 Forms\Components\TextInput::make('paid_price')
-                    ->label('Rozliczona')
+                    ->label('Zapłacono')
                     ->numeric()
                     ->minValue(0)
                     ->step(0.01)
@@ -200,7 +200,7 @@ class EventProgramPointPricingFields
 
         return Forms\Components\Section::make($showBasisSelector ? 'Wycena i rozliczenie' : 'Wycena')
             ->description($showBasisSelector
-                ? 'Wybierz rodzaj ceny — kwota trafi do kalkulacji imprezy i kosztów rozliczenia.'
+                ? 'Wybierz rodzaj ceny — kwota trafi do szablonu imprezy i kosztów rozliczenia.'
                 : ($forTemplate
                     ? 'Ustawienia finansowe punktu programu w bibliotece szablonu.'
                     : 'Ten sam algorytm co w bibliotece punktów szablonu.'))

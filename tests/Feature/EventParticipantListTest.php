@@ -36,22 +36,34 @@ class EventParticipantListTest extends TestCase
 
         $event = Event::factory()->create(['participant_count' => 5]);
         $csv = implode("\n", [
-            'Imię,Nazwisko,Data urodzenia',
-            'Jan,Kowalski,2010-05-15',
-            'Anna,Nowak,12.03.2011',
+            'Imię,Nazwisko,Płeć,Data urodzenia',
+            'Jan,Kowalski,Męska,2010-05-15',
+            'Anna,Nowak,Żeńska,12.03.2011',
+            'Minh,Nguyen,Inna,2012-01-01',
         ]);
         $path = tempnam(sys_get_temp_dir(), 'participants');
         file_put_contents($path, $csv);
 
         $result = app(EventParticipantImporter::class)->importFromPath($event, $path);
 
-        $this->assertSame(2, $result['imported']);
-        $this->assertDatabaseCount('event_participants', 2);
+        $this->assertSame(3, $result['imported']);
+        $this->assertDatabaseCount('event_participants', 3);
         $this->assertDatabaseHas('event_participants', [
             'event_id' => $event->id,
             'first_name' => 'Jan',
             'last_name' => 'Kowalski',
+            'gender' => EventParticipant::GENDER_MALE,
             'source' => EventParticipant::SOURCE_IMPORT,
+        ]);
+        $this->assertDatabaseHas('event_participants', [
+            'event_id' => $event->id,
+            'first_name' => 'Anna',
+            'gender' => EventParticipant::GENDER_FEMALE,
+        ]);
+        $this->assertDatabaseHas('event_participants', [
+            'event_id' => $event->id,
+            'first_name' => 'Minh',
+            'gender' => EventParticipant::GENDER_OTHER,
         ]);
 
         @unlink($path);
@@ -278,7 +290,7 @@ class EventParticipantListTest extends TestCase
         $this->assertSame($documentsContext['title'], $paymentsContext['title']);
         $this->assertSame($documentsContext['subtitle'], $paymentsContext['subtitle']);
         $this->assertSame($documentsContext['title_url'], $paymentsContext['title_url']);
-        $this->assertNotNull($paymentsContext['finance'] ?? null);
+        $this->assertNull($paymentsContext['finance'] ?? null);
     }
 
     public function test_workflow_context_includes_operational_contacts(): void
@@ -297,6 +309,7 @@ class EventParticipantListTest extends TestCase
             'name' => 'Impreza kontakty',
             'client_name' => 'Anna Zamawiająca',
             'client_phone' => '111222333',
+            'client_email' => 'anna@example.com',
             'assigned_to' => $pilotUser->id,
             'driver_name' => 'Piotr Kierowca',
             'driver_phone' => '444555666',
@@ -316,13 +329,15 @@ class EventParticipantListTest extends TestCase
         $context = $page->getWorkflowContext();
         $this->assertNotNull($context);
 
-        $metaByLabel = collect($context['meta'])->mapWithKeys(
-            fn (array $item) => [$item['label'] => $item['value']]
-        );
+        $metaByLabel = collect($context['meta'])->keyBy('label');
 
-        $this->assertSame('Anna Zamawiająca · 111222333', $metaByLabel->get('Zamawiający'));
-        $this->assertSame('Jan Pilot · 500600700', $metaByLabel->get('Pilot'));
-        $this->assertSame('Piotr Kierowca · 444555666', $metaByLabel->get('Kierowca'));
-        $this->assertSame('Hotel Alfa (+1)', $metaByLabel->get('Hotel'));
+        $this->assertSame('Anna Zamawiająca', $metaByLabel->get('Zamawiający')['value'] ?? null);
+        $this->assertSame('111222333 · anna@example.com', $metaByLabel->get('Zamawiający')['hint'] ?? null);
+        $this->assertSame('Jan Pilot', $metaByLabel->get('Pilot')['value'] ?? null);
+        $this->assertSame('500600700', $metaByLabel->get('Pilot')['hint'] ?? null);
+        $this->assertSame('Piotr Kierowca', $metaByLabel->get('Kierowca')['value'] ?? null);
+        $this->assertSame('444555666', $metaByLabel->get('Kierowca')['hint'] ?? null);
+        $this->assertSame('Hotel Alfa (+1)', $metaByLabel->get('Hotel')['value'] ?? null);
+        $this->assertNotEmpty($metaByLabel->get('Hotel')['url'] ?? null);
     }
 }

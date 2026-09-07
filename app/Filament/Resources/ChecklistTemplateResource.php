@@ -96,6 +96,26 @@ class ChecklistTemplateResource extends Resource
                             ->label('Dodatkowy opis (opcjonalnie)')
                             ->rows(2)
                             ->columnSpanFull(),
+                        Forms\Components\Select::make('input_type')
+                            ->label('Typ punktu')
+                            ->options(\App\Enums\ChecklistItemInputType::options())
+                            ->default('check_only')
+                            ->live()
+                            ->required(),
+                        Forms\Components\TextInput::make('input_label')
+                            ->label('Etykieta pola do wypełnienia')
+                            ->maxLength(255)
+                            ->placeholder('np. Stan licznika')
+                            ->visible(fn (\Filament\Forms\Get $get): bool => ($get('input_type') ?? 'check_only') !== 'check_only'),
+                        Forms\Components\TextInput::make('input_unit')
+                            ->label('Jednostka (opcjonalnie)')
+                            ->maxLength(32)
+                            ->placeholder('np. km')
+                            ->visible(fn (\Filament\Forms\Get $get): bool => ($get('input_type') ?? 'check_only') !== 'check_only'),
+                        Forms\Components\Toggle::make('input_required')
+                            ->label('Wymagane przed odhaczeniem')
+                            ->default(false)
+                            ->visible(fn (\Filament\Forms\Get $get): bool => ($get('input_type') ?? 'check_only') !== 'check_only'),
                     ]),
             ]),
         ]);

@@ -55,11 +55,27 @@
                 <div>Suma grupy: <strong class="tabular-nums">{{ MoneyFormatter::format((float) ($summary['payable_total_pln'] ?? $summary['total_pln']), 'PLN') }}</strong></div>
                 <div>Płacących: <strong>{{ (int) $summary['paying'] }}</strong> · opiekunów: <strong>{{ (int) $summary['gratis'] }}</strong></div>
                 <div>Baza: <span class="tabular-nums">{{ MoneyFormatter::format((float) $summary['base_pln'], 'PLN') }}</span></div>
-                <div>Marża: <span class="tabular-nums">{{ MoneyFormatter::format((float) $summary['markup_pln'], 'PLN') }}</span>
-                    · Podatki: <span class="tabular-nums">{{ MoneyFormatter::format((float) $summary['tax_pln'], 'PLN') }}</span></div>
+                <div>Narzut (zysk)
+                    @if ((float) ($summary['markup_percent'] ?? 0) > 0)
+                        ({{ rtrim(rtrim(number_format((float) $summary['markup_percent'], 2, ',', ' '), '0'), ',') }}%)
+                    @endif
+                    : <strong class="tabular-nums text-emerald-700">{{ MoneyFormatter::format((float) $summary['markup_pln'], 'PLN') }}</strong>
+                </div>
+                <div>Podatki: <span class="tabular-nums">{{ MoneyFormatter::format((float) $summary['tax_pln'], 'PLN') }}</span></div>
             </div>
+            @if (! empty($summary['tax_breakdown']))
+                <p class="mt-2 text-xs text-gray-500">
+                    @foreach ($summary['tax_breakdown'] as $tax)
+                        {{ $tax['name'] ?? 'Podatek' }}
+                        @if ((float) ($tax['percentage'] ?? 0) > 0)
+                            {{ rtrim(rtrim(number_format((float) $tax['percentage'], 2, ',', ' '), '0'), ',') }}%
+                        @endif
+                        ({{ MoneyFormatter::format((float) ($tax['amount'] ?? 0), 'PLN') }})@if (! $loop->last), @endif
+                    @endforeach
+                </p>
+            @endif
             <p class="mt-2 text-xs text-gray-500">
-                Pełna kalkulacja szablonu: program + noclegi + transport + ubezpieczenie + marża + podatki.
+                Pełna kalkulacja: program + noclegi + transport + ubezpieczenie + narzut + podatki.
                 Koszty dzielone przez uczestników płacących (bez opiekunów). Suma grupy = cena zaokrąglona × płacący.
             </p>
         </div>

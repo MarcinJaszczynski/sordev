@@ -25,6 +25,14 @@ class TaskAttachmentDownloadController extends Controller
 
         abort_unless($path && Storage::disk('public')->exists($path), 404);
 
-        return Storage::disk('public')->download($path, $attachment->name ?: basename($path));
+        $filename = $attachment->name ?: basename($path);
+        $disk = Storage::disk('public');
+
+        if ($request->boolean('download')) {
+            return $disk->download($path, $filename);
+        }
+
+        // Domyślnie inline — PDF/zdjęcia otwierają się w karcie zamiast wymuszać pobranie.
+        return $disk->response($path, $filename);
     }
 }

@@ -24,6 +24,8 @@ class EventWorkflowFinanceSummaryServiceTest extends TestCase
         $this->assertArrayHasKey('calculation', $summary);
         $this->assertArrayHasKey('planned', $summary);
         $this->assertArrayHasKey('paid', $summary);
+        $this->assertArrayHasKey('paid_office', $summary);
+        $this->assertArrayHasKey('paid_pilot', $summary);
         $this->assertArrayHasKey('remaining', $summary);
         $this->assertArrayHasKey('client_due', $summary);
         $this->assertArrayHasKey('client_paid', $summary);
@@ -34,12 +36,15 @@ class EventWorkflowFinanceSummaryServiceTest extends TestCase
         $this->assertIsString($summary['pilot_cash']);
         $this->assertIsString($summary['pilot_cash_paid']);
         $this->assertArrayHasKey('pilot_cash_lines', $summary);
-        $this->assertSame('Cena za osobę (umowa / kalkulacja)', $summary['labels']['price_per_person']);
-        $this->assertSame('Koszty (kalkulacja)', $summary['labels']['calculation']);
+        $this->assertSame('Cena za osobę (umowa / szablon)', $summary['labels']['price_per_person']);
+        $this->assertSame('Koszty (szablon)', $summary['labels']['calculation']);
+        $this->assertSame('Koszty (planowane)', $summary['labels']['planned']);
         $this->assertArrayHasKey('price_per_person_hint', $summary);
-        $this->assertSame('Zapłacone dostawcom', $summary['labels']['paid']);
+        $this->assertSame('Zapłacono', $summary['labels']['paid']);
+        $this->assertSame('Zapłacono przez biuro', $summary['labels']['paid_office']);
+        $this->assertSame('Zapłacono przez pilota', $summary['labels']['paid_pilot']);
         $this->assertSame('Wpłacono od klientów', $summary['labels']['client_paid']);
-        $this->assertSame('Gotówka dla pilota (plan)', $summary['labels']['pilot_cash']);
+        $this->assertSame('Gotówka pilota (planowane)', $summary['labels']['pilot_cash']);
         $this->assertSame('Wypłacono pilotowi', $summary['labels']['pilot_cash_paid']);
         $this->assertStringContainsString('/finance', $summary['settlement_url']);
     }
@@ -61,6 +66,61 @@ class EventWorkflowFinanceSummaryServiceTest extends TestCase
         $this->assertSame([], $summary['pilot_cash_lines']);
         $this->assertStringContainsString('/finance', $summary['settlement_url']);
         $this->assertSame(0, $event->fresh()->settlements()->count());
+    }
+
+    public function test_client_totals_use_capacity_with_discounts_and_show_remaining(): void
+    {
+        if (! \Illuminate\Support\Facades\Schema::hasTable('event_settlement_participant_payments')) {
+            $this->markTestSkipped('Brak tabeli wpłat uczestników.');
+        }
+        if (! \Illuminate\Support\Facades\Schema::hasTable('contracts')) {
+            $this->markTestSkipped('Brak tabeli umów.');
+        }
+
+        $user = \App\Models\User::factory()->create();
+        $event = Event::factory()->create(['participant_count' => 4]);
+        $settlement = EventSettlement::findOrCreateActiveForEvent($event);
+
+        \App\Models\Contract::create([
+            'event_id' => $event->id,
+            'contract_type' => \App\Models\Contract::TYPE_GROUP,
+            'title' => 'Umowa',
+            'contract_date' => now()->toDateString(),
+            'participant_count' => 4,
+            'unit_price' => 1000,
+            'total_price' => 4000,
+            'payment_scheme' => \App\Models\Contract::PAYMENT_SCHEME_LUMP_SUM,
+            'currency' => 'PLN',
+            'status' => 'sent',
+            'payment_status' => 'pending',
+            'created_by' => $user->id,
+            'public_token' => 'tok-client-totals-'.uniqid(),
+        ]);
+
+        $settlement->participantPayments()->delete();
+
+        \App\Models\EventSettlementParticipantPayment::query()->create([
+            'settlement_id' => $settlement->id,
+            'participant_name' => 'Rabat',
+            'due_amount_pln' => 800,
+            'paid_amount_pln' => 200,
+            'payment_status' => 'partial',
+        ]);
+
+        $settlement->update([
+            'participant_due_pln' => 800,
+            'participant_paid_pln' => 200,
+        ]);
+
+        $summary = app(EventWorkflowFinanceSummaryService::class)->forEvent($event->fresh());
+
+        $this->assertNotNull($summary);
+        // należne: 800 (ledger) + 3×1000 = 3800; wpłaty 200; do dopłaty 3600
+        $this->assertStringContainsString('3 800,00 PLN', $summary['client_due']);
+        $this->assertStringContainsString('200,00 PLN', $summary['client_paid']);
+        $this->assertStringContainsString('3 600,00 PLN', $summary['client_remaining']);
+        $this->assertSame('due', $summary['client_remaining_tone']);
+        $this->assertSame('Do dopłaty od klientów', $summary['labels']['client_remaining']);
     }
 
     public function test_pilot_cash_paid_shows_office_payout_amount(): void
@@ -149,5 +209,60 @@ class EventWorkflowFinanceSummaryServiceTest extends TestCase
         $this->assertNotNull($summary);
         $normalized = preg_replace('/\s+/u', '', $summary['pilot_cash']);
         $this->assertStringContainsString('1200', $normalized);
+    }
+
+    public function test_paid_breakdown_splits_office_and_pilot_payments(): void
+    {
+        if (! \Illuminate\Support\Facades\Schema::hasTable('event_settlement_costs')) {
+            $this->markTestSkipped('Brak tabeli event_settlement_costs.');
+        }
+
+        $event = Event::factory()->create();
+        $settlement = EventSettlement::findOrCreateActiveForEvent($event);
+
+        $plan = $settlement->costs()->create([
+            'source_type' => 'manual',
+            'name' => 'Bilety',
+            'planned_amount' => 1000,
+            'planned_amount_pln' => 1000,
+            'paid_by' => 'pilot',
+            'payment_status' => 'planned',
+            'order' => 1,
+        ]);
+
+        $settlement->costs()->create([
+            'source_type' => 'manual_payment',
+            'source_id' => $plan->id,
+            'name' => 'Bilety — zaliczka biura',
+            'actual_amount' => 400,
+            'actual_amount_pln' => 400,
+            'paid_by' => 'office',
+            'payment_method' => 'transfer',
+            'payment_status' => 'advance_paid',
+            'advance_type' => 'advance',
+            'paid_at' => now(),
+            'order' => 2,
+        ]);
+
+        $settlement->costs()->create([
+            'source_type' => 'manual_payment',
+            'source_id' => $plan->id,
+            'name' => 'Bilety — dopłata pilota',
+            'actual_amount' => 600,
+            'actual_amount_pln' => 600,
+            'paid_by' => 'pilot',
+            'payment_method' => 'cash',
+            'payment_status' => 'paid',
+            'advance_type' => 'final',
+            'paid_at' => now(),
+            'order' => 3,
+        ]);
+
+        $summary = app(EventWorkflowFinanceSummaryService::class)->forEvent($event->fresh());
+
+        $this->assertNotNull($summary);
+        $this->assertStringContainsString('1 000,00 PLN', $summary['paid']);
+        $this->assertStringContainsString('400,00 PLN', $summary['paid_office']);
+        $this->assertStringContainsString('600,00 PLN', $summary['paid_pilot']);
     }
 }

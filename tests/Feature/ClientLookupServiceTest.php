@@ -50,6 +50,22 @@ class ClientLookupServiceTest extends TestCase
             && (int) $row['contractor_id'] === $contractor->id));
     }
 
+    public function test_search_from_query_matches_phone_ignoring_separators(): void
+    {
+        $contractor = Contractor::create([
+            'name' => 'Klient ze spacjami w telefonie',
+            'phone' => '123 456 789',
+            'status' => 'active',
+        ]);
+        $this->markAsClient($contractor);
+
+        $results = app(ClientLookupService::class)->searchFromQuery('123456789');
+
+        $this->assertTrue($results->contains(
+            fn (array $row): bool => (int) ($row['contractor_id'] ?? 0) === $contractor->id
+        ));
+    }
+
     public function test_contact_with_multiple_contractors_returns_multiple_pair_rows(): void
     {
         $contact = Contact::create([

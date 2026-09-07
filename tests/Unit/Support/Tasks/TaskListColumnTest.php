@@ -41,6 +41,32 @@ class TaskListColumnTest extends TestCase
         $this->assertSame('System', TaskListColumn::authorLabel($task));
     }
 
+    public function test_ownership_line_shows_from_author_to_assignee(): void
+    {
+        $author = User::factory()->create(['name' => 'Anna Autor']);
+        $assignee = User::factory()->create(['name' => 'Jan Wykonawca']);
+
+        $task = Task::factory()->create([
+            'source' => \App\Enums\TaskSource::Office->value,
+            'author_id' => $author->id,
+            'assignee_id' => $assignee->id,
+        ]);
+
+        $this->assertSame('Jan Wykonawca', TaskListColumn::assigneeLabel($task));
+        $this->assertSame('Od Anna Autor dla Jan Wykonawca', TaskListColumn::ownershipLine($task));
+    }
+
+    public function test_ownership_line_uses_system_author_and_dash_when_unassigned(): void
+    {
+        $task = Task::factory()->create([
+            'source' => \App\Enums\TaskSource::System->value,
+            'author_id' => User::factory()->create(['name' => 'Ukryty Autor'])->id,
+            'assignee_id' => null,
+        ]);
+
+        $this->assertSame('Od System dla —', TaskListColumn::ownershipLine($task));
+    }
+
     public function test_task_cell_contains_title_and_sanitized_description(): void
     {
         $task = Task::factory()->create([
@@ -102,7 +128,8 @@ class TaskListColumnTest extends TestCase
         $html = TaskListColumn::attachmentsCellHtml($task);
 
         $this->assertStringContainsString('umowa.pdf', $html);
-        $this->assertStringContainsString(route('admin.task-attachments.download', ['attachment' => $attachment->id]), $html);
+        $this->assertStringContainsString($attachment->preview_url, $html);
+        $this->assertStringNotContainsString('download=1', $html);
     }
 
     public function test_due_date_is_red_when_overdue_and_open(): void

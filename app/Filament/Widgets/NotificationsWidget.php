@@ -47,7 +47,7 @@ class NotificationsWidget extends Widget
             ->whereHas('status', function ($query) {
                 $query->whereIn('name', ['Do zrobienia', 'W trakcie', 'Oczekuje na weryfikację']);
             })
-            ->with('status');
+            ->with(['status', 'author', 'assignee']);
 
         if ($this->taskFilter === 'new') {
             $tasksQuery->whereHas('status', fn ($q) => $q->where('name', 'Do zrobienia'));

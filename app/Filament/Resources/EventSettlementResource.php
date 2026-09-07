@@ -225,7 +225,7 @@ class EventSettlementResource extends Resource
                         ->visible(fn (?EventSettlement $record): bool => ! $record || ExecutiveAccess::canViewSettlementFinancialSummary($record)),
 
                     Forms\Components\TextInput::make('actual_cost_pln')
-                        ->label('Koszt rzeczywisty (PLN)')
+                        ->label('Koszt zapłacony (PLN)')
                         ->default(0)
                         ->numeric()
                         ->readOnly()
@@ -360,7 +360,7 @@ class EventSettlementResource extends Resource
         $diffColor = $diff > 0 ? '#b91c1c' : ($diff < 0 ? '#166534' : '#374151');
 
         $html = "<div class='admin-table-stack admin-table-stack-compact'>"
-            .'<span class="admin-table-value">Plan: '.e(self::formatMoneyPln($planned)).'</span>'
+            .'<span class="admin-table-value">Planowane: '.e(self::formatMoneyPln($planned)).'</span>'
             .'<span class="admin-table-value">Rzecz.: '.e(self::formatMoneyPln($actual)).'</span>'
             .'<span class="admin-table-value-strong" style="color:'.$diffColor.'">Różnica: '.e(self::formatMoneyPln($diff)).'</span>';
 
@@ -528,7 +528,7 @@ class EventSettlementResource extends Resource
                         ->visible(fn (?EventSettlement $record): bool => ! $record || ExecutiveAccess::canViewSettlementFinancialSummary($record)),
 
                     Infolists\Components\TextEntry::make('actual_cost_pln')
-                        ->label('Koszt rzeczywisty')
+                        ->label('Koszt zapłacony')
                         ->money('PLN')
                         ->visible(fn (?EventSettlement $record): bool => ! $record || ExecutiveAccess::canViewSettlementFinancialSummary($record)),
 

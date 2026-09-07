@@ -40,7 +40,7 @@ class UnmatchedBankPaymentsInboxPage extends Page implements HasTable
     {
         $user = auth()->user();
 
-        return $user && ($user->hasRole(['admin', 'super_admin', 'ksiegowosc']) || $user->can('view_any_event::settlement'));
+        return $user && ($user->hasRole(['admin', 'super_admin', 'biuro', 'ksiegowosc']) || $user->can('view_any_event::settlement'));
     }
 
     public static function getNavigationBadge(): ?string

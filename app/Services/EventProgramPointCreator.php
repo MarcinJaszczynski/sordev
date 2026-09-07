@@ -48,6 +48,8 @@ class EventProgramPointCreator
     ): EventProgramPoint {
         $template->loadMissing(['children']);
 
+        $day = $event->clampProgramPointDay($day);
+
         $groupSize = (int) ($options['group_size'] ?? $template->group_size ?? 0);
         $requestedQuantity = max(1, (int) ($options['quantity'] ?? 1));
         $participantCount = max(1, (int) ($event->participant_count ?? 1));
@@ -90,6 +92,8 @@ class EventProgramPointCreator
 
     public function addBlank(Event $event, string $name, int $day, ?int $parentId = null, array $options = []): EventProgramPoint
     {
+        $day = $event->clampProgramPointDay($day);
+
         return $event->programPoints()->create($this->mergeOptions([
             'name' => $name,
             'day' => $day,

@@ -64,7 +64,7 @@ class PendingPaymentsInboxPage extends Page
     {
         $user = auth()->user();
 
-        return $user && ($user->hasRole(['admin', 'super_admin', 'ksiegowosc']) || static::canViewInvoices());
+        return $user && ($user->hasRole(['admin', 'super_admin', 'biuro', 'ksiegowosc']) || static::canViewInvoices());
     }
 
     public function mount(): void
@@ -208,7 +208,7 @@ class PendingPaymentsInboxPage extends Page
         $plan = $cost->resolvePlanCostForPayment();
         if (EventSettlementCost::isPaymentSourceType($plan->source_type)) {
             Notification::make()
-                ->title('Brak pozycji planu do zaksięgowania wpłaty')
+                ->title('Brak kosztu do zaksięgowania wpłaty')
                 ->body('Otwórz Finanse imprezy i dodaj wpłatę ręcznie.')
                 ->warning()
                 ->send();

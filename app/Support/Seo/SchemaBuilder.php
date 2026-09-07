@@ -230,6 +230,17 @@ class SchemaBuilder
         ]);
     }
 
+    public static function blogPostBreadcrumbs(BlogPost $post, string $url): array
+    {
+        $isGuide = $post->isGuide();
+
+        return self::breadcrumbList([
+            ['name' => 'Start', 'url' => self::siteUrl()],
+            ['name' => $isGuide ? 'Poradnik' : 'Aktualności', 'url' => $isGuide ? self::siteUrl().'/poradnik' : self::siteUrl().'/blog'],
+            ['name' => $post->title, 'url' => $url],
+        ]);
+    }
+
     private static function offer(EventTemplate $template, float $price, ?string $canonicalUrl): array
     {
         return [

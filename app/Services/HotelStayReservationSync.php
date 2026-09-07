@@ -235,9 +235,15 @@ class HotelStayReservationSync
             ];
         }
 
+        $stay->loadMissing('event');
+
         return [
             'reserved_amount' => null,
-            'participant_count' => max(1, (int) ($stay->event?->participant_count ?? 1)),
+            'participant_count' => max(1, (int) (
+                $stay->event
+                    ? app(\App\Services\EventHotelOccupancyService::class)->forEvent($stay->event)['required_beds_per_night']
+                    : 1
+            )),
             'currency_id' => null,
             'amount_basis' => 'lump_sum',
             'participant_scope' => 'all',

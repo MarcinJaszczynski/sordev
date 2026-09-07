@@ -102,7 +102,7 @@ class PilotPanelProvider extends PanelProvider
                             'title' => $banner['title'],
                             'description' => $banner['description'],
                             'exitUrl' => $banner['exitUrl'] ?? null,
-                            'accentClass' => 'border-blue-200 bg-blue-50 text-blue-950',
+                            'accentClass' => 'portal-preview-banner',
                         ])->render();
                     }
 

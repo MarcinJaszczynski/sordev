@@ -2,7 +2,6 @@
 
 namespace Tests\Feature;
 
-use App\Filament\Pilot\Pages\PilotSettlementPage;
 use App\Livewire\PilotCashDesk;
 use App\Livewire\PilotTripSettlementForm;
 use App\Models\Event;
@@ -102,10 +101,30 @@ class PilotPortalVisibilityTest extends TestCase
 
         $this->assertContains('settlement', $keys);
         $this->assertNotContains('advance', $keys);
+        $this->assertNotContains('attendance', $keys);
         $this->assertStringContainsString(
             '/pilot/settlement/',
             collect($tabs)->firstWhere('key', 'settlement')['url'] ?? '',
         );
+    }
+
+    public function test_trip_nav_shows_attendance_when_enabled(): void
+    {
+        $pilot = User::factory()->create(['status' => 'active']);
+        $pilot->assignRole('pilot');
+
+        $event = Event::factory()->create([
+            'assigned_to' => $pilot->id,
+            'shared_with_pilot' => true,
+            'status' => Event::STATUS_CONFIRMED,
+            'pilot_portal_show_attendance' => true,
+        ]);
+
+        $this->actingAs($pilot);
+
+        $keys = collect(\App\Support\PilotTripModuleNavigation::tabs($event))->pluck('key')->all();
+
+        $this->assertContains('attendance', $keys);
     }
 
     public function test_admin_pilot_cash_desk_respects_portal_exchange_visibility(): void
@@ -121,17 +140,24 @@ class PilotPortalVisibilityTest extends TestCase
 
         $this->actingAs($admin);
 
+        // Admin zawsze widzi i edytuje; flaga steruje tylko panelem pilota.
         Livewire::test(PilotCashDesk::class, [
             'event' => $event,
             'context' => 'admin',
             'respectPortalVisibility' => true,
-        ])->assertDontSee('Wymiana walut');
+        ])
+            ->assertSee('Wymiana walut')
+            ->assertSee('Portal: wymiana wyłączona')
+            ->assertSee('Zapisz wymianę');
 
         Livewire::test(PilotCashDesk::class, [
             'event' => $event,
             'context' => 'admin',
             'respectPortalVisibility' => false,
-        ])->assertSee('Wymiana walut');
+        ])
+            ->assertSee('Wymiana walut')
+            ->assertSee('Zapisz wymianę')
+            ->assertDontSee('Portal: wymiana wyłączona');
     }
 
     public function test_admin_cash_desk_toggles_exchange_after_portal_visibility_event(): void
@@ -151,12 +177,15 @@ class PilotPortalVisibilityTest extends TestCase
             'event' => $event,
             'context' => 'admin',
             'respectPortalVisibility' => true,
-        ])->assertSee('Wymiana walut');
+        ])
+            ->assertSee('Zapisz wymianę')
+            ->assertDontSee('Portal: wymiana wyłączona');
 
         $event->update(['pilot_portal_show_currency_exchange' => false]);
 
         $component
             ->dispatch('pilot-portal-visibility-updated', eventId: $event->id)
-            ->assertDontSee('Wymiana walut');
+            ->assertSee('Portal: wymiana wyłączona')
+            ->assertSee('Zapisz wymianę');
     }
 }

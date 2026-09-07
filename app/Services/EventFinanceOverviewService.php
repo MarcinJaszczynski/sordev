@@ -6,6 +6,7 @@ namespace App\Services;
 
 use App\Models\Currency;
 use App\Models\Event;
+use App\Models\EventHotelStay;
 use App\Models\EventProgramPoint;
 use App\Models\EventSettlement;
 use App\Models\EventSettlementCost;
@@ -20,7 +21,7 @@ use Illuminate\Support\Facades\Schema;
 
 /**
  * Read-model uproszczonego ekranu Finanse imprezy:
- * kalkulacja / plan / zapłacone + health + dokumenty.
+ * szablon / planowane / zapłacono + health + dokumenty.
  */
 final class EventFinanceOverviewService
 {
@@ -60,12 +61,12 @@ final class EventFinanceOverviewService
 
     /** Uproszczone etykiety statusu UI (nie 8 raw payment_status). */
     public static array $uiStatusLabels = [
-        'paid' => 'Zapłacone',
+        'paid' => 'Zapłacono',
         'partial' => 'Częściowo',
         'advance' => 'Zaliczka',
         'due' => 'Do zapłaty',
         'overdue' => 'Po terminie',
-        'ok' => 'Zapłacone',
+        'ok' => 'Zapłacono',
         'n/a' => 'Brak kwoty',
         'review' => 'Do sprawdzenia',
     ];
@@ -131,10 +132,15 @@ final class EventFinanceOverviewService
 
     public static function forgetOverviewCacheForEvent(int $eventId): void
     {
-        // Klucz cache zawiera max(updated_at) kosztów + settlement — touch wystarczy,
-        // by kolejny odczyt nie trafił w stary wpis.
+        // Klucz cache zawiera settlement.updated_at — MySQL DATETIME ma precyzję do sekundy,
+        // więc zwykły touch() w tej samej sekundzie nie zmienia klucza (stale hit po usunięciu dok.).
         $settlement = EventSettlement::query()->where('event_id', $eventId)->orderByDesc('id')->first();
-        $settlement?->touch();
+        if (! $settlement) {
+            return;
+        }
+
+        $bump = now()->addSecond();
+        $settlement->forceFill(['updated_at' => $bump])->saveQuietly();
     }
 
     /**
@@ -225,6 +231,13 @@ final class EventFinanceOverviewService
                 ->get()
                 ->keyBy('id');
 
+        $hasHotelPlanCosts = $allCosts->contains(
+            fn (EventSettlementCost $cost): bool => in_array($cost->source_type, [
+                HotelStaySettlementSync::SOURCE_HOTEL,
+                HotelStaySettlementSync::SOURCE_STAY,
+            ], true)
+        );
+
         $planCostIds = $this->health->listPlanCosts($allCosts)->pluck('id')->map(fn ($id) => (int) $id)->all();
         /** @var Collection<int, VendorInvoice> $invoicesByCostId */
         $invoicesByCostId = $planCostIds === [] || ! Schema::hasTable('vendor_invoices')
@@ -241,21 +254,37 @@ final class EventFinanceOverviewService
         $sumCalc = 0.0;
         $sumPlan = 0.0;
         $sumPaid = 0.0;
+        $sumOfficePaid = 0.0;
+        $sumPilotPaid = 0.0;
         $pilotCashPaid = 0.0;
         $hiddenZeroCount = 0;
         /** @var array<string, float> $plannedForeignBuckets */
         $plannedForeignBuckets = [];
+        /** @var array<string, float> $paidForeignBuckets */
+        $paidForeignBuckets = [];
         $nonConvertedIndicativePln = 0.0;
 
         foreach ($this->health->listPlanCosts($allCosts) as $planCost) {
+            $point = ($planCost->source_type === 'program_point' && $planCost->source_id)
+                ? $programPointsById->get((int) $planCost->source_id)
+                : null;
+
+            // Nocleg z planu hotelowego ma własny wiersz accommodation_hotel* —
+            // ukryj zdublowany program_point dla is_hotel (sumy i UI bez podwójnego liczenia).
+            if (
+                $hasHotelPlanCosts
+                && $planCost->source_type === 'program_point'
+                && $point instanceof EventProgramPoint
+                && (bool) ($point->is_hotel ?? false)
+            ) {
+                continue;
+            }
+
             /** @var array<string, mixed>|null $eval */
             $eval = $evaluations->get($planCost->id);
             $planned = (float) ($eval['planned_pln'] ?? $this->health->plannedPlnForCost($planCost));
             $statusPlanned = (float) ($eval['status_planned_pln'] ?? $this->health->indicativePlannedPlnForCost($planCost));
             $paid = (float) ($eval['paid_pln'] ?? 0);
-            $point = ($planCost->source_type === 'program_point' && $planCost->source_id)
-                ? $programPointsById->get((int) $planCost->source_id)
-                : null;
             [$calc, $pricingHint, $calcLabel] = $this->calculationDisplayForPlanCost($planCost, $event, $point);
             $payments = $this->health->paymentRowsForPlanCost($planCost, $allCosts);
             $documents = $this->documentsForPlanCost($planCost, $settlement, $payments);
@@ -311,7 +340,14 @@ final class EventFinanceOverviewService
                 'calculation_label' => $calcLabel,
                 'planned_label' => $plannedLabel,
                 'paid_label' => $paymentMeta['paid_label'] ?? MoneyFormatter::format($paid, 'PLN'),
-                'remaining_label' => $this->remainingAmountLabel($planCost, $remainingPln, $planned, $paid),
+                'remaining_label' => $this->remainingAmountLabel(
+                    $planCost,
+                    $remainingPln,
+                    $planned,
+                    $paid,
+                    $paymentMeta['payments'] ?? [],
+                    $paymentMeta['paid_foreign'] ?? [],
+                ),
                 'savings_label' => $savingsPln > SettlementPaymentHealthService::TOLERANCE
                     ? 'Oszczędność '.MoneyFormatter::format($savingsPln, 'PLN')
                     : null,
@@ -349,10 +385,11 @@ final class EventFinanceOverviewService
                 'plan_group_size' => $point !== null ? (int) ($point->group_size ?? 1) : null,
                 'plan_quantity' => $point ? max(1, (int) ($point->quantity ?? 1)) : null,
                 'plan_unit_price_label' => $point
-                    ? ProgramPointPricingCalculator::unitPriceLabel($point->group_size)
+                    ? ProgramPointPricingCalculator::unitPriceLabel($point->group_size).' (szablon)'
                     : null,
                 'notes' => $planCost->notes,
                 'is_program_point' => $planCost->source_type === 'program_point',
+                'supports_reservation' => $this->supportsReservationForSourceType($planCost->source_type),
                 'is_insurance' => $planCost->source_type === 'insurance_day',
                 'approval_status' => (string) ($planCost->approval_status ?? 'pending'),
                 'is_approved' => ($planCost->approval_status ?? 'pending') === 'approved',
@@ -363,7 +400,12 @@ final class EventFinanceOverviewService
             $sumCalc += $calc;
             $sumPlan += $planned;
             $sumPaid += $paid;
+            $sumOfficePaid += (float) ($paymentMeta['office_paid_pln'] ?? 0);
+            $sumPilotPaid += (float) ($paymentMeta['pilot_paid_pln'] ?? 0);
             $this->accumulateNonConvertedForeign($planCost, $plannedForeignBuckets, $nonConvertedIndicativePln);
+            foreach ($paymentMeta['paid_foreign'] ?? [] as $symbol => $amount) {
+                $paidForeignBuckets[$symbol] = ($paidForeignBuckets[$symbol] ?? 0) + (float) $amount;
+            }
 
             foreach ($payments as $payment) {
                 if (($payment->paid_by ?? '') === 'pilot' && ($payment->payment_method ?? '') === 'cash') {
@@ -375,12 +417,8 @@ final class EventFinanceOverviewService
                 continue;
             }
 
-            if ($groupFilter === self::FILTER_UNGROUPED && $groupId !== null) {
-                continue;
-            }
-            if (is_numeric($groupFilter) && (int) $groupFilter > 0 && $groupId !== (int) $groupFilter) {
-                continue;
-            }
+            // groupFilter NIE obcina wierszy tu — liczniki/sumy grup muszą być pełne.
+            // Widoczność sekcji po filtrze grupy jest w blade ($showSection).
 
             if ($hideZero && $this->isZeroValueRow($row)) {
                 $hiddenZeroCount++;
@@ -446,20 +484,25 @@ final class EventFinanceOverviewService
                 'calculation_pln' => round($headerCalc, 2),
                 'planned_pln' => round($sumPlan, 2),
                 'paid_pln' => round($sumPaid, 2),
+                'office_paid_pln' => round($sumOfficePaid, 2),
+                'pilot_paid_pln' => round($sumPilotPaid, 2),
                 'remaining_pln' => round(max(0, $sumPlan - $sumPaid), 2),
                 'client_due_pln' => $clientDue,
                 'client_paid_pln' => $clientPaid,
                 'calculation_label' => MoneyFormatter::format($headerCalc, 'PLN'),
                 'planned_label' => CurrencyAmountDisplay::formatMixedTotal(round($sumPlan, 2), $plannedForeignBuckets, 2),
-                'paid_label' => MoneyFormatter::format($sumPaid, 'PLN'),
+                'paid_label' => CurrencyAmountDisplay::formatMixedTotal(round($sumPaid, 2), $paidForeignBuckets, 2),
+                'office_paid_label' => MoneyFormatter::format(round($sumOfficePaid, 2), 'PLN'),
+                'pilot_paid_label' => MoneyFormatter::format(round($sumPilotPaid, 2), 'PLN'),
                 'remaining_label' => CurrencyAmountDisplay::formatMixedTotal(
                     round(max(0, $sumPlan - $sumPaid), 2),
-                    $plannedForeignBuckets,
+                    $this->remainingForeignBuckets($plannedForeignBuckets, $paidForeignBuckets),
                     2,
                 ),
                 'client_due_label' => MoneyFormatter::format($clientDue, 'PLN'),
                 'client_paid_label' => MoneyFormatter::format($clientPaid, 'PLN'),
                 'planned_foreign' => $plannedForeignBuckets,
+                'paid_foreign' => $paidForeignBuckets,
                 'non_converted_indicative_pln' => round($nonConvertedIndicativePln, 2),
                 'calc_plan_delta_pln' => $calcPlanDelta,
                 'calc_plan_hint' => $foreignHint,
@@ -470,6 +513,7 @@ final class EventFinanceOverviewService
             'pilot_cash' => $this->pilotCashSummary($settlement, $pilotCashPaid),
             'rows' => $rows,
             'groups' => $grouped,
+            'contractor_rollups' => $this->buildContractorRollups($rows),
             'filter' => $filter,
             'group_filter' => $groupFilter,
             'hide_zero' => $hideZero,
@@ -513,12 +557,16 @@ final class EventFinanceOverviewService
                 'calculation_pln' => 0.0,
                 'planned_pln' => 0.0,
                 'paid_pln' => 0.0,
+                'office_paid_pln' => 0.0,
+                'pilot_paid_pln' => 0.0,
                 'remaining_pln' => 0.0,
                 'client_due_pln' => 0.0,
                 'client_paid_pln' => 0.0,
                 'calculation_label' => $zeroLabel,
                 'planned_label' => $zeroLabel,
                 'paid_label' => $zeroLabel,
+                'office_paid_label' => $zeroLabel,
+                'pilot_paid_label' => $zeroLabel,
                 'remaining_label' => $zeroLabel,
                 'client_due_label' => $zeroLabel,
                 'client_paid_label' => $zeroLabel,
@@ -533,6 +581,7 @@ final class EventFinanceOverviewService
             'pilot_cash' => $this->emptyPilotCashSummary($zeroLabel),
             'rows' => [],
             'groups' => [],
+            'contractor_rollups' => [],
             'filter' => $filter,
             'group_filter' => $groupFilter,
             'hide_zero' => $hideZero,
@@ -740,16 +789,23 @@ final class EventFinanceOverviewService
         $gCalc = array_sum(array_column($groupRows, 'calculation_pln'));
         $gRemaining = max(0, round($gPlan - $gPaid, 2));
         $foreign = [];
+        $paidForeign = [];
         foreach ($groupRows as $row) {
-            if (! empty($row['planned_convert_to_pln'])) {
-                continue;
+            if (empty($row['planned_convert_to_pln'])) {
+                $amount = (float) ($row['planned_amount'] ?? 0);
+                $symbol = (string) ($row['planned_currency_symbol'] ?? 'PLN');
+                if ($amount > 0 && $symbol !== 'PLN') {
+                    $foreign[$symbol] = ($foreign[$symbol] ?? 0) + $amount;
+                }
             }
-            $amount = (float) ($row['planned_amount'] ?? 0);
-            $symbol = (string) ($row['planned_currency_symbol'] ?? 'PLN');
-            if ($amount <= 0 || $symbol === 'PLN') {
-                continue;
+            foreach ($row['payments'] ?? [] as $payment) {
+                $symbol = (string) ($payment['currency_symbol'] ?? 'PLN');
+                $amountRaw = (float) ($payment['amount'] ?? 0);
+                $convert = (bool) ($payment['convert_to_pln'] ?? false);
+                if ($symbol !== 'PLN' && ! $convert && $amountRaw > 0) {
+                    $paidForeign[$symbol] = ($paidForeign[$symbol] ?? 0) + $amountRaw;
+                }
             }
-            $foreign[$symbol] = ($foreign[$symbol] ?? 0) + $amount;
         }
 
         return [
@@ -766,9 +822,95 @@ final class EventFinanceOverviewService
             'remaining_pln' => $gRemaining,
             'calculation_label' => MoneyFormatter::format($gCalc, 'PLN'),
             'planned_label' => CurrencyAmountDisplay::formatMixedTotal(round($gPlan, 2), $foreign, 2),
-            'paid_label' => MoneyFormatter::format($gPaid, 'PLN'),
-            'remaining_label' => CurrencyAmountDisplay::formatMixedTotal($gRemaining, $foreign, 2),
+            'paid_label' => CurrencyAmountDisplay::formatMixedTotal(round($gPaid, 2), $paidForeign, 2),
+            'remaining_label' => CurrencyAmountDisplay::formatMixedTotal(
+                $gRemaining,
+                $this->remainingForeignBuckets($foreign, $paidForeign),
+                2,
+            ),
         ];
+    }
+
+    /**
+     * Sumy plan / zapłacono / pozostało po kontrahencie (wszystkie kategorie kosztów).
+     *
+     * @param  list<array<string, mixed>>  $rows
+     * @return list<array<string, mixed>>
+     */
+    private function buildContractorRollups(array $rows): array
+    {
+        /** @var array<int, array<string, mixed>> $byContractor */
+        $byContractor = [];
+
+        foreach ($rows as $row) {
+            $contractorId = (int) ($row['contractor_id'] ?? 0);
+            if ($contractorId <= 0) {
+                continue;
+            }
+
+            if (! isset($byContractor[$contractorId])) {
+                $byContractor[$contractorId] = [
+                    'contractor_id' => $contractorId,
+                    'contractor' => (string) ($row['contractor'] ?? 'Kontrahent'),
+                    'planned_pln' => 0.0,
+                    'paid_pln' => 0.0,
+                    'remaining_pln' => 0.0,
+                    'cost_count' => 0,
+                    'cost_ids' => [],
+                    'costs' => [],
+                ];
+            }
+
+            $planned = round((float) ($row['planned_pln'] ?? 0), 2);
+            $paid = round((float) ($row['paid_pln'] ?? 0), 2);
+            $remaining = round((float) ($row['remaining_pln'] ?? max(0, $planned - $paid)), 2);
+
+            $byContractor[$contractorId]['planned_pln'] += $planned;
+            $byContractor[$contractorId]['paid_pln'] += $paid;
+            $byContractor[$contractorId]['remaining_pln'] += $remaining;
+            $byContractor[$contractorId]['cost_count']++;
+            $byContractor[$contractorId]['cost_ids'][] = (int) ($row['cost_id'] ?? 0);
+            $byContractor[$contractorId]['costs'][] = [
+                'cost_id' => (int) ($row['cost_id'] ?? 0),
+                'name' => (string) ($row['name'] ?? 'Pozycja'),
+                'source_label' => (string) ($row['source_label'] ?? ''),
+                'planned_pln' => $planned,
+                'paid_pln' => $paid,
+                'remaining_pln' => $remaining,
+                'planned_label' => (string) ($row['planned_label'] ?? MoneyFormatter::format($planned, 'PLN')),
+                'paid_label' => (string) ($row['paid_label'] ?? MoneyFormatter::format($paid, 'PLN')),
+                'remaining_label' => (string) ($row['remaining_label'] ?? MoneyFormatter::format($remaining, 'PLN')),
+                'ui_status' => (string) ($row['ui_status'] ?? ''),
+                'ui_status_label' => (string) ($row['ui_status_label'] ?? ''),
+            ];
+        }
+
+        $rollups = [];
+        foreach ($byContractor as $rollup) {
+            $planned = round((float) $rollup['planned_pln'], 2);
+            $paid = round((float) $rollup['paid_pln'], 2);
+            $remaining = round((float) $rollup['remaining_pln'], 2);
+            $rollups[] = [
+                'contractor_id' => (int) $rollup['contractor_id'],
+                'contractor' => (string) $rollup['contractor'],
+                'planned_pln' => $planned,
+                'paid_pln' => $paid,
+                'remaining_pln' => $remaining,
+                'cost_count' => (int) $rollup['cost_count'],
+                'cost_ids' => array_values(array_filter(array_map('intval', $rollup['cost_ids']))),
+                'costs' => $rollup['costs'],
+                'planned_label' => MoneyFormatter::format($planned, 'PLN'),
+                'paid_label' => MoneyFormatter::format($paid, 'PLN'),
+                'remaining_label' => MoneyFormatter::format($remaining, 'PLN'),
+            ];
+        }
+
+        usort(
+            $rollups,
+            fn (array $a, array $b): int => mb_strtolower((string) $a['contractor']) <=> mb_strtolower((string) $b['contractor'])
+        );
+
+        return $rollups;
     }
 
     /**
@@ -875,11 +1017,31 @@ final class EventFinanceOverviewService
         return '—';
     }
 
+    /**
+     * @param  array<string, float>  $planned
+     * @param  array<string, float>  $paid
+     * @return array<string, float>
+     */
+    private function remainingForeignBuckets(array $planned, array $paid): array
+    {
+        $remaining = [];
+        foreach ($planned as $symbol => $amount) {
+            $left = round(max(0, (float) $amount - (float) ($paid[$symbol] ?? 0)), 2);
+            if ($left > 0) {
+                $remaining[$symbol] = $left;
+            }
+        }
+
+        return $remaining;
+    }
+
     private function remainingAmountLabel(
         EventSettlementCost $planCost,
         float $remainingPln,
         float $plannedPln,
         float $paidPln,
+        array $payments = [],
+        array $paidForeignBuckets = [],
     ): string {
         $amount = (float) ($planCost->planned_amount ?? 0);
         $currency = $planCost->plannedCurrency;
@@ -891,9 +1053,21 @@ final class EventFinanceOverviewService
 
         // Obca waluta planu: reszta w walucie źródłowej; ≈ PLN tylko gdy przeliczamy.
         if ($amount > 0 && $symbol !== 'PLN') {
-            $paidForeign = $rate > 0 ? round($paidPln / $rate, 2) : 0.0;
-            $remainingForeign = max(0, round($amount - $paidForeign, 2));
             $convertToPln = (bool) ($planCost->planned_convert_to_pln ?? true);
+            $paidForeign = (float) ($paidForeignBuckets[$symbol] ?? 0);
+            if ($paidForeign <= 0.009 && $convertToPln && $rate > 0) {
+                // Legacy: wpłaty przeliczone — szacuj z PLN.
+                $paidForeign = round($paidPln / $rate, 2);
+            } elseif ($paidForeign <= 0.009) {
+                foreach ($payments as $payment) {
+                    $paySymbol = (string) ($payment['currency_symbol'] ?? '');
+                    if ($paySymbol === $symbol) {
+                        $paidForeign += (float) ($payment['amount'] ?? 0);
+                    }
+                }
+                $paidForeign = round($paidForeign, 2);
+            }
+            $remainingForeign = max(0, round($amount - $paidForeign, 2));
 
             return $convertToPln
                 ? CurrencyAmountDisplay::formatIndicative($remainingForeign, $currency, $rate)
@@ -919,13 +1093,52 @@ final class EventFinanceOverviewService
             }
         }
 
-        if (in_array($planCost->source_type, ['transport', 'accommodation'], true)) {
+        if (in_array($planCost->source_type, ['transport', TransportContractorSettlementSync::SOURCE_CONTRACTOR], true)) {
+            try {
+                $calculator = new EventTransportCostCalculator($event);
+                $fromBus = round($calculator->busCalculatedTransportCost(), 2);
+                // Przy ryczałcie bez autokaru nie ma pierwotnego kosztorysu z km — pokaż ryczałt.
+                // Gdy jest autokar: zawsze pierwotna kalkulacja (ryczałt żyje w Planie).
+                if ($fromBus > 0.009) {
+                    // Przy grupowaniu po przewoźniku pełna kalkulacja trafia tylko na grupę główną.
+                    if (
+                        $planCost->source_type === TransportContractorSettlementSync::SOURCE_CONTRACTOR
+                        && $planCost->source_id
+                        && ! app(TransportContractorSettlementSync::class)
+                            ->isPrimaryContractor($event, (int) $planCost->source_id)
+                    ) {
+                        return $this->health->plannedPlnForCost($planCost);
+                    }
+
+                    return $fromBus;
+                }
+
+                return round($calculator->effectiveTransportCost(), 2);
+            } catch (\Throwable) {
+                // fallback poniżej
+            }
+        }
+
+        if ($planCost->source_type === 'accommodation') {
             try {
                 return round((float) app(SettlementAggregateFinanceService::class)
                     ->resolveReferenceTotalPln($event, (string) $planCost->source_type), 2);
             } catch (\Throwable) {
                 // fallback poniżej
             }
+        }
+
+        if ($planCost->source_type === 'accommodation_hotel' && $planCost->source_id) {
+            return app(HotelStaySettlementSync::class)
+                ->referenceTotalPlnForContractor($event, (int) $planCost->source_id);
+        }
+
+        if ($planCost->source_type === 'accommodation_hotel_stay' && $planCost->source_id) {
+            $stay = EventHotelStay::query()->with('roomLines.currency')->find((int) $planCost->source_id);
+
+            return $stay
+                ? app(HotelStaySettlementSync::class)->referenceTotalPlnForStay($event, $stay)
+                : $this->health->plannedPlnForCost($planCost);
         }
 
         return $this->health->plannedPlnForCost($planCost);
@@ -1084,18 +1297,39 @@ final class EventFinanceOverviewService
         $planIsForeign = $planSymbol !== 'PLN';
 
         $mapped = $payments->map(function (EventSettlementCost $p) use ($planCurrency, $planRate, $planIsForeign, $planCost): array {
+            $convertToPln = (bool) ($p->planned_convert_to_pln ?? false);
             $amountPln = (float) ($p->actual_amount_pln ?? 0);
-            $amountRaw = (float) ($p->actual_amount ?? $amountPln);
+            $amountRaw = (float) ($p->actual_amount ?? 0);
+            // Zaplanowana wpłata (termin bez paid_at): kwota siedzi w advance_amount / planned_amount.
+            if ($amountRaw <= 0.009) {
+                $amountRaw = (float) ($p->advance_amount ?? $p->planned_amount ?? 0);
+            }
+            $currencyId = $p->actual_currency_id ?? $p->planned_currency_id ?? $planCost->planned_currency_id;
+            $isForeign = CurrencyAmountDisplay::isForeignCurrency($currencyId);
+            if ($amountPln <= 0.009 && $amountRaw > 0.009) {
+                $rowRate = (float) ($p->actual_rate ?? $p->planned_rate ?? $planRate);
+                if ($rowRate <= 0) {
+                    $rowRate = $planRate > 0 ? $planRate : 1.0;
+                }
+                if (! $isForeign) {
+                    $amountPln = round($amountRaw, 2);
+                } elseif ($convertToPln) {
+                    // Tylko przy świadomym przeliczeniu — inaczej zostaje 0 (waluta osobno).
+                    $amountPln = round($amountRaw * $rowRate, 2);
+                }
+            }
             $currency = $p->relationLoaded('actualCurrency') ? $p->actualCurrency : ($p->actualCurrency ?: $planCurrency);
-            $rate = (float) ($p->actual_rate ?? $planRate);
+            if (! $currency && $amountRaw > 0.009 && blank($p->actual_amount)) {
+                $currency = $p->relationLoaded('plannedCurrency') ? $p->plannedCurrency : ($p->plannedCurrency ?: $planCurrency);
+            }
+            $rate = (float) ($p->actual_rate ?? $p->planned_rate ?? $planRate);
             $symbol = CurrencyAmountDisplay::symbol($currency instanceof Currency ? $currency : $planCurrency);
-            $convertToPln = (bool) ($planCost->planned_convert_to_pln ?? true);
 
-            $amountLabel = ($symbol !== 'PLN' && $amountRaw > 0 && ($planIsForeign || abs($amountRaw - $amountPln) > 0.009))
+            $amountLabel = ($symbol !== 'PLN' && $amountRaw > 0 && ($planIsForeign || $isForeign || abs($amountRaw - $amountPln) > 0.009))
                 ? ($convertToPln
                     ? CurrencyAmountDisplay::formatIndicative($amountRaw, $currency instanceof Currency ? $currency : $planCurrency, $rate)
                     : CurrencyAmountDisplay::format($amountRaw, $currency instanceof Currency ? $currency : $planCurrency, false))
-                : MoneyFormatter::format($amountPln, 'PLN');
+                : MoneyFormatter::format($amountPln > 0 ? $amountPln : $amountRaw, 'PLN');
 
             return [
                 'id' => (int) $p->id,
@@ -1103,6 +1337,9 @@ final class EventFinanceOverviewService
                 'amount' => $amountRaw,
                 'amount_pln' => $amountPln,
                 'rate' => $rate,
+                'currency_id' => $currencyId ? (int) $currencyId : null,
+                'currency_symbol' => $symbol,
+                'convert_to_pln' => $convertToPln,
                 'amount_label' => $amountLabel,
                 'method' => $p->payment_method,
                 'method_label' => EventSettlementCost::$paymentMethods[$p->payment_method] ?? ($p->payment_method ?: '—'),
@@ -1128,17 +1365,55 @@ final class EventFinanceOverviewService
         $advance = $mapped->filter(fn (array $p): bool => (bool) ($p['is_advance'] ?? false));
         $advanceSum = round((float) $advance->sum('amount_pln'), 2);
         $paidSum = round((float) $mapped->sum('amount_pln'), 2);
-        $paidForeignSum = round((float) $mapped->sum('amount'), 2);
         $count = $mapped->count();
 
-        $paidLabel = MoneyFormatter::format($paidSum, 'PLN');
-        if ($planIsForeign && $paidForeignSum > 0) {
-            $avgRate = $paidForeignSum > 0 ? ($paidSum / $paidForeignSum) : $planRate;
-            $convertToPln = (bool) ($planCost->planned_convert_to_pln ?? true);
-            $paidLabel = $convertToPln
-                ? CurrencyAmountDisplay::formatIndicative($paidForeignSum, $planCurrency, $avgRate)
-                : CurrencyAmountDisplay::format($paidForeignSum, $planCurrency, false);
+        $paidPlnPart = 0.0;
+        /** @var array<string, float> $paidForeignBuckets */
+        $paidForeignBuckets = [];
+        /** @var array<string, array{amount: float, pln: float}> $convertedForeign */
+        $convertedForeign = [];
+        foreach ($mapped as $paymentRow) {
+            $symbol = (string) ($paymentRow['currency_symbol'] ?? 'PLN');
+            $amountRaw = (float) ($paymentRow['amount'] ?? 0);
+            $amountPln = (float) ($paymentRow['amount_pln'] ?? 0);
+            $convert = (bool) ($paymentRow['convert_to_pln'] ?? false);
+
+            if ($symbol === 'PLN') {
+                $paidPlnPart += $amountPln > 0 ? $amountPln : $amountRaw;
+            } elseif ($convert && $amountRaw > 0) {
+                $convertedForeign[$symbol] ??= ['amount' => 0.0, 'pln' => 0.0];
+                $convertedForeign[$symbol]['amount'] += $amountRaw;
+                $convertedForeign[$symbol]['pln'] += $amountPln > 0 ? $amountPln : 0.0;
+                $paidPlnPart += $amountPln > 0 ? $amountPln : 0.0;
+            } elseif ($amountRaw > 0) {
+                $paidForeignBuckets[$symbol] = ($paidForeignBuckets[$symbol] ?? 0) + $amountRaw;
+            }
         }
+
+        $paidParts = [];
+        if ($paidPlnPart > 0.009 && $convertedForeign === []) {
+            $paidParts[] = MoneyFormatter::format(round($paidPlnPart, 2), 'PLN');
+        } elseif ($paidPlnPart > 0.009 && $convertedForeign !== []) {
+            // PLN z wpłat w złotówkach (bez przeliczonych walut — te poniżej z ≈).
+            $plnOnly = $paidPlnPart;
+            foreach ($convertedForeign as $data) {
+                $plnOnly -= (float) $data['pln'];
+            }
+            if ($plnOnly > 0.009) {
+                $paidParts[] = MoneyFormatter::format(round($plnOnly, 2), 'PLN');
+            }
+        }
+        foreach ($convertedForeign as $symbol => $data) {
+            $avgRate = $data['amount'] > 0 ? ($data['pln'] / $data['amount']) : 1.0;
+            $currency = Currency::query()->where('symbol', $symbol)->orWhere('code', $symbol)->first();
+            $paidParts[] = CurrencyAmountDisplay::formatIndicative((float) $data['amount'], $currency, $avgRate);
+        }
+        foreach ($paidForeignBuckets as $symbol => $amount) {
+            if ($amount > 0) {
+                $paidParts[] = number_format($amount, 2, ',', ' ').' '.$symbol;
+            }
+        }
+        $paidLabel = $paidParts !== [] ? implode(' + ', $paidParts) : MoneyFormatter::format(0, 'PLN');
 
         $hint = null;
         if ($count > 0) {
@@ -1186,6 +1461,7 @@ final class EventFinanceOverviewService
             'advance_count' => $advance->count(),
             'advance_paid_pln' => $advanceSum,
             'paid_label' => $paidLabel,
+            'paid_foreign' => $paidForeignBuckets,
             'hint' => $hint,
             'payments' => $mapped->all(),
             'office_paid_pln' => $officePaidPln,
@@ -1305,5 +1581,16 @@ final class EventFinanceOverviewService
                 && (int) ($row['files_count'] ?? $row['documents_count'] ?? 0) === 0,
             default => true,
         };
+    }
+
+    private function supportsReservationForSourceType(?string $sourceType): bool
+    {
+        return in_array($sourceType, [
+            'program_point',
+            HotelStaySettlementSync::SOURCE_HOTEL,
+            HotelStaySettlementSync::SOURCE_STAY,
+            TransportContractorSettlementSync::SOURCE_CONTRACTOR,
+            'transport',
+        ], true);
     }
 }

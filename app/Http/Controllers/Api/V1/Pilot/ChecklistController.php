@@ -29,6 +29,11 @@ class ChecklistController extends BaseApiController
             'status_name' => $task->status?->name,
             'is_done' => strcasecmp((string) ($task->status?->name ?? ''), 'Zakończone') === 0,
             'order' => $task->order,
+            'input_type' => $task->checklistInputType()->value,
+            'input_label' => $task->checklist_input_label,
+            'input_required' => (bool) $task->checklist_input_required,
+            'input_unit' => $task->checklist_input_unit,
+            'response' => $task->checklist_response,
         ])->values();
 
         return $this->success([
@@ -52,7 +57,20 @@ class ChecklistController extends BaseApiController
         $owned = $checklist->tasksForEvent($event)->contains(fn (Task $row) => (int) $row->id === (int) $task->id);
         abort_unless($owned, 404);
 
-        $checklist->toggleDone($task);
+        try {
+            if ($task->checklistInputType()->requiresValue() && $request->has('response')) {
+                $checklist->saveResponse($task, $request->input('response'));
+                $task->refresh();
+            }
+
+            $checklist->toggleDone($task);
+        } catch (\Illuminate\Validation\ValidationException $exception) {
+            return $this->error(
+                collect($exception->errors())->flatten()->first() ?? 'Nie udało się zaktualizować checklisty.',
+                [],
+                422
+            );
+        }
 
         return $this->success(
             $this->show($event, $checklist)->getData(true)['data'],

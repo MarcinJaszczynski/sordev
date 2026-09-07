@@ -3,6 +3,7 @@
 namespace App\Filament\Resources\EventTemplateResource\Pages;
 
 use App\Filament\Concerns\AuthorizesEventTemplatePages;
+use App\Filament\Concerns\ConfirmsEventTemplateEditing;
 use App\Filament\Concerns\SingleRelationManagerPage;
 use App\Filament\Resources\EventTemplateResource;
 use App\Filament\Resources\EventTemplateResource\Concerns\HasEventTemplateWorkflowContext;
@@ -11,6 +12,7 @@ use App\Filament\Resources\EventTemplateResource\RelationManagers\QtyVariantsRel
 class ManageTemplateQtyVariants extends SingleRelationManagerPage
 {
     use AuthorizesEventTemplatePages;
+    use ConfirmsEventTemplateEditing;
     use HasEventTemplateWorkflowContext;
 
     protected static string $resource = EventTemplateResource::class;
@@ -20,6 +22,17 @@ class ManageTemplateQtyVariants extends SingleRelationManagerPage
     protected static ?string $title = 'Warianty ilości uczestników';
 
     protected static ?string $navigationIcon = 'heroicon-o-users';
+
+    public function mount(int|string $record): void
+    {
+        parent::mount($record);
+        $this->bootTemplateEditingGate();
+    }
+
+    protected function getHeaderActions(): array
+    {
+        return $this->templateEditingHeaderActions();
+    }
 
     public function getHeading(): string|\Illuminate\Contracts\Support\Htmlable
     {

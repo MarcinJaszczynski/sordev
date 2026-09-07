@@ -39,14 +39,13 @@ final class EventTransportCostCalculator
     }
 
     /**
+     * Koszt z cennika autokaru (km / pakiet) — niezależnie od ryczałtu ręcznego.
+     * Używane m.in. w kolumnie „Kalkulacja” w Finansach.
+     *
      * @param  array{qty:int,gratis?:int,staff?:int,driver?:int}|object|null  $variant
      */
-    public function effectiveTransportCost(array|object|null $variant = null): float
+    public function busCalculatedTransportCost(array|object|null $variant = null): float
     {
-        if ($this->usesManualTransportCost()) {
-            return round((float) ($this->event->manual_transport_cost ?? 0), 2);
-        }
-
         if (! $this->resolveBus()) {
             return 0.0;
         }
@@ -59,6 +58,20 @@ final class EventTransportCostCalculator
         ];
 
         return $this->costForVariant($variant);
+    }
+
+    /**
+     * Efektywny koszt do oferty / planu: ryczałt ręczny albo kalkulacja z autokaru.
+     *
+     * @param  array{qty:int,gratis?:int,staff?:int,driver?:int}|object|null  $variant
+     */
+    public function effectiveTransportCost(array|object|null $variant = null): float
+    {
+        if ($this->usesManualTransportCost()) {
+            return round((float) ($this->event->manual_transport_cost ?? 0), 2);
+        }
+
+        return $this->busCalculatedTransportCost($variant);
     }
 
     /**

@@ -127,6 +127,11 @@ class EventSettlement extends Model
         return $this->hasMany(PilotCurrencyExchange::class, 'settlement_id');
     }
 
+    public function busCollections(): HasMany
+    {
+        return $this->hasMany(EventBusCollection::class, 'settlement_id');
+    }
+
     public function documents(): HasMany
     {
         return $this->hasMany(EventSettlementDocument::class, 'settlement_id')->latest('id');
@@ -285,6 +290,23 @@ class EventSettlement extends Model
             );
         }
 
+        // Zbiórki w autokarze: utrzymaj wiersze walut (także bez kosztów „płaci pilot”).
+        $busCurrencyIds = $this->busCollectionCurrencyIds();
+        foreach ($busCurrencyIds as $busCurrencyId) {
+            $usedCurrencyIds[] = $busCurrencyId;
+            $this->pilotCashPreparations()->firstOrCreate(
+                ['currency_id' => $busCurrencyId],
+                [
+                    'calculated_amount' => 0,
+                    'rate_used' => 1,
+                    'pln_equivalent' => 0,
+                    'status' => 'calculated',
+                ]
+            );
+        }
+
+        $usedCurrencyIds = array_values(array_unique(array_map('intval', $usedCurrencyIds)));
+
         $staleQuery = $this->pilotCashPreparations()->whereNull('provided_amount');
 
         if (! empty($usedCurrencyIds)) {
@@ -294,6 +316,24 @@ class EventSettlement extends Model
         $staleQuery->delete();
 
         $this->applyPilotCurrencyExchangeBalances();
+    }
+
+    /**
+     * @return list<int>
+     */
+    public function busCollectionCurrencyIds(): array
+    {
+        if (! Schema::hasTable('event_bus_collections')) {
+            return [];
+        }
+
+        return $this->busCollections()
+            ->whereNotNull('currency_id')
+            ->pluck('currency_id')
+            ->map(fn ($id): int => (int) $id)
+            ->unique()
+            ->values()
+            ->all();
     }
 
     protected function applyPilotCurrencyExchangeBalances(): void

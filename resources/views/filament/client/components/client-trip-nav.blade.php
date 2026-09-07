@@ -12,9 +12,6 @@
                     'is-active' => ! empty($tab['active']),
                 ])
             >
-                @if (! empty($tab['icon']))
-                    <x-filament::icon :icon="$tab['icon']" class="h-4 w-4 shrink-0" />
-                @endif
                 <span>{{ $tab['label'] }}</span>
             </a>
         @endforeach

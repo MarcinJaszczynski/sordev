@@ -8,6 +8,7 @@ use App\Filament\Resources\TaskResource\RelationManagers\TasksRelationManager;
 use App\Models\EventTemplate;
 use App\Models\EventTemplatePricePerPerson;
 use App\Models\Media;
+use App\Support\EventTemplateOfferPreview;
 use App\Support\FilamentNavigation;
 use Filament\Forms;
 use Filament\Forms\Components\Actions\Action as FormAction;
@@ -17,11 +18,13 @@ use Filament\Forms\Components\View as ViewComponent;
 use Filament\Forms\Form;
 use Filament\Forms\Get;
 use Filament\Forms\Set;
+use Filament\Notifications\Notification;
 use Filament\Pages\SubNavigationPosition;
 use Filament\Resources\Pages\Page;
 use Filament\Resources\Resource;
 use Filament\Tables;
 use Filament\Tables\Table;
+use Illuminate\Support\Js;
 use Illuminate\Support\Str;
 
 /**
@@ -138,11 +141,40 @@ class EventTemplateResource extends Resource
                                 ->helperText('Jeśli nie wybierzesz, zostanie użyty domyślny narzut.'),
                             Forms\Components\Select::make('event_price_description_id')
                                 ->label('Opis ceny imprezy')
-                                ->options(fn () => \App\Models\EventPriceDescription::pluck('name', 'id'))
+                                ->options(fn () => \App\Models\EventPriceDescription::query()->orderBy('name')->pluck('name', 'id'))
                                 ->searchable()
                                 ->nullable()
-                                ->helperText('Wybierz opis ceny imprezy. Możesz zostawić puste.')
-                                ->live(),
+                                ->helperText('Wybierz opis ceny imprezy albo dodaj/edytuj go bezpośrednio z tego pola. Pełna lista: Słowniki → Opisy cen imprez.')
+                                ->live()
+                                ->manageOptionForm(EventPriceDescriptionResource::getFormSchema())
+                                ->createOptionUsing(function (array $data): int {
+                                    return \App\Models\EventPriceDescription::query()->create($data)->getKey();
+                                })
+                                ->fillEditOptionActionFormUsing(function (Select $component): ?array {
+                                    $id = $component->getState();
+                                    if (! filled($id)) {
+                                        return null;
+                                    }
+
+                                    $record = \App\Models\EventPriceDescription::query()->find($id);
+
+                                    return $record?->only(['name', 'description']);
+                                })
+                                ->updateOptionUsing(function (array $data, Select $component): void {
+                                    $id = $component->getState();
+                                    if (! filled($id)) {
+                                        return;
+                                    }
+
+                                    \App\Models\EventPriceDescription::query()->whereKey($id)->update($data);
+                                })
+                                ->getOptionLabelUsing(function ($value): ?string {
+                                    if (! filled($value)) {
+                                        return null;
+                                    }
+
+                                    return \App\Models\EventPriceDescription::query()->whereKey($value)->value('name');
+                                }),
                         ]),
                     Forms\Components\CheckboxList::make('taxes')
                         ->label('Podatki')
@@ -619,8 +651,45 @@ class EventTemplateResource extends Resource
                 Tables\Actions\Action::make('preview_offer')
                     ->label('Podgląd oferty')
                     ->icon('heroicon-o-globe-alt')
-                    ->url(fn (EventTemplate $record) => $record->prettyUrl())
-                    ->openUrlInNewTab(),
+                    ->modalHeading('Podgląd oferty na WWW')
+                    ->modalDescription('Wybierz miejsce wyjazdu — otworzy się strona klienta z ceną i dostępnością dla tego punktu.')
+                    ->modalSubmitActionLabel('Otwórz ofertę')
+                    ->form(fn (EventTemplate $record): array => [
+                        Select::make('start_place_id')
+                            ->label('Miejsce wyjazdu')
+                            ->options(EventTemplateOfferPreview::startPlaceOptions($record))
+                            ->default(EventTemplateOfferPreview::defaultStartPlaceId($record))
+                            ->searchable()
+                            ->required()
+                            ->native(false),
+                    ])
+                    ->action(function (EventTemplate $record, array $data, \Livewire\Component $livewire): void {
+                        $options = EventTemplateOfferPreview::startPlaceOptions($record);
+
+                        if ($options === []) {
+                            Notification::make()
+                                ->title('Brak miejsc wyjazdu')
+                                ->body('Szablon nie ma dostępnego miejsca wyjazdu. Ustaw availability w kalkulacji/transporcie.')
+                                ->warning()
+                                ->send();
+
+                            return;
+                        }
+
+                        $startPlaceId = (int) ($data['start_place_id'] ?? 0);
+
+                        if ($startPlaceId <= 0 || ! array_key_exists($startPlaceId, $options)) {
+                            Notification::make()
+                                ->title('Wybierz miejsce wyjazdu')
+                                ->warning()
+                                ->send();
+
+                            return;
+                        }
+
+                        $url = EventTemplateOfferPreview::url($record, $startPlaceId);
+                        $livewire->js('window.open('.Js::from($url).', "_blank")');
+                    }),
                 Tables\Actions\ViewAction::make()
                     ->label('Podgląd'),
                 Tables\Actions\EditAction::make()
@@ -687,15 +756,29 @@ class EventTemplateResource extends Resource
             return false;
         }
 
-        if ($user->hasRole(['admin', 'super_admin'])) {
+        if ($user->hasRole(['admin', 'super_admin', 'biuro'])) {
             return true;
         }
 
-        if ($user->can('view event_template')) {
+        if ($user->can('view event_template') || $user->can('edit event_template') || $user->can('edit event_template_program')) {
             return true;
         }
 
         return $user->can(static::shieldPermission('view_any'));
+    }
+
+    public static function canView($record): bool
+    {
+        return static::canViewAny();
+    }
+
+    /**
+     * Filament EditRecord wymaga canEdit nawet do podglądu — faktyczny zapis
+     * blokuje ConfirmsEventTemplateEditing (odblokowanie po potwierdzeniu).
+     */
+    public static function canEdit($record): bool
+    {
+        return static::canViewAny();
     }
 
     public static function canCreate(): bool
@@ -705,7 +788,7 @@ class EventTemplateResource extends Resource
             return false;
         }
 
-        if ($user->hasRole(['admin', 'super_admin'])) {
+        if ($user->hasRole(['admin', 'super_admin', 'biuro'])) {
             return true;
         }
 

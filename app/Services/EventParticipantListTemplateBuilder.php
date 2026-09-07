@@ -11,7 +11,7 @@ class EventParticipantListTemplateBuilder
     /** @return array<int, string> */
     public function headings(): array
     {
-        return ['Imię', 'Nazwisko', 'Data urodzenia', 'PESEL', 'E-mail', 'Telefon', 'Nr rezerwacji'];
+        return ['Imię', 'Nazwisko', 'Płeć', 'Data urodzenia', 'PESEL', 'E-mail', 'Telefon', 'Nr rezerwacji'];
     }
 
     /** @return array<int, array{0: string, 1: string}> */
@@ -21,6 +21,7 @@ class EventParticipantListTemplateBuilder
             ['INSTRUKCJA — lista uczestników (ubezpieczenie i weryfikacja danych)'],
             [''],
             ['Wypełnij kolumny Imię, Nazwisko i Data urodzenia (format: RRRR-MM-DD lub DD.MM.RRRR).'],
+            ['Płeć (opcjonalnie): Męska / Żeńska / Inna (albo male / female / other, M / Ż / I).'],
             ['Pozostałe kolumny są opcjonalne.'],
             ['Możesz też użyć jednej kolumny „Imię i nazwisko” zamiast osobnych Imię/Nazwisko.'],
             [''],
@@ -33,8 +34,8 @@ class EventParticipantListTemplateBuilder
     public function exampleRows(): array
     {
         return [
-            ['Jan', 'Kowalski', '2010-05-15', '', 'jan@example.com', '', ''],
-            ['Anna', 'Nowak', '12.03.2011', '', '', '500600700', 'REZ-001'],
+            ['Jan', 'Kowalski', 'Męska', '2010-05-15', '', 'jan@example.com', '', ''],
+            ['Anna', 'Nowak', 'Żeńska', '12.03.2011', '', '', '500600700', 'REZ-001'],
         ];
     }
 

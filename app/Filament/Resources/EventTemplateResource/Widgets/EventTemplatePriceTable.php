@@ -278,14 +278,14 @@ class EventTemplatePriceTable extends Widget
         try {
             \App\Services\PriceRecalcProgress::start($userId, \App\Models\EventTemplate::count());
             // powiadom widgety na stronie, jeśli są (Livewire emit)
-            if (method_exists($this, 'emit')) {
-                $this->emit('priceRecalcStarted');
+            if (method_exists($this, 'dispatch')) {
+                $this->dispatch('priceRecalcStarted');
             }
         } catch (\Throwable $e) {
             // ignore
         }
 
-        \App\Jobs\RecalculateAllEventTemplatePricesJob::dispatch($userId)->afterResponse();
+        \App\Jobs\RecalculateAllEventTemplatePricesJob::dispatch($userId);
 
         Notification::make()
             ->title('Przeliczanie cen zostało zlecone')

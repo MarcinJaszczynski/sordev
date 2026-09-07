@@ -6,11 +6,13 @@ use App\Filament\Forms\PhoneInput;
 use App\Filament\Resources\ContactResource\Pages;
 use App\Models\Contact;
 use App\Support\FilamentNavigation;
+use App\Support\PhoneValidation;
 use Filament\Forms;
 use Filament\Forms\Form;
 use Filament\Resources\Resource;
 use Filament\Tables;
 use Filament\Tables\Table;
+use Illuminate\Database\Eloquent\Builder;
 
 /**
  * Resource Filament dla modelu Contact.
@@ -74,6 +76,23 @@ class ContactResource extends Resource
     }
 
     /**
+     * Global search: przy frazie wyglądającej jak telefon porównuj cyfry
+     * (ignoruj spacje / separatory), bez dzielenia numeru na tokeny.
+     */
+    protected static function applyGlobalSearchAttributeConstraints(Builder $query, string $search): void
+    {
+        if (PhoneValidation::looksLikePhone($search)) {
+            $query->where(function (Builder $phoneQuery) use ($search): void {
+                PhoneValidation::constrainDigitsLike($phoneQuery, $phoneQuery->qualifyColumn('phone'), $search);
+            });
+
+            return;
+        }
+
+        parent::applyGlobalSearchAttributeConstraints($query, $search);
+    }
+
+    /**
      * Zwraca etykietę pojedynczą modelu
      */
     public static function getModelLabel(): string
@@ -129,7 +148,14 @@ class ContactResource extends Resource
                     ->label('Nazwisko')
                     ->searchable(),
                 Tables\Columns\TextColumn::make('phone')
-                    ->label('Telefon'),
+                    ->label('Telefon')
+                    ->searchable(query: function (Builder $query, string $search): void {
+                        PhoneValidation::constrainDigitsLike(
+                            $query,
+                            $query->qualifyColumn('phone'),
+                            $search,
+                        );
+                    }),
                 Tables\Columns\TextColumn::make('email')
                     ->label('Email'),
             ])

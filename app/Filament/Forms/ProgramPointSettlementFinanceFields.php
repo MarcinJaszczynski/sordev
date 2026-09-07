@@ -25,7 +25,7 @@ final class ProgramPointSettlementFinanceFields
                 ->afterStateUpdated(fn ($state, Set $set, Get $get) => self::recalculatePlannedPln($set, $get)),
 
             CurrencyConversionFields::currencySelect('settlement_planned_currency_id')
-                ->label('Waluta planu')
+                ->label('Waluta planowanych')
                 ->live()
                 ->afterStateUpdated(function ($state, Set $set, Get $get): void {
                     if ($state) {
@@ -36,12 +36,12 @@ final class ProgramPointSettlementFinanceFields
                 }),
 
             CurrencyConversionFields::convertToggle('settlement_planned_convert_to_pln', 'settlement_planned_currency_id')
-                ->label('Przelicz plan na PLN')
+                ->label('Przelicz planowane na PLN')
                 ->live()
                 ->afterStateUpdated(fn ($state, Set $set, Get $get) => self::recalculatePlannedPln($set, $get)),
 
             Forms\Components\TextInput::make('settlement_planned_rate')
-                ->label('Kurs planu')
+                ->label('Kurs planowanych')
                 ->numeric()
                 ->live(onBlur: true)
                 ->afterStateUpdated(fn ($state, Set $set, Get $get) => self::recalculatePlannedPln($set, $get)),
@@ -49,7 +49,7 @@ final class ProgramPointSettlementFinanceFields
             Forms\Components\TextInput::make('settlement_planned_amount_pln')
                 ->label(fn (Get $get): string => self::isForeignCurrency($get('settlement_planned_currency_id')) && ! (bool) ($get('settlement_planned_convert_to_pln') ?? true)
                     ? 'Suma w PLN'
-                    : 'Plan = PLN')
+                    : 'Planowane = PLN')
                 ->numeric()
                 ->readOnly()
                 ->suffix('PLN')
@@ -176,7 +176,7 @@ final class ProgramPointSettlementFinanceFields
                 ->nullable(),
 
             Forms\Components\DatePicker::make('paid_at')
-                ->label('Zapłacone dnia')
+                ->label('Data zapłaty')
                 ->nullable(),
 
             Forms\Components\Textarea::make('notes')
@@ -209,7 +209,7 @@ final class ProgramPointSettlementFinanceFields
             self::payableUntilField('due_date'),
 
             Forms\Components\TextInput::make('actual_amount')
-                ->label('Wpłacono')
+                ->label('Zapłacono')
                 ->numeric()
                 ->live(onBlur: true)
                 ->afterStateUpdated(fn ($state, Set $set, Get $get) => self::recalculateActualPln($set, $get))

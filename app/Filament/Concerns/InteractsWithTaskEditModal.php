@@ -4,6 +4,7 @@ namespace App\Filament\Concerns;
 
 use App\Models\Task;
 use App\Services\NotificationService;
+use App\Support\Tasks\TaskDueDates;
 use Filament\Actions\Action;
 use Filament\Tables;
 use Illuminate\Contracts\View\View;
@@ -23,6 +24,9 @@ trait InteractsWithTaskEditModal
 
     public ?string $pendingCreateDueDate = null;
 
+    /** Livewire woła mount{Trait} automatycznie — ręczne mountInteractsWithTaskEditModal() dawało podwójny modal. */
+    protected bool $taskEditModalDeepLinkHandled = false;
+
     public function bootInteractsWithTaskEditModal(): void
     {
         $this->cacheAction($this->makeEditTaskAction());
@@ -37,6 +41,12 @@ trait InteractsWithTaskEditModal
 
     public function mountInteractsWithTaskEditModal(): void
     {
+        if ($this->taskEditModalDeepLinkHandled) {
+            return;
+        }
+
+        $this->taskEditModalDeepLinkHandled = true;
+
         $this->openDeepLinkedTaskIfPresent();
         $this->openDeepLinkedCreateTaskIfPresent();
     }
@@ -46,8 +56,30 @@ trait InteractsWithTaskEditModal
         $this->editingTaskId = $taskId;
         $this->editingTaskActiveRelationManager = $activeRelationManager;
         $this->clearConflictingMountedTableAction();
+        $this->markOpenedTaskNotificationsAsRead($taskId);
         $this->mountAction('editTask');
         $this->ensureMountedActionModalVisible();
+    }
+
+    /**
+     * Oznacza zadanie i komentarze jako przeczytane przy otwarciu z dowolnego poziomu
+     * (lista, impreza, topbar) — nie dopiero przy zamknięciu modala.
+     */
+    protected function markOpenedTaskNotificationsAsRead(int $taskId): void
+    {
+        $userId = auth()->id();
+        if (! $userId || $taskId <= 0) {
+            return;
+        }
+
+        $task = Task::query()->find($taskId);
+        if (! $task) {
+            return;
+        }
+
+        NotificationService::markTaskAsRead((int) $userId, $task);
+        NotificationService::markTaskCommentNotificationsAsRead((int) $userId, $taskId);
+        $this->dispatchTopbarNotificationRefresh();
     }
 
     #[On('open-edit-task-modal')]
@@ -186,7 +218,7 @@ trait InteractsWithTaskEditModal
 
     protected function createTaskDefaultDueDate(): mixed
     {
-        return $this->pendingCreateDueDate;
+        return $this->pendingCreateDueDate ?? TaskDueDates::defaultForNew();
     }
 
     protected function afterTaskModalSaved(Task $task): void

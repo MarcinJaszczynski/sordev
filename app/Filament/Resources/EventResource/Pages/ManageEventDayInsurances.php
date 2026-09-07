@@ -2,17 +2,13 @@
 
 namespace App\Filament\Resources\EventResource\Pages;
 
-use App\Filament\Forms\EventReadinessFields;
 use App\Filament\Resources\EventResource;
 use App\Filament\Resources\EventResource\Concerns\HasEventOperationsSubNavigation;
 use App\Filament\Resources\EventResource\Concerns\HasEventWorkflowContext;
 use App\Filament\Resources\EventResource\RelationManagers\DayInsurancesRelationManager;
-use Filament\Forms;
 use Filament\Forms\Form;
-use Filament\Forms\Set;
-use Filament\Resources\Pages\EditRecord;
 use Filament\Resources\Pages\Concerns\HasRelationManagers;
-use Illuminate\Database\Eloquent\Model;
+use Filament\Resources\Pages\EditRecord;
 
 class ManageEventDayInsurances extends EditRecord
 {
@@ -30,51 +26,17 @@ class ManageEventDayInsurances extends EditRecord
 
     protected static ?string $navigationIcon = 'heroicon-o-shield-check';
 
-    public static function shouldRegisterNavigation(array $parameters = []): bool
-    {
-        return false;
-    }
-
+    /**
+     * Polisy i produkty są w relation managerze (jeden modal „Dodaj ubezpieczenia”).
+     */
     public function form(Form $form): Form
     {
-        return $form->schema([
-            Forms\Components\Section::make('Polisa imprezy / gotowość')
-                ->description('Status „Gotowe” oznacza gotowość imprezy po stronie ubezpieczeń. Wgraj plik polisy i oryginalną listę ubezpieczonych — pilot zobaczy je w panelu Dokumenty i w pakiecie PDF. Plan / wpłaty / dokumenty NNW i KL: klik w wiersz tabeli (ten sam panel co w Finansach → Koszty).')
-                ->icon('heroicon-o-shield-check')
-                ->columns(['default' => 1, 'md' => 2])
-                ->schema([
-                    Forms\Components\Toggle::make('insurance_event_ready')
-                        ->label('Gotowość imprezy — ubezpieczenie OK')
-                        ->helperText('Zaznacz, gdy polisa jest domknięta (ustawia status „Gotowe”).')
-                        ->live()
-                        ->dehydrated(false)
-                        ->afterStateHydrated(function (Forms\Components\Toggle $component, ?Model $record): void {
-                            $component->state(($record?->insurance_status ?? 'pending') === 'completed');
-                        })
-                        ->afterStateUpdated(function (bool $state, Set $set): void {
-                            $set('insurance_status', $state ? 'completed' : 'pending');
-                        })
-                        ->columnSpanFull(),
-                    ...EventReadinessFields::insuranceModalSchema(),
-                ]),
-        ]);
+        return $form->schema([]);
     }
 
-    protected function mutateFormDataBeforeFill(array $data): array
+    protected function getFormActions(): array
     {
-        return array_merge($data, EventReadinessFields::insuranceFormState($this->record));
-    }
-
-    protected function handleRecordUpdate(Model $record, array $data): Model
-    {
-        EventReadinessFields::persistInsurance($record, $data);
-
-        return $record->refresh();
-    }
-
-    protected function getSavedNotificationTitle(): ?string
-    {
-        return 'Zapisano polisę imprezy';
+        return [];
     }
 
     protected function getHeaderActions(): array

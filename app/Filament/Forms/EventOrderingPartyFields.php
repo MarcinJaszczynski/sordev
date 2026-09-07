@@ -49,8 +49,9 @@ class EventOrderingPartyFields
                     ];
                 })
                 ->columnSpanFull(),
+            // Walidacja zamawiającego jest w beforeValidate (CreateEvent) / serwisie —
+            // required() na Hidden dawało nieczytelny błąd bez wskazania lookupu.
             Forms\Components\Hidden::make('client_name')
-                ->required()
                 ->dehydrated(),
             Forms\Components\Hidden::make('client_email')
                 ->dehydrated(),
@@ -210,6 +211,10 @@ class EventOrderingPartyFields
                     ->placeholder('np. rodzic odpowiedzialny za rozliczenie, nauczyciel jadący na wycieczkę')
                     ->helperText('Widoczne tylko wewnętrznie — pomaga rozróżnić kontakty przy tej samej firmie.')
                     ->columnSpanFull(),
+
+                Forms\Components\Hidden::make('goes_on_trip')
+                    ->default(false)
+                    ->dehydrated(),
 
                 Forms\Components\ViewField::make('party_details_preview')
                     ->label('Dane kontaktowe')

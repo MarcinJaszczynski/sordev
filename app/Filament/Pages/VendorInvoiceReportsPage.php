@@ -37,9 +37,7 @@ class VendorInvoiceReportsPage extends Page implements HasTable
 
     public static function canAccess(): bool
     {
-        $user = auth()->user();
-
-        return $user && ($user->hasRole(['admin', 'super_admin']) || static::canViewInvoices());
+        return \App\Support\ExecutiveAccess::canAccessSensitiveAnalytics();
     }
 
     public function getTitle(): string

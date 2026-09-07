@@ -5,12 +5,13 @@ namespace App\Services;
 use App\Models\Contact;
 use App\Models\Contractor;
 use App\Models\Event;
+use App\Support\PhoneValidation;
 use Illuminate\Support\Facades\Schema;
 
 class EventOrderingPartyService
 {
     /**
-     * @return array<int, array{contact_id: int|null, contractor_id: int|null, department_label: string|null, notes: string|null}>
+     * @return array<int, array{contact_id: int|null, contractor_id: int|null, department_label: string|null, notes: string|null, goes_on_trip: bool}>
      */
     public function partiesToFormState(Event $event): array
     {
@@ -33,6 +34,9 @@ class EventOrderingPartyService
                     'notes' => Schema::hasColumn('event_contractor', 'notes')
                         ? ($contractor->pivot->notes ?: null)
                         : null,
+                    'goes_on_trip' => Schema::hasColumn('event_contractor', 'goes_on_trip')
+                        ? (bool) ($contractor->pivot->goes_on_trip ?? false)
+                        : false,
                 ])
                 ->values()
                 ->all();
@@ -44,6 +48,7 @@ class EventOrderingPartyService
                 'contractor_id' => $event->contractor_id ? (int) $event->contractor_id : null,
                 'department_label' => null,
                 'notes' => null,
+                'goes_on_trip' => true,
             ]];
         }
 
@@ -80,10 +85,78 @@ class EventOrderingPartyService
                 $pivot['notes'] = $party['notes'];
             }
 
+            if (Schema::hasColumn('event_contractor', 'goes_on_trip')) {
+                $pivot['goes_on_trip'] = (bool) ($party['goes_on_trip'] ?? false);
+            }
+
             $event->orderingContractors()->attach($party['contractor_id'], $pivot);
         }
 
+        $this->ensureSingleTripContactFlag($event);
+
         $event->syncPrimaryClientFromOrderingParties();
+    }
+
+    /**
+     * Dokładnie jeden zamawiający z flagą „jedzie na wyjazd” (domyślnie pierwszy).
+     */
+    public function ensureSingleTripContactFlag(Event $event): void
+    {
+        if (! Schema::hasTable('event_contractor') || ! Schema::hasColumn('event_contractor', 'goes_on_trip')) {
+            return;
+        }
+
+        $rows = $event->orderingContractors()->orderByPivot('sort_order')->get();
+        if ($rows->isEmpty()) {
+            return;
+        }
+
+        $marked = $rows->filter(fn (Contractor $c): bool => (bool) ($c->pivot->goes_on_trip ?? false));
+
+        $targetId = $marked->count() === 1
+            ? (int) $marked->first()->id
+            : (int) $rows->first()->id;
+
+        foreach ($rows as $contractor) {
+            $should = (int) $contractor->id === $targetId;
+            if ((bool) ($contractor->pivot->goes_on_trip ?? false) !== $should) {
+                $event->orderingContractors()->updateExistingPivot($contractor->id, [
+                    'goes_on_trip' => $should,
+                ]);
+            }
+        }
+    }
+
+    /**
+     * Zamawiający oznaczony jako kontakt na wyjeździe (dla pilota).
+     *
+     * @return array{contractor: Contractor, contact: ?Contact}|null
+     */
+    public function tripContactForEvent(Event $event): ?array
+    {
+        if (! Schema::hasTable('event_contractor')) {
+            return null;
+        }
+
+        $event->loadMissing('orderingContractors');
+
+        if ($event->orderingContractors->isEmpty()) {
+            return null;
+        }
+
+        $contractor = $event->orderingContractors
+            ->first(fn (Contractor $c): bool => (bool) ($c->pivot->goes_on_trip ?? false))
+            ?? $event->orderingContractors->first();
+
+        $contactId = Schema::hasColumn('event_contractor', 'contact_id')
+            ? (int) ($contractor->pivot->contact_id ?? 0)
+            : 0;
+        $contact = $contactId > 0 ? Contact::query()->find($contactId) : null;
+
+        return [
+            'contractor' => $contractor,
+            'contact' => $contact,
+        ];
     }
 
     /**
@@ -128,8 +201,9 @@ class EventOrderingPartyService
                 $builder
                     ->where('first_name', 'like', '%'.$search.'%')
                     ->orWhere('last_name', 'like', '%'.$search.'%')
-                    ->orWhere('email', 'like', '%'.$search.'%')
-                    ->orWhere('phone', 'like', '%'.$search.'%');
+                    ->orWhere('email', 'like', '%'.$search.'%');
+
+                PhoneValidation::orWhereDigitsLike($builder, 'phone', $search);
             });
         } elseif ($linkedIds->isNotEmpty()) {
             // Bez wyszukiwania: tylko kontakty wybranej firmy (ładują się w preload).
@@ -185,8 +259,9 @@ class EventOrderingPartyService
                     ->where('name', 'like', '%'.$search.'%')
                     ->orWhere('nip', 'like', '%'.$search.'%')
                     ->orWhere('city', 'like', '%'.$search.'%')
-                    ->orWhere('email', 'like', '%'.$search.'%')
-                    ->orWhere('phone', 'like', '%'.$search.'%');
+                    ->orWhere('email', 'like', '%'.$search.'%');
+
+                PhoneValidation::orWhereDigitsLike($builder, 'phone', $search);
             });
         }
 
@@ -314,6 +389,57 @@ class EventOrderingPartyService
     }
 
     /**
+     * Linie zamawiającego pod ofertę Word — wyłącznie główny (sort_order / pierwszy).
+     * Instytucja + osoba (osobne wiersze), bez prefiksu „Główny”.
+     *
+     * @return list<array{institution: string, person: string}>
+     */
+    public function partiesForWordDocument(Event $event): array
+    {
+        if (! Schema::hasTable('event_contractor')) {
+            $fallback = trim((string) ($event->client_name ?? ''));
+
+            return $fallback !== ''
+                ? [['institution' => $fallback, 'person' => '']]
+                : [];
+        }
+
+        $event->loadMissing('orderingContractors');
+
+        $primary = $event->orderingContractors->values()->first();
+
+        if ($primary === null) {
+            $fallback = trim((string) ($event->client_name ?? ''));
+
+            return $fallback !== ''
+                ? [['institution' => $fallback, 'person' => '']]
+                : [];
+        }
+
+        $hasContactPivot = Schema::hasColumn('event_contractor', 'contact_id');
+        $contactId = $hasContactPivot ? (int) ($primary->pivot->contact_id ?? 0) : 0;
+        $person = '';
+
+        if ($contactId > 0) {
+            $contact = Contact::query()->find($contactId);
+            if ($contact) {
+                $person = trim($contact->displayName());
+            }
+        }
+
+        $institution = trim((string) ($primary->name ?? ''));
+
+        if ($institution === '' && $person === '') {
+            return [];
+        }
+
+        return [[
+            'institution' => $institution,
+            'person' => $person,
+        ]];
+    }
+
+    /**
      * Nagłówek wiersza w repeaterze (bez prefiksu roli — rolę pokazuje badge w wierszu).
      */
     public function formatPartyItemHeading(
@@ -348,11 +474,11 @@ class EventOrderingPartyService
 
     /**
      * @param  array<int, array<string, mixed>>|null  $parties
-     * @return array<int, array{contact_id: int|null, contractor_id: int, department_label: string|null, notes: string|null}>
+     * @return array<int, array{contact_id: int|null, contractor_id: int, department_label: string|null, notes: string|null, goes_on_trip: bool}>
      */
     public function normalizeParties(?array $parties): array
     {
-        return collect($parties ?? [])
+        $normalized = collect($parties ?? [])
             ->map(function (array $party): ?array {
                 $contractorId = isset($party['contractor_id']) ? (int) $party['contractor_id'] : null;
 
@@ -369,11 +495,29 @@ class EventOrderingPartyService
                     'notes' => filled($party['notes'] ?? null)
                         ? trim((string) $party['notes'])
                         : null,
+                    'goes_on_trip' => (bool) ($party['goes_on_trip'] ?? false),
                 ];
             })
             ->filter()
             ->values()
             ->all();
+
+        if ($normalized === []) {
+            return [];
+        }
+
+        $tripIndexes = collect($normalized)
+            ->keys()
+            ->filter(fn (int $index): bool => (bool) ($normalized[$index]['goes_on_trip'] ?? false))
+            ->values();
+
+        $tripIndex = $tripIndexes->count() === 1 ? (int) $tripIndexes->first() : 0;
+
+        foreach (array_keys($normalized) as $index) {
+            $normalized[$index]['goes_on_trip'] = $index === $tripIndex;
+        }
+
+        return $normalized;
     }
 
     /**
@@ -392,18 +536,18 @@ class EventOrderingPartyService
         $normalized = $this->normalizeParties($parties);
 
         if ($normalized === []) {
-            $errors['ordering_parties'] = 'Wybierz zamawiającego z wyszukiwarki lub użyj szybkiego wprowadzenia.';
+            $errors['ordering_parties'] = 'Wyszukaj zamawiającego w bazie albo kliknij „Dodaj nowego klienta”, uzupełnij dane i zatwierdź przyciskiem „Zapisz klienta i wybierz go”.';
         }
 
         if (blank($clientName)) {
-            $errors['client_name'] = 'Podaj dane zamawiającego przed zapisem imprezy.';
+            $errors['client_name'] = 'Brak wybranego zamawiającego. Po dodaniu nowego klienta kliknij „Zapisz klienta i wybierz go”, a dopiero potem zapisz imprezę.';
         }
 
         $phone = trim((string) ($clientPhone ?? ''));
         $email = trim((string) ($clientEmail ?? ''));
 
         if ($phone === '' && $email === '') {
-            $errors['client_contact'] = 'Podaj telefon lub e-mail zamawiającego.';
+            $errors['client_contact'] = 'Zamawiający musi mieć telefon lub e-mail. Uzupełnij to przy wyborze / dodawaniu klienta.';
         }
 
         return $errors;

@@ -50,12 +50,12 @@ class ProgramPointCostPricingTest extends TestCase
         $this->assertSame(44, ProgramPointCostPricing::costHeadcount($event));
         $this->assertSame(44, ProgramPointCostPricing::costHeadcount($event, null, false));
         $this->assertSame(48, ProgramPointCostPricing::costHeadcount($event, null, true));
-        $this->assertSame(44, ProgramPointCostPricing::costHeadcount($event, null, false, true, false));
+        $this->assertSame(45, ProgramPointCostPricing::costHeadcount($event, null, false, true, false));
         $this->assertSame(45, ProgramPointCostPricing::costHeadcount($event, null, false, false, true));
         $this->assertSame(49, ProgramPointCostPricing::costHeadcount($event, null, true, false, true));
     }
 
-    public function test_cost_headcount_adds_pilot_when_assigned(): void
+    public function test_cost_headcount_uses_qty_staff_for_pilot_not_assignment(): void
     {
         $user = User::factory()->create();
         $event = Event::factory()->create([
@@ -72,6 +72,9 @@ class ProgramPointCostPricingTest extends TestCase
 
         $this->assertSame(45, ProgramPointCostPricing::costHeadcount($event, null, false, true, false));
         $this->assertSame(50, ProgramPointCostPricing::costHeadcount($event, null, true, true, true));
+
+        $event->update(['assigned_to' => null]);
+        $this->assertSame(45, ProgramPointCostPricing::costHeadcount($event->fresh(), null, false, true, false));
     }
 
     public function test_breakdown_respects_include_gratis_in_cost_flag(): void
@@ -530,5 +533,56 @@ class ProgramPointCostPricingTest extends TestCase
         $this->assertSame(1, $withCrew['driver']);
         $this->assertStringContainsString('pilot', $withCrew['hint']);
         $this->assertStringContainsString('kierowca', $withCrew['hint']);
+    }
+
+    public function test_pilot_and_driver_counts_use_qty_variant_without_operational_assignment(): void
+    {
+        $pln = Currency::create([
+            'name' => 'Złoty',
+            'symbol' => 'PLN',
+            'code' => 'PLN',
+            'exchange_rate' => 1,
+        ]);
+
+        $event = Event::factory()->create([
+            'participant_count' => 40,
+            'assigned_to' => null,
+            'driver_name' => null,
+        ]);
+        EventQty::create([
+            'event_id' => $event->id,
+            'qty' => 40,
+            'gratis' => 5,
+            'staff' => 1,
+            'driver' => 1,
+        ]);
+
+        $point = EventProgramPoint::create([
+            'event_id' => $event->id,
+            'day' => 1,
+            'order' => 1,
+            'name' => 'Obiad',
+            'unit_price' => 10,
+            'quantity' => 1,
+            'group_size' => 1,
+            'currency_id' => $pln->id,
+            'convert_to_pln' => true,
+            'include_in_calculation' => true,
+            'include_in_program' => true,
+            'include_gratis_in_cost' => true,
+            'include_pilot_in_cost' => true,
+            'include_driver_in_cost' => true,
+            'active' => true,
+        ]);
+
+        $this->assertSame(1, ProgramPointCostPricing::pilotCount($event));
+        $this->assertSame(1, $event->resolveDriverCountForParticipantCount());
+
+        EventCostCalculator::clearRequestCache();
+        $result = EventCostCalculator::for($event->fresh())->calculate(40);
+        $programLine = collect($result['lines'])->firstWhere('name', 'Obiad');
+
+        $this->assertNotNull($programLine);
+        $this->assertSame(470.0, (float) $programLine['cost_pln']);
     }
 }

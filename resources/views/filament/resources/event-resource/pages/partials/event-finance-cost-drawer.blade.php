@@ -30,7 +30,7 @@
                         <h3 class="text-sm font-semibold text-gray-900 dark:text-gray-100">{{ $selected['name'] }}</h3>
                         <p class="mt-0.5 text-xs text-gray-500">
                             {{ $selected['source_label'] }}
-                            · płatnik planu: <span class="font-medium text-gray-700 dark:text-gray-300">{{ $selected['paid_by_label'] }}</span>
+                            · płatnik planowanych: <span class="font-medium text-gray-700 dark:text-gray-300">{{ $selected['paid_by_label'] }}</span>
                         </p>
                         @if (! empty($selected['contractor_details']))
                             <p class="mt-1 text-xs text-gray-600 dark:text-gray-300">{{ implode(' · ', $selected['contractor_details']) }}</p>
@@ -46,7 +46,7 @@
                     <h4 class="mb-2 text-[11px] font-semibold uppercase tracking-wide text-gray-500">Kwoty</h4>
                     <div class="grid grid-cols-2 gap-2 text-center text-xs">
                         <div class="rounded-lg border border-gray-100 bg-gray-50 p-2.5 dark:border-gray-800 dark:bg-gray-800/80">
-                            <div class="text-[10px] uppercase tracking-wide text-gray-500">Kalkulacja</div>
+                            <div class="text-[10px] uppercase tracking-wide text-gray-500">Szablon</div>
                             <div class="mt-0.5 font-semibold tabular-nums text-gray-800 dark:text-gray-100">{{ $selected['calculation_label'] }}</div>
                             @if (! empty($selected['pricing_hint']))
                                 <div class="mt-1 text-[10px] leading-snug text-gray-500">{{ $selected['pricing_hint'] }}</div>
@@ -58,7 +58,7 @@
                             class="rounded-lg border border-primary-100 bg-primary-50/50 p-2.5 text-center transition hover:bg-primary-50 dark:border-primary-900/40 dark:bg-primary-950/20 dark:hover:bg-primary-950/40"
                             title="Edytuj kwotę planowaną"
                         >
-                            <div class="text-[10px] uppercase tracking-wide text-primary-700 dark:text-primary-300">Plan</div>
+                            <div class="text-[10px] uppercase tracking-wide text-primary-700 dark:text-primary-300">Planowane</div>
                             <div class="mt-0.5 font-semibold tabular-nums text-primary-900 dark:text-primary-100">{{ $selected['planned_label'] }}</div>
                         </button>
                         <div class="rounded-lg border border-emerald-100 bg-emerald-50/60 p-2.5 dark:border-emerald-900/40 dark:bg-emerald-950/20">
@@ -91,22 +91,79 @@
                         @endif
                     </div>
 
+                    @if (! empty($selected['contractor_rollup']) && (int) ($selected['contractor_rollup']['cost_count'] ?? 0) > 1)
+                        @php $rollup = $selected['contractor_rollup']; @endphp
+                        <div class="mt-3 rounded-lg border border-sky-100 bg-sky-50/70 p-2.5 text-xs dark:border-sky-900/40 dark:bg-sky-950/20">
+                            <div class="font-semibold text-sky-900 dark:text-sky-100">
+                                {{ $rollup['contractor'] }} — łącznie ({{ (int) $rollup['cost_count'] }} poz.)
+                            </div>
+                            <div class="mt-1.5 grid grid-cols-3 gap-2 text-center">
+                                <div>
+                                    <div class="text-[10px] uppercase tracking-wide text-sky-700/80">Plan</div>
+                                    <div class="font-semibold tabular-nums text-sky-950 dark:text-sky-50">{{ $rollup['planned_label'] }}</div>
+                                </div>
+                                <div>
+                                    <div class="text-[10px] uppercase tracking-wide text-emerald-700/80">Zapłacono</div>
+                                    <div class="font-semibold tabular-nums text-emerald-900 dark:text-emerald-100">{{ $rollup['paid_label'] }}</div>
+                                </div>
+                                <div>
+                                    <div class="text-[10px] uppercase tracking-wide text-rose-700/80">Pozostało</div>
+                                    <div class="font-semibold tabular-nums text-rose-900 dark:text-rose-100">
+                                        @if (($rollup['remaining_pln'] ?? 0) > 0.01)
+                                            {{ $rollup['remaining_label'] }}
+                                        @else
+                                            —
+                                        @endif
+                                    </div>
+                                </div>
+                            </div>
+                            @if (! empty($rollup['costs']))
+                                <ul class="mt-2 space-y-1 border-t border-sky-100 pt-2 dark:border-sky-900/40">
+                                    @foreach ($rollup['costs'] as $sibling)
+                                        @php $isCurrent = (int) ($sibling['cost_id'] ?? 0) === (int) ($selected['cost_id'] ?? 0); @endphp
+                                        <li>
+                                            <button
+                                                type="button"
+                                                wire:click="openCost({{ (int) $sibling['cost_id'] }})"
+                                                @class([
+                                                    'flex w-full items-center justify-between gap-2 rounded px-1.5 py-1 text-left transition hover:bg-sky-100/80 dark:hover:bg-sky-900/40',
+                                                    'bg-sky-100/60 font-semibold dark:bg-sky-900/30' => $isCurrent,
+                                                ])
+                                            >
+                                                <span class="min-w-0 truncate">{{ $sibling['name'] }}</span>
+                                                <span class="shrink-0 tabular-nums text-gray-600 dark:text-gray-300">{{ $sibling['remaining_label'] }}</span>
+                                            </button>
+                                        </li>
+                                    @endforeach
+                                </ul>
+                            @endif
+                        </div>
+                    @endif
+
                     @if (! empty($selected['needs_overpayment_approval']))
-                        <div class="mt-2 space-y-2 rounded-md bg-red-100 px-2 py-1.5 text-xs text-red-900 dark:bg-red-950/50 dark:text-red-100">
-                            <span class="font-medium">Nadpłata wymaga potwierdzenia.</span>
-                            <label class="flex items-start gap-2 text-[11px] font-normal">
+                        <div class="mt-3 space-y-3 rounded-lg border-2 border-red-400 bg-red-50 p-3 text-sm text-red-950 shadow-sm dark:border-red-500/60 dark:bg-red-950/50 dark:text-red-50">
+                            <div class="flex items-start gap-2">
+                                <span class="mt-0.5 inline-flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-red-600 text-xs font-bold text-white">!</span>
+                                <div>
+                                    <p class="font-semibold">Nadpłata wymaga potwierdzenia</p>
+                                    <p class="mt-0.5 text-xs font-normal opacity-90">
+                                        Wpłata jest wyższa niż planowane — zatwierdź, aby oznaczyć pozycję jako opłaconą.
+                                    </p>
+                                </div>
+                            </div>
+                            <label class="flex items-start gap-2 text-xs font-normal">
                                 <input
                                     type="checkbox"
                                     wire:model.live="overpaymentConfirmAcknowledged"
-                                    class="mt-0.5 rounded border-red-400 text-red-700 focus:ring-red-600"
+                                    class="mt-0.5 h-4 w-4 rounded border-red-400 text-red-700 focus:ring-red-600"
                                 />
-                                <span>Potwierdzam, że nadpłata względem planu jest prawidłowa.</span>
+                                <span>Potwierdzam, że nadpłata względem planowanych jest prawidłowa.</span>
                             </label>
                             <button
                                 type="button"
                                 wire:click="approveOverpayment"
                                 @disabled(! $overpaymentConfirmAcknowledged)
-                                class="rounded-md bg-red-700 px-2 py-0.5 text-[11px] font-semibold text-white hover:bg-red-800 disabled:cursor-not-allowed disabled:opacity-50"
+                                class="inline-flex w-full items-center justify-center rounded-md bg-red-700 px-3 py-2 text-sm font-bold text-white hover:bg-red-800 disabled:cursor-not-allowed disabled:opacity-50"
                             >
                                 Zatwierdź nadpłatę
                             </button>
@@ -138,7 +195,7 @@
                     <div class="mb-3 space-y-2 rounded-lg border border-primary-200 bg-primary-50/40 p-3 dark:border-primary-900/40 dark:bg-primary-950/20">
                         <div class="text-xs font-semibold uppercase text-primary-800 dark:text-primary-200">Nowy koszt programu</div>
                         <p class="text-[11px] text-primary-900/80 dark:text-primary-100/80">
-                            Dodaj pozycję spoza kosztorysu — trafi do programu i rozliczenia.
+                            Dodaj pozycję spoza szablonu — trafi do programu i kosztów.
                         </p>
                         @include('filament.resources.event-resource.pages.partials.event-finance-cost-form')
                     </div>
@@ -167,40 +224,57 @@
                         </div>
                         <p class="text-[11px] text-primary-900/80 dark:text-primary-100/80">
                             Wybierz <strong>płatnika</strong> (kto zapłacił) i <strong>rodzaj wpłaty</strong>.
-                            Zaliczka / dopłata = częściowo; dopłata całkowita = reszta po zaliczce; wpłata całkowita = jednorazowo cały plan.
+                            Zaliczka / dopłata = częściowo; dopłata całkowita = reszta po zaliczce; wpłata całkowita = jednorazowo całe planowane.
                         </p>
                         <div class="grid gap-2 sm:grid-cols-2">
+                            <div>
+                                <label class="text-xs text-gray-600">Waluta</label>
+                                <select wire:model.live="paymentForm.currency_id" class="fi-select-input w-full rounded-lg border-gray-300 text-sm dark:border-gray-600 dark:bg-gray-800">
+                                    @foreach ($this->currencyOptions as $id => $label)
+                                        <option value="{{ $id }}">{{ $label }}</option>
+                                    @endforeach
+                                </select>
+                                @error('paymentForm.currency_id') <p class="text-xs text-rose-600">{{ $message }}</p> @enderror
+                            </div>
                             @if (! empty($paymentForm['is_foreign']))
+                                <div class="flex items-end">
+                                    <label class="flex items-center gap-2 text-xs text-gray-700 dark:text-gray-300">
+                                        <input id="payment-convert-to-pln" type="checkbox" wire:model.live="paymentForm.convert_to_pln" class="rounded border-gray-300" />
+                                        Przelicz na PLN
+                                    </label>
+                                </div>
                                 <div>
                                     <label class="text-xs text-gray-600">Kwota {{ $paymentForm['currency_symbol'] ?? '' }}</label>
                                     <input
                                         type="number"
                                         step="0.01"
-                                        wire:model="paymentForm.amount"
+                                        wire:model.live="paymentForm.amount"
                                         x-on:input="amount = $event.target.value"
                                         class="fi-input w-full rounded-lg border-gray-300 text-sm dark:border-gray-600 dark:bg-gray-800"
                                     />
                                     @error('paymentForm.amount') <p class="text-xs text-rose-600">{{ $message }}</p> @enderror
                                 </div>
-                                <div>
-                                    <label class="text-xs text-gray-600">Kurs (→ PLN)</label>
-                                    <input
-                                        type="number"
-                                        step="0.0001"
-                                        wire:model="paymentForm.rate"
-                                        x-on:input="rate = $event.target.value"
-                                        class="fi-input w-full rounded-lg border-gray-300 text-sm dark:border-gray-600 dark:bg-gray-800"
-                                    />
-                                    @error('paymentForm.rate') <p class="text-xs text-rose-600">{{ $message }}</p> @enderror
-                                </div>
-                                <div class="sm:col-span-2">
-                                    <label class="text-xs text-gray-600">Ekwiwalent PLN</label>
-                                    <div class="rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm font-medium tabular-nums dark:border-gray-700 dark:bg-gray-900" x-text="pln + ' PLN'"></div>
-                                </div>
+                                @if (! empty($paymentForm['convert_to_pln']))
+                                    <div>
+                                        <label class="text-xs text-gray-600">Kurs (→ PLN)</label>
+                                        <input
+                                            type="number"
+                                            step="0.0001"
+                                            wire:model.live="paymentForm.rate"
+                                            x-on:input="rate = $event.target.value"
+                                            class="fi-input w-full rounded-lg border-gray-300 text-sm dark:border-gray-600 dark:bg-gray-800"
+                                        />
+                                        @error('paymentForm.rate') <p class="text-xs text-rose-600">{{ $message }}</p> @enderror
+                                    </div>
+                                    <div class="sm:col-span-2">
+                                        <label class="text-xs text-gray-600">Ekwiwalent PLN</label>
+                                        <div class="rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm font-medium tabular-nums dark:border-gray-700 dark:bg-gray-900" x-text="pln + ' PLN'"></div>
+                                    </div>
+                                @endif
                             @else
                                 <div>
                                     <label class="text-xs text-gray-600">Kwota PLN</label>
-                                    <input type="number" step="0.01" wire:model="paymentForm.amount_pln" class="fi-input w-full rounded-lg border-gray-300 text-sm dark:border-gray-600 dark:bg-gray-800" />
+                                    <input type="number" step="0.01" wire:model.live="paymentForm.amount_pln" class="fi-input w-full rounded-lg border-gray-300 text-sm dark:border-gray-600 dark:bg-gray-800" />
                                     @error('paymentForm.amount_pln') <p class="text-xs text-rose-600">{{ $message }}</p> @enderror
                                 </div>
                             @endif
@@ -231,11 +305,15 @@
                             </div>
                             <div>
                                 <label class="text-xs text-gray-600">Data wpłaty</label>
-                                <input type="date" wire:model="paymentForm.paid_at" class="fi-input w-full rounded-lg border-gray-300 text-sm dark:border-gray-600 dark:bg-gray-800" />
+                                <input type="date" wire:model.live="paymentForm.paid_at" class="fi-input w-full rounded-lg border-gray-300 text-sm dark:border-gray-600 dark:bg-gray-800" />
+                                <p class="mt-0.5 text-[11px] text-gray-500">Wyczyść, jeśli tylko planujesz termin (bez księgowania).</p>
+                                @error('paymentForm.paid_at') <p class="text-xs text-rose-600">{{ $message }}</p> @enderror
                             </div>
                             <div>
-                                <label class="text-xs text-gray-600">Termin</label>
+                                <label class="text-xs text-gray-600">Termin (płatne do)</label>
                                 <input type="date" wire:model="paymentForm.due_date" class="fi-input w-full rounded-lg border-gray-300 text-sm dark:border-gray-600 dark:bg-gray-800" />
+                                <p class="mt-0.5 text-[11px] text-gray-500">Bez daty wpłaty = zaplanowana, świeci się na liście.</p>
+                                @error('paymentForm.due_date') <p class="text-xs text-rose-600">{{ $message }}</p> @enderror
                             </div>
                             <div class="sm:col-span-2">
                                 <label class="text-xs text-gray-600">Nr dokumentu / FV</label>
@@ -261,6 +339,28 @@
                                 </div>
                             @endif
                         </div>
+                        @if ($this->paymentFormNeedsOverpaymentAck())
+                            <div class="mt-2 space-y-2 rounded-lg border-2 border-red-400 bg-red-50 p-3 text-sm text-red-950 dark:border-red-500/60 dark:bg-red-950/50 dark:text-red-50">
+                                <p class="font-semibold">
+                                    Nadpłata względem planu:
+                                    {{ \App\Support\MoneyFormatter::format($this->paymentFormProjectedOverpaymentPln(), 'PLN') }}
+                                </p>
+                                <p class="text-xs opacity-90">
+                                    Kwota wpłaty jest wyższa niż planowane. Potwierdź, aby oznaczyć pozycję jako opłaconą.
+                                </p>
+                                <label class="flex items-start gap-2 text-xs font-normal">
+                                    <input
+                                        type="checkbox"
+                                        wire:model.live="paymentForm.acknowledge_overpayment"
+                                        class="mt-0.5 h-4 w-4 rounded border-red-400 text-red-700 focus:ring-red-600"
+                                    />
+                                    <span>Potwierdzam, że nadpłata względem planowanych jest prawidłowa.</span>
+                                </label>
+                                @error('paymentForm.acknowledge_overpayment')
+                                    <p class="text-xs text-rose-700">{{ $message }}</p>
+                                @enderror
+                            </div>
+                        @endif
                         <div class="flex gap-2 pt-1">
                             <x-filament::button size="sm" wire:click="savePayment" wire:loading.attr="disabled">
                                 {{ $editingPaymentId ? 'Zapisz zmiany' : 'Zapisz wpłatę' }}
@@ -283,7 +383,7 @@
                     @if ($showPlanForm)
                         <div class="mb-1 space-y-2 rounded-lg border border-primary-200 bg-primary-50/40 p-3 dark:border-primary-900/40 dark:bg-primary-950/20">
                             <div class="text-xs font-semibold uppercase text-primary-800 dark:text-primary-200">
-                                {{ ! empty($selected['is_program_point']) ? 'Edycja kwoty planowanej' : 'Edycja planu' }}
+                                {{ ! empty($selected['is_program_point']) ? 'Edycja kwoty planowanej' : 'Edycja planowanych' }}
                             </div>
                             @if (! empty($selected['is_program_point']))
                                 @php
@@ -297,7 +397,7 @@
                                         : null;
                                     $planIsForeign = \App\Support\CurrencyAmountDisplay::isForeignCurrency($planCurrencyId);
                                     $planConvert = (bool) ($planForm['convert_to_pln'] ?? true);
-                                    // Plan = planned_price (edytowalny); calculated_price to podpowiedź z formuły.
+                                    // Planowane = planned_price (edytowalny); calculated_price to podpowiedź z formuły.
                                     $planAmount = (float) ($planForm['planned_price'] ?? $planForm['calculated_price'] ?? 0);
                                     $planAmountPreview = $planAmount > 0
                                         ? \App\Support\CurrencyAmountDisplay::format(
@@ -325,7 +425,7 @@
                                         @endif
                                     </div>
                                     <div>
-                                        <label class="text-xs text-gray-600">{{ $unitPriceLabel }} (podpowiedź)</label>
+                                        <label class="text-xs text-gray-600">{{ $unitPriceLabel }} (podpowiedź ze szablonu)</label>
                                         <input
                                             type="number"
                                             step="0.01"
@@ -372,11 +472,11 @@
                                         <div class="sm:col-span-2 space-y-1 pt-1">
                                             <div class="flex items-center gap-2">
                                                 <input id="plan-convert-to-pln" type="checkbox" wire:model.live="planForm.convert_to_pln" class="rounded border-gray-300" />
-                                                <label for="plan-convert-to-pln" class="text-xs text-gray-700 dark:text-gray-200">Przelicz plan na PLN</label>
+                                                <label for="plan-convert-to-pln" class="text-xs text-gray-700 dark:text-gray-200">Przelicz planowane na PLN</label>
                                             </div>
                                             @if ($planAmountPreview)
                                                 <p class="text-[11px] text-gray-600 dark:text-gray-300">
-                                                    Podgląd planu: <span class="font-medium tabular-nums">{{ $planAmountPreview }}</span>
+                                                    Podgląd planowanych: <span class="font-medium tabular-nums">{{ $planAmountPreview }}</span>
                                                     @if ($planConvert)
                                                         <span class="text-gray-500">· wchodzi do sum PLN</span>
                                                     @else
@@ -423,7 +523,7 @@
                                         </label>
                                     </div>
                                     <div>
-                                        <label class="text-xs text-gray-600">Płatnik planu</label>
+                                        <label class="text-xs text-gray-600">Płatnik planowanych</label>
                                         <select wire:model="planForm.paid_by" class="fi-select-input w-full rounded-lg border-gray-300 text-sm dark:border-gray-600 dark:bg-gray-900">
                                             @foreach (\App\Models\EventSettlementCost::$paidByOptions as $k => $v)
                                                 <option value="{{ $k }}">{{ $v }}</option>
@@ -451,7 +551,7 @@
                             @else
                                 <div class="grid gap-2 sm:grid-cols-2">
                                     <div>
-                                        <label class="text-xs text-gray-600">Plan PLN</label>
+                                        <label class="text-xs text-gray-600">Planowane PLN</label>
                                         <input type="number" step="0.01" wire:model="planForm.planned_amount_pln" class="fi-input w-full rounded-lg border-gray-300 text-sm dark:border-gray-600 dark:bg-gray-900" />
                                         @error('planForm.planned_amount_pln') <p class="text-xs text-rose-600">{{ $message }}</p> @enderror
                                     </div>
@@ -483,7 +583,7 @@
                                 </div>
                             @endif
                             <div class="flex gap-2 pt-1">
-                                <x-filament::button size="sm" wire:click="savePlan">Zapisz plan</x-filament::button>
+                                <x-filament::button size="sm" wire:click="savePlan">Zapisz planowane</x-filament::button>
                                 <x-filament::button size="sm" color="gray" wire:click="$set('showPlanForm', false)">Anuluj</x-filament::button>
                             </div>
                         </div>
@@ -534,7 +634,7 @@
                                         </div>
                                     </div>
                                     <div>
-                                        <span class="text-gray-500">Kalkulacja</span>
+                                        <span class="text-gray-500">Szablon</span>
                                         <div class="font-medium tabular-nums text-gray-800 dark:text-gray-100">{{ $selected['calculation_label'] }}</div>
                                     </div>
                                 </div>
@@ -581,11 +681,13 @@
                                     <div class="mt-0.5 text-xs text-gray-500">
                                         @if (! empty($payment['paid_at']))
                                             data {{ $payment['paid_at'] }}
+                                        @elseif (! empty($payment['due_date']))
+                                            do zapłaty · termin {{ $payment['due_date'] }}
                                         @else
                                             bez daty wpłaty
                                         @endif
                                         · {{ $payment['method_label'] }}
-                                        @if (! empty($payment['due_date']))
+                                        @if (! empty($payment['paid_at']) && ! empty($payment['due_date']))
                                             · termin {{ $payment['due_date'] }}
                                         @endif
                                         @if (! empty($payment['document_number']))
@@ -593,6 +695,9 @@
                                         @endif
                                         @if (! empty($payment['reservation_label']))
                                             · rez. {{ $payment['reservation_label'] }}
+                                        @endif
+                                        @if (! empty($payment['status_label']))
+                                            · {{ $payment['status_label'] }}
                                         @endif
                                     </div>
                                     <div class="mt-1.5 flex gap-3 text-xs">
@@ -605,7 +710,7 @@
                     @endif
                 </section>
 
-                @if (! empty($selected['is_program_point']))
+                @if (! empty($selected['supports_reservation']) || ! empty($selected['is_program_point']))
                     @php
                         $drawerReservations = $this->drawerReservations;
                         $showReservationForm = $showReservationForm ?? $this->showReservationForm;

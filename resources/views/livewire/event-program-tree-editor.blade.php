@@ -8,17 +8,27 @@
         <div>
             <div class="program-page-eyebrow">Szablon imprezy</div>
             <h2 class="program-page-title">Program wydarzenia: {{ $eventTemplate->name }}</h2>
-            <p class="program-page-subtitle">Uporządkuj punkty programu, materiały, widoczność i zadania w jednym miejscu.</p>
+            <p class="program-page-subtitle">
+                @if ($readOnly)
+                    Podgląd programu szablonu (edycja wyłączona).
+                @else
+                    Uporządkuj punkty programu, materiały, widoczność i ustawienia w jednym miejscu.
+                @endif
+            </p>
         </div>
-        <div class="flex items-center space-x-3"> <a
+        <div class="flex items-center space-x-3">
+            <a
                 href="{{ \App\Filament\Resources\EventTemplateResource::getUrl('edit', ['record' => $eventTemplate->id]) }}"
                 class="program-toolbar-link">
                 ← Wróć do edycji szablonu
-            </a> <button wire:click="showAddModal"
-                class="program-toolbar-button">
-                <x-heroicon-o-plus-circle class="w-5 h-5 mr-2" />
-                Dodaj punkt programu
-            </button>
+            </a>
+            @unless ($readOnly)
+                <button wire:click="showAddModal"
+                    class="program-toolbar-button">
+                    <x-heroicon-o-plus-circle class="w-5 h-5 mr-2" />
+                    Dodaj punkt programu
+                </button>
+            @endunless
         </div>
     </div>
 
@@ -110,7 +120,7 @@
                                                            wire:click="togglePivotProperty({{ $point['pivot_id'] ?? $point['id'] }}, 'include_in_calculation')"
                                                            @checked($point['include_in_calculation'] ?? true)
                                                            class="form-checkbox text-blue-500">
-                                                    <span class="program-setting-text">Kalkulacja</span>
+                                                    <span class="program-setting-text">W kosztach</span>
                                                 </label>
                                                 <label class="program-setting-tile compact">
                                                     <input type="checkbox"
@@ -277,7 +287,7 @@
                                                                        wire:click="toggleChildPivotProperty({{ $child['id'] }}, 'include_in_calculation')"
                                                                        @checked($child['include_in_calculation'] ?? true)
                                                                        class="form-checkbox text-blue-500">
-                                                                <span class="program-setting-text">Kalkulacja</span>
+                                                                <span class="program-setting-text">W kosztach</span>
                                                             </label>
                                                             <label class="program-setting-tile compact">
                                                                 <input type="checkbox"
@@ -1278,7 +1288,7 @@
                             </div>
                             <div class="rounded-lg border border-gray-200 bg-slate-50 p-3">
                                 <p class="mb-2 text-sm font-semibold text-gray-800">Gdzie ma być ten punkt</p>
-                                <p class="mb-3 text-xs text-gray-500">Domyślnie w programie i w kalkulacji.</p>
+                                <p class="mb-3 text-xs text-gray-500">Domyślnie w programie i w kosztach.</p>
                                 <div class="grid grid-cols-1 sm:grid-cols-3 gap-3">
                                 <label class="flex items-center">
                                     <input type="checkbox" wire:model.live.debounce.500ms="modalData.include_in_program"
@@ -1290,7 +1300,7 @@
                                     <input type="checkbox" wire:model.live.debounce.500ms="modalData.include_in_calculation"
                                         id="include_in_calculation"
                                         class="rounded border-gray-300 text-primary-600 shadow-sm focus:border-primary-500 focus:ring-primary-500">
-                                    <span class="ml-2 text-sm font-medium text-gray-800">W kalkulacji</span>
+                                    <span class="ml-2 text-sm font-medium text-gray-800">W kosztach</span>
                                 </label>
                                 <label class="flex items-center">
                                     <input type="checkbox" wire:model.live.debounce.500ms="modalData.active" id="active"

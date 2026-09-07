@@ -1,5 +1,12 @@
 @extends('front.layout.master')
 
+@section('head')
+    @include('front.partials.seo', [
+        'pageTitle' => ($document->title ?? 'Dokument').' | Biuro Podróży RAFA',
+        'pageDescription' => \Illuminate\Support\Str::limit(strip_tags((string) ($document->excerpt ?: $document->content)), 160),
+    ])
+@endsection
+
 @section('main_content')
     <div class="page-top">
         <div class="container">

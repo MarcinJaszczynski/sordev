@@ -72,8 +72,7 @@ class PilotEventResource extends Resource
             return true;
         }
 
-        return $user->hasRole(['admin', 'super_admin', 'biuro'])
-            && \App\Http\Middleware\PilotPreviewMiddleware::isActive();
+        return app(PilotAccessService::class)->canStaffPreviewPortal($user);
     }
 
     protected static ?int $navigationSort = 1;
@@ -171,6 +170,29 @@ class PilotEventResource extends Resource
                         Infolists\Components\TextEntry::make('driver_name')->label('Kierowca'),
                         Infolists\Components\TextEntry::make('driver_phone')->label('Telefon kierowcy'),
                         Infolists\Components\TextEntry::make('vehicle_registration')->label('Rejestracja autokaru'),
+                        Infolists\Components\TextEntry::make('fleet_manufacture_year')
+                            ->label('Rocznik')
+                            ->state(function (Event $record): ?string {
+                                $record->loadMissing(['eventVehicles.vehicle']);
+
+                                return $record->mainFleetVehicle()?->manufactureYearLabel();
+                            })
+                            ->placeholder('—')
+                            ->visible(fn (Event $record): bool => filled($record->mainFleetVehicle()?->manufacture_year)),
+                        Infolists\Components\TextEntry::make('fleet_brand_model')
+                            ->label('Marka / model')
+                            ->state(function (Event $record): ?string {
+                                $record->loadMissing(['eventVehicles.vehicle']);
+                                $vehicle = $record->mainFleetVehicle();
+                                if (! $vehicle) {
+                                    return null;
+                                }
+
+                                $label = trim(implode(' ', array_filter([(string) $vehicle->brand, (string) $vehicle->model])));
+
+                                return $label !== '' ? $label : null;
+                            })
+                            ->placeholder('—'),
                     ]),
                 Infolists\Components\Section::make('Hotele')
                     ->visible(fn (Event $record): bool => $pilotDetailsVisible($record) && self::pilotHotelLines($record) !== [])

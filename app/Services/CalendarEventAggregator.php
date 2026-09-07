@@ -4,12 +4,14 @@ namespace App\Services;
 
 use App\Enums\TaskPriority;
 use App\Models\Event;
+use App\Models\EventDayInsurance;
 use App\Models\EventHotelStay;
 use App\Models\Reservation;
 use App\Models\Task;
 use App\Models\VendorInvoice;
 use App\Support\Calendar\CalendarEventLinks;
 use App\Support\Tasks\TaskContextRegistry;
+use App\Support\Tasks\TaskListColumn;
 use App\Support\Tasks\TaskQueryFilters;
 use Carbon\Carbon;
 use Illuminate\Support\Collection;
@@ -44,6 +46,10 @@ class CalendarEventAggregator
                 (bool) ($filters['show_finished_tasks'] ?? $filters['show_completed_tasks'] ?? false),
                 $filters,
             ));
+        }
+
+        if ($types->isEmpty() || $types->contains('insurances')) {
+            $items = $items->merge($this->dayInsurances($from, $to));
         }
 
         if ($types->isEmpty() || $types->contains('ksef')) {
@@ -231,7 +237,11 @@ class CalendarEventAggregator
             ->when(true, fn ($query) => TaskQueryFilters::topLevelOnly($query))
             ->when(
                 (bool) ($filters['tasks_only_urgent'] ?? false),
-                fn ($query) => $query->where('priority', TaskPriority::Urgent->value),
+                fn ($query) => TaskQueryFilters::applyUrgentOnly($query, true),
+            )
+            ->when(
+                filled($filters['tasks_due_filter'] ?? null),
+                fn ($query) => TaskQueryFilters::applyDueFilter($query, (string) $filters['tasks_due_filter']),
             )
             ->when(! $includeFinished, fn ($query) => TaskQueryFilters::excludeFinished($query))
             ->when(
@@ -246,7 +256,7 @@ class CalendarEventAggregator
                 ! filled($filters['tasks_scope'] ?? null) && (bool) ($filters['tasks_only_mine'] ?? false),
                 fn ($query) => TaskQueryFilters::assignedTo($query, $filters['user_id'] ?? null),
             )
-            ->with(['taskable', 'comments' => fn ($comments) => $comments->latest()->limit(1)])
+            ->with(['taskable', 'author', 'assignee', 'comments' => fn ($comments) => $comments->latest()->limit(1)])
             ->limit(200)
             ->get()
             ->map(function (Task $task) use ($finishedStatusIds): array {
@@ -272,6 +282,7 @@ class CalendarEventAggregator
                         $isUrgent ? 'operations-calendar-urgent' : null,
                     ])),
                     'extendedProps' => [
+                        'ownershipPreview' => TaskListColumn::ownershipLine($task),
                         'descriptionPreview' => $descriptionPreview,
                         'commentPreview' => $commentPreview,
                     ],
@@ -424,6 +435,63 @@ class CalendarEventAggregator
                     CalendarEventLinks::contractor($reservation->contractor_id),
                 ]);
             });
+    }
+
+    /** @return Collection<int, array<string, mixed>> */
+    protected function dayInsurances(Carbon $from, Carbon $to): Collection
+    {
+        if (! Schema::hasTable('event_day_insurance')) {
+            return collect();
+        }
+
+        $hasDoneColumn = Schema::hasColumn('event_day_insurance', 'is_done');
+
+        return EventDayInsurance::query()
+            ->with(['event', 'insurance'])
+            ->whereNotNull('insurance_id')
+            ->whereHas('event', fn ($q) => $q->whereNotNull('start_date'))
+            ->when($hasDoneColumn, fn ($q) => $q->where(function ($inner): void {
+                $inner->where('is_done', false)->orWhereNull('is_done');
+            }))
+            ->limit(300)
+            ->get()
+            ->map(function (EventDayInsurance $row): ?array {
+                $event = $row->event;
+                if (! $event?->start_date) {
+                    return null;
+                }
+
+                $date = $event->dateForProgramDay((int) $row->day);
+                if (! $date) {
+                    return null;
+                }
+
+                $product = $row->insurance?->name ?? 'Ubezpieczenie';
+                $code = $event->code ? $event->code.' — ' : '';
+
+                return $this->withLinks([
+                    'id' => 'insurance-'.$row->id,
+                    'title' => 'Ubezpieczenie: '.$code.$product.' (dzień '.$row->day.')',
+                    'start' => $date->toDateString(),
+                    'backgroundColor' => '#059669',
+                    'borderColor' => '#047857',
+                    'type' => 'insurances',
+                ], [
+                    CalendarEventLinks::link(
+                        \App\Filament\Resources\EventResource::getUrl('day-insurances', ['record' => $event->id]),
+                        'Ubezpieczenia imprezy',
+                        'heroicon-o-shield-check',
+                    ),
+                    CalendarEventLinks::event($event->id),
+                ]);
+            })
+            ->filter()
+            ->filter(function (array $item) use ($from, $to): bool {
+                $start = Carbon::parse($item['start']);
+
+                return $start->between($from, $to);
+            })
+            ->values();
     }
 
     /** @return Collection<int, array<string, mixed>> */

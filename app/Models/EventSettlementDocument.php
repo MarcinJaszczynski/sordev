@@ -68,6 +68,16 @@ class EventSettlementDocument extends Model
         'other' => 'Inny dokument',
     ];
 
+    /** Krótkie etykiety do chipów w liście programu / finansów. */
+    public static array $documentTypeBadges = [
+        'invoice' => 'Faktura',
+        'payment_proof' => 'Dowód',
+        'wz' => 'WZ',
+        'receipt' => 'Paragon',
+        'insurance_policy' => 'Polisa',
+        'other' => 'Plik',
+    ];
+
     public static array $paymentMethods = [
         'cash' => 'Gotówka',
         'transfer' => 'Przelew',

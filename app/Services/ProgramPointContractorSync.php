@@ -5,12 +5,22 @@ namespace App\Services;
 use App\Models\EventProgramPoint;
 use App\Models\EventSettlementCost;
 use App\Models\Reservation;
+use App\Support\Reservations\ProgramPointReservationGroup;
 
 class ProgramPointContractorSync
 {
     public function sync(EventProgramPoint $point): void
     {
         if (! filled($point->contractor_id)) {
+            return;
+        }
+
+        // Set nadrzędny: kontrahent = miejsce — nie ruszamy kosztów/rezerwacji (w tym podpunktów).
+        if ($point->isSetParent()) {
+            if (ProgramPointReservationGroup::hasColumn() && filled($point->reservation_id)) {
+                $point->forceFill(['reservation_id' => null])->saveQuietly();
+            }
+
             return;
         }
 

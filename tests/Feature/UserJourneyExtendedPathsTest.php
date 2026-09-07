@@ -108,13 +108,13 @@ class UserJourneyExtendedPathsTest extends TestCase
             ->where('taskable_id', $event->id)
             ->get();
 
-        $this->assertCount(1, $tasks);
+        $this->assertCount(2, $tasks);
         $this->assertTrue(
             $tasks->contains(fn (Task $task): bool => str_contains((string) $task->title, 'Nowe zapytanie:')),
         );
-        $this->assertTrue(
-            $tasks->pluck('assignee_id')->contains($biuro->id)
-            || $tasks->pluck('assignee_id')->contains($this->admin->id),
+        $this->assertEqualsCanonicalizing(
+            [$this->admin->id, $biuro->id],
+            $tasks->pluck('assignee_id')->all(),
         );
     }
 

@@ -5,24 +5,24 @@
     ])
 
     @if($this->readOnly)
-        <div class="mb-4 rounded-xl border border-blue-200 bg-blue-50 px-4 py-3 text-sm text-blue-950">
+        <div class="portal-notice portal-notice--accent">
             Podgląd tylko do odczytu — zapis świadczeń jest wyłączony.
         </div>
     @endif
 
     @if($this->catalog === [])
-        <div class="client-portal-section text-sm text-slate-600">
+        <div class="client-portal-section text-sm text-[#5F5E5A]">
             Biuro nie zdefiniowało dodatkowych świadczeń na umowie.
         </div>
     @elseif($this->participants === [])
-        <div class="client-portal-section text-sm text-slate-600">
+        <div class="client-portal-section text-sm text-[#5F5E5A]">
             Brak uczestników do przypisania świadczeń.
         </div>
     @else
         <div class="space-y-4">
             @foreach($this->participants as $participant)
                 <section class="client-portal-section" wire:key="extras-p-{{ $participant->id }}">
-                    <h3 class="text-sm font-semibold text-slate-900">{{ $participant->fullName() ?: 'Uczestnik #'.$participant->id }}</h3>
+                    <h3 class="text-sm font-semibold text-[#2C2C2A]">{{ $participant->fullName() ?: 'Uczestnik #'.$participant->id }}</h3>
                     <div class="mt-3 grid gap-3 md:grid-cols-2">
                         @foreach($this->catalog as $extra)
                             @if(($extra['applies'] ?? 'participant') !== 'participant')
@@ -33,10 +33,10 @@
                                 $options = $extra['options'] ?? [];
                             @endphp
                             <div>
-                                <label class="mb-1 block text-xs text-slate-600">
+                                <label class="mb-1 block text-xs text-[#5F5E5A]">
                                     {{ $extra['label'] }}
                                     @if(($extra['per_unit_pln'] ?? 0) > 0)
-                                        <span class="text-[#0663fc]">(+{{ number_format($extra['per_unit_pln'], 2, ',', ' ') }} PLN)</span>
+                                        <span class="text-[#0C447C]">(+{{ number_format($extra['per_unit_pln'], 2, ',', ' ') }} PLN)</span>
                                     @endif
                                 </label>
                                 @if(count($options) > 0)

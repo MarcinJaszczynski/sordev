@@ -42,7 +42,7 @@ class ClientGroupPaymentsPage extends Page
 
     public function getTitle(): string|Htmlable
     {
-        return 'Wpłaty grupy: '.$this->event->name;
+        return $this->event->name;
     }
 
     public static function urlFor(Event $event): string

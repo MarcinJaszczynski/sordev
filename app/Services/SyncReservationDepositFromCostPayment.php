@@ -23,6 +23,16 @@ final class SyncReservationDepositFromCostPayment
             return;
         }
 
+        // Zaplanowana zaliczka (termin bez wpłaty) — nie oznaczaj depozytu rezerwacji jako zapłaconego.
+        if (! SettlementPaymentHealthService::isBookedPaymentStatus($payment->payment_status)
+            || (
+                blank($payment->paid_at)
+                && (float) ($payment->actual_amount ?? 0) <= 0.009
+                && (float) ($payment->actual_amount_pln ?? 0) <= 0.009
+            )) {
+            return;
+        }
+
         if ($plan->source_type !== 'program_point' || ! $plan->source_id) {
             return;
         }
@@ -307,6 +317,13 @@ final class SyncReservationDepositFromCostPayment
             ->where(function ($query): void {
                 $query->whereIn('advance_type', ['advance', 'deposit'])
                     ->orWhere('payment_status', 'advance_paid');
+            })
+            // Tylko zaksięgowane — zaplanowana zaliczka (advance_required bez paid_at) nie zamyka depozytu.
+            ->where(function ($query): void {
+                $query->whereIn('payment_status', SettlementPaymentHealthService::BOOKED_PAYMENT_STATUSES)
+                    ->orWhereNotNull('paid_at')
+                    ->orWhere('actual_amount', '>', 0)
+                    ->orWhere('actual_amount_pln', '>', 0);
             });
     }
 

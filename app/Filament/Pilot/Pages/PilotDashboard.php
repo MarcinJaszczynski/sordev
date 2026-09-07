@@ -6,7 +6,7 @@ use App\Filament\Pilot\Resources\PilotEventResource;
 use App\Filament\Pilot\Widgets\PilotOverviewWidget;
 use App\Filament\Pilot\Widgets\PilotTripCalendarWidget;
 use App\Filament\Pilot\Widgets\PilotUpcomingTripsWidget;
-use App\Http\Middleware\PilotPreviewMiddleware;
+use App\Services\PilotAccessService;
 use Filament\Pages\Dashboard as BaseDashboard;
 use Illuminate\Support\Facades\Auth;
 
@@ -53,6 +53,6 @@ class PilotDashboard extends BaseDashboard
             return true;
         }
 
-        return $user->hasRole(['admin', 'super_admin']) && PilotPreviewMiddleware::isActive();
+        return app(PilotAccessService::class)->canStaffPreviewPortal($user);
     }
 }

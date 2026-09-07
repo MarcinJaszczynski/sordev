@@ -9,7 +9,9 @@ use App\Models\Contractor;
 use App\Models\ContractorType;
 use App\Models\Event;
 use App\Models\EventQty;
+use App\Models\EventVehicle;
 use App\Models\User;
+use App\Models\Vehicle;
 use App\Services\EventOrderingPartyService;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Livewire\Livewire;
@@ -203,7 +205,85 @@ class EventTransportPageTest extends TestCase
         $this->assertArrayHasKey($hotel->id, $all);
     }
 
-    public function test_transport_page_shows_red_warning_when_group_exceeds_bus_capacity(): void
+    public function test_transport_page_shows_red_warning_when_group_exceeds_fleet_capacity(): void
+    {
+        $admin = User::factory()->create(['status' => 'active']);
+        $admin->assignRole('admin');
+
+        $bus = Bus::factory()->create([
+            'name' => 'Bus Cennik 49',
+            'capacity' => 49,
+        ]);
+        $vehicle = Vehicle::factory()->create([
+            'registration_number' => 'WW TEST19',
+            'capacity' => 19,
+        ]);
+
+        $event = Event::factory()->create([
+            'status' => Event::STATUS_CONFIRMED,
+            'bus_id' => $bus->id,
+            'participant_count' => 18,
+        ]);
+        EventVehicle::query()->create([
+            'event_id' => $event->id,
+            'vehicle_id' => $vehicle->id,
+            'role' => 'main',
+        ]);
+        EventQty::query()->create([
+            'event_id' => $event->id,
+            'qty' => 18,
+            'gratis' => 3,
+            'staff' => 0,
+            'driver' => 0,
+        ]);
+
+        $this->actingAs($admin);
+
+        Livewire::test(ManageEventTransport::class, ['record' => $event->getKey()])
+            ->assertSee('przekracza pojemność autokaru')
+            ->assertSee('WW TEST19')
+            ->assertSee('Brakuje 2 miejsc');
+    }
+
+    public function test_transport_page_hides_capacity_warning_when_fleet_group_fits(): void
+    {
+        $admin = User::factory()->create(['status' => 'active']);
+        $admin->assignRole('admin');
+
+        $bus = Bus::factory()->create([
+            'name' => 'Bus Cennik 19',
+            'capacity' => 19,
+        ]);
+        $vehicle = Vehicle::factory()->create([
+            'registration_number' => 'WW OK49',
+            'capacity' => 49,
+        ]);
+
+        $event = Event::factory()->create([
+            'status' => Event::STATUS_CONFIRMED,
+            'bus_id' => $bus->id,
+            'participant_count' => 40,
+        ]);
+        EventVehicle::query()->create([
+            'event_id' => $event->id,
+            'vehicle_id' => $vehicle->id,
+            'role' => 'main',
+        ]);
+        EventQty::query()->create([
+            'event_id' => $event->id,
+            'qty' => 40,
+            'gratis' => 5,
+            'staff' => 0,
+            'driver' => 0,
+        ]);
+
+        $this->actingAs($admin);
+
+        Livewire::test(ManageEventTransport::class, ['record' => $event->getKey()])
+            ->assertDontSee('przekracza pojemność autokaru');
+    }
+
+    public function test_transport_page_does_not_warn_about_catalog_bus_without_fleet(): void
     {
         $admin = User::factory()->create(['status' => 'active']);
         $admin->assignRole('admin');
@@ -222,37 +302,6 @@ class EventTransportPageTest extends TestCase
             'event_id' => $event->id,
             'qty' => 18,
             'gratis' => 3,
-            'staff' => 0,
-            'driver' => 0,
-        ]);
-
-        $this->actingAs($admin);
-
-        Livewire::test(ManageEventTransport::class, ['record' => $event->getKey()])
-            ->assertSee('przekracza pojemność autokaru')
-            ->assertSee('Bus Test 19')
-            ->assertSee('Brakuje 2 miejsc');
-    }
-
-    public function test_transport_page_hides_capacity_warning_when_group_fits(): void
-    {
-        $admin = User::factory()->create(['status' => 'active']);
-        $admin->assignRole('admin');
-
-        $bus = Bus::factory()->create([
-            'name' => 'Bus OK 49',
-            'capacity' => 49,
-        ]);
-
-        $event = Event::factory()->create([
-            'status' => Event::STATUS_CONFIRMED,
-            'bus_id' => $bus->id,
-            'participant_count' => 40,
-        ]);
-        EventQty::query()->create([
-            'event_id' => $event->id,
-            'qty' => 40,
-            'gratis' => 5,
             'staff' => 0,
             'driver' => 0,
         ]);
@@ -335,7 +384,7 @@ class EventTransportPageTest extends TestCase
         Livewire::test(ManageEventTransport::class, ['record' => $event->getKey()])
             ->set('data.use_manual_transport_cost', true)
             ->set('data.manual_transport_cost', 4500.50)
-            ->assertSeeHtml('Koszt transportu (ryczałt):')
+            ->assertSeeHtml('Koszt transportu (ręczny):')
             ->assertSee('4 500,50 PLN', escape: false);
     }
 

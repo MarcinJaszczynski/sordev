@@ -26,6 +26,7 @@
                                 <a href="{{ \App\Support\Tasks\TaskNavigation::editUrl($task) }}"
                                    class="flex flex-col px-2 py-1.5 rounded hover:bg-orange-50 dark:hover:bg-orange-900/50 text-sm text-gray-900 dark:text-white">
                                     <span class="font-medium truncate">{{ $task->title }}</span>
+                                    <span class="text-[11px] text-gray-500 dark:text-gray-400 truncate">{{ \App\Support\Tasks\TaskListColumn::ownershipLine($task) }}</span>
                                     <span class="text-[11px] text-gray-400">{{ $task->created_at->diffForHumans() }}</span>
                                 </a>
                             @endforeach

@@ -4,6 +4,7 @@ namespace App\Models;
 
 use App\Models\Concerns\HasStickyNotes;
 use App\Models\Concerns\HasTasks;
+use App\Support\CurrencyAmountDisplay;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
@@ -86,7 +87,10 @@ class EventSettlementCost extends Model
         'program_point' => 'Program',
         'manual' => 'Nieprzewidziany',
         'transport' => 'Transport',
+        'transport_contractor' => 'Transport (przewoźnik)',
         'accommodation' => 'Nocleg',
+        'accommodation_hotel' => 'Nocleg (hotel)',
+        'accommodation_hotel_stay' => 'Nocleg (noc)',
         'insurance_day' => 'Ubezpieczenie',
     ];
 
@@ -256,7 +260,7 @@ class EventSettlementCost extends Model
     public function programPoint(): ?EventProgramPoint
     {
         if ($this->source_type === 'program_point' && $this->source_id) {
-            return EventProgramPoint::find($this->source_id);
+            return EventProgramPoint::withTrashed()->find($this->source_id);
         }
 
         return null;
@@ -293,7 +297,121 @@ class EventSettlementCost extends Model
             return false;
         }
 
-        return in_array($sourceType, ['program_point', 'transport', 'accommodation', 'insurance_day', 'manual'], true);
+        return in_array($sourceType, [
+            'program_point',
+            'transport',
+            'transport_contractor',
+            'accommodation',
+            'accommodation_hotel',
+            'accommodation_hotel_stay',
+            'insurance_day',
+            'manual',
+        ], true);
+    }
+
+    /**
+     * Koszt z zaliczką / wpłatą — sync planu nie może go sprzątać.
+     */
+    public function mustBePreserved(): bool
+    {
+        if (self::isPaymentSourceType($this->source_type)) {
+            if ((string) $this->payment_status === 'cancelled') {
+                return false;
+            }
+
+            return in_array((string) $this->payment_status, ['paid', 'advance_paid', 'partially_paid', 'advance_required'], true)
+                || (float) ($this->actual_amount_pln ?? 0) > 0.01
+                || (float) ($this->advance_amount ?? 0) > 0.01
+                || filled($this->paid_at);
+        }
+
+        if (in_array((string) $this->payment_status, ['paid', 'advance_paid', 'partially_paid'], true)) {
+            return true;
+        }
+
+        if ((float) ($this->actual_amount_pln ?? 0) > 0.01) {
+            return true;
+        }
+
+        if ($this->hasPaymentRows()) {
+            return true;
+        }
+
+        if (! filled($this->reservation_id)) {
+            return false;
+        }
+
+        $reservation = Reservation::query()->find((int) $this->reservation_id);
+
+        return $reservation instanceof Reservation && filled($reservation->deposit_paid_at);
+    }
+
+    public function hasPaymentRows(): bool
+    {
+        if (self::isPaymentSourceType($this->source_type)) {
+            return false;
+        }
+
+        $query = static::query()
+            ->where('settlement_id', $this->settlement_id)
+            ->where('source_type', $this->source_type.'_payment')
+            ->where('payment_status', '!=', 'cancelled');
+
+        if ($this->source_type === 'manual') {
+            return $query->where('source_id', $this->id)->exists();
+        }
+
+        return $this->source_id === null
+            ? $query->whereNull('source_id')->exists()
+            : $query->where('source_id', $this->source_id)->exists();
+    }
+
+    public function markDetached(string $label = 'odłączony od planu'): void
+    {
+        $name = trim((string) $this->name);
+        if ($name === '' || str_contains($name, $label)) {
+            return;
+        }
+
+        $this->update(['name' => $name.' — '.$label]);
+    }
+
+    /**
+     * Kasuje pusty koszt; zostawia (i oznacza) pozycję z wpłatami / zaliczką.
+     *
+     * @return bool true gdy rekord skasowano
+     */
+    public function discardIfNotPreserved(?string $detachedLabel = null): bool
+    {
+        if ($this->mustBePreserved()) {
+            if ($detachedLabel && self::isPlanSourceType($this->source_type)) {
+                $this->markDetached($detachedLabel);
+            }
+
+            return false;
+        }
+
+        if (self::isPlanSourceType($this->source_type)) {
+            $payments = static::query()
+                ->where('settlement_id', $this->settlement_id)
+                ->where('source_type', $this->source_type.'_payment')
+                ->when(
+                    $this->source_id !== null,
+                    fn ($query) => $query->where('source_id', $this->source_id),
+                    fn ($query) => $query->whereNull('source_id'),
+                )
+                ->get();
+
+            foreach ($payments as $payment) {
+                if (! $payment->mustBePreserved()) {
+                    $payment->delete();
+                }
+            }
+        }
+
+        $this->delete();
+
+        return true;
     }
 
     public static function isManualPaymentRow(self $cost): bool
@@ -354,6 +472,25 @@ class EventSettlementCost extends Model
             $plan = static::query()
                 ->where('settlement_id', $settlementId)
                 ->where('source_type', $planType)
+                ->whereNull('deleted_at')
+                ->orderBy('id')
+                ->first();
+
+            if ($plan) {
+                return $plan;
+            }
+        }
+
+        if (in_array($this->source_type, [
+            'accommodation_hotel_payment',
+            'accommodation_hotel_stay_payment',
+            'transport_contractor_payment',
+        ], true) && $this->source_id) {
+            $planType = str_replace('_payment', '', $this->source_type);
+            $plan = static::query()
+                ->where('settlement_id', $settlementId)
+                ->where('source_type', $planType)
+                ->where('source_id', (int) $this->source_id)
                 ->whereNull('deleted_at')
                 ->orderBy('id')
                 ->first();
@@ -489,9 +626,14 @@ class EventSettlementCost extends Model
     {
         static::saving(function (self $model) {
             // auto-przelicz PLN przy zmianie kwoty lub kursu
-            if ($model->isDirty(['actual_amount', 'actual_rate']) && $model->actual_amount !== null) {
-                $rate = $model->actual_rate ?? $model->planned_rate ?? 1;
-                $model->actual_amount_pln = $model->actual_amount * $rate;
+            if ($model->isDirty(['actual_amount', 'actual_rate', 'actual_currency_id', 'planned_convert_to_pln']) && $model->actual_amount !== null) {
+                $isForeign = CurrencyAmountDisplay::isForeignCurrency($model->actual_currency_id);
+                if ($isForeign && ! (bool) ($model->planned_convert_to_pln ?? true)) {
+                    $model->actual_amount_pln = null;
+                } else {
+                    $rate = $model->actual_rate ?? $model->planned_rate ?? 1;
+                    $model->actual_amount_pln = $model->actual_amount * $rate;
+                }
             }
             if ($model->isDirty(['planned_amount', 'planned_rate', 'planned_convert_to_pln', 'planned_currency_id'])) {
                 $model->planned_amount_pln = $model->resolvePlannedAmountPln();

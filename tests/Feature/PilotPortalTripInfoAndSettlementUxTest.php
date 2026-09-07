@@ -74,12 +74,13 @@ class PilotPortalTripInfoAndSettlementUxTest extends TestCase
             ->assertOk()
             ->assertSee('Adres podstawienia autokaru')
             ->assertSee('ul. Testowa 1, brama B')
-            ->assertSee('Godzina podstawienia')
+            ->assertSee('Podstawienie')
             ->assertSee('07:15')
-            ->assertSee('Godzina wyjazdu')
+            ->assertSee('Wyjazd')
             ->assertSee('07:45')
-            ->assertSee('Godzina powrotu')
+            ->assertSee('Powrót')
             ->assertSee('19:30')
+            ->assertSee('Planowana liczba uczestników')
             ->assertDontSee('Km transferu')
             ->assertDontSee('Km programu')
             ->assertDontSee('Miejsce startu')
@@ -189,6 +190,59 @@ class PilotPortalTripInfoAndSettlementUxTest extends TestCase
         $this->assertStringContainsString('Trasa: Warszawa – Paryż', $html);
     }
 
+    public function test_pilot_program_hides_times_when_point_has_hide_times(): void
+    {
+        if (! Schema::hasTable('event_program_points')) {
+            $this->markTestSkipped('Brak tabeli punktów programu.');
+        }
+
+        $pilot = User::factory()->create(['status' => 'active']);
+        $pilot->assignRole('pilot');
+
+        $event = Event::factory()->create([
+            'assigned_to' => $pilot->id,
+            'shared_with_pilot' => true,
+            'status' => Event::STATUS_CONFIRMED,
+            'start_date' => '2026-08-10',
+            'end_date' => '2026-08-10',
+            'duration_days' => 1,
+        ]);
+
+        EventProgramPoint::factory()->create([
+            'event_id' => $event->id,
+            'event_template_program_point_id' => null,
+            'name' => 'Zwiedzanie bez godzin',
+            'day' => 1,
+            'start_time' => '11:00:00',
+            'end_time' => '12:30:00',
+            'hide_times' => true,
+            'active' => true,
+            'include_in_program' => true,
+        ]);
+
+        EventProgramPoint::factory()->create([
+            'event_id' => $event->id,
+            'event_template_program_point_id' => null,
+            'name' => 'Lunch z godziną',
+            'day' => 1,
+            'start_time' => '13:00:00',
+            'end_time' => '14:00:00',
+            'hide_times' => false,
+            'active' => true,
+            'include_in_program' => true,
+        ]);
+
+        $html = view('pilot.partials.trip-program-timeline', [
+            'event' => $event->fresh(),
+        ])->render();
+
+        $this->assertStringContainsString('Zwiedzanie bez godzin', $html);
+        $this->assertStringContainsString('Lunch z godziną', $html);
+        $this->assertStringContainsString('13:00', $html);
+        $this->assertStringNotContainsString('11:00', $html);
+        $this->assertStringNotContainsString('12:30', $html);
+    }
+
     public function test_pilot_trip_info_shows_program_day_routes(): void
     {
         if (! Schema::hasColumn('events', 'program_day_routes')) {
@@ -289,7 +343,7 @@ class PilotPortalTripInfoAndSettlementUxTest extends TestCase
         ])
             ->assertOk()
             ->assertDontSee('Do przygotowania')
-            ->assertSee('Od biura')
+            ->assertSee('Rozliczenie zaliczki od biura')
             ->assertSee('Parking awaryjny')
             ->assertSee('Nieplanowany')
             ->assertSee('Dodaj wydatek');
@@ -359,7 +413,7 @@ class PilotPortalTripInfoAndSettlementUxTest extends TestCase
             ->assertSee('Zaliczka biura')
             ->assertSee('Biuro wpłaciło')
             ->assertSee('300')
-            ->assertSee('dopłata')
+            ->assertSee('pilot dopłaca')
             ->assertSee('500')
             ->call('startEditCost', $hotel->id)
             ->assertSet('editCostActualAmount', '500')

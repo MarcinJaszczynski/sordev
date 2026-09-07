@@ -71,6 +71,10 @@ class EventHotelRoomOccupant extends Model
             return 'reservation:'.$this->reservation_id;
         }
 
+        if ($this->event_participant_id) {
+            return 'participant:'.$this->event_participant_id;
+        }
+
         return null;
     }
 }

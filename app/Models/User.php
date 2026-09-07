@@ -35,6 +35,7 @@ class User extends Authenticatable implements FilamentUser
         'pesel',
         'pilot_panel_access_sent_at',
         'pilot_panel_access_sent_by',
+        'ui_preferences',
     ];
 
     /**
@@ -62,6 +63,7 @@ class User extends Authenticatable implements FilamentUser
             'status' => 'string',
             'birth_date' => 'date',
             'pilot_panel_access_sent_at' => 'datetime',
+            'ui_preferences' => 'array',
         ];
     }
 
@@ -104,6 +106,11 @@ class User extends Authenticatable implements FilamentUser
     public function messages(): HasMany
     {
         return $this->hasMany(Message::class);
+    }
+
+    public function portalAccesses(): HasMany
+    {
+        return $this->hasMany(EventPortalAccess::class);
     }
 
     /**

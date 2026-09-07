@@ -10,6 +10,7 @@ use Filament\Forms\Form;
 use Filament\Resources\RelationManagers\RelationManager;
 use Filament\Tables;
 use Filament\Tables\Table;
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Storage;
@@ -203,6 +204,12 @@ class DocumentsRelationManager extends RelationManager
                     ->label('Dodano')
                     ->dateTime('d.m.Y H:i')
                     ->sortable()
+                    ->toggleable(),
+
+                Tables\Columns\TextColumn::make('updated_at')
+                    ->label('Zmieniono')
+                    ->dateTime('d.m.Y H:i')
+                    ->sortable()
                     ->toggleable(isToggledHiddenByDefault: true),
             ])
             ->filters([
@@ -225,6 +232,26 @@ class DocumentsRelationManager extends RelationManager
                 Tables\Filters\Filter::make('is_invoice')
                     ->label('Tylko faktury')
                     ->query(fn ($query) => $query->where('is_invoice', true)),
+
+                Tables\Filters\Filter::make('created_at')
+                    ->label('Data dodania')
+                    ->form([
+                        Forms\Components\DatePicker::make('from')
+                            ->label('Od'),
+                        Forms\Components\DatePicker::make('until')
+                            ->label('Do'),
+                    ])
+                    ->query(function (Builder $query, array $data): Builder {
+                        return $query
+                            ->when(
+                                $data['from'],
+                                fn (Builder $query, $date): Builder => $query->whereDate('created_at', '>=', $date),
+                            )
+                            ->when(
+                                $data['until'],
+                                fn (Builder $query, $date): Builder => $query->whereDate('created_at', '<=', $date),
+                            );
+                    }),
             ])
             ->headerActions([
                 Tables\Actions\CreateAction::make()

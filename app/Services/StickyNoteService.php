@@ -31,6 +31,41 @@ class StickyNoteService
         return $query->get();
     }
 
+    public function countFor(Model $notable, ?string $category = null): int
+    {
+        $this->assertSupportedNotable($notable);
+
+        $query = StickyNote::query()
+            ->where('notable_type', $notable::class)
+            ->where('notable_id', $notable->getKey());
+
+        if ($category) {
+            $query->where('category', $category);
+        }
+
+        return $query->count();
+    }
+
+    /**
+     * Etykieta PL: „1 notatka” / „3 notatki” / „5 notatek”.
+     */
+    public static function countLabel(int $count): string
+    {
+        $abs = abs($count);
+        $mod10 = $abs % 10;
+        $mod100 = $abs % 100;
+
+        if ($abs === 1) {
+            $word = 'notatka';
+        } elseif ($mod10 >= 2 && $mod10 <= 4 && ($mod100 < 12 || $mod100 > 14)) {
+            $word = 'notatki';
+        } else {
+            $word = 'notatek';
+        }
+
+        return $count.' '.$word;
+    }
+
     public function latest(Model $notable): ?StickyNote
     {
         return $this->getStack($notable)->first();

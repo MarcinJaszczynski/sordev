@@ -5,9 +5,71 @@
         'fi-resource-record-' . $record->getKey(),
     ])
 >
-    @include('filament.resources.event-resource.components.operations-sub-navigation', ['record' => $record])
+    <div class="space-y-6 transport-page-root">
+        @include('filament.resources.event-resource.pages.partials.transport-page-styles')
 
-    <div class="space-y-6">
+        @php
+            /** @var \App\Models\Event $record */
+            $statusLabel = \App\Models\Event::getStatusOptions()[$record->status] ?? (string) $record->status;
+            $statusColor = \App\Models\Event::statusBadgeColor($record->status);
+
+            $driverSent = method_exists($record, 'isDriverPickupInfoSent') ? $record->isDriverPickupInfoSent() : false;
+            $driverBadgeLabel = $driverSent ? 'Wysłano do kierowcy' : 'Nie wysłano do kierowcy';
+
+            $driverBadgeClass = $driverSent ? 'transport-badge--success' : 'transport-badge--warning';
+
+            $statusBadgeClass = match ($statusColor) {
+                'success' => 'transport-badge--success',
+                'warning' => 'transport-badge--warning',
+                'danger' => 'transport-badge--danger',
+                default => 'transport-badge--muted',
+            };
+
+            $start = $record->start_date?->format('d.m.Y');
+            $end = $record->end_date?->format('d.m.Y');
+            $range = $start
+                ? ($end && $end !== $start ? "{$start}–{$end}" : $start)
+                : null;
+
+            $busName = $record->bus?->name;
+            $from = $record->startPlace?->name;
+            $to = $record->endPlace?->name;
+            $routeLine = $busName && $from && $to
+                ? "{$busName} · {$from} → {$to}"
+                : ($busName ? $busName : '—');
+
+            $transportNotesCount = app(\App\Services\StickyNoteService::class)
+                ->countFor($record, \App\Support\StickyNotes\StickyNoteCategory::TRANSPORT);
+        @endphp
+
+        {{-- 1) Pasek statusu --}}
+        <div class="transport-status-bar">
+            <div class="transport-status-title">
+                <span class="transport-status-icon">🚌</span>
+                <div>
+                    <p class="transport-status-main">{{ $record->name ?? 'Impreza' }}</p>
+                    <p class="transport-status-sub">{{ $routeLine }}</p>
+                </div>
+            </div>
+
+            <div class="transport-badges">
+                @if ($range)
+                    <span class="transport-badge transport-badge--muted" title="Data od – do">{{ $range }}</span>
+                @endif
+                @if ($transportNotesCount > 0)
+                    <a
+                        href="#transport-sticky-notes"
+                        class="transport-badge transport-badge--warning transport-badge--link"
+                        title="Przejdź do notatek transportu"
+                    >
+                        📝 {{ \App\Services\StickyNoteService::countLabel($transportNotesCount) }}
+                    </a>
+                @endif
+                <span class="transport-badge {{ $driverBadgeClass }}">{{ $driverBadgeLabel }}</span>
+                <span class="transport-badge {{ $statusBadgeClass }}">{{ $statusLabel }}</span>
+            </div>
+        </div>
+
         {{-- Panel finansów poza formularzem EditRecord — nested Livewire w Placeholderze psuje akcje Filament. --}}
         @livewire('settlement-aggregate-finance-panel', [
             'eventId' => $this->record->getKey(),
@@ -23,10 +85,13 @@
             >
                 {{ $this->form }}
 
-                <x-filament-panels::form.actions
-                    :actions="$this->getCachedFormActions()"
-                    :full-width="$this->hasFullWidthFormActions()"
-                />
+                {{-- 7) Sticky pasek akcji na dole (bez zmiany samych akcji Filament) --}}
+                <div class="transport-sticky-actions">
+                    <x-filament-panels::form.actions
+                        :actions="$this->getCachedFormActions()"
+                        :full-width="$this->hasFullWidthFormActions()"
+                    />
+                </div>
             </x-filament-panels::form>
         @endcapture
 

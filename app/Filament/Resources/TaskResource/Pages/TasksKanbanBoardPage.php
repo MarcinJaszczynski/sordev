@@ -3,7 +3,6 @@
 namespace App\Filament\Resources\TaskResource\Pages;
 
 use App\Enums\TaskPriority;
-use App\Enums\TaskSource;
 use App\Filament\Concerns\InteractsWithTaskEditModal;
 use App\Filament\Concerns\InteractsWithTaskOwnershipScope;
 use App\Filament\Concerns\MarksTaskInboxAsSeen;
@@ -28,6 +27,7 @@ use App\Models\Task;
 use App\Models\TaskStatus;
 use App\Models\User;
 use App\Support\Tasks\TaskAuthorization;
+use App\Support\Tasks\TaskDueDates;
 use App\Support\Tasks\TaskQueryFilters;
 use Filament\Actions;
 use Filament\Forms\Concerns\InteractsWithForms;
@@ -65,13 +65,6 @@ class TasksKanbanBoardPage extends Page implements HasForms
 
     public $searchTerm = '';
 
-    public $dueFilter = '';
-
-    /** office | system | '' (wszystkie) — domyślnie biuro. */
-    public string $sourceFilter = 'office';
-
-    public bool $showFinishedTasks = false;
-
     public ?int $eventFilter = null;
 
     // Sortowanie kolumn
@@ -104,13 +97,75 @@ class TasksKanbanBoardPage extends Page implements HasForms
         static::authorizeResourceAccess();
 
         $this->eventFilter = request()->integer('event') ?: null;
+        $this->tasksScope = $this->defaultTasksScope();
+        $this->showFinishedTasks = $this->defaultShowFinishedTasks();
 
         if ($this->eventFilter) {
             $this->quickTaskableType = Event::class;
             $this->quickTaskableId = $this->eventFilter;
         }
 
-        $this->mountInteractsWithTaskEditModal();
+        $this->restoreTaskQuickFiltersFromSession();
+        $this->restoreKanbanLayoutFromSession();
+    }
+
+    protected function defaultTasksScope(): string
+    {
+        return $this->eventFilter ? 'all' : 'assigned';
+    }
+
+    protected function defaultShowFinishedTasks(): bool
+    {
+        return true;
+    }
+
+    protected function taskQuickFiltersSessionKey(): ?string
+    {
+        $userId = auth()->id() ?? 'guest';
+
+        if ($this->eventFilter) {
+            return "tasks.kanban.filters.{$userId}.event";
+        }
+
+        return "tasks.kanban.filters.{$userId}";
+    }
+
+    protected function taskQuickFiltersPreferenceKey(): ?string
+    {
+        return $this->eventFilter ? 'task_filters.event' : 'task_filters.kanban';
+    }
+
+    protected function extraTaskQuickFiltersState(): array
+    {
+        return [
+            'hiddenColumns' => array_values(array_map('intval', $this->hiddenColumns)),
+            'priorityFilter' => is_string($this->priorityFilter) ? $this->priorityFilter : '',
+            'contextFilter' => is_string($this->contextFilter) ? $this->contextFilter : '',
+        ];
+    }
+
+    protected function restoreKanbanLayoutFromSession(): void
+    {
+        $saved = $this->loadStoredTaskQuickFilters();
+
+        if ($saved === []) {
+            return;
+        }
+
+        if (isset($saved['hiddenColumns']) && is_array($saved['hiddenColumns'])) {
+            $this->hiddenColumns = array_values(array_filter(
+                array_map('intval', $saved['hiddenColumns']),
+                fn (int $id): bool => $id > 0,
+            ));
+        }
+
+        if (isset($saved['priorityFilter']) && is_string($saved['priorityFilter'])) {
+            $this->priorityFilter = $saved['priorityFilter'];
+        }
+
+        if (isset($saved['contextFilter']) && is_string($saved['contextFilter'])) {
+            $this->contextFilter = $saved['contextFilter'];
+        }
     }
 
     protected function getHeaderActions(): array
@@ -196,11 +251,7 @@ class TasksKanbanBoardPage extends Page implements HasForms
                 ->where('taskable_id', $this->eventFilter);
         }
 
-        if (! $this->showFinishedTasks) {
-            TaskQueryFilters::excludeFinished($query);
-        }
-
-        $this->applyTasksScopeTo($query);
+        $this->applyTaskQuickFiltersTo($query, applyFinished: true, applySource: true);
 
         if ($this->priorityFilter) {
             $query->where('priority', $this->priorityFilter);
@@ -217,18 +268,6 @@ class TasksKanbanBoardPage extends Page implements HasForms
                 $q->where('title', 'like', '%'.$this->searchTerm.'%')
                     ->orWhere('description', 'like', '%'.$this->searchTerm.'%');
             });
-        }
-
-        if ($this->dueFilter === 'overdue') {
-            $query->whereNotNull('due_date')->where('due_date', '<', now());
-        }
-
-        if ($this->dueFilter === 'has_due_date') {
-            $query->whereNotNull('due_date');
-        }
-
-        if ($this->sourceFilter === TaskSource::Office->value || $this->sourceFilter === TaskSource::System->value) {
-            $query->where('source', $this->sourceFilter);
         }
 
         $tasks = $query->get();
@@ -333,6 +372,10 @@ class TasksKanbanBoardPage extends Page implements HasForms
 
             $task->save();
 
+            if (in_array((int) $task->status_id, TaskQueryFilters::finishedStatusIds(), true)) {
+                $this->showFinishedTasks = true;
+            }
+
             unset($this->tasks);
 
             if ($oldStatusId != $task->status_id) {
@@ -400,12 +443,11 @@ class TasksKanbanBoardPage extends Page implements HasForms
 
     public function refreshBoard()
     {
-        $this->tasksScope = 'assigned';
-        $this->showFinishedTasks = false;
-        $this->sourceFilter = 'office';
-        $this->reset(['priorityFilter', 'contextFilter', 'searchTerm', 'dueFilter', 'columnSorts']);
+        $this->resetTaskQuickFilters();
+        $this->reset(['priorityFilter', 'contextFilter', 'searchTerm', 'columnSorts']);
+        $this->hiddenColumns = [];
+        $this->persistTaskQuickFilters();
 
-        // Clear computed properties
         unset($this->tasks);
         unset($this->boardStats);
 
@@ -418,17 +460,13 @@ class TasksKanbanBoardPage extends Page implements HasForms
 
     public function applyQuickFilter(string $filter): void
     {
-        $this->reset(['priorityFilter', 'contextFilter', 'searchTerm', 'dueFilter']);
-        $this->sourceFilter = 'office';
-
         match ($filter) {
-            'high_priority' => $this->priorityFilter = TaskPriority::Urgent->value,
+            'high_priority' => $this->tasksOnlyUrgent = true,
             'overdue' => $this->dueFilter = 'overdue',
             default => null,
         };
 
-        unset($this->tasks);
-        unset($this->boardStats);
+        $this->afterTaskQuickFiltersChanged();
     }
 
     protected function afterTasksScopeChanged(): void
@@ -449,11 +487,7 @@ class TasksKanbanBoardPage extends Page implements HasForms
                 ->where('taskable_id', $this->eventFilter);
         }
 
-        if (! $this->showFinishedTasks) {
-            TaskQueryFilters::excludeFinished($baseQuery);
-        }
-
-        $this->applyTasksScopeTo($baseQuery);
+        $this->applyTaskQuickFiltersTo($baseQuery, applyFinished: true, applySource: true);
 
         $tasks = $baseQuery->get();
 
@@ -473,22 +507,13 @@ class TasksKanbanBoardPage extends Page implements HasForms
     public function updatedPriorityFilter(): void
     {
         unset($this->tasks);
+        $this->persistTaskQuickFilters();
     }
 
     public function updatedContextFilter(): void
     {
         unset($this->tasks);
-    }
-
-    public function updatedShowFinishedTasks(): void
-    {
-        unset($this->tasks);
-        unset($this->boardStats);
-    }
-
-    public function updatedDueFilter(): void
-    {
-        unset($this->tasks);
+        $this->persistTaskQuickFilters();
     }
 
     public function toggleColumn(int $statusId): void
@@ -498,6 +523,8 @@ class TasksKanbanBoardPage extends Page implements HasForms
         } else {
             $this->hiddenColumns[] = $statusId;
         }
+
+        $this->persistTaskQuickFilters();
     }
 
     public function sortColumn($statusId, $sortType)
@@ -548,13 +575,15 @@ class TasksKanbanBoardPage extends Page implements HasForms
                 $selectedDateTime = Carbon::parse($selectedDate);
 
                 if (mb_strlen((string) $selectedDate) <= 10) {
-                    $selectedDateTime->setTime(9, 0);
+                    $selectedDateTime = TaskDueDates::defaultForNew($selectedDateTime);
                 }
 
                 $this->quickTaskDueDate = $selectedDateTime->format('Y-m-d\TH:i');
             } catch (\Throwable $exception) {
-                $this->quickTaskDueDate = null;
+                $this->quickTaskDueDate = TaskDueDates::defaultForNew()->format('Y-m-d\TH:i');
             }
+        } else {
+            $this->quickTaskDueDate = TaskDueDates::defaultForNew()->format('Y-m-d\TH:i');
         }
 
         $this->showingQuickAdd = true;
@@ -713,11 +742,10 @@ class TasksKanbanBoardPage extends Page implements HasForms
                     'url' => EventResource::getUrl('edit', ['record' => $context->event_id]),
                 ] : null,
                 $context->event_id ? [
-                    'label' => 'Program imprezy',
-                    'url' => EventResource::getUrl('edit-program', ['record' => $context->event_id]),
-                ] : null,
-                $context->event_id ? [
-                    'label' => 'Punkt programu #'.$context->getKey(),
+                    'label' => \App\Support\Tasks\TaskContextRegistry::typedName(
+                        'Punkt programu',
+                        $context->name ?: $context->templatePoint?->name,
+                    ),
                     'url' => EventResource::getUrl('edit-program', ['record' => $context->event_id]),
                 ] : null,
             ])),

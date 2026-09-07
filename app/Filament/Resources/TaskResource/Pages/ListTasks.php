@@ -37,7 +37,17 @@ class ListTasks extends ListRecords
             parent::mount();
         }
 
-        $this->mountInteractsWithTaskEditModal();
+        $this->restoreTaskQuickFiltersFromSession();
+    }
+
+    protected function taskQuickFiltersSessionKey(): ?string
+    {
+        return 'tasks.list.filters.'.(auth()->id() ?? 'guest');
+    }
+
+    protected function taskQuickFiltersPreferenceKey(): ?string
+    {
+        return 'task_filters.list';
     }
 
     public function getDefaultActiveTab(): string|int|null
@@ -49,10 +59,14 @@ class ListTasks extends ListRecords
     {
         return [
             'active' => Tab::make('Aktywne')
-                ->icon('heroicon-o-user'),
+                ->icon('heroicon-o-user')
+                ->modifyQueryUsing(fn (Builder $query): Builder => TaskQueryFilters::excludeFinished($query)),
             'new' => Tab::make('Nowe (do zrobienia)')
                 ->icon('heroicon-o-sparkles')
                 ->modifyQueryUsing(fn (Builder $query): Builder => TaskQueryFilters::openTodo($query)),
+            'finished' => Tab::make('Zakończone')
+                ->icon('heroicon-o-check-circle')
+                ->modifyQueryUsing(fn (Builder $query): Builder => TaskQueryFilters::onlyFinished($query)),
             'manual' => Tab::make('Kolejność ręczna')
                 ->icon('heroicon-o-bars-3'),
             'all' => Tab::make('Wszystkie statusy')
@@ -65,7 +79,8 @@ class ListTasks extends ListRecords
         $table = parent::table($table);
 
         $table = $table->modifyQueryUsing(function (Builder $query): Builder {
-            return $this->applyTasksScopeTo($query);
+            // Status zakończonych obsługują zakładki (Aktywne / Wszystkie statusy).
+            return $this->applyTaskQuickFiltersTo($query, applyFinished: false, applySource: true);
         });
 
         if ($this->activeTab === 'manual') {

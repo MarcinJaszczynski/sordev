@@ -102,7 +102,7 @@ if (! $user) {
         '4.3' => '/admin/contacts',
         '5.1' => '/admin/tasks',
         '6.1' => '/admin/places',
-        '7.1' => '/admin/users',
+        '7.1' => '/admin/pilots',
         '7.3' => '/admin/legacy-events',
     ];
 

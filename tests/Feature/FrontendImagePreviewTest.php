@@ -60,4 +60,13 @@ it('generates missing previews for existing public images', function () {
 
     Storage::disk('public')->assertExists('event-templates/thumbs/sample.jpg');
     Storage::disk('public')->assertExists('event-templates/sample.webp');
+
+    $manager = new \Intervention\Image\ImageManager(new \Intervention\Image\Drivers\Gd\Driver);
+    $stored = $manager->read(Storage::disk('public')->get('event-templates/sample.jpg'));
+    $thumb = $manager->read(Storage::disk('public')->get('event-templates/thumbs/sample.jpg'));
+
+    expect($stored->width())->toBe(1440)
+        ->and($stored->height())->toBe(1080)
+        ->and($thumb->width())->toBe(\App\Services\ImageCompressionService::THUMBNAIL_SIZE)
+        ->and($thumb->height())->toBe(\App\Services\ImageCompressionService::THUMBNAIL_SIZE);
 });

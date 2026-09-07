@@ -5,11 +5,12 @@ namespace App\Filament\Resources\EventResource\Pages;
 use App\Actions\Events\RecalculateEventTotalsAction;
 use App\Actions\Events\SendDriverPickupInfoAction;
 use App\Data\RecalculateEventTotalsData;
+use App\Filament\Forms\EventVehicleFields;
 use App\Filament\Resources\EventResource;
 use App\Filament\Resources\EventResource\Concerns\HasEventOperationsSubNavigation;
 use App\Filament\Resources\EventResource\Concerns\HasEventWorkflowContext;
-use App\Filament\Forms\EventProgramDayRouteFields;
 use App\Models\Contractor;
+use App\Models\Event;
 use Filament\Actions;
 use Filament\Forms;
 use Filament\Forms\Form;
@@ -33,8 +34,13 @@ class ManageEventTransport extends EditRecord
 
     protected static ?string $navigationIcon = 'heroicon-o-truck';
 
+    /** @var int|null Virtualne pole floty — persist w afterSave */
+    protected ?int $pendingMainFleetVehicleId = null;
+
     public function form(Form $form): Form
     {
+        $transportCards = EventResource::carrierAndDriverSection();
+
         return $form->schema([
             Forms\Components\Placeholder::make('transport_empty_state')
                 ->hiddenLabel()
@@ -46,14 +52,45 @@ class ManageEventTransport extends EditRecord
                 })
                 ->content(new HtmlString(
                     '<div class="rounded-lg border border-dashed border-gray-300 bg-gray-50 px-4 py-6 text-center dark:border-gray-600 dark:bg-gray-800/50">'
-                    .'<p class="text-sm font-medium text-gray-900 dark:text-gray-100">Brak przypisanego autokaru</p>'
-                    .'<p class="mt-1 text-sm text-gray-500">Wybierz firmę transportową i autokar w sekcji „Przewoźnik i kierowca” poniżej — albo włącz ryczałt.</p>'
+                    .'<p class="text-sm font-medium text-gray-900 dark:text-gray-100">Brak przypisanego transportu</p>'
+                    .'<p class="mt-1 text-sm text-gray-500">Wybierz cennik autokaru, firmę i flotę w panelu po prawej — punkt startowy i adres podstawienia po lewej.</p>'
                     .'</div>'
                 ))
                 ->columnSpanFull(),
 
-            EventProgramDayRouteFields::section(),
-            EventResource::carrierAndDriverSection(),
+            Forms\Components\Grid::make(2)
+                ->extraAttributes(['class' => 'transport-transport-form-grid transport-page'])
+                ->schema([
+                    Forms\Components\Group::make()
+                        ->extraAttributes(['class' => 'transport-main-column'])
+                        ->schema([
+                            $transportCards[0], // Trasa i harmonogram
+                            $transportCards[2], // Szczegóły podstawienia i uwagi
+                        ]),
+
+                    Forms\Components\Group::make()
+                        ->extraAttributes(['class' => 'transport-sidebar sticky top-24 self-start'])
+                        ->schema([
+                            $transportCards[1], // Autokar, przewoźnik i kierowca (+ kontakty firmy)
+
+                            Forms\Components\Section::make('Notatki transportu')
+                                ->extraAttributes([
+                                    'class' => 'transport-sidebar-card',
+                                    'id' => 'transport-sticky-notes',
+                                ])
+                                ->schema([
+                                    Forms\Components\Placeholder::make('transport_notes_stack')
+                                        ->hiddenLabel()
+                                        ->content(fn (?Event $record) => view('filament.components.sticky-notes-stack', [
+                                            'notableType' => Event::class,
+                                            'notableId' => $record?->id,
+                                            'title' => 'Notatki - Transport',
+                                            'filterCategory' => \App\Support\StickyNotes\StickyNoteCategory::TRANSPORT,
+                                        ]))
+                                        ->hiddenOn('create'),
+                                ]),
+                        ]),
+                ]),
         ]);
     }
 
@@ -77,11 +114,16 @@ class ManageEventTransport extends EditRecord
             $data['driver_pickup_info_sent'] = $this->record->isDriverPickupInfoSent();
         }
 
-        return $data;
+        return EventVehicleFields::hydrateMainVehicleId($this->record, $data);
     }
 
     protected function mutateFormDataBeforeSave(array $data): array
     {
+        $this->pendingMainFleetVehicleId = filled($data['main_fleet_vehicle_id'] ?? null)
+            ? (int) $data['main_fleet_vehicle_id']
+            : null;
+        unset($data['main_fleet_vehicle_id']);
+
         if (Schema::hasColumn('events', 'transport_company_name')) {
             $contractorId = filled($data['transport_contractor_id'] ?? null)
                 ? (int) $data['transport_contractor_id']
@@ -155,6 +197,8 @@ class ManageEventTransport extends EditRecord
         } catch (\Throwable $e) {
             // ignore settlement refresh failures silently
         }
+
+        EventVehicleFields::persistMainVehicle($this->record, $this->pendingMainFleetVehicleId);
 
         $this->dispatch('event-price-table-refresh');
     }

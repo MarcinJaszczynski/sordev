@@ -68,6 +68,34 @@ class PilotProgramReservationDisplayTest extends TestCase
         $this->assertStringContainsString('emerald', $lines[0]['badge_classes']);
     }
 
+    public function test_hides_point_time_when_hide_times_enabled(): void
+    {
+        if (! Schema::hasTable('reservations')) {
+            $this->markTestSkipped('Tabela reservations nie istnieje.');
+        }
+
+        $event = Event::factory()->create();
+        $point = EventProgramPoint::factory()->create([
+            'event_id' => $event->id,
+            'start_time' => '14:15:00',
+            'hide_times' => true,
+        ]);
+
+        Reservation::create([
+            'event_id' => $event->id,
+            'program_point_id' => $point->id,
+            'status' => 'confirmed',
+            'booking_reference' => 'HID-1',
+            'reserved_at' => now(),
+        ]);
+
+        $lines = PilotProgramReservationDisplay::linesForPoint($point->fresh('reservations'));
+
+        $this->assertCount(1, $lines);
+        $this->assertNull($lines[0]['time']);
+        $this->assertSame('HID-1', $lines[0]['reference']);
+    }
+
     public function test_set_parent_shows_child_reservations_when_own_empty(): void
     {
         if (! Schema::hasTable('reservations')) {

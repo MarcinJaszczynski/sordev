@@ -8,7 +8,6 @@ use App\Models\Event;
 use App\Models\EventDocument;
 use App\Models\EventSettlement;
 use App\Models\EventSettlementDocument;
-use Filament\Actions\Action;
 use Filament\Pages\Page;
 use Illuminate\Contracts\Support\Htmlable;
 use Illuminate\Support\Collection;
@@ -47,12 +46,12 @@ class PilotDocumentsPage extends Page
 
     public function getTitle(): string|Htmlable
     {
-        return 'Dokumenty: '.$this->event->name;
+        return $this->event->name;
     }
 
     public function getSubheading(): ?string
     {
-        return 'Pakiet pilota i dokumenty udostępnione Ci przez biuro';
+        return null;
     }
 
     public static function urlFor(Event $event): string
@@ -142,13 +141,6 @@ class PilotDocumentsPage extends Page
 
     protected function getHeaderActions(): array
     {
-        return [
-            Action::make('pilot_pdf')
-                ->label('Teczka / pakiet pilota PDF')
-                ->icon('heroicon-o-document-text')
-                ->color('primary')
-                ->url(route('pilot.events.pdf', ['event' => $this->event, 'audience' => 'pilot']))
-                ->openUrlInNewTab(),
-        ];
+        return [];
     }
 }

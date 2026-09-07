@@ -72,10 +72,11 @@
 
         @if(!empty($detailedCalculations))
             <div class="mb-8">
-                <h4 class="text-md font-semibold mb-1">Szczegółowa kalkulacja kosztów (poglądowo, wg szablonu)</h4>
+                <h4 class="text-md font-semibold mb-1">Szczegółowa kalkulacja kosztów (program imprezy)</h4>
                 <p class="mb-4 text-xs text-gray-500 dark:text-gray-400">
-                    Rozbicie na dni/pozycje na bazie cen szablonu. Wiążąca jest „Kalkulacja (oficjalna)" na górze
-                    oraz pozycje cennika — uwzględniają ceny ustalone dla tej imprezy i plan hotelowy.
+                    Rozbicie na dni/pozycje z aktualnego programu imprezy (ceny i punkty tej imprezy).
+                    Usunięte punkty nie wchodzą do kalkulacji. Plan hotelowy i transport liczone osobno —
+                    zgodnie z oficjalnym kalkulatorem kosztów.
                 </p>
                 @include('partials.event-calculation-explanation')
 

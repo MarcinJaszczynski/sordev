@@ -2,58 +2,65 @@
 
 namespace App\Filament\Resources\UserResource\Pages;
 
-use App\Filament\Forms\ClientInvoiceRequestFormFields;
 use App\Filament\Resources\UserResource;
+use App\Services\PilotContractorAssignmentService;
 use App\Services\PilotOnboardingService;
-use App\Support\ClientInvoiceRequestAdminHelper;
 use App\Support\UserRoleManagement;
 use Filament\Actions;
 use Filament\Forms;
 use Filament\Notifications\Notification;
 use Filament\Resources\Pages\EditRecord;
-use Illuminate\Support\Facades\Schema;
 
 class EditUser extends EditRecord
 {
     protected static string $resource = UserResource::class;
 
+    protected mixed $pendingPilotBirthDate = null;
+
+    protected ?string $pendingPilotPesel = null;
+
+    protected mixed $pendingPilotPhone = null;
+
     protected function getHeaderActions(): array
     {
         return [
             $this->makeSendPilotCredentialsAction(),
-            Actions\Action::make('create_invoice_request')
-                ->label('Wniosek o fakturę')
-                ->icon('heroicon-o-document-plus')
-                ->color('gray')
-                ->visible(fn (): bool => Schema::hasTable('client_invoice_requests')
-                    && filled($this->record->email))
-                ->modalHeading('Wniosek o fakturę dla użytkownika')
-                ->modalIcon('heroicon-o-receipt-percent')
-                ->modalWidth('3xl')
-                ->modalSubmitActionLabel('Zapisz wniosek')
-                ->fillForm(fn (): array => ClientInvoiceRequestAdminHelper::prefillFromUser($this->record))
-                ->form(ClientInvoiceRequestFormFields::adminCreateSchema())
-                ->action(function (array $data): void {
-                    ClientInvoiceRequestAdminHelper::createFromAdminForm(
-                        $data,
-                        linkedUser: $this->record,
-                    );
-
-                    Notification::make()
-                        ->title('Utworzono wniosek o fakturę')
-                        ->success()
-                        ->send();
-                }),
             Actions\DeleteAction::make(),
         ];
     }
 
+    /**
+     * @param  array<string, mixed>  $data
+     * @return array<string, mixed>
+     */
+    protected function mutateFormDataBeforeFill(array $data): array
+    {
+        $state = app(PilotContractorAssignmentService::class)
+            ->demographicsFormStateForPortalUser($this->record);
+
+        $data['birth_date'] = $state['birth_date'];
+        $data['pesel'] = $state['pesel'];
+
+        return $data;
+    }
+
+    /**
+     * @param  array<string, mixed>  $data
+     * @return array<string, mixed>
+     */
     protected function mutateFormDataBeforeSave(array $data): array
     {
         $data = UserRoleManagement::applyPilotDefaults($data);
 
+        $this->pendingPilotBirthDate = $data['birth_date'] ?? null;
+        $this->pendingPilotPesel = isset($data['pesel']) ? (filled($data['pesel']) ? (string) $data['pesel'] : null) : null;
+        $this->pendingPilotPhone = $data['phone'] ?? null;
+        unset($data['birth_date'], $data['pesel']);
+
         if (filled($data['password'] ?? null)) {
             $data['password'] = bcrypt($data['password']);
+        } else {
+            unset($data['password']);
         }
 
         return $data;
@@ -61,9 +68,16 @@ class EditUser extends EditRecord
 
     protected function afterSave(): void
     {
-        if (! UserRoleManagement::canManageRolesAndPermissions(auth()->user())) {
-            UserRoleManagement::ensurePilotRole($this->record->fresh());
-        }
+        UserRoleManagement::ensurePilotRole($this->record->fresh());
+
+        app(PilotContractorAssignmentService::class)->persistPilotDemographicsFromPortalUser(
+            $this->record->fresh(),
+            $this->pendingPilotBirthDate,
+            $this->pendingPilotPesel,
+            filled($this->pendingPilotPhone) ? (string) $this->pendingPilotPhone : null,
+        );
+
+        $this->record->refresh();
     }
 
     protected function makeSendPilotCredentialsAction(): Actions\Action

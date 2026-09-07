@@ -221,15 +221,8 @@ final class EventPackageDocumentService
     {
         $this->assertAudience($audience);
 
-        if ($audience === EventPackageDocument::AUDIENCE_DRIVER) {
-            $data = $this->driverInfoBuilder->build($event);
-            $data['logoDataUri'] = $this->dataFactory->resolveLogoDataUri();
-            $data['audience'] = $audience;
-            $data['audienceLabel'] = EventPackageDocument::$audienceLabels[$audience];
-            $data['attachedFiles'] = collect();
-        } else {
-            $data = $this->dataFactory->make($event, $audience);
-        }
+        // Jeden kontrakt danych + szablony z pdf/packages/* (jak branch polskieznakipdf).
+        $data = $this->dataFactory->make($event, $audience);
 
         return $this->applyOverrides($data, $package);
     }
@@ -259,6 +252,8 @@ final class EventPackageDocumentService
 
         if (in_array('pilot_set_finance', $overrides['hide_sections'], true)) {
             $payload['pilotSetFinanceCards'] = [];
+            $payload['pilotExpenseRows'] = [];
+            $payload['pilotDueByPointId'] = [];
         }
 
         if (in_array('attachments_list', $overrides['hide_sections'], true)) {
@@ -275,7 +270,7 @@ final class EventPackageDocumentService
             EventPackageDocument::AUDIENCE_PILOT,
             EventPackageDocument::AUDIENCE_HOTEL,
             EventPackageDocument::AUDIENCE_FOLDER => 'pdf.packages.'.$audience,
-            EventPackageDocument::AUDIENCE_DRIVER => 'documents.driver-info',
+            EventPackageDocument::AUDIENCE_DRIVER => 'pdf.packages.driver',
             default => throw new InvalidArgumentException("Nieobsługiwany audience: {$audience}"),
         };
     }

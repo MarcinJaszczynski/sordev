@@ -5,6 +5,7 @@ namespace App\Filament\Resources;
 use App\Filament\Forms\PhoneInput;
 use App\Filament\Resources\UserResource\Pages;
 use App\Models\User;
+use App\Services\PilotContractorAssignmentService;
 use App\Support\FilamentNavigation;
 use App\Support\PilotIdentityValidation;
 use App\Support\UserRoleManagement;
@@ -17,29 +18,28 @@ use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Model;
 
 /**
- * Resource Filament dla modelu User.
- * Definiuje formularz, tabelę, uprawnienia i strony powiązane z użytkownikami.
+ * Konta pilotów (panel /pilot) — PESEL kanonicznie na Contractor, kopia na User.
  */
 class UserResource extends Resource
 {
     /**
-     * Powiązany model Eloquent
-     *
      * @var class-string<User>
      */
     protected static ?string $model = User::class;
 
-    protected static ?string $navigationIcon = 'heroicon-o-users';
+    protected static ?string $navigationIcon = 'heroicon-o-identification';
 
-    protected static ?string $navigationLabel = 'Zespół (piloci)';
+    protected static ?string $navigationLabel = 'Piloci';
 
-    protected static ?string $navigationGroup = FilamentNavigation::GROUP_EVENTS;
+    protected static ?string $navigationGroup = FilamentNavigation::GROUP_PEOPLE;
 
-    protected static ?int $navigationSort = 3;
+    protected static ?int $navigationSort = 1;
 
-    protected static ?string $modelLabel = 'użytkownik';
+    protected static ?string $slug = 'pilots';
 
-    protected static ?string $pluralModelLabel = 'użytkownicy';
+    protected static ?string $modelLabel = 'pilot';
+
+    protected static ?string $pluralModelLabel = 'piloci';
 
     protected static ?string $recordTitleAttribute = 'name';
 
@@ -90,34 +90,19 @@ class UserResource extends Resource
 
     public static function getEloquentQuery(): Builder
     {
-        $query = parent::getEloquentQuery();
-
-        if (! UserRoleManagement::canManageRolesAndPermissions(auth()->user())) {
-            return UserRoleManagement::scopePilotTeamMembers($query);
-        }
-
-        return $query;
+        return UserRoleManagement::scopePilotTeamMembers(parent::getEloquentQuery());
     }
 
-    /**
-     * Zwraca etykietę pojedynczą modelu
-     */
     public static function getModelLabel(): string
     {
-        return 'użytkownik';
+        return 'pilot';
     }
 
-    /**
-     * Zwraca etykietę mnogą modelu
-     */
     public static function getPluralModelLabel(): string
     {
-        return 'użytkownicy';
+        return 'piloci';
     }
 
-    /**
-     * Definicja formularza do edycji/dodawania użytkownika
-     */
     public static function form(Form $form): Form
     {
         return $form->schema([
@@ -131,7 +116,8 @@ class UserResource extends Resource
                     Forms\Components\TextInput::make('email')
                         ->label('E-mail')
                         ->email()
-                        ->required(),
+                        ->required()
+                        ->helperText('Ten sam e-mail co na karcie kontrahenta-pilota wiąże konto z PESEL.'),
                     PhoneInput::make('phone')
                         ->label('Telefon'),
                     Forms\Components\TextInput::make('password')
@@ -161,14 +147,29 @@ class UserResource extends Resource
 
                             return $record->pilot_panel_access_sent_at->format('d.m.Y H:i').' · '.$by;
                         })
-                        ->visible(fn (?User $record): bool => $record?->hasRole('pilot') ?? false)
+                        ->visible(fn (?User $record): bool => $record !== null)
                         ->columnSpanFull(),
                 ]),
 
-            Forms\Components\Section::make('Dane pilota')
-                ->description('Domyślnie każdy nowy użytkownik w tej sekcji jest pilotem.')
+            Forms\Components\Section::make('Dane osobowe pilota')
+                ->description('Źródło kanoniczne: karta kontrahenta typu „pilot” z tym samym e-mailem. Bez karty zapis idzie tylko na konto.')
                 ->columns(['default' => 1, 'md' => 2])
                 ->schema([
+                    Forms\Components\Placeholder::make('linked_contractor_info')
+                        ->label('Powiązany kontrahent')
+                        ->content(function (?User $record): string {
+                            if (! $record) {
+                                return 'Po zapisaniu — jeśli istnieje kontrahent-pilot z tym e-mailem — PESEL trafi na jego kartę.';
+                            }
+
+                            $label = app(PilotContractorAssignmentService::class)
+                                ->demographicsFormStateForPortalUser($record)['contractor_label'] ?? null;
+
+                            return filled($label)
+                                ? (string) $label.' — PESEL zapisze się na karcie kontrahenta i skopiuje na konto.'
+                                : 'Brak kontrahenta-pilota z tym e-mailem — PESEL tylko na koncie. Utwórz kartę w Kontrahentach, aby ujednolicić dane.';
+                        })
+                        ->columnSpanFull(),
                     Forms\Components\DatePicker::make('birth_date')
                         ->label('Data urodzenia')
                         ->displayFormat('d.m.Y')
@@ -181,48 +182,22 @@ class UserResource extends Resource
                         ->rules(PilotIdentityValidation::optionalPeselRules())
                         ->helperText('Opcjonalnie — 11 cyfr.'),
                 ]),
-
-            Forms\Components\Section::make('Uprawnienia i dostęp')
-                ->columns(1)
-                ->visible(fn (): bool => UserRoleManagement::canManageRolesAndPermissions(auth()->user()))
-                ->description('Role inne niż pilot oraz indywidualne uprawnienia mogą nadawać wyłącznie administratorzy.')
-                ->schema([
-                    Forms\Components\Select::make('roles')
-                        ->label('Role użytkownika')
-                        ->multiple()
-                        ->relationship('roles', 'name')
-                        ->preload()
-                        ->default(UserRoleManagement::defaultPilotRoleIds())
-                        ->helperText('Domyślnie: pilot. Inne role tylko dla administratorów.'),
-                    Forms\Components\Select::make('permissions')
-                        ->label('Indywidualne uprawnienia')
-                        ->multiple()
-                        ->relationship('permissions', 'name')
-                        ->preload()
-                        ->helperText('Opcjonalne uprawnienia poza rolami — tylko dla administratorów.'),
-                ]),
         ]);
     }
 
-    /**
-     * Definicja tabeli użytkowników w panelu
-     */
     public static function table(Table $table): Table
     {
         return $table->columns([
             Tables\Columns\TextColumn::make('name')->label('Imię i nazwisko')->searchable(),
             Tables\Columns\TextColumn::make('email')->label('E-mail')->searchable(),
             Tables\Columns\TextColumn::make('phone')->label('Telefon')->placeholder('—')->copyable(),
+            Tables\Columns\TextColumn::make('pesel')->label('PESEL')->placeholder('—')->toggleable(),
             Tables\Columns\TextColumn::make('status')->label('Status')->formatStateUsing(fn ($state) => $state === 'active' ? 'Aktywny' : 'Nieaktywny'),
             Tables\Columns\TextColumn::make('pilot_panel_access_sent_at')
                 ->label('Dostęp — e-mail')
                 ->dateTime('d.m.Y H:i')
                 ->placeholder('Nie wysłano')
                 ->toggleable(isToggledHiddenByDefault: true),
-            Tables\Columns\TextColumn::make('roles.name')
-                ->label('Role')
-                ->badge()
-                ->visible(fn (): bool => UserRoleManagement::canManageRolesAndPermissions(auth()->user())),
         ])
             ->actions([
                 Tables\Actions\EditAction::make()->label('Edytuj'),
@@ -233,17 +208,11 @@ class UserResource extends Resource
             ]);
     }
 
-    /**
-     * Relacje powiązane z użytkownikiem (brak w tym przypadku)
-     */
     public static function getRelations(): array
     {
         return [];
     }
 
-    /**
-     * Rejestracja stron powiązanych z tym resource (zgodnie z Filament 3)
-     */
     public static function getPages(): array
     {
         return [

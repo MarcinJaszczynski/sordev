@@ -7,14 +7,27 @@ use App\Filament\Concerns\InteractsWithTaskEditModal;
 use App\Filament\Resources\ContractorResource;
 use App\Filament\Resources\EventResource;
 use App\Filament\Resources\EventTemplateResource;
+use App\Models\Contact;
+use App\Models\Contractor;
 use App\Models\Event;
-use App\Services\EventWorkflowFinanceSummaryService;
+use App\Support\ContractorContactDetails;
+use Illuminate\Support\Facades\Schema;
 use Illuminate\Support\Str;
+use Livewire\Attributes\On;
 
 trait HasEventWorkflowContext
 {
     use HasWorkflowRecordContext;
     use InteractsWithTaskEditModal;
+
+    /** Wymusza re-render górnego paska workflow (kontakty / meta) po zmianach finansowych. */
+    public int $workflowFinanceTick = 0;
+
+    #[On('event-workflow-finance-changed')]
+    public function refreshWorkflowFinanceBar(): void
+    {
+        $this->workflowFinanceTick++;
+    }
 
     /**
      * @return array<string, mixed>
@@ -51,12 +64,30 @@ trait HasEventWorkflowContext
             'assignedUser',
             'officeCaretaker',
             'driverContractor',
+            'transportContractor',
             'hotelStays.contractor',
+            'hotelStays.contractorLocation',
+            'orderingContractors',
         ]);
 
-        $start = $event->start_date?->format('d.m.Y') ?? '—';
+        $start = $event->start_date?->format('d.m.Y');
         $end = $event->end_date?->format('d.m.Y');
-        $termin = $end && $end !== $start ? "{$start} – {$end}" : $start;
+        $startPlace = $event->startPlace?->name;
+        $pickupDetails = $this->formatWorkflowPickupPlace($event);
+        $wyjazdLabel = $this->formatWorkflowWyjazdLabel($startPlace, $pickupDetails);
+        $substitutionTime = $this->formatWorkflowTime($event->substitution_time ?? null);
+        $returnTime = $this->formatWorkflowTime($event->return_time ?? null);
+
+        $substitutionLabel = collect([$start, $substitutionTime])->filter()->implode(' ');
+        $returnLabel = collect([$end ?: $start, $returnTime])->filter()->implode(' ');
+
+        $termin = $start ?: '—';
+        if ($end && $end !== $start) {
+            $termin = "{$start} – {$end}";
+        }
+        if ($wyjazdLabel) {
+            $termin .= ' · '.$wyjazdLabel;
+        }
 
         $links = [];
         if ($event->event_template_id) {
@@ -86,13 +117,7 @@ trait HasEventWorkflowContext
         $gratis = $event->resolveGratisCountForParticipantCount($participants);
         $participantsDisplay = $gratis > 0 ? "{$participants}+{$gratis}" : (string) $participants;
 
-        $finance = app(EventWorkflowFinanceSummaryService::class)->forEvent($event);
-
-        $meta = [
-            ['label' => 'Kod', 'value' => $event->code ?? '—'],
-            ['label' => 'Uczestnicy', 'value' => $participantsDisplay],
-        ];
-
+        $meta = [];
         foreach ($this->eventWorkflowContactMeta($event) as $item) {
             $meta[] = $item;
         }
@@ -101,78 +126,265 @@ trait HasEventWorkflowContext
             'type' => 'Impreza',
             'title' => $event->name ?? 'Impreza #'.$event->id,
             'title_url' => EventResource::getUrl('edit', ['record' => $event->getKey()]),
-            'subtitle' => $termin.($event->startPlace?->name ? ' · '.$event->startPlace->name : ''),
+            'subtitle' => $termin,
+            'code' => $event->code ?: null,
+            'participants' => $participantsDisplay,
+            'start_date' => $start,
+            'end_date' => $end,
+            'start_place' => $wyjazdLabel,
+            'start_place_catalog' => $startPlace,
+            'pickup_place_details' => $pickupDetails,
+            'substitution_label' => $substitutionLabel !== '' ? $substitutionLabel : null,
+            'return_label' => $returnLabel !== '' ? $returnLabel : null,
             'status' => $statusLabel,
             'statusColor' => Event::statusBadgeColor($event->status),
             'meta' => $meta,
-            'finance' => $finance,
+            // Finanse (dostawcy / klienci / narzut) — tylko belka na stronie Finanse.
+            'finance' => null,
             'links' => $links,
         ];
     }
 
     /**
-     * Kontakty operacyjne do boxa „Impreza” (zamawiający, pilot, kierowca, hotel).
+     * Kontakty operacyjne do boxa „Impreza” (zamawiający, pilot, transport, hotel…).
      *
-     * @return list<array{label: string, value: string, url?: string}>
+     * @return list<array{label: string, value: string, hint?: string, url?: string}>
      */
     protected function eventWorkflowContactMeta(Event $event): array
     {
         $items = [];
 
-        $client = $this->formatWorkflowPerson(
-            filled($event->client_name) ? (string) $event->client_name : null,
-            filled($event->client_phone) ? (string) $event->client_phone : null,
-        );
-        if ($client !== null) {
-            $items[] = ['label' => 'Zamawiający', 'value' => $client];
+        $ordering = $this->formatWorkflowOrderingPartyMeta($event);
+        if ($ordering !== null) {
+            $items[] = $ordering;
         }
 
-        $caretaker = $this->formatWorkflowPerson(
+        $caretaker = $this->formatWorkflowPersonMeta(
             $event->officeCaretaker?->name,
             filled($event->officeCaretaker?->phone) ? (string) $event->officeCaretaker->phone : null,
         );
         if ($caretaker !== null) {
-            $items[] = ['label' => 'Opiekun imprezy', 'value' => $caretaker];
+            $items[] = array_merge(['label' => 'Opiekun imprezy'], $caretaker);
         }
 
-        $pilotName = $event->pilotContractor?->displayLabel()
-            ?: ($event->assignedUser?->name ?: null);
-        $pilotPhone = filled($event->pilotContractor?->phone)
-            ? (string) $event->pilotContractor->phone
-            : (filled($event->assignedUser?->phone) ? (string) $event->assignedUser->phone : null);
-        $pilot = $this->formatWorkflowPerson($pilotName, $pilotPhone);
+        $pilot = $this->formatWorkflowContractorMeta(
+            $event->pilotContractor,
+            fallbackName: $event->assignedUser?->name,
+            fallbackPhone: filled($event->assignedUser?->phone) ? (string) $event->assignedUser->phone : null,
+        );
         if ($pilot !== null) {
-            $pilotUrl = null;
-            if (filled($event->pilot_contractor_id)) {
-                $pilotUrl = ContractorResource::getUrl('edit', ['record' => $event->pilot_contractor_id]);
-            }
-            $items[] = array_filter([
-                'label' => 'Pilot',
-                'value' => $pilot,
-                'url' => $pilotUrl,
-            ], fn ($value): bool => $value !== null && $value !== '');
+            $items[] = array_merge(['label' => 'Pilot'], $pilot);
         }
 
-        $driverName = filled($event->driver_name)
-            ? (string) $event->driver_name
-            : ($event->driverContractor?->displayLabel() ?: null);
-        $driverPhone = filled($event->driver_phone)
-            ? (string) $event->driver_phone
-            : (filled($event->driverContractor?->phone) ? (string) $event->driverContractor->phone : null);
-        $driver = $this->formatWorkflowPerson($driverName, $driverPhone);
+        $transport = $this->formatWorkflowTransportMeta($event);
+        if ($transport !== null) {
+            $items[] = $transport;
+        }
+
+        $driver = $this->formatWorkflowPersonMeta(
+            filled($event->driver_name)
+                ? (string) $event->driver_name
+                : ($event->driverContractor?->displayLabel() ?: null),
+            filled($event->driver_phone)
+                ? (string) $event->driver_phone
+                : (filled($event->driverContractor?->phone) ? (string) $event->driverContractor->phone : null),
+        );
         if ($driver !== null) {
-            $items[] = ['label' => 'Kierowca', 'value' => $driver];
+            $driverMeta = $driver;
+            if (filled($event->driver_contractor_id)) {
+                $driverMeta['url'] = ContractorResource::getUrl('edit', ['record' => $event->driver_contractor_id]);
+            }
+            $items[] = array_merge(['label' => 'Kierowca'], $driverMeta);
         }
 
-        $hotel = $this->formatWorkflowHotelSummary($event);
+        $hotel = $this->formatWorkflowHotelMeta($event);
         if ($hotel !== null) {
-            $items[] = ['label' => 'Hotel', 'value' => $hotel];
+            $items[] = $hotel;
         }
 
         return $items;
     }
 
-    protected function formatWorkflowPerson(?string $name, ?string $phone): ?string
+    /**
+     * @return array{label: string, value: string, hint?: string, url?: string}|null
+     */
+    protected function formatWorkflowOrderingPartyMeta(Event $event): ?array
+    {
+        $trip = app(\App\Services\EventOrderingPartyService::class)->tripContactForEvent($event);
+        $contractor = $trip['contractor'] ?? $event->orderingContractors->first();
+
+        if ($contractor instanceof Contractor) {
+            $contact = $trip['contact'] ?? null;
+            if (! $contact) {
+                $contactId = (int) ($contractor->pivot->contact_id ?? 0);
+                if ($contactId > 0) {
+                    $contact = Contact::query()->find($contactId);
+                }
+            }
+
+            $meta = ContractorContactDetails::operationalMeta($contractor, null, $contact);
+            $extra = $event->orderingContractors->count() - 1;
+            $value = (string) ($meta['company_name'] ?? $contractor->displayLabel());
+            if ($extra > 0) {
+                $value .= " (+{$extra})";
+            }
+
+            $hint = $this->joinWorkflowHints([
+                $meta['contact_name'] ?? null,
+                $meta['phone'] ?? null,
+                $meta['email'] ?? null,
+                $meta['address'] ?? null,
+                Schema::hasColumn('event_contractor', 'goes_on_trip')
+                    && $event->orderingContractors->contains(fn (Contractor $c): bool => (bool) ($c->pivot->goes_on_trip ?? false))
+                    ? 'kontakt na wyjeździe'
+                    : null,
+            ]);
+
+            return array_filter([
+                'label' => 'Zamawiający',
+                'value' => $value,
+                'hint' => $hint,
+                'url' => ContractorResource::getUrl('edit', ['record' => $contractor->getKey()]),
+            ], fn ($v): bool => $v !== null && $v !== '');
+        }
+
+        $client = $this->formatWorkflowPersonMeta(
+            filled($event->client_name) ? (string) $event->client_name : null,
+            filled($event->client_phone) ? (string) $event->client_phone : null,
+        );
+        if ($client === null) {
+            return null;
+        }
+
+        if (filled($event->client_email)) {
+            $client['hint'] = $this->joinWorkflowHints([
+                $client['hint'] ?? null,
+                trim((string) $event->client_email),
+            ]);
+        }
+
+        return array_merge(['label' => 'Zamawiający'], $client);
+    }
+
+    /**
+     * @return array{label: string, value: string, hint?: string, url?: string}|null
+     */
+    protected function formatWorkflowTransportMeta(Event $event): ?array
+    {
+        $contractor = $event->transportContractor;
+        if ($contractor instanceof Contractor) {
+            $location = $contractor->usesBusinessLocations()
+                ? $contractor->defaultLocation()
+                : null;
+            $meta = ContractorContactDetails::operationalMeta($contractor, $location);
+            $hint = $this->joinWorkflowHints([
+                $meta['address'] ?? null,
+                $meta['phone'] ?? null,
+                $meta['email'] ?? null,
+                filled($event->driver_name) ? 'kierowca: '.$event->driver_name : null,
+                filled($event->vehicle_registration) ? 'rej. '.$event->vehicle_registration : null,
+            ]);
+
+            return array_filter([
+                'label' => 'Transport',
+                'value' => (string) ($meta['company_name'] ?? $contractor->displayLabel()),
+                'hint' => $hint,
+                'url' => ContractorResource::getUrl('edit', ['record' => $contractor->getKey()]),
+            ], fn ($v): bool => $v !== null && $v !== '');
+        }
+
+        if (filled($event->transport_company_name)) {
+            $hint = $this->joinWorkflowHints([
+                filled($event->driver_name) ? 'kierowca: '.$event->driver_name : null,
+                filled($event->driver_phone) ? (string) $event->driver_phone : null,
+                filled($event->vehicle_registration) ? 'rej. '.$event->vehicle_registration : null,
+            ]);
+
+            return array_filter([
+                'label' => 'Transport',
+                'value' => trim((string) $event->transport_company_name),
+                'hint' => $hint,
+            ], fn ($v): bool => $v !== null && $v !== '');
+        }
+
+        return null;
+    }
+
+    /**
+     * @return array{label: string, value: string, hint?: string, url?: string}|null
+     */
+    protected function formatWorkflowHotelMeta(Event $event): ?array
+    {
+        $stays = $event->hotelStays
+            ->filter(fn ($stay) => filled($stay->contractor_id))
+            ->values();
+
+        if ($stays->isEmpty()) {
+            return null;
+        }
+
+        $first = $stays->sortBy('day')->first();
+        $contractor = $first?->contractor;
+        if (! $contractor instanceof Contractor) {
+            return null;
+        }
+
+        $meta = ContractorContactDetails::operationalMeta($contractor, $first->contractorLocation);
+        $uniqueContractors = $stays
+            ->map(fn ($stay) => (int) $stay->contractor_id)
+            ->unique()
+            ->values();
+        $extra = $uniqueContractors->count() - 1;
+        $value = (string) ($meta['company_name'] ?? $contractor->displayLabel());
+        if ($extra > 0) {
+            $value .= " (+{$extra})";
+        }
+
+        $hint = $this->joinWorkflowHints([
+            $meta['branch_name'] ?? null,
+            $meta['address'] ?? null,
+            $meta['phone'] ?? null,
+            $meta['email'] ?? null,
+        ]);
+
+        return array_filter([
+            'label' => 'Hotel',
+            'value' => $value,
+            'hint' => $hint,
+            'url' => ContractorResource::getUrl('edit', ['record' => $contractor->getKey()]),
+        ], fn ($v): bool => $v !== null && $v !== '');
+    }
+
+    /**
+     * @return array{value: string, hint?: string, url?: string}|null
+     */
+    protected function formatWorkflowContractorMeta(
+        ?Contractor $contractor,
+        ?string $fallbackName = null,
+        ?string $fallbackPhone = null,
+    ): ?array {
+        if ($contractor instanceof Contractor) {
+            $meta = ContractorContactDetails::operationalMeta($contractor);
+            $hint = $this->joinWorkflowHints([
+                $meta['phone'] ?? null,
+                $meta['email'] ?? null,
+                $meta['address'] ?? null,
+            ]);
+
+            return array_filter([
+                'value' => (string) ($meta['company_name'] ?? $contractor->displayLabel()),
+                'hint' => $hint,
+                'url' => ContractorResource::getUrl('edit', ['record' => $contractor->getKey()]),
+            ], fn ($v): bool => $v !== null && $v !== '');
+        }
+
+        return $this->formatWorkflowPersonMeta($fallbackName, $fallbackPhone);
+    }
+
+    /**
+     * @return array{value: string, hint?: string}|null
+     */
+    protected function formatWorkflowPersonMeta(?string $name, ?string $phone): ?array
     {
         $name = filled($name) ? trim($name) : null;
         $phone = filled($phone) ? trim($phone) : null;
@@ -182,29 +394,82 @@ trait HasEventWorkflowContext
         }
 
         if ($name !== null && $phone !== null) {
-            return "{$name} · {$phone}";
+            return ['value' => $name, 'hint' => $phone];
         }
 
-        return $name ?? $phone;
+        return ['value' => $name ?? $phone];
     }
 
-    protected function formatWorkflowHotelSummary(Event $event): ?string
+    /**
+     * @param  list<string|null>  $parts
+     */
+    protected function joinWorkflowHints(array $parts): ?string
     {
-        $names = $event->hotelStays
-            ->map(fn ($stay) => $stay->contractor?->displayLabel())
-            ->filter(fn ($name) => filled($name))
-            ->map(fn ($name) => trim((string) $name))
+        $joined = collect($parts)
+            ->map(fn ($part) => filled($part) ? trim((string) $part) : null)
+            ->filter()
             ->unique()
-            ->values();
+            ->implode(' · ');
 
-        if ($names->isEmpty()) {
+        return $joined !== '' ? $joined : null;
+    }
+
+    /**
+     * Faktyczne miejsce podstawienia (adres / szczegóły), niezależnie od Place z kalkulacji.
+     */
+    protected function formatWorkflowPickupPlace(Event $event): ?string
+    {
+        $candidates = [];
+
+        if (filled($event->pickup_place_details)) {
+            $plain = trim(html_entity_decode(strip_tags((string) $event->pickup_place_details)));
+            $plain = preg_replace('/\s+/u', ' ', $plain) ?? $plain;
+            if ($plain !== '') {
+                $candidates[] = $plain;
+            }
+        }
+
+        if (filled($event->adress_transport_start)) {
+            $address = trim((string) $event->adress_transport_start);
+            if ($address !== '') {
+                $candidates[] = $address;
+            }
+        }
+
+        $candidates = array_values(array_unique($candidates));
+
+        return $candidates[0] ?? null;
+    }
+
+    /**
+     * Etykieta „wyjazd z”: Place z kalkulacji + faktyczne podstawienie (gdy inne).
+     */
+    protected function formatWorkflowWyjazdLabel(?string $startPlace, ?string $pickupDetails): ?string
+    {
+        $startPlace = filled($startPlace) ? trim($startPlace) : null;
+        $pickupDetails = filled($pickupDetails) ? trim($pickupDetails) : null;
+
+        if ($startPlace && $pickupDetails) {
+            if (mb_stripos($pickupDetails, $startPlace) !== false
+                || mb_stripos($startPlace, $pickupDetails) !== false
+                || mb_strtolower($startPlace) === mb_strtolower($pickupDetails)
+            ) {
+                return $pickupDetails;
+            }
+
+            return $startPlace.' → '.$pickupDetails;
+        }
+
+        return $pickupDetails ?: $startPlace;
+    }
+
+    protected function formatWorkflowTime(mixed $time): ?string
+    {
+        if (! filled($time)) {
             return null;
         }
 
-        $first = (string) $names->first();
-        $extra = $names->count() - 1;
-
-        return $extra > 0 ? "{$first} (+{$extra})" : $first;
+        return substr((string) $time, 0, 5);
     }
 
     /**

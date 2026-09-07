@@ -31,13 +31,14 @@ final class RecordSettlementCostPaymentAction
         }
 
         if (EventSettlementCost::isPaymentSourceType($plan->source_type)) {
-            throw new InvalidArgumentException('Wpłatę można dodać tylko do pozycji planu, nie do wiersza płatności.');
+            throw new InvalidArgumentException('Wpłatę można dodać tylko do kosztu planowanego, nie do wiersza płatności.');
         }
 
         [$amount, $rate, $amountPln, $currencyId] = $this->resolveAmounts($data, $plan);
 
-        if ($amountPln <= 0 && $amount <= 0) {
-            throw new InvalidArgumentException('Kwota wpłaty musi być większa od zera.');
+        // 0 jest dozwolone (świadome domknięcie / pokrycie na innej pozycji); ujemne nie.
+        if ($amountPln < 0 || $amount < 0) {
+            throw new InvalidArgumentException('Kwota wpłaty nie może być ujemna.');
         }
 
         $paidBy = array_key_exists($data->paidBy, EventSettlementCost::$paidByOptions)
@@ -78,28 +79,40 @@ final class RecordSettlementCostPaymentAction
                 default => 'wpłata',
             };
 
+            // Zaplanowana płatność: jest termin, brak daty wpłaty — świeci się „do zapłaty”, bez actual.
+            // BC: brak paidAt i brak dueDate → księguj jak dotychczas (paid_at = dziś).
+            $isScheduled = $data->paidAt === null && $data->dueDate !== null;
+            $paidAt = $isScheduled ? null : ($data->paidAt ?? now());
+            $isAdvance = EventSettlementCost::isAdvancePaymentType($advanceType);
+            $paymentStatus = $isScheduled
+                ? ($isAdvance ? 'advance_required' : 'planned')
+                : ($isAdvance ? 'advance_paid' : 'paid');
+
             $payload = [
                 'source_type' => $paymentSourceType,
                 'source_id' => $paymentSourceId,
                 'name' => $baseName.' • '.$label.' #'.($existingCount + 1),
-                'planned_amount' => 0,
-                'planned_currency_id' => $plan->planned_currency_id,
-                'planned_convert_to_pln' => $plan->planned_convert_to_pln ?? true,
-                'planned_rate' => $plan->planned_rate ?? 1,
-                'planned_amount_pln' => 0,
-                'actual_amount' => $amount,
-                'actual_currency_id' => $currencyId,
-                'actual_rate' => $rate,
-                'actual_amount_pln' => $amountPln,
+                'planned_amount' => ($isScheduled && ! $isAdvance) ? $amount : 0,
+                'planned_currency_id' => $currencyId ?: $plan->planned_currency_id,
+                'planned_convert_to_pln' => $data->convertToPln,
+                'planned_rate' => $rate ?: ($plan->planned_rate ?? 1),
+                'planned_amount_pln' => ($isScheduled && ! $isAdvance) ? $amountPln : 0,
+                'actual_amount' => $isScheduled ? null : $amount,
+                'actual_currency_id' => $isScheduled ? null : $currencyId,
+                'actual_rate' => $isScheduled ? null : $rate,
+                // 0 PLN jest poprawną kwotą; null tylko gdy obca bez przeliczenia (convert_to_pln=false).
+                'actual_amount_pln' => $isScheduled
+                    ? null
+                    : ($data->convertToPln ? $amountPln : ($amountPln > 0 ? $amountPln : null)),
                 'paid_by' => $paidBy,
                 'advance_type' => $advanceType,
                 'payment_method' => $method,
                 'document_number' => $data->documentNumber,
-                'paid_at' => $data->paidAt ?? now(),
-                'paid_by_user_id' => $data->paidByUserId,
-                'payment_status' => EventSettlementCost::isAdvancePaymentType($advanceType) ? 'advance_paid' : 'paid',
+                'paid_at' => $paidAt,
+                'paid_by_user_id' => $isScheduled ? null : $data->paidByUserId,
+                'payment_status' => $paymentStatus,
                 'advance_due_date' => $data->dueDate,
-                'advance_amount' => EventSettlementCost::isAdvancePaymentType($advanceType) ? $amount : null,
+                'advance_amount' => $isAdvance ? $amount : null,
                 'notes' => $data->notes,
                 'contractor_id' => $plan->contractor_id,
                 'order' => (int) ($plan->order ?? 0) + $existingCount + 1,
@@ -111,7 +124,11 @@ final class RecordSettlementCostPaymentAction
 
             $payment = $settlement->costs()->create($payload);
 
-            $this->refreshPlanPaymentStatus($plan, $settlement->fresh(['costs']));
+            $this->refreshPlanPaymentStatus(
+                $plan,
+                $settlement->fresh(['costs']),
+                $data->approveOverpayment,
+            );
 
             ($this->recalculateSettlement)(new RecalculateSettlementTotalsData(
                 settlement: $settlement->fresh(),
@@ -120,8 +137,10 @@ final class RecordSettlementCostPaymentAction
 
             app(\App\Services\PilotSettlementService::class)->refreshCashFromCosts($settlement->fresh() ?? $settlement);
 
-            app(\App\Services\SyncReservationDepositFromCostPayment::class)
-                ->markPaidFromPayment($plan->fresh(), $payment->fresh());
+            if (! $isScheduled) {
+                app(\App\Services\SyncReservationDepositFromCostPayment::class)
+                    ->markPaidFromPayment($plan->fresh(), $payment->fresh());
+            }
 
             return $payment->fresh();
         });
@@ -136,23 +155,25 @@ final class RecordSettlementCostPaymentAction
         $planCurrency = $plan->relationLoaded('plannedCurrency')
             ? $plan->plannedCurrency
             : $plan->plannedCurrency()->first();
-        $symbol = CurrencyAmountDisplay::symbol($planCurrency);
-        $defaultRate = (float) ($plan->planned_rate ?? ($planCurrency?->exchange_rate ?? 1));
+        $defaultRate = (float) ($data->rate ?? $plan->planned_rate ?? ($planCurrency?->exchange_rate ?? 1));
         if ($defaultRate <= 0) {
             $defaultRate = 1.0;
         }
 
-        $isForeign = $symbol !== 'PLN' && $currencyId;
+        $isForeign = CurrencyAmountDisplay::isForeignCurrency($currencyId);
 
-        if ($isForeign && $data->amount !== null && $data->amount > 0) {
+        if ($isForeign && $data->amount !== null) {
             $amount = round((float) $data->amount, 2);
             $rate = round((float) ($data->rate ?? $defaultRate), 6);
             if ($rate <= 0) {
                 $rate = $defaultRate;
             }
+            if (! $data->convertToPln) {
+                return [$amount, $rate, 0.0, $currencyId];
+            }
             $amountPln = $data->amountPln > 0
                 ? round($data->amountPln, 2)
-                : round($amount * $rate, 2);
+                : ($amount > 0 ? round($amount * $rate, 2) : 0.0);
 
             return [$amount, $rate, $amountPln, $currencyId];
         }
@@ -172,8 +193,14 @@ final class RecordSettlementCostPaymentAction
             return ['program_point_payment', $plan->source_id ? (int) $plan->source_id : null];
         }
 
-        if (in_array($plan->source_type, ['transport', 'accommodation'], true)) {
-            return [$plan->source_type.'_payment', null];
+        if (in_array($plan->source_type, [
+            'transport',
+            'transport_contractor',
+            'accommodation',
+            'accommodation_hotel',
+            'accommodation_hotel_stay',
+        ], true)) {
+            return [$plan->source_type.'_payment', $plan->source_id ? (int) $plan->source_id : null];
         }
 
         if ($plan->source_type === 'manual') {
@@ -183,9 +210,22 @@ final class RecordSettlementCostPaymentAction
         return [$plan->source_type.'_payment', $plan->source_id ? (int) $plan->source_id : null];
     }
 
-    private function refreshPlanPaymentStatus(EventSettlementCost $plan, $settlement): void
-    {
-        app(\App\Services\SettlementPaymentHealthService::class)
-            ->syncPlanPaymentStatus($plan, $settlement->costs);
+    private function refreshPlanPaymentStatus(
+        EventSettlementCost $plan,
+        $settlement,
+        bool $approveOverpayment = false,
+    ): void {
+        $health = app(\App\Services\SettlementPaymentHealthService::class);
+        $allCosts = $settlement->fresh(['costs'])?->costs ?? $settlement->costs;
+        $health->syncPlanPaymentStatusAfterPayment(
+            $plan,
+            $allCosts,
+            $approveOverpayment,
+            auth()->id(),
+        );
+
+        if ($plan->source_type === 'insurance_day') {
+            app(\App\Services\EventInsuranceOperationalSync::class)->syncFromPlanCost($plan->fresh());
+        }
     }
 }

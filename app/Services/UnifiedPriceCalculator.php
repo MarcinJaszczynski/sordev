@@ -193,7 +193,25 @@ class UnifiedPriceCalculator
     {
         $data = $this->calculate($template, $startPlaceId, false);
         if (empty($data)) {
-            Log::warning("[UnifiedPriceCalculator] Brak danych kalkulacji (template={$template->id}, start_place=".($startPlaceId ?? 'null').')');
+            Log::warning("[UnifiedPriceCalculator] Brak danych kalkulacji (template={$template->id}, start_place=".($startPlaceId ?? 'null').') — zachowuję istniejące ceny.');
+
+            return;
+        }
+
+        $hasPositivePln = false;
+        foreach ($data as $row) {
+            $pln = $row['currencies']['PLN']['final']['price_per_person']
+                ?? $row['currencies']['PLN']['raw']['price_per_person']
+                ?? null;
+            if (is_numeric($pln) && (float) $pln > 0) {
+                $hasPositivePln = true;
+                break;
+            }
+        }
+
+        // Bez PLN > 0 oferta znika z WWW (strict local). Nie kasuj / nie nadpisuj zerami.
+        if (! $hasPositivePln) {
+            Log::warning("[UnifiedPriceCalculator] Kalkulacja bez PLN > 0 (template={$template->id}, start_place=".($startPlaceId ?? 'null').') — zachowuję istniejące ceny.');
 
             return;
         }
@@ -217,7 +235,11 @@ class UnifiedPriceCalculator
                     if ($code !== 'PLN' && ! $allowForeignCurrencies) {
                         continue;
                     }
-                    $currency = Currency::where('symbol', $code)->orWhere('code', $code)->first();
+                    $currency = Currency::query()
+                        ->where(function ($q) use ($code) {
+                            $q->where('symbol', $code)->orWhere('code', $code);
+                        })
+                        ->first();
                     if (! $currency) {
                         Log::warning("[UnifiedPriceCalculator] Nie znaleziono waluty code={$code} – pomijam zapis.");
 
@@ -226,6 +248,9 @@ class UnifiedPriceCalculator
                     $raw = $cdata['raw'] ?? [];
                     $final = $cdata['final'] ?? [];
                     $pricePerPerson = $final['price_per_person'] ?? $raw['price_per_person'] ?? null;
+                    if ($pricePerPerson === null || (float) $pricePerPerson <= 0) {
+                        continue;
+                    }
                     // Zapisujemy także waluty obce nawet jeśli nie mają price_base (historyczny wymóg UI).
                     // W takich przypadkach pola base/markup/tax pozostaną puste lub 0, ale price_per_person będzie dostępne.
                     try {

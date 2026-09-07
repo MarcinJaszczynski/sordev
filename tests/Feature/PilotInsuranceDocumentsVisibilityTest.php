@@ -133,7 +133,8 @@ class PilotInsuranceDocumentsVisibilityTest extends TestCase
         $event->refresh();
 
         $this->assertSame($listPath, $event->insurance_insured_list_path);
-        $this->assertCount(1, $event->insuranceFilesForPilot());
-        $this->assertSame('insured_list', $event->insuranceFilesForPilot()[0]['key']);
+        $files = $event->insuranceFilesForPilot();
+        $this->assertCount(1, $files);
+        $this->assertStringStartsWith('insured_list', $files[0]['key']);
     }
 }

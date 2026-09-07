@@ -653,7 +653,7 @@ class ProgramPointListFinanceDisplayTest extends TestCase
         $this->assertNull($summary['paymentHint']);
         $this->assertNull($summary['advanceLine']);
         $this->assertSame('66,00 EUR', $summary['totalLine']);
-        $this->assertSame('Pilot · 66,00 EUR', $summary['remainingLine']['text'] ?? null);
+        $this->assertSame('Reszta Pilot · 66,00 EUR', $summary['remainingLine']['text'] ?? null);
     }
 
     public function test_paid_office_advance_splits_remainder_to_plan_payer(): void
@@ -711,8 +711,8 @@ class ProgramPointListFinanceDisplayTest extends TestCase
 
         $this->assertSame('1 236,00 PLN', $summary['totalLine']);
         $this->assertSame('paid', $summary['advanceLine']['status'] ?? null);
-        $this->assertSame('zapłacona · Biuro · 500,00 PLN · 12.09.2026', $summary['advanceLine']['text'] ?? null);
-        $this->assertSame('Pilot · 736,00 PLN', $summary['remainingLine']['text'] ?? null);
+        $this->assertSame('Zal. Biuro · 500,00 PLN · 12.09', $summary['advanceLine']['text'] ?? null);
+        $this->assertSame('Reszta Pilot · 736,00 PLN', $summary['remainingLine']['text'] ?? null);
     }
 
     public function test_remaining_line_omits_advance_due_date(): void
@@ -767,12 +767,12 @@ class ProgramPointListFinanceDisplayTest extends TestCase
             $cache,
         );
 
-        $this->assertSame('Biuro · 736,00 PLN', $summary['remainingLine']['text'] ?? null);
+        $this->assertSame('Reszta Biuro · 736,00 PLN', $summary['remainingLine']['text'] ?? null);
         $this->assertStringNotContainsString('31.01.2027', (string) ($summary['remainingLine']['text'] ?? ''));
         $this->assertStringNotContainsString('do ', (string) ($summary['remainingLine']['text'] ?? ''));
     }
 
-    public function test_program_points_table_renders_pilot_and_advance_hints_next_to_price(): void
+    public function test_program_points_table_renders_compact_amounts_payer_and_payment_status(): void
     {
         \Spatie\Permission\Models\Role::firstOrCreate(['name' => 'admin', 'guard_name' => 'web']);
         $user = User::factory()->create();
@@ -803,6 +803,24 @@ class ProgramPointListFinanceDisplayTest extends TestCase
             'paid_by' => 'pilot',
         ]);
 
+        EventSettlementCost::query()->create([
+            'settlement_id' => $settlement->id,
+            'source_type' => 'program_point_payment',
+            'source_id' => $point->id,
+            'name' => $point->name.' • zaliczka #1',
+            'planned_currency_id' => $pln->id,
+            'advance_type' => 'advance',
+            'advance_amount' => 200,
+            'actual_amount' => 200,
+            'actual_currency_id' => $pln->id,
+            'actual_rate' => 1,
+            'actual_amount_pln' => 200,
+            'payment_status' => 'advance_paid',
+            'paid_by' => 'office',
+            'paid_at' => now(),
+            'order' => 2,
+        ]);
+
         \Livewire\Livewire::actingAs($user)
             ->test(
                 \App\Filament\Resources\EventResource\RelationManagers\ProgramPointsRelationManager::class,
@@ -811,9 +829,10 @@ class ProgramPointListFinanceDisplayTest extends TestCase
                     'pageClass' => \App\Filament\Resources\EventResource\Pages\EditEventProgram::class,
                 ]
             )
-            ->assertSee('Zaliczka')
+            ->assertSee('Pł.')
             ->assertSee('Pilot')
             ->assertSee('200,00 PLN')
+            ->assertSee('Część')
             ->assertDontSee('Zaliczka wpłacona');
     }
 
@@ -1194,7 +1213,7 @@ class ProgramPointListFinanceDisplayTest extends TestCase
 
         $this->assertNotNull($summary['advanceLine']);
         $this->assertSame('pending', $summary['advanceLine']['status'] ?? null);
-        $this->assertStringContainsString('do 30.12.2026', (string) $summary['advanceLine']['text']);
+        $this->assertStringContainsString('do 30.12', (string) $summary['advanceLine']['text']);
         $this->assertSame('none', $summary['paidStatus']);
         $this->assertNotNull($summary['remainingLine']);
     }
@@ -1255,7 +1274,7 @@ class ProgramPointListFinanceDisplayTest extends TestCase
         $this->assertSame('paid', $summary['advanceLine']['status'] ?? null);
         $this->assertStringContainsString('Biuro', (string) ($summary['advanceLine']['text'] ?? ''));
         $this->assertStringContainsString('100,00 PLN', (string) ($summary['advanceLine']['text'] ?? ''));
-        $this->assertSame('Pilot · 400,00 PLN', $summary['remainingLine']['text'] ?? null);
+        $this->assertSame('Reszta Pilot · 400,00 PLN', $summary['remainingLine']['text'] ?? null);
     }
 
     public function test_reservation_without_payment_is_not_shown_as_fully_paid(): void
@@ -1303,5 +1322,117 @@ class ProgramPointListFinanceDisplayTest extends TestCase
         $this->assertNotSame('full', $summary['paidStatus']);
         $this->assertNotNull($summary['remainingLine']);
         $this->assertStringContainsString('2 400,00 PLN', (string) ($summary['remainingLine']['text'] ?? ''));
+    }
+
+    public function test_payment_lines_list_all_booked_payments_not_only_advance(): void
+    {
+        $eur = Currency::factory()->eur()->create(['exchange_rate' => 4.2]);
+        $event = Event::factory()->create(['participant_count' => 20]);
+        $settlement = EventSettlement::findOrCreateActiveForEvent($event);
+        $point = EventProgramPoint::factory()->create([
+            'event_id' => $event->id,
+            'name' => 'Bilety Louvre',
+            'planned_price' => 560,
+            'currency_id' => $eur->id,
+            'convert_to_pln' => false,
+            'include_in_calculation' => true,
+            'active' => true,
+        ]);
+
+        $this->seedProgramPointCost($settlement, $point, [
+            'planned_amount' => 560,
+            'planned_currency_id' => $eur->id,
+            'planned_convert_to_pln' => false,
+            'planned_rate' => 4.2,
+            'payment_status' => 'paid',
+            'paid_by' => 'office',
+        ]);
+
+        EventSettlementCost::query()->create([
+            'settlement_id' => $settlement->id,
+            'source_type' => 'program_point_payment',
+            'source_id' => $point->id,
+            'name' => $point->name.' • zaliczka',
+            'planned_currency_id' => $eur->id,
+            'advance_type' => 'advance',
+            'advance_amount' => 110,
+            'actual_amount' => 110,
+            'actual_currency_id' => $eur->id,
+            'actual_rate' => 4.2,
+            'actual_amount_pln' => 462,
+            'payment_status' => 'advance_paid',
+            'paid_by' => 'office',
+            'paid_at' => '2026-08-01',
+            'advance_due_date' => '2026-07-28',
+            'order' => 2,
+        ]);
+
+        EventSettlementCost::query()->create([
+            'settlement_id' => $settlement->id,
+            'source_type' => 'program_point_payment',
+            'source_id' => $point->id,
+            'name' => $point->name.' • dopłata',
+            'planned_currency_id' => $eur->id,
+            'advance_type' => 'final',
+            'actual_amount' => 450,
+            'actual_currency_id' => $eur->id,
+            'actual_rate' => 4.2,
+            'actual_amount_pln' => 1890,
+            'payment_status' => 'paid',
+            'paid_by' => 'pilot',
+            'paid_at' => '2026-08-20',
+            'order' => 3,
+        ]);
+
+        $cache = new ProgramPointSettlementCostCache;
+        $cache->warm(collect([$point->fresh(['currency', 'event'])]), $event);
+        $summary = app(ProgramPointListFinanceDisplay::class)->summarizePoint(
+            $point->fresh(['currency', 'event']),
+            $cache,
+        );
+
+        $this->assertSame('full', $summary['paidStatus']);
+        $this->assertSame('560,00 EUR', $summary['paid']);
+        $this->assertCount(2, $summary['paymentLines']);
+        $this->assertSame('Zal. Biuro · 110,00 EUR · 01.08', $summary['paymentLines'][0]['text'] ?? null);
+        $this->assertSame('Wpł. Pilot · 450,00 EUR · 20.08', $summary['paymentLines'][1]['text'] ?? null);
+        $this->assertNull($summary['remainingLine']);
+    }
+
+    public function test_payment_lines_empty_when_no_planned_amount(): void
+    {
+        $pln = Currency::factory()->pln()->create();
+        $event = Event::factory()->create(['participant_count' => 10]);
+        $settlement = EventSettlement::findOrCreateActiveForEvent($event);
+        $point = EventProgramPoint::factory()->create([
+            'event_id' => $event->id,
+            'planned_price' => 0,
+            'currency_id' => $pln->id,
+            'convert_to_pln' => true,
+            'include_in_calculation' => true,
+            'active' => true,
+        ]);
+
+        $this->seedProgramPointCost($settlement, $point, [
+            'planned_amount' => 0,
+            'planned_amount_pln' => 0,
+            'planned_currency_id' => $pln->id,
+            'planned_convert_to_pln' => true,
+            'planned_rate' => 1,
+            'payment_status' => 'planned',
+            'paid_by' => 'office',
+        ]);
+
+        $cache = new ProgramPointSettlementCostCache;
+        $cache->warm(collect([$point->fresh(['currency', 'event'])]), $event);
+        $summary = app(ProgramPointListFinanceDisplay::class)->summarizePoint(
+            $point->fresh(['currency', 'event']),
+            $cache,
+        );
+
+        $this->assertSame('—', $summary['planned']);
+        $this->assertSame([], $summary['paymentLines']);
+        $this->assertNull($summary['advanceLine']);
+        $this->assertNull($summary['remainingLine']);
     }
 }

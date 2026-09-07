@@ -51,7 +51,7 @@ class BankPaymentImportPage extends Page
     {
         $user = auth()->user();
 
-        return $user && ($user->hasRole(['admin', 'super_admin', 'ksiegowosc']) || $user->can('view_any_event::settlement'));
+        return $user && ($user->hasRole(['admin', 'super_admin', 'biuro', 'ksiegowosc']) || $user->can('view_any_event::settlement'));
     }
 
     protected function getHeaderActions(): array

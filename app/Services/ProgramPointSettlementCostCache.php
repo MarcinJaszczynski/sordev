@@ -12,6 +12,9 @@ use Illuminate\Support\Facades\Storage;
 
 /**
  * Jednorazowy preload kosztów rozliczenia dla punktów programu (lista / RM).
+ *
+ * Punkty is_hotel korzystają z kosztu accommodation_hotel* (jak panel hotelu / Finanse),
+ * nie z osobnego program_point — żeby wpłata w Finansach była widoczna w programie.
  */
 class ProgramPointSettlementCostCache
 {
@@ -21,7 +24,7 @@ class ProgramPointSettlementCostCache
     /** @var array<int, EloquentCollection<int, EventSettlementCost>> */
     private array $paymentRowsByPointId = [];
 
-    /** @var array<int, array{files_count: int, has_uploaded_file: bool, hint: string, status_label: string, first_file_url: string|null}> */
+    /** @var array<int, array{files_count: int, has_uploaded_file: bool, hint: string, status_label: string, badge_label: string|null, first_file_url: string|null}> */
     private array $documentMetaByPointId = [];
 
     private bool $warmed = false;
@@ -57,33 +60,73 @@ class ProgramPointSettlementCostCache
             return;
         }
 
-        $costs = $settlement->costs()
-            ->whereIn('source_id', $pointIds)
-            ->whereIn('source_type', ['program_point', 'program_point_payment'])
-            ->with(['plannedCurrency', 'actualCurrency'])
-            ->get();
+        $pointsById = $points->keyBy(fn (EventProgramPoint $point): int => (int) $point->id);
+        if ($childIds !== []) {
+            $missingChildIds = collect($childIds)
+                ->reject(fn (int $id): bool => $pointsById->has($id))
+                ->values()
+                ->all();
+            if ($missingChildIds !== []) {
+                EventProgramPoint::query()
+                    ->whereIn('id', $missingChildIds)
+                    ->get()
+                    ->each(function (EventProgramPoint $point) use ($pointsById): void {
+                        $pointsById->put((int) $point->id, $point);
+                    });
+            }
+        }
 
-        $documents = $settlement->relationLoaded('documents')
-            ? $settlement->documents
-            : $settlement->documents()->get();
+        $settlement->loadMissing(['costs.plannedCurrency', 'costs.actualCurrency', 'documents']);
+        $allCosts = $settlement->costs;
+        $documents = $settlement->documents;
+        $health = app(SettlementPaymentHealthService::class);
+        $hotelSync = app(HotelStaySettlementSync::class);
+
+        $event->loadMissing(['hotelStays']);
+
+        $programPointCosts = $allCosts
+            ->filter(fn (EventSettlementCost $cost): bool => in_array($cost->source_type, ['program_point', 'program_point_payment'], true)
+                && $pointIds->contains((int) $cost->source_id));
 
         foreach ($pointIds as $pointId) {
-            $rows = $costs->where('source_id', $pointId);
+            $pointId = (int) $pointId;
+            $point = $pointsById->get($pointId);
+
+            $hotelPlan = $point instanceof EventProgramPoint
+                ? $hotelSync->findForProgramPoint($event, $point)
+                : null;
+
+            if ($hotelPlan instanceof EventSettlementCost) {
+                $payments = $health->paymentRowsForPlanCost($hotelPlan, $allCosts)
+                    ->filter(fn (EventSettlementCost $cost): bool => $cost->payment_status !== 'cancelled')
+                    ->values();
+
+                $this->baseCostsByPointId[$pointId] = $hotelPlan;
+                $this->paymentRowsByPointId[$pointId] = $payments;
+                $this->documentMetaByPointId[$pointId] = $this->buildDocumentMeta($hotelPlan, $payments, $documents);
+
+                continue;
+            }
+
+            $rows = $programPointCosts->where('source_id', $pointId);
             $base = $rows->first(fn (EventSettlementCost $cost): bool => $cost->source_type === 'program_point');
             $payments = $rows
                 ->filter(fn (EventSettlementCost $cost): bool => $cost->source_type === 'program_point_payment'
                     && $cost->payment_status !== 'cancelled')
                 ->values();
 
-            $this->baseCostsByPointId[(int) $pointId] = $base;
-            $this->paymentRowsByPointId[(int) $pointId] = $payments;
-            $this->documentMetaByPointId[(int) $pointId] = $this->buildDocumentMeta($base, $payments, $documents);
+            $this->baseCostsByPointId[$pointId] = $base;
+            $this->paymentRowsByPointId[$pointId] = $payments;
+            $this->documentMetaByPointId[$pointId] = $this->buildDocumentMeta($base, $payments, $documents);
         }
     }
 
     public function baseCost(int $pointId): ?EventSettlementCost
     {
-        return $this->baseCostsByPointId[$pointId] ?? null;
+        $base = $this->baseCostsByPointId[$pointId] ?? null;
+
+        // Defensywa: nigdy nie zwracaj Collection / innych typów pod ?EventSettlementCost.
+        return $base instanceof EventSettlementCost ? $base : null;
     }
 
     /**
@@ -95,7 +138,7 @@ class ProgramPointSettlementCostCache
     }
 
     /**
-     * @return array{files_count: int, has_uploaded_file: bool, hint: string, status_label: string, first_file_url: string|null}
+     * @return array{files_count: int, has_uploaded_file: bool, hint: string, status_label: string, badge_label: string|null, first_file_url: string|null}
      */
     public function documentMeta(int $pointId): array
     {
@@ -104,6 +147,7 @@ class ProgramPointSettlementCostCache
             'has_uploaded_file' => false,
             'hint' => 'Brak pliku',
             'status_label' => 'Brak wgranego pliku faktury / dowodu',
+            'badge_label' => null,
             'first_file_url' => null,
         ];
     }
@@ -111,7 +155,7 @@ class ProgramPointSettlementCostCache
     /**
      * @param  Collection<int, EventSettlementDocument>|EloquentCollection<int, EventSettlementDocument>  $documents
      * @param  Collection<int, EventSettlementCost>|EloquentCollection<int, EventSettlementCost>  $payments
-     * @return array{files_count: int, has_uploaded_file: bool, hint: string, status_label: string, first_file_url: string|null}
+     * @return array{files_count: int, has_uploaded_file: bool, hint: string, status_label: string, badge_label: string|null, first_file_url: string|null}
      */
     private function buildDocumentMeta(
         ?EventSettlementCost $base,
@@ -146,23 +190,28 @@ class ProgramPointSettlementCostCache
             ->unique()
             ->values();
 
+        $typeKey = (string) ($linkedDocs->first()?->document_type ?: '');
+        $typeLabel = EventSettlementDocument::$documentTypes[$typeKey]
+            ?? ($typeKey !== '' ? $typeKey : 'Plik');
+        $badgeLabel = EventSettlementDocument::$documentTypeBadges[$typeKey]
+            ?? ($typeKey !== '' ? $typeLabel : 'Plik');
+
         if ($filesCount > 0) {
             $first = basename((string) $filePaths->first());
-            $type = EventSettlementDocument::$documentTypes[$linkedDocs->first()?->document_type ?? '']
-                ?? ((string) ($linkedDocs->first()?->document_type ?: 'Plik'));
             $number = (string) ($linkedDocs->first()?->document_number ?: ($numbers->first() ?? ''));
             $hint = $number !== ''
-                ? $type.': nr '.$number
+                ? $badgeLabel.': nr '.$number
                 : ($filesCount === 1
-                    ? $type
-                    : $type.' ('.$filesCount.' pl.)');
+                    ? $badgeLabel
+                    : $badgeLabel.' ('.$filesCount.' pl.)');
 
             return [
                 'files_count' => $filesCount,
                 'has_uploaded_file' => true,
                 'hint' => $hint,
-                'status_label' => 'Faktura / dokument wgrany: '.$hint
+                'status_label' => $typeLabel.' wgrany: '.$hint
                     .($number === '' && $filesCount > 0 ? ' · '.$first : ''),
+                'badge_label' => $badgeLabel,
                 'first_file_url' => $firstFileUrl,
             ];
         }
@@ -175,6 +224,7 @@ class ProgramPointSettlementCostCache
                 'has_uploaded_file' => false,
                 'hint' => 'Nr '.$joined.' (bez pliku)',
                 'status_label' => 'Brak wgranego pliku — jest numer: '.$joined,
+                'badge_label' => null,
                 'first_file_url' => null,
             ];
         }
@@ -184,6 +234,7 @@ class ProgramPointSettlementCostCache
             'has_uploaded_file' => false,
             'hint' => 'Brak pliku',
             'status_label' => 'Brak wgranego pliku faktury / dowodu',
+            'badge_label' => null,
             'first_file_url' => null,
         ];
     }

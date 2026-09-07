@@ -19,12 +19,13 @@
         </div>
     @endif
 
-    {{-- Wypłata z biura: pełny formularz w adminie; w panelu pilota podgląd (opcjonalnie) --}}
+    {{-- Zaliczka z biura: pełny formularz w adminie; w panelu pilota podgląd (opcjonalnie) --}}
     @if ($this->showOfficePayoutBlock && $focus !== 'exchange')
     <section @class(['pilot-card' => $compact, 'rounded-xl border border-gray-200 bg-white p-4 dark:border-gray-700 dark:bg-gray-900' => ! $compact])>
-        <h3 class="mb-1 text-base font-semibold text-gray-900 dark:text-gray-100">Wypłata gotówki pilotowi</h3>
+        <h3 class="mb-1 text-base font-semibold text-gray-900 dark:text-gray-100">Zaliczki wypłacone pilotowi</h3>
         <p class="mb-3 text-xs text-gray-500">
             Ile biuro fizycznie wydało pilotowi, w jakiej walucie i kiedy. To zasila kolumnę „Od biura” poniżej.
+            Przy pomyłce edytuj lub usuń pozycję — nie trzeba zakładać nowej imprezy.
             @if ($this->context === 'admin')
                 Ten sam zapis widzi pilot w panelu zaliczki.
             @endif
@@ -33,13 +34,13 @@
         @if ($this->officePayouts->isNotEmpty())
             <ul class="mb-3 divide-y rounded-lg border border-gray-200 dark:border-gray-700">
                 @foreach ($this->officePayouts as $cash)
-                    <li class="flex flex-wrap items-center justify-between gap-2 px-3 py-2 text-sm" wire:key="office-payout-{{ $cash->currency_id }}">
-                        <span class="font-medium text-gray-900 dark:text-gray-100">
-                            {{ number_format((float) $cash->provided_amount, 2, ',', ' ') }}
-                            {{ $cash->currency?->code ?: $cash->currency?->symbol ?: '—' }}
-                        </span>
-                        <span class="flex flex-wrap items-center gap-2 text-xs text-gray-500">
-                            <span>
+                    <li class="flex flex-wrap items-center justify-between gap-3 px-3 py-3 text-sm" wire:key="office-payout-{{ $cash->currency_id }}">
+                        <div class="min-w-0">
+                            <p class="font-medium text-gray-900 dark:text-gray-100">
+                                {{ number_format((float) $cash->provided_amount, 2, ',', ' ') }}
+                                {{ $cash->currency?->code ?: $cash->currency?->symbol ?: '—' }}
+                            </p>
+                            <p class="mt-0.5 text-xs text-gray-500">
                                 @if ($cash->provided_at)
                                     {{ $cash->provided_at->format('d.m.Y') }}
                                 @elseif ($this->event->pilot_funds_paid_at)
@@ -50,17 +51,34 @@
                                 @if ($cash->notes)
                                     · {{ $cash->notes }}
                                 @endif
-                            </span>
-                            @if ($this->canRecordPayout)
-                                <button type="button" wire:click="editOfficePayout({{ $cash->currency_id }})" class="text-indigo-700 hover:underline dark:text-indigo-300">Edytuj</button>
-                                <button
-                                    type="button"
-                                    wire:click="deleteOfficePayout({{ $cash->currency_id }})"
-                                    wire:confirm="Usunąć tę wypłatę gotówki?"
-                                    class="text-red-700 hover:underline dark:text-red-300"
-                                >Usuń</button>
-                            @endif
-                        </span>
+                            </p>
+                        </div>
+                        @if ($this->canRecordPayout)
+                            <div class="flex flex-wrap items-center gap-2">
+                                @if ($compact)
+                                    <button type="button" wire:click="editOfficePayout({{ $cash->currency_id }})" class="pilot-touch-btn border border-indigo-300 bg-white text-indigo-800">Edytuj</button>
+                                    <button
+                                        type="button"
+                                        wire:click="deleteOfficePayout({{ $cash->currency_id }})"
+                                        wire:confirm="Usunąć tę zaliczkę?"
+                                        class="pilot-touch-btn border border-red-300 bg-white text-red-800"
+                                    >Usuń</button>
+                                @else
+                                    <x-filament::button wire:click="editOfficePayout({{ $cash->currency_id }})" size="sm" color="gray">
+                                        Edytuj
+                                    </x-filament::button>
+                                    <x-filament::button
+                                        wire:click="deleteOfficePayout({{ $cash->currency_id }})"
+                                        wire:confirm="Usunąć tę zaliczkę?"
+                                        size="sm"
+                                        color="danger"
+                                        outlined
+                                    >
+                                        Usuń
+                                    </x-filament::button>
+                                @endif
+                            </div>
+                        @endif
                     </li>
                 @endforeach
             </ul>
@@ -77,7 +95,7 @@
             @endif
         @else
             <p class="mb-3 text-sm text-amber-800 dark:text-amber-200">
-                Brak zarejestrowanej wypłaty — saldo „Od biura” będzie puste, dopóki ktoś z biura nie zapisze gotówki.
+                Brak zarejestrowanej zaliczki — saldo „Od biura” będzie puste, dopóki ktoś z biura jej nie zapisze.
             </p>
         @endif
 
@@ -87,7 +105,7 @@
             @else
                 @if ($this->editingPayoutCurrencyId)
                     <p class="mb-2 text-xs font-medium text-indigo-800 dark:text-indigo-200">
-                        Edycja wypłaty
+                        Edycja zaliczki
                         <button type="button" wire:click="cancelEditOfficePayout" class="ml-2 text-gray-600 underline">Anuluj</button>
                     </p>
                 @endif
@@ -102,7 +120,7 @@
                         @error('payoutCurrencyId') <p class="mt-1 text-xs text-red-600">{{ $message }}</p> @enderror
                     </div>
                     <div>
-                        <label class="mb-1 block text-xs text-gray-600">Kwota wydana pilotowi *</label>
+                        <label class="mb-1 block text-xs text-gray-600">Kwota zaliczki *</label>
                         <input type="text" inputmode="decimal" wire:model="payoutAmount" placeholder="np. 3000" class="{{ $compact ? 'pilot-field' : 'w-full rounded-lg border px-3 py-2 text-sm dark:border-gray-600 dark:bg-gray-950' }}" />
                         @error('payoutAmount') <p class="mt-1 text-xs text-red-600">{{ $message }}</p> @enderror
                     </div>
@@ -116,15 +134,15 @@
                         <input type="text" wire:model="payoutComment" placeholder="np. gotówka w biurze" class="{{ $compact ? 'pilot-field' : 'w-full rounded-lg border px-3 py-2 text-sm dark:border-gray-600 dark:bg-gray-950' }}" />
                     </div>
                 </div>
-                <div class="mt-2 flex flex-wrap items-center gap-2">
+                <div class="mt-3 flex flex-wrap items-center gap-2">
                     @if ($compact)
                         <button type="button" wire:click="saveOfficePayout" class="pilot-touch-btn bg-gray-800 text-white">
-                            {{ $this->editingPayoutCurrencyId ? 'Zapisz zmiany' : 'Zapisz wypłatę' }}
+                            {{ $this->editingPayoutCurrencyId ? 'Zapisz zmiany' : 'Dodaj zaliczkę' }}
                         </button>
                         <button type="button" wire:click="prefillPayoutFromCalculation" class="pilot-touch-btn border border-gray-300 bg-white text-gray-900">Uzupełnij z wyliczenia</button>
                     @else
-                        <x-filament::button wire:click="saveOfficePayout" size="sm" color="primary">
-                            {{ $this->editingPayoutCurrencyId ? 'Zapisz zmiany' : 'Zapisz wypłatę' }}
+                        <x-filament::button wire:click="saveOfficePayout" size="md" color="primary">
+                            {{ $this->editingPayoutCurrencyId ? 'Zapisz zmiany' : 'Dodaj zaliczkę' }}
                         </x-filament::button>
                         <x-filament::button wire:click="prefillPayoutFromCalculation" size="sm" color="gray">
                             Uzupełnij z wyliczenia
@@ -139,9 +157,15 @@
 
     @if ($focus !== 'exchange')
     <section @class(['pilot-card' => $compact, 'rounded-xl border border-gray-200 bg-white p-4 dark:border-gray-700 dark:bg-gray-900' => ! $compact])>
-        <h3 class="mb-1 text-base font-semibold text-gray-900 dark:text-gray-100">Gotówka dla pilota</h3>
+        <h3 class="mb-1 text-base font-semibold text-gray-900 dark:text-gray-100">
+            {{ $this->context === 'pilot' ? 'Rozliczenie zaliczki od biura' : 'Gotówka dla pilota' }}
+        </h3>
         <p class="mb-3 text-xs text-gray-500">
-            Od biura → ewentualna wymiana → wydatki → zwrot / dopłata. Saldo per waluta.
+            @if ($this->context === 'pilot')
+                Kwota od biura / z autokaru → ewentualna wymiana → wydatki → zwrot. Saldo per waluta.
+            @else
+                Od biura / zbiórka w autokarze → ewentualna wymiana → wydatki → zwrot / dopłata. Saldo per waluta.
+            @endif
         </p>
         @include('pilot.partials.cash-summary', [
             'editable' => $this->editable,
@@ -150,13 +174,26 @@
     </section>
     @endif
 
-    @if ($this->showCurrencyExchange)
+    @if ($this->showCurrencyExchange && ($focus === 'exchange' || ($focus === 'all' && $this->includeCurrencyExchange)))
     <section @class(['pilot-card' => $compact, 'rounded-xl border border-gray-200 bg-white p-4 dark:border-gray-700 dark:bg-gray-900' => ! $compact])>
         <h3 class="mb-2 text-base font-semibold text-gray-900 dark:text-gray-100">Wymiana walut</h3>
         <p class="mb-3 text-xs text-gray-500">
-            Np. 2000 PLN → EUR na wyjeździe. Zmienia kolumnę „Po wymianie” powyżej.
+            Np. 2000 PLN → EUR na wyjeździe. Zmienia zasoby pilota i kolumnę „Po wymianie”.
             Przy podanym kursie kwota oddana = otrzymana × kurs (np. 100 EUR × 4,30 = 430 PLN).
         </p>
+
+        @if ($focus === 'exchange')
+            @include('pilot.partials.cash-resource-status', [
+                'compact' => $compact,
+                'canEditExchange' => $this->canEditCurrencyExchange,
+            ])
+        @endif
+
+        @if ($this->respectPortalVisibility && ! $this->event->showsPilotCurrencyExchange())
+            <p class="mb-3 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-900 dark:border-amber-900/40 dark:bg-amber-950/30 dark:text-amber-100">
+                Portal: wymiana wyłączona — pilot nie widzi tej sekcji. Biuro może edytować tutaj; włącz flagę, żeby pokazać ją w panelu pilota.
+            </p>
+        @endif
 
         @if ($this->currencyExchanges->isNotEmpty())
             <ul class="mb-3 space-y-2 text-sm">
@@ -174,7 +211,7 @@
                         </span>
                         <span class="flex items-center gap-2 text-xs text-gray-500">
                             <span>{{ $ex->exchanged_at?->format('d.m.Y') }}</span>
-                            @if ($this->editable)
+                            @if ($this->canEditCurrencyExchange)
                                 <button type="button" wire:click="editExchange({{ $ex->id }})" class="text-indigo-700 hover:underline dark:text-indigo-300">Edytuj</button>
                                 <button
                                     type="button"
@@ -187,9 +224,11 @@
                     </li>
                 @endforeach
             </ul>
+        @elseif (! $this->cashResourceStory->has_movements)
+            <p class="mb-3 text-sm text-gray-500">Brak wymian — zasoby = wypłata z biura.</p>
         @endif
 
-        @if ($this->editable)
+        @if ($this->canEditCurrencyExchange)
             @if ($this->editingExchangeId)
                 <p class="mb-2 text-xs font-medium text-indigo-800 dark:text-indigo-200">
                     Edycja wymiany #{{ $this->editingExchangeId }}
@@ -250,7 +289,17 @@
     @endif
 
     @if ($focus !== 'exchange')
+    @php
+        $expenseCount = $this->expenseLines->count();
+        $wrapExpenses = $this->collapseExpenses;
+    @endphp
+    @if ($wrapExpenses)
+    <details open class="pilot-accordion rounded-xl border border-gray-200 bg-white p-4 dark:border-gray-700 dark:bg-gray-900">
+        <summary>Wydatki / koszty pilota ({{ $expenseCount }} {{ $expenseCount === 1 ? 'pozycja' : 'pozycji' }})</summary>
+        <div class="mt-2">
+    @else
     <section @class(['pilot-card' => $compact, 'rounded-xl border border-gray-200 bg-white p-4 dark:border-gray-700 dark:bg-gray-900' => ! $compact])>
+    @endif
         <h3 class="mb-1 text-base font-semibold text-gray-900 dark:text-gray-100">Wydatki / koszty pilota</h3>
         <p class="mb-3 text-xs text-gray-500">
             Pozycje z płatnikiem Pilot. Kolumna „Zapłacono” to tylko gotówka pilota — zaliczki biura są osobno (nie sumują się jako wydatek pilota).
@@ -308,6 +357,11 @@
                 </div>
             </div>
         @endif
+    @if ($wrapExpenses)
+        </div>
+    </details>
+    @else
     </section>
+    @endif
     @endif
 </div>

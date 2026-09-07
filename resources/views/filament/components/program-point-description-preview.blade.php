@@ -3,7 +3,7 @@
     $record = $getRecord();
 
     $showDescription = (bool) ($record?->show_description ?? true);
-    $html = trim((string) ($record?->description ?? $record?->templatePoint?->description ?? ''));
+    $html = trim((string) ($record?->resolvedDescription() ?? ''));
     $plain = trim(preg_replace('/\s+/u', ' ', strip_tags($html)) ?? '');
 @endphp
 

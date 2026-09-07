@@ -151,6 +151,75 @@ class EventTemplateUxFeedbackTest extends TestCase
         $response->assertDontSee('Przejdź do szablonu');
     }
 
+    public function test_offer_preview_prefers_warsaw_and_builds_pretty_url(): void
+    {
+        $warsaw = Place::factory()->starting()->create(['name' => 'Warszawa']);
+        $gdansk = Place::factory()->starting()->create(['name' => 'Gdańsk']);
+        $programStart = Place::factory()->create(['name' => 'Hub']);
+
+        $template = EventTemplate::factory()->create([
+            'name' => 'Podlasie preview',
+            'slug' => 'podlasie-preview',
+            'duration_days' => 3,
+            'start_place_id' => $programStart->id,
+            'is_active' => true,
+        ]);
+
+        foreach ([$gdansk, $warsaw] as $place) {
+            EventTemplateStartingPlaceAvailability::query()->create([
+                'event_template_id' => $template->id,
+                'start_place_id' => $place->id,
+                'end_place_id' => $programStart->id,
+                'available' => true,
+            ]);
+        }
+
+        $this->assertSame($warsaw->id, \App\Support\EventTemplateOfferPreview::defaultStartPlaceId($template));
+
+        $url = \App\Support\EventTemplateOfferPreview::url($template, $warsaw->id);
+
+        $this->assertStringContainsString('/warszawa/3-dniowe/'.$template->id.'/podlasie-preview', $url);
+    }
+
+    public function test_edit_template_preview_offer_action_accepts_start_place(): void
+    {
+        $user = User::factory()->create();
+        $user->givePermissionTo(['view event_template', 'edit event_template']);
+        $this->actingAs($user);
+
+        Filament::setCurrentPanel(Filament::getPanel('admin'));
+
+        $warsaw = Place::factory()->starting()->create(['name' => 'Warszawa']);
+        $gdansk = Place::factory()->starting()->create(['name' => 'Gdańsk']);
+        $programStart = Place::factory()->create(['name' => 'Hub']);
+
+        $template = EventTemplate::factory()->create([
+            'name' => 'Oferta z miejscem',
+            'slug' => 'oferta-z-miejscem',
+            'duration_days' => 3,
+            'start_place_id' => $programStart->id,
+            'is_active' => true,
+        ]);
+
+        foreach ([$warsaw, $gdansk] as $place) {
+            EventTemplateStartingPlaceAvailability::query()->create([
+                'event_template_id' => $template->id,
+                'start_place_id' => $place->id,
+                'end_place_id' => $programStart->id,
+                'available' => true,
+            ]);
+        }
+
+        Livewire::test(\App\Filament\Resources\EventTemplateResource\Pages\EditEventTemplate::class, [
+            'record' => $template->id,
+        ])
+            ->assertActionExists('preview_offer')
+            ->callAction('preview_offer', data: [
+                'start_place_id' => $gdansk->id,
+            ])
+            ->assertHasNoActionErrors();
+    }
+
     /**
      * @param  array<string, mixed>  $overrides
      */

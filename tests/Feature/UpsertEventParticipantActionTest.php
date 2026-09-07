@@ -42,6 +42,7 @@ class UpsertEventParticipantActionTest extends TestCase
             event: $event,
             firstName: 'Anna',
             lastName: 'Kowalska',
+            gender: 'female',
             email: 'anna@example.com',
             bookingReference: 'BK-1',
             ensurePayment: true,
@@ -53,6 +54,7 @@ class UpsertEventParticipantActionTest extends TestCase
             'event_id' => $event->id,
             'first_name' => 'Anna',
             'last_name' => 'Kowalska',
+            'gender' => EventParticipant::GENDER_FEMALE,
         ]);
 
         $this->assertNotNull($participant->participant_payment_id);

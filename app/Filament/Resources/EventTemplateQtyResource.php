@@ -56,12 +56,16 @@ class EventTemplateQtyResource extends Resource
             Forms\Components\TextInput::make('staff')
                 ->label('Obsługa')
                 ->numeric()
+                ->minValue(0)
                 ->default(1)
+                ->helperText('0 = bez obsługi w kalkulacji')
                 ->required(),
             Forms\Components\TextInput::make('driver')
                 ->label('Kierowcy')
                 ->numeric()
+                ->minValue(0)
                 ->default(1)
+                ->helperText('0 = wycieczka bez kierowcy')
                 ->required(),
         ]);
     }

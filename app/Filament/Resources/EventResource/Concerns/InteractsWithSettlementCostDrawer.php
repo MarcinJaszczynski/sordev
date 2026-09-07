@@ -25,6 +25,7 @@ use App\Models\Contractor;
 use App\Models\ContractorType;
 use App\Models\Currency;
 use App\Models\Event;
+use App\Models\EventHotelStay;
 use App\Models\EventProgramPoint;
 use App\Models\EventSettlement;
 use App\Models\EventSettlementCost;
@@ -32,7 +33,13 @@ use App\Models\EventSettlementDocument;
 use App\Models\Reservation;
 use App\Services\ContractorLookupService;
 use App\Services\EventFinanceOverviewService;
+use App\Services\HotelStayReservationSync;
+use App\Services\HotelStaySettlementSync;
 use App\Services\ProgramPointPricingCalculator;
+use App\Services\SettlementPaymentHealthService;
+use App\Services\TransportContractorSettlementSync;
+use App\Support\CurrencyAmountDisplay;
+use App\Support\MoneyFormatter;
 use App\Support\ProgramPointCostPricing;
 use App\Support\Reservations\ProgramPointReservationGroup;
 use App\Support\Reservations\ReservationFormDefaults;
@@ -131,10 +138,19 @@ trait InteractsWithSettlementCostDrawer
 
     /**
      * Po mutacjach — odśwież overview / tabelę hosta.
+     * touch settlement → nowy klucz cache (dokumenty nie bumpuja costs.updated_at).
      */
     protected function invalidateSettlementCostCaches(): void
     {
+        EventFinanceOverviewService::forgetOverviewCacheForEvent((int) $this->settlementCostEvent()->id);
         unset($this->selectedRow, $this->drawerReservations);
+        $this->dispatchSettlementFinanceChanged();
+    }
+
+    protected function dispatchSettlementFinanceChanged(): void
+    {
+        $this->dispatch('event-workflow-finance-changed');
+        $this->dispatch('event-program-planner-refresh');
     }
 
     protected function ensureSettlement(): EventSettlement
@@ -323,7 +339,7 @@ trait InteractsWithSettlementCostDrawer
             ->find($costId);
 
         if (! $cost || EventSettlementCost::isPaymentSourceType($cost->source_type)) {
-            Notification::make()->title('Nie znaleziono pozycji planu')->warning()->send();
+            Notification::make()->title('Nie znaleziono kosztu')->warning()->send();
 
             return;
         }
@@ -352,7 +368,7 @@ trait InteractsWithSettlementCostDrawer
             ->find($costId);
 
         if (! $cost || EventSettlementCost::isPaymentSourceType($cost->source_type)) {
-            Notification::make()->title('Nie znaleziono pozycji planu')->warning()->send();
+            Notification::make()->title('Nie znaleziono kosztu')->warning()->send();
 
             return;
         }
@@ -515,17 +531,35 @@ trait InteractsWithSettlementCostDrawer
             hideZero: false,
         );
 
-        foreach ($overview['rows'] as $row) {
-            if ((int) $row['cost_id'] === (int) $this->selectedCostId) {
-                return $row;
+        $row = null;
+        foreach ($overview['rows'] as $candidate) {
+            if ((int) $candidate['cost_id'] === (int) $this->selectedCostId) {
+                $row = $candidate;
+                break;
             }
         }
 
         // Fallback: świeżo upsertowany / poza cache overview — zbuduj wiersz z kosztu.
-        return app(EventFinanceOverviewService::class)->rowForCostId(
+        $row ??= app(EventFinanceOverviewService::class)->rowForCostId(
             $this->settlementCostEvent(),
             (int) $this->selectedCostId,
         );
+
+        if (! is_array($row)) {
+            return null;
+        }
+
+        $contractorId = (int) ($row['contractor_id'] ?? 0);
+        if ($contractorId > 0) {
+            foreach ($overview['contractor_rollups'] ?? [] as $rollup) {
+                if ((int) ($rollup['contractor_id'] ?? 0) === $contractorId) {
+                    $row['contractor_rollup'] = $rollup;
+                    break;
+                }
+            }
+        }
+
+        return $row;
     }
 
     public function openNewPaymentForm(): void
@@ -578,9 +612,14 @@ trait InteractsWithSettlementCostDrawer
             return;
         }
 
-        $symbol = (string) ($row['planned_currency_symbol'] ?? 'PLN');
-        $isForeign = $symbol !== 'PLN';
-        $rate = (float) ($payment['rate'] ?? $row['planned_rate'] ?? 1);
+        $currencyId = filled($payment['currency_id'] ?? null)
+            ? (int) $payment['currency_id']
+            : (filled($row['planned_currency_id'] ?? null) ? (int) $row['planned_currency_id'] : $this->defaultCurrencyId());
+        $convertToPln = (bool) ($payment['convert_to_pln'] ?? false);
+        $this->applyPaymentFormCurrency($currencyId, $convertToPln);
+
+        $isForeign = (bool) ($this->paymentForm['is_foreign'] ?? false);
+        $rate = (float) ($payment['rate'] ?? $this->paymentForm['rate'] ?? $row['planned_rate'] ?? 1);
         if ($rate <= 0) {
             $rate = 1.0;
         }
@@ -589,19 +628,19 @@ trait InteractsWithSettlementCostDrawer
 
         $this->editingPaymentId = $paymentId;
         $this->paymentForm = [
+            ...$this->paymentForm,
             'amount' => $isForeign ? (float) ($payment['amount'] ?? 0) : null,
             'amount_pln' => (float) ($payment['amount_pln'] ?? 0),
             'rate' => $rate,
-            'currency_symbol' => $symbol,
-            'is_foreign' => $isForeign,
             'advance_type' => $advanceType,
             'payment_method' => (string) ($payment['method'] ?? 'transfer'),
             'paid_by' => (string) ($payment['paid_by'] ?? 'office'),
-            'paid_at' => $payment['paid_at'] ?? now()->format('Y-m-d'),
+            'paid_at' => $payment['paid_at'] ?? null,
             'due_date' => $payment['due_date'] ?? null,
             'document_number' => $payment['document_number'] ?? null,
             'notes' => $payment['notes'] ?? null,
             'reservation_id' => $payment['reservation_id'] ?? null,
+            'acknowledge_overpayment' => false,
         ];
 
         $this->showPaymentForm = true;
@@ -631,32 +670,60 @@ trait InteractsWithSettlementCostDrawer
         Notification::make()->title('Usunięto wpłatę')->success()->send();
     }
 
+    public function updatedPaymentFormCurrencyId(mixed $value): void
+    {
+        $this->applyPaymentFormCurrency(filled($value) ? (int) $value : null, false);
+    }
+
     public function savePayment(): void
     {
-        $isForeign = (bool) ($this->paymentForm['is_foreign'] ?? false);
+        $currencyId = filled($this->paymentForm['currency_id'] ?? null)
+            ? (int) $this->paymentForm['currency_id']
+            : $this->defaultCurrencyId();
+        $isForeign = CurrencyAmountDisplay::isForeignCurrency($currencyId);
+        $convertToPln = $isForeign ? (bool) ($this->paymentForm['convert_to_pln'] ?? false) : true;
 
         $rules = [
+            'paymentForm.currency_id' => ['required', 'integer', 'exists:currencies,id'],
             'paymentForm.payment_method' => ['required', 'in:cash,transfer,card,other'],
             'paymentForm.paid_by' => ['required', 'in:office,pilot'],
             'paymentForm.advance_type' => ['required', EventSettlementCost::userSelectableAdvanceTypesValidationRule()],
+            'paymentForm.paid_at' => ['nullable', 'date'],
+            'paymentForm.due_date' => ['nullable', 'date'],
         ];
         $attributes = [
+            'paymentForm.currency_id' => 'waluta',
             'paymentForm.payment_method' => 'metoda',
             'paymentForm.paid_by' => 'płatnik',
             'paymentForm.advance_type' => 'rodzaj',
+            'paymentForm.paid_at' => 'data wpłaty',
+            'paymentForm.due_date' => 'termin',
         ];
 
         if ($isForeign) {
-            $rules['paymentForm.amount'] = ['required', 'numeric', 'min:0.01'];
-            $rules['paymentForm.rate'] = ['required', 'numeric', 'min:0.0001'];
+            $rules['paymentForm.amount'] = ['required', 'numeric', 'min:0'];
             $attributes['paymentForm.amount'] = 'kwota';
-            $attributes['paymentForm.rate'] = 'kurs';
+            if ($convertToPln) {
+                $rules['paymentForm.rate'] = ['required', 'numeric', 'min:0.0001'];
+                $attributes['paymentForm.rate'] = 'kurs';
+            }
         } else {
-            $rules['paymentForm.amount_pln'] = ['required', 'numeric', 'min:0.01'];
+            $rules['paymentForm.amount_pln'] = ['required', 'numeric', 'min:0'];
             $attributes['paymentForm.amount_pln'] = 'kwota';
         }
 
-        $this->validate($rules, [], $attributes);
+        $this->validate($rules, [
+            'paymentForm.paid_at.required_without' => 'Podaj datę wpłaty albo termin płatności.',
+            'paymentForm.due_date.required_without' => 'Podaj termin płatności albo datę wpłaty.',
+        ], $attributes);
+
+        $paidAtFilled = filled($this->paymentForm['paid_at'] ?? null);
+        $dueDateFilled = filled($this->paymentForm['due_date'] ?? null);
+        if (! $paidAtFilled && ! $dueDateFilled) {
+            $this->addError('paymentForm.due_date', 'Podaj datę wpłaty (zaksięgowana) albo termin (zaplanowana, bez wpłaty).');
+
+            return;
+        }
 
         if (! $this->selectedCostId) {
             return;
@@ -671,8 +738,25 @@ trait InteractsWithSettlementCostDrawer
         $amount = $isForeign ? (float) ($form['amount'] ?? 0) : null;
         $rate = $isForeign ? (float) ($form['rate'] ?? 1) : null;
         $amountPln = $isForeign
-            ? round(((float) ($form['amount'] ?? 0)) * ((float) ($form['rate'] ?? 1)), 2)
+            ? ($convertToPln ? round(((float) ($form['amount'] ?? 0)) * ((float) ($form['rate'] ?? 1)), 2) : 0.0)
             : (float) ($form['amount_pln'] ?? 0);
+
+        $paidAt = $paidAtFilled ? Carbon::parse($form['paid_at']) : null;
+        $dueDate = $dueDateFilled ? Carbon::parse($form['due_date']) : null;
+
+        $projectedOverpayment = $this->paymentFormProjectedOverpaymentPln($amountPln, $paidAt !== null);
+        $approveOverpayment = false;
+        if ($projectedOverpayment > SettlementPaymentHealthService::TOLERANCE) {
+            if (! (bool) ($form['acknowledge_overpayment'] ?? false)) {
+                $this->addError(
+                    'paymentForm.acknowledge_overpayment',
+                    'Potwierdź checkboxem, że nadpłata względem planu ('.MoneyFormatter::format($projectedOverpayment, 'PLN').') jest prawidłowa.',
+                );
+
+                return;
+            }
+            $approveOverpayment = true;
+        }
 
         try {
             if ($this->editingPaymentId) {
@@ -683,33 +767,58 @@ trait InteractsWithSettlementCostDrawer
                     paymentMethod: (string) $form['payment_method'],
                     paidBy: (string) $form['paid_by'],
                     advanceType: (string) $form['advance_type'],
-                    paidAt: filled($form['paid_at'] ?? null) ? Carbon::parse($form['paid_at']) : now(),
-                    dueDate: filled($form['due_date'] ?? null) ? Carbon::parse($form['due_date']) : null,
+                    paidAt: $paidAt,
+                    dueDate: $dueDate,
                     documentNumber: $form['document_number'] ?? null,
                     notes: $form['notes'] ?? null,
                     amount: $amount,
                     rate: $rate,
-                    currencyId: $payment->actual_currency_id ?? $payment->planned_currency_id,
+                    currencyId: $currencyId,
                     reservationId: filled($form['reservation_id'] ?? null) ? (int) $form['reservation_id'] : null,
+                    convertToPln: $convertToPln,
+                    approveOverpayment: $approveOverpayment,
                 ));
+                $siblingCount = 0;
             } else {
                 $cost = EventSettlementCost::query()->with('plannedCurrency')->findOrFail($this->selectedCostId);
+                $paymentPayload = [
+                    'amountPln' => $amountPln,
+                    'paymentMethod' => (string) $form['payment_method'],
+                    'paidBy' => (string) $form['paid_by'],
+                    'advanceType' => (string) $form['advance_type'],
+                    'paidAt' => $paidAt,
+                    'dueDate' => $dueDate,
+                    'documentNumber' => $form['document_number'] ?? null,
+                    'notes' => $form['notes'] ?? null,
+                    'paidByUserId' => auth()->id(),
+                    'amount' => $amount,
+                    'rate' => $rate,
+                    'currencyId' => $currencyId,
+                    'reservationId' => filled($form['reservation_id'] ?? null) ? (int) $form['reservation_id'] : null,
+                    'convertToPln' => $convertToPln,
+                    'approveOverpayment' => $approveOverpayment,
+                ];
                 app(RecordSettlementCostPaymentAction::class)(new RecordSettlementCostPaymentData(
                     planCost: $cost,
-                    amountPln: $amountPln,
-                    paymentMethod: (string) $form['payment_method'],
-                    paidBy: (string) $form['paid_by'],
-                    advanceType: (string) $form['advance_type'],
-                    paidAt: filled($form['paid_at'] ?? null) ? Carbon::parse($form['paid_at']) : now(),
-                    dueDate: filled($form['due_date'] ?? null) ? Carbon::parse($form['due_date']) : null,
-                    documentNumber: $form['document_number'] ?? null,
-                    notes: $form['notes'] ?? null,
-                    paidByUserId: auth()->id(),
-                    amount: $amount,
-                    rate: $rate,
-                    currencyId: $cost->planned_currency_id,
-                    reservationId: filled($form['reservation_id'] ?? null) ? (int) $form['reservation_id'] : null,
+                    amountPln: $paymentPayload['amountPln'],
+                    paymentMethod: $paymentPayload['paymentMethod'],
+                    paidBy: $paymentPayload['paidBy'],
+                    advanceType: $paymentPayload['advanceType'],
+                    paidAt: $paymentPayload['paidAt'],
+                    dueDate: $paymentPayload['dueDate'],
+                    documentNumber: $paymentPayload['documentNumber'],
+                    notes: $paymentPayload['notes'],
+                    paidByUserId: $paymentPayload['paidByUserId'],
+                    amount: $paymentPayload['amount'],
+                    rate: $paymentPayload['rate'],
+                    currencyId: $paymentPayload['currencyId'],
+                    reservationId: $paymentPayload['reservationId'],
+                    convertToPln: $paymentPayload['convertToPln'],
+                    approveOverpayment: $paymentPayload['approveOverpayment'],
                 ));
+
+                // Wpłata 0: domknij też inne otwarte koszty tego samego kontrahenta (np. 3× ten sam punkt).
+                $siblingCount = $this->recordZeroPaymentForSameContractorSiblings($cost, $paymentPayload);
             }
         } catch (\Throwable $e) {
             Notification::make()->title('Nie udało się zapisać wpłaty')->body($e->getMessage())->danger()->send();
@@ -718,6 +827,7 @@ trait InteractsWithSettlementCostDrawer
         }
 
         $wasEdit = $this->editingPaymentId !== null;
+        $wasScheduled = $paidAt === null && $dueDate !== null;
         $this->showPaymentForm = false;
         $this->editingPaymentId = null;
         $this->resetPaymentForm();
@@ -725,10 +835,102 @@ trait InteractsWithSettlementCostDrawer
         if ($this->showReservationForm) {
             $this->hydrateReservationFormFromSelection();
         }
+
+        $title = $wasEdit
+            ? ($wasScheduled ? 'Zapisano zaplanowaną płatność' : 'Zapisano wpłatę')
+            : ($wasScheduled ? 'Zaplanowano płatność' : 'Dodano wpłatę');
+        $body = null;
+        if (! $wasEdit && ($siblingCount ?? 0) > 0) {
+            $body = 'Dodatkowo zastosowano do '.$siblingCount.' '
+                .($siblingCount === 1 ? 'pozycji' : 'pozycji')
+                .' tego samego kontrahenta.';
+        }
         Notification::make()
-            ->title($wasEdit ? 'Zapisano wpłatę' : 'Dodano wpłatę')
+            ->title($title)
+            ->body($body)
             ->success()
             ->send();
+    }
+
+    /**
+     * Przy wpłacie 0 zbiera pozostałe otwarte koszty tego samego kontrahenta i dokłada tę samą wpłatę.
+     *
+     * @param  array{
+     *     amountPln: float,
+     *     paymentMethod: string,
+     *     paidBy: string,
+     *     advanceType: string,
+     *     paidAt: ?\Illuminate\Support\Carbon,
+     *     dueDate: ?\Illuminate\Support\Carbon,
+     *     documentNumber: ?string,
+     *     notes: ?string,
+     *     paidByUserId: ?int,
+     *     amount: ?float,
+     *     rate: ?float,
+     *     currencyId: int|string|null,
+     *     reservationId: ?int,
+     *     convertToPln: bool,
+     *     approveOverpayment: bool
+     * }  $payload
+     */
+    protected function recordZeroPaymentForSameContractorSiblings(EventSettlementCost $sourcePlan, array $payload): int
+    {
+        $isZero = abs((float) $payload['amountPln']) <= SettlementPaymentHealthService::TOLERANCE
+            && abs((float) ($payload['amount'] ?? 0)) <= SettlementPaymentHealthService::TOLERANCE;
+        if (! $isZero) {
+            return 0;
+        }
+
+        $contractorId = (int) ($sourcePlan->contractor_id ?? 0);
+        if ($contractorId <= 0) {
+            return 0;
+        }
+
+        $settlement = $sourcePlan->settlement()->with('costs')->first();
+        if (! $settlement) {
+            return 0;
+        }
+
+        $health = app(SettlementPaymentHealthService::class);
+        $allCosts = $settlement->costs;
+        $siblings = $health->listPlanCosts($allCosts)
+            ->filter(fn (EventSettlementCost $plan): bool => (int) $plan->id !== (int) $sourcePlan->id)
+            ->filter(fn (EventSettlementCost $plan): bool => (int) ($plan->contractor_id ?? 0) === $contractorId)
+            ->filter(function (EventSettlementCost $plan) use ($health, $allCosts): bool {
+                if (in_array((string) ($plan->payment_status ?? ''), ['paid', 'cancelled'], true)) {
+                    return false;
+                }
+
+                return ! SettlementPaymentHealthService::hasBookedZeroClosure(
+                    $health->paymentRowsForPlanCost($plan, $allCosts)
+                );
+            })
+            ->values();
+
+        $count = 0;
+        foreach ($siblings as $sibling) {
+            app(RecordSettlementCostPaymentAction::class)(new RecordSettlementCostPaymentData(
+                planCost: $sibling->fresh(['plannedCurrency']) ?? $sibling,
+                amountPln: $payload['amountPln'],
+                paymentMethod: $payload['paymentMethod'],
+                paidBy: $payload['paidBy'],
+                advanceType: $payload['advanceType'],
+                paidAt: $payload['paidAt'],
+                dueDate: $payload['dueDate'],
+                documentNumber: $payload['documentNumber'],
+                notes: $payload['notes'],
+                paidByUserId: $payload['paidByUserId'],
+                amount: $payload['amount'],
+                rate: $payload['rate'],
+                currencyId: $payload['currencyId'],
+                reservationId: null,
+                convertToPln: $payload['convertToPln'],
+                approveOverpayment: $payload['approveOverpayment'],
+            ));
+            $count++;
+        }
+
+        return $count;
     }
 
     public function startEditPlan(): void
@@ -765,7 +967,8 @@ trait InteractsWithSettlementCostDrawer
             $fixedQty,
         );
 
-        // Plan = wynik formuły (bez osobnego nadpisu w drawerze).
+        // Podpowiedź z formuły — przy zmianie parametrów przenosi się też do planu.
+        // Ręczna edycja „Kwota planowana (suma)” nie woła tej metody, więc nadpis planu zostaje.
         $this->planForm['calculated_price'] = $calculated;
         $this->planForm['planned_price'] = $calculated;
     }
@@ -807,12 +1010,13 @@ trait InteractsWithSettlementCostDrawer
 
         $this->showPlanForm = false;
         $this->invalidateSettlementCostCaches();
-        Notification::make()->title('Zapisano plan')->success()->send();
+        Notification::make()->title('Zapisano kwotę planowaną')->success()->send();
     }
 
     protected function saveProgramPointPlan(): void
     {
         $this->validate([
+            'planForm.planned_price' => ['required', 'numeric', 'min:0'],
             'planForm.unit_price' => ['required', 'numeric', 'min:0'],
             'planForm.group_size' => ['required', 'integer', 'min:0'],
             'planForm.quantity' => ['nullable', 'integer', 'min:1'],
@@ -821,6 +1025,7 @@ trait InteractsWithSettlementCostDrawer
             'planForm.paid_by' => ['required', 'in:office,pilot'],
             'planForm.contractor_id' => ['nullable', 'integer', 'exists:contractors,id'],
         ], [], [
+            'planForm.planned_price' => 'kwota planowana',
             'planForm.unit_price' => 'cena jednostkowa',
             'planForm.group_size' => 'wielkość grupy',
             'planForm.quantity' => 'ilość',
@@ -843,8 +1048,6 @@ trait InteractsWithSettlementCostDrawer
         $point = EventProgramPoint::query()
             ->where('event_id', $this->settlementCostEvent()->id)
             ->findOrFail((int) $cost->source_id);
-
-        $this->recalculateProgramPointPlanTotals();
 
         $event = $this->settlementCostEvent();
         $plannedAmount = (float) ($this->planForm['planned_price'] ?? $this->planForm['calculated_price'] ?? 0);
@@ -883,7 +1086,7 @@ trait InteractsWithSettlementCostDrawer
 
         $this->showPlanForm = false;
         $this->invalidateSettlementCostCaches();
-        Notification::make()->title('Zapisano plan')->success()->send();
+        Notification::make()->title('Zapisano kwotę planowaną')->success()->send();
     }
 
     protected function resetPaymentForm(): void
@@ -892,8 +1095,10 @@ trait InteractsWithSettlementCostDrawer
             'amount' => null,
             'amount_pln' => null,
             'rate' => 1,
+            'currency_id' => $this->defaultCurrencyId(),
             'currency_symbol' => 'PLN',
             'is_foreign' => false,
+            'convert_to_pln' => false,
             'advance_type' => 'advance',
             'payment_method' => 'transfer',
             'paid_by' => 'office',
@@ -902,7 +1107,63 @@ trait InteractsWithSettlementCostDrawer
             'document_number' => null,
             'notes' => null,
             'reservation_id' => null,
+            'acknowledge_overpayment' => false,
         ];
+    }
+
+    /**
+     * Nadpłata PLN po zapisie bieżącego formularza (0 = brak / tylko planowanie bez księgowania).
+     */
+    public function paymentFormProjectedOverpaymentPln(?float $amountPln = null, ?bool $isBooked = null): float
+    {
+        $row = $this->selectedRow;
+        if (! is_array($row)) {
+            return 0.0;
+        }
+
+        $paidAtFilled = $isBooked ?? filled($this->paymentForm['paid_at'] ?? null);
+        if (! $paidAtFilled) {
+            return 0.0;
+        }
+
+        if ($amountPln === null) {
+            $currencyId = filled($this->paymentForm['currency_id'] ?? null)
+                ? (int) $this->paymentForm['currency_id']
+                : $this->defaultCurrencyId();
+            $isForeign = CurrencyAmountDisplay::isForeignCurrency($currencyId);
+            $convertToPln = $isForeign ? (bool) ($this->paymentForm['convert_to_pln'] ?? false) : true;
+            $amountPln = $isForeign
+                ? ($convertToPln
+                    ? round(((float) ($this->paymentForm['amount'] ?? 0)) * ((float) ($this->paymentForm['rate'] ?? 1)), 2)
+                    : 0.0)
+                : (float) ($this->paymentForm['amount_pln'] ?? 0);
+        }
+
+        if ($amountPln <= SettlementPaymentHealthService::TOLERANCE) {
+            return 0.0;
+        }
+
+        $plannedPln = (float) ($row['planned_pln'] ?? 0);
+        if ($plannedPln <= SettlementPaymentHealthService::TOLERANCE) {
+            return 0.0;
+        }
+
+        $basePaid = (float) ($row['paid_pln'] ?? 0);
+        if ($this->editingPaymentId) {
+            $editing = collect($row['payments'] ?? [])->firstWhere('id', $this->editingPaymentId);
+            if (is_array($editing)) {
+                $basePaid = max(0, round($basePaid - (float) ($editing['amount_pln'] ?? 0), 2));
+            }
+        }
+
+        $projectedPaid = round($basePaid + $amountPln, 2);
+
+        return SettlementPaymentHealthService::overpaymentPln($projectedPaid, $plannedPln);
+    }
+
+    public function paymentFormNeedsOverpaymentAck(): bool
+    {
+        return $this->paymentFormProjectedOverpaymentPln() > SettlementPaymentHealthService::TOLERANCE;
     }
 
     protected function hydratePaymentDefaultsFromSelection(string $advanceType, ?string $paidByOverride = null): void
@@ -925,9 +1186,14 @@ trait InteractsWithSettlementCostDrawer
         }
 
         $paidBy = $override ?? (string) ($row['paid_by'] ?? 'office');
-        $symbol = (string) ($row['planned_currency_symbol'] ?? 'PLN');
-        $isForeign = $symbol !== 'PLN';
-        $rate = (float) ($row['planned_rate'] ?? 1);
+        $currencyId = filled($row['planned_currency_id'] ?? null)
+            ? (int) $row['planned_currency_id']
+            : $this->defaultCurrencyId();
+        // Nowa wpłata: domyślnie bez przeliczenia — użytkownik zaznacza checkbox świadomie.
+        $this->applyPaymentFormCurrency($currencyId, false);
+
+        $isForeign = (bool) ($this->paymentForm['is_foreign'] ?? false);
+        $rate = (float) ($this->paymentForm['rate'] ?? $row['planned_rate'] ?? 1);
         if ($rate <= 0) {
             $rate = 1.0;
         }
@@ -945,8 +1211,6 @@ trait InteractsWithSettlementCostDrawer
         $this->paymentForm['paid_by'] = $paidBy;
         $this->paymentForm['advance_type'] = $advanceType;
         $this->paymentForm['payment_method'] = $paidBy === 'pilot' ? 'cash' : 'transfer';
-        $this->paymentForm['is_foreign'] = $isForeign;
-        $this->paymentForm['currency_symbol'] = $symbol;
         $this->paymentForm['rate'] = $rate;
 
         $amountHint = match ($advanceType) {
@@ -977,6 +1241,31 @@ trait InteractsWithSettlementCostDrawer
         $this->paymentForm['reservation_id'] = $reservations->count() === 1
             ? (int) $reservations->first()->id
             : null;
+    }
+
+    protected function applyPaymentFormCurrency(?int $currencyId, ?bool $convertToPln = null): void
+    {
+        $currencyId = $currencyId ?: $this->defaultCurrencyId();
+        $currency = $currencyId ? Currency::query()->find($currencyId) : null;
+        $isForeign = CurrencyAmountDisplay::isForeignCurrency($currencyId);
+        $rate = CurrencyAmountDisplay::rate($currency);
+        if ($rate <= 0) {
+            $rate = 1.0;
+        }
+
+        $this->paymentForm['currency_id'] = $currencyId;
+        $this->paymentForm['currency_symbol'] = CurrencyAmountDisplay::symbol($currency);
+        $this->paymentForm['is_foreign'] = $isForeign;
+        $this->paymentForm['rate'] = $rate;
+
+        if ($convertToPln !== null) {
+            $this->paymentForm['convert_to_pln'] = $isForeign ? $convertToPln : false;
+        } elseif (! array_key_exists('convert_to_pln', $this->paymentForm) || ! $isForeign) {
+            $this->paymentForm['convert_to_pln'] = $this->paymentForm['convert_to_pln'] ?? false;
+            if (! $isForeign) {
+                $this->paymentForm['convert_to_pln'] = false;
+            }
+        }
     }
 
     protected function resetPlanForm(): void
@@ -1176,10 +1465,23 @@ trait InteractsWithSettlementCostDrawer
 
     public function saveReservation(): void
     {
+        $settlementCost = $this->selectedCostId
+            ? EventSettlementCost::query()->find($this->selectedCostId)
+            : null;
         $point = $this->selectedProgramPointForDrawer();
-        if (! $point) {
+
+        if (! $point && ! $settlementCost) {
             Notification::make()
-                ->title('Rezerwacja dostępna tylko dla punktów programu')
+                ->title('Brak pozycji do rezerwacji')
+                ->warning()
+                ->send();
+
+            return;
+        }
+
+        if ($settlementCost && ! $this->costSupportsReservation($settlementCost) && ! $point) {
+            Notification::make()
+                ->title('Rezerwacja niedostępna dla tej pozycji')
                 ->warning()
                 ->send();
 
@@ -1202,13 +1504,10 @@ trait InteractsWithSettlementCostDrawer
             $formData['pending_attachments'] = $this->reservationAttachmentFiles;
         }
 
-        $settlementCost = $this->selectedCostId
-            ? EventSettlementCost::query()->find($this->selectedCostId)
-            : null;
-
         $linkedPoint = $point;
         if (
-            $reservation
+            $point
+            && $reservation
             && filled($reservation->program_point_id)
             && (int) $reservation->program_point_id !== (int) $point->id
         ) {
@@ -1216,12 +1515,16 @@ trait InteractsWithSettlementCostDrawer
         }
 
         try {
-            app(UpsertReservationAction::class)(UpsertReservationData::fromForm(
+            $saved = app(UpsertReservationAction::class)(UpsertReservationData::fromForm(
                 formData: $formData,
                 reservation: $reservation,
                 programPoint: $linkedPoint,
                 settlementCost: $settlementCost,
             ));
+
+            if ($settlementCost && (int) ($settlementCost->reservation_id ?? 0) !== (int) $saved->id) {
+                $settlementCost->forceFill(['reservation_id' => (int) $saved->id])->saveQuietly();
+            }
         } catch (\Throwable $e) {
             Notification::make()
                 ->title('Nie udało się zapisać rezerwacji')
@@ -1245,10 +1548,14 @@ trait InteractsWithSettlementCostDrawer
 
     public function deleteReservation(?int $reservationId = null): void
     {
+        $settlementCost = $this->selectedCostId
+            ? EventSettlementCost::query()->find($this->selectedCostId)
+            : null;
         $point = $this->selectedProgramPointForDrawer();
-        if (! $point) {
+
+        if (! $point && ! $settlementCost) {
             Notification::make()
-                ->title('Rezerwacja dostępna tylko dla punktów programu')
+                ->title('Brak pozycji do rezerwacji')
                 ->warning()
                 ->send();
 
@@ -1267,6 +1574,9 @@ trait InteractsWithSettlementCostDrawer
         }
 
         try {
+            if ($settlementCost && (int) ($settlementCost->reservation_id ?? 0) === (int) $reservation->id) {
+                $settlementCost->forceFill(['reservation_id' => null])->saveQuietly();
+            }
             $reservation->delete();
         } catch (\Throwable $e) {
             Notification::make()
@@ -1384,15 +1694,31 @@ trait InteractsWithSettlementCostDrawer
     protected function reservationContractorTypeNames(): array
     {
         $point = $this->selectedProgramPointForDrawer();
-        if (! $point) {
-            return [];
+        if ($point) {
+            if ((bool) $point->is_hotel) {
+                return ContractorType::hotelTypeNames();
+            }
+
+            if ((bool) $point->is_transport) {
+                return ContractorType::transportTypeNames();
+            }
         }
 
-        if ((bool) $point->is_hotel) {
+        $cost = $this->selectedCostId
+            ? EventSettlementCost::query()->find($this->selectedCostId)
+            : null;
+
+        if ($cost && in_array($cost->source_type, [
+            HotelStaySettlementSync::SOURCE_HOTEL,
+            HotelStaySettlementSync::SOURCE_STAY,
+        ], true)) {
             return ContractorType::hotelTypeNames();
         }
 
-        if ((bool) $point->is_transport) {
+        if ($cost && in_array($cost->source_type, [
+            TransportContractorSettlementSync::SOURCE_CONTRACTOR,
+            TransportContractorSettlementSync::SOURCE_LEGACY,
+        ], true)) {
             return ContractorType::transportTypeNames();
         }
 
@@ -1426,25 +1752,34 @@ trait InteractsWithSettlementCostDrawer
 
     protected function hydrateReservationFormFromSelection(): void
     {
+        $settlementCost = $this->selectedCostId
+            ? EventSettlementCost::query()->find($this->selectedCostId)
+            : null;
         $point = $this->selectedProgramPointForDrawer();
-        if (! $point) {
+        $reservation = $this->resolveReservationForDrawer();
+
+        if (! $point && ! $settlementCost) {
             $this->resetReservationForm();
 
             return;
         }
 
-        $settlementCost = $this->selectedCostId
-            ? EventSettlementCost::query()->find($this->selectedCostId)
-            : null;
+        $defaults = $point
+            ? ReservationFormDefaults::forProgramPoint($point, $settlementCost, $reservation)
+            : ReservationFormDefaults::forSettlementCost($settlementCost, $reservation);
 
-        $reservation = $this->resolveReservationForDrawer();
-        $defaults = ReservationFormDefaults::forProgramPoint($point, $settlementCost, $reservation);
         $depositDue = $defaults['deposit_due_at']
             ?? (filled($this->planForm['due_date'] ?? null) ? (string) $this->planForm['due_date'] : null);
         $contractorId = $reservation?->contractor_id
-            ?? $point->contractor_id
-            ?? $settlementCost?->contractor_id;
-        $coverage = ProgramPointReservationGroup::coverageLabel($point);
+            ?? $point?->contractor_id
+            ?? $settlementCost?->contractor_id
+            ?? ($settlementCost?->source_type === TransportContractorSettlementSync::SOURCE_CONTRACTOR
+                ? $settlementCost->source_id
+                : null)
+            ?? ($settlementCost?->source_type === HotelStaySettlementSync::SOURCE_HOTEL
+                ? $settlementCost->source_id
+                : null);
+        $coverage = $point ? ProgramPointReservationGroup::coverageLabel($point) : null;
 
         if (! $reservation) {
             $this->reservationForm = [
@@ -1477,20 +1812,20 @@ trait InteractsWithSettlementCostDrawer
             'reservation_id' => $reservation->id,
             'contractor_id' => $contractorId,
             'booking_reference' => $reservation->booking_reference,
-            'status' => $reservation->status,
+            'status' => $reservation->status ?? $defaults['status'],
             'confirm_by' => $reservation->confirm_by?->toDateString(),
             'confirmed_at' => $reservation->confirmed_at?->toDateString(),
             'deposit_due_at' => $reservation->deposit_due_at?->toDateString() ?? $depositDue,
             'deposit_paid_at' => $reservation->deposit_paid_at?->toDateString(),
             'reserved_amount' => $reservation->reserved_amount !== null
-                ? round((float) $reservation->reserved_amount, 2)
+                ? (float) $reservation->reserved_amount
                 : $defaults['reserved_amount'],
-            'participant_count' => max(1, (int) ($reservation->participant_count ?? $defaults['participant_count'])),
+            'participant_count' => (int) ($reservation->participant_count ?? $defaults['participant_count']),
             'currency_id' => $reservation->currency_id ?? $defaults['currency_id'],
-            'amount_basis' => $reservation->amount_basis ?? $defaults['amount_basis'],
-            'participant_scope' => $reservation->participant_scope ?? $defaults['participant_scope'],
+            'amount_basis' => (string) ($reservation->amount_basis ?? $defaults['amount_basis']),
+            'participant_scope' => (string) ($reservation->participant_scope ?? $defaults['participant_scope']),
             'convert_to_pln' => (bool) ($reservation->convert_to_pln ?? $defaults['convert_to_pln']),
-            'amount_hint' => $reservation->reserved_amount !== null ? null : $defaults['amount_hint'],
+            'amount_hint' => $defaults['amount_hint'],
             'coverage_label' => $coverage,
             'office_notes' => $reservation->office_notes,
         ];
@@ -1506,18 +1841,130 @@ trait InteractsWithSettlementCostDrawer
         }
 
         $cost = EventSettlementCost::query()->find($this->selectedCostId);
-        if (! $cost || $cost->source_type !== 'program_point' || ! $cost->source_id) {
+        if (! $cost) {
             return null;
         }
 
-        return EventProgramPoint::query()
-            ->where('event_id', $this->settlementCostEvent()->id)
-            ->with(['reservations.contractor', 'sharedReservation.contractor', 'contractor', 'hotelStays.reservation.contractor'])
-            ->find((int) $cost->source_id);
+        if ($cost->source_type === 'program_point' && $cost->source_id) {
+            return EventProgramPoint::query()
+                ->where('event_id', $this->settlementCostEvent()->id)
+                ->with(['reservations.contractor', 'sharedReservation.contractor', 'contractor', 'hotelStays.reservation.contractor'])
+                ->find((int) $cost->source_id);
+        }
+
+        if ($cost->source_type === HotelStaySettlementSync::SOURCE_HOTEL && $cost->source_id) {
+            $stay = EventHotelStay::query()
+                ->where('event_id', $this->settlementCostEvent()->id)
+                ->where('contractor_id', (int) $cost->source_id)
+                ->whereNotNull('event_program_point_id')
+                ->orderBy('day')
+                ->first();
+
+            if (! $stay?->event_program_point_id) {
+                return null;
+            }
+
+            return EventProgramPoint::query()
+                ->where('event_id', $this->settlementCostEvent()->id)
+                ->with(['reservations.contractor', 'sharedReservation.contractor', 'contractor', 'hotelStays.reservation.contractor'])
+                ->find((int) $stay->event_program_point_id);
+        }
+
+        if ($cost->source_type === HotelStaySettlementSync::SOURCE_STAY && $cost->source_id) {
+            $stay = EventHotelStay::query()
+                ->where('event_id', $this->settlementCostEvent()->id)
+                ->find((int) $cost->source_id);
+
+            if (! $stay?->event_program_point_id) {
+                return null;
+            }
+
+            return EventProgramPoint::query()
+                ->where('event_id', $this->settlementCostEvent()->id)
+                ->with(['reservations.contractor', 'sharedReservation.contractor', 'contractor', 'hotelStays.reservation.contractor'])
+                ->find((int) $stay->event_program_point_id);
+        }
+
+        return null;
+    }
+
+    protected function costSupportsReservation(EventSettlementCost $cost): bool
+    {
+        return in_array($cost->source_type, [
+            'program_point',
+            HotelStaySettlementSync::SOURCE_HOTEL,
+            HotelStaySettlementSync::SOURCE_STAY,
+            TransportContractorSettlementSync::SOURCE_CONTRACTOR,
+            TransportContractorSettlementSync::SOURCE_LEGACY,
+        ], true);
     }
 
     protected function resolveReservationForDrawer(?int $reservationId = null): ?Reservation
     {
+        if ($this->selectedCostId) {
+            $cost = EventSettlementCost::query()->find($this->selectedCostId);
+
+            if ($cost && $this->costSupportsReservation($cost)) {
+                if ($reservationId) {
+                    $found = Reservation::query()
+                        ->where('event_id', $this->settlementCostEvent()->id)
+                        ->whereKey($reservationId)
+                        ->first();
+
+                    if ($found) {
+                        return $found;
+                    }
+                }
+
+                if ($cost->reservation_id) {
+                    $linked = Reservation::query()->find((int) $cost->reservation_id);
+                    if ($linked) {
+                        return $linked;
+                    }
+                }
+
+                $bySettlementCost = Reservation::query()
+                    ->where('event_id', $this->settlementCostEvent()->id)
+                    ->where('settlement_cost_id', (int) $cost->id)
+                    ->latest('id')
+                    ->first();
+
+                if ($bySettlementCost) {
+                    return $bySettlementCost;
+                }
+
+                if ($cost->source_type === HotelStaySettlementSync::SOURCE_HOTEL && $cost->source_id) {
+                    $stay = EventHotelStay::query()
+                        ->where('event_id', $this->settlementCostEvent()->id)
+                        ->where('contractor_id', (int) $cost->source_id)
+                        ->orderBy('day')
+                        ->first();
+
+                    $fromStay = $stay ? app(HotelStayReservationSync::class)->findForStay($stay) : null;
+                    if ($fromStay) {
+                        return $fromStay;
+                    }
+                }
+
+                if (
+                    in_array($cost->source_type, [
+                        TransportContractorSettlementSync::SOURCE_CONTRACTOR,
+                        TransportContractorSettlementSync::SOURCE_LEGACY,
+                    ], true)
+                    && filled($cost->contractor_id ?: $cost->source_id)
+                ) {
+                    $contractorId = (int) ($cost->contractor_id ?: $cost->source_id);
+
+                    return Reservation::query()
+                        ->where('event_id', $this->settlementCostEvent()->id)
+                        ->where('contractor_id', $contractorId)
+                        ->whereNull('program_point_id')
+                        ->latest('id')
+                        ->first();
+                }
+            }
+        }
+
         $point = $this->selectedProgramPointForDrawer();
         if (! $point) {
             return null;
@@ -1545,17 +1992,19 @@ trait InteractsWithSettlementCostDrawer
     public function drawerReservations(): \Illuminate\Support\Collection
     {
         $point = $this->selectedProgramPointForDrawer();
-        if (! $point) {
-            return collect();
+        if ($point) {
+            $own = $point->reservations;
+            $visible = $point->latestVisibleReservation();
+
+            if ($visible && $own->doesntContain(fn (Reservation $reservation): bool => (int) $reservation->id === (int) $visible->id)) {
+                return $own->prepend($visible)->values();
+            }
+
+            return $own;
         }
 
-        $own = $point->reservations;
-        $visible = $point->latestVisibleReservation();
+        $reservation = $this->resolveReservationForDrawer();
 
-        if ($visible && $own->doesntContain(fn (Reservation $reservation): bool => (int) $reservation->id === (int) $visible->id)) {
-            return $own->prepend($visible)->values();
-        }
-
-        return $own;
+        return $reservation ? collect([$reservation]) : collect();
     }
 }

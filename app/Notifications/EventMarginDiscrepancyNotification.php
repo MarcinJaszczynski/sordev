@@ -25,9 +25,9 @@ class EventMarginDiscrepancyNotification extends Notification
     public function toArray(object $notifiable): array
     {
         return [
-            'title' => 'Rozbieżność kalkulacji vs rozliczenia',
+            'title' => 'Rozbieżność szablon vs planowane',
             'body' => sprintf(
-                '%s: kalkulacja %s PLN, rozliczenie %s PLN (Δ %s%%).',
+                '%s: szablon %s PLN, planowane %s PLN (Δ %s%%).',
                 $this->event->name,
                 number_format($this->calculationPln, 2, ',', ' '),
                 number_format($this->settlementPln, 2, ',', ' '),

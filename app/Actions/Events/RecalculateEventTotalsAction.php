@@ -25,7 +25,12 @@ final class RecalculateEventTotalsAction
         }
 
         try {
-            $result = EventCostCalculator::for($data->event)->calculate($data->participantCount);
+            $result = EventCostCalculator::for($data->event)->calculate(
+                $data->participantCount,
+                $data->gratisCount,
+                $data->staffCount,
+                $data->driverCount,
+            );
             $total = round((float) ($result['base_pln'] ?? 0), 2);
         } catch (\Throwable) {
             $total = $data->event->resolvedBaseTotalCost(

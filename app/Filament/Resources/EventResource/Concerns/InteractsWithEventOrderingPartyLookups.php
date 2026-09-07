@@ -31,15 +31,23 @@ trait InteractsWithEventOrderingPartyLookups
         ?string $clientEmail = null,
         ?string $clientPhone = null,
     ): void {
-        $additional = array_slice($this->resolvedOrderingParties(), 1);
+        $additional = collect(array_slice($this->resolvedOrderingParties(), 1))
+            ->map(function (array $row): array {
+                $row['goes_on_trip'] = false;
+
+                return $row;
+            })
+            ->all();
         $primary = $this->orderingPartiesFromRepeater($orderingParties)[0] ?? null;
 
         $this->syncLookupOrderingParties($primary
             ? array_merge([$primary], $additional)
             : $additional);
-        $this->data['client_name'] = $clientName;
-        $this->data['client_email'] = $clientEmail;
-        $this->data['client_phone'] = $clientPhone;
+        $this->writeClientFieldsToForm(
+            $clientName !== '' ? $clientName : null,
+            $clientEmail,
+            $clientPhone,
+        );
     }
 
     #[On('client-lookup-cleared')]
@@ -48,9 +56,21 @@ trait InteractsWithEventOrderingPartyLookups
         $additional = array_slice($this->resolvedOrderingParties(), 1);
 
         $this->syncLookupOrderingParties($additional);
-        $this->data['client_name'] = null;
-        $this->data['client_email'] = null;
-        $this->data['client_phone'] = null;
+        $this->writeClientFieldsToForm(null, null, null);
+    }
+
+    /**
+     * Ukryte client_* muszą zostać w $this->data (statePath formularza).
+     * Nie wołamy form->fill() — przebudowuje repeater ordering_parties i gubi dodatkowych.
+     */
+    protected function writeClientFieldsToForm(
+        ?string $clientName,
+        ?string $clientEmail,
+        ?string $clientPhone,
+    ): void {
+        $this->data['client_name'] = $clientName;
+        $this->data['client_email'] = $clientEmail;
+        $this->data['client_phone'] = $clientPhone;
     }
 
     /**
@@ -65,6 +85,18 @@ trait InteractsWithEventOrderingPartyLookups
         $this->syncLookupOrderingParties($primary
             ? array_merge([$primary], $additional)
             : $additional);
+    }
+
+    #[On('ordering-party-trip-contact-set')]
+    public function applyTripContactSelection(int $partyIndex): void
+    {
+        $parties = $this->resolvedOrderingParties();
+
+        foreach (array_keys($parties) as $index) {
+            $parties[$index]['goes_on_trip'] = $index === $partyIndex;
+        }
+
+        $this->syncLookupOrderingParties($parties);
     }
 
     /**
@@ -127,6 +159,7 @@ trait InteractsWithEventOrderingPartyLookups
                 'contractor_id' => $row['contractor_id'],
                 'department_label' => $row['department_label'] ?? null,
                 'notes' => $row['notes'] ?? null,
+                'goes_on_trip' => (bool) ($row['goes_on_trip'] ?? false),
             ])
             ->values()
             ->all();

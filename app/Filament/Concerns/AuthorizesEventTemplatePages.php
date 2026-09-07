@@ -5,7 +5,7 @@ namespace App\Filament\Concerns;
 use Illuminate\Support\Facades\Auth;
 
 /**
- * Uprawnienia stron workflow szablonu imprezy (pełna edycja vs tylko program).
+ * Uprawnienia stron workflow szablonu imprezy (podgląd vs edycja).
  */
 trait AuthorizesEventTemplatePages
 {
@@ -15,11 +15,15 @@ trait AuthorizesEventTemplatePages
             return false;
         }
 
-        if (static::requiresFullTemplateEdit()) {
-            return static::userCanEditEventTemplate();
+        if (static::userCanViewEventTemplate()) {
+            return true;
         }
 
-        return static::userCanEditEventTemplateProgram();
+        if (! static::requiresFullTemplateEdit()) {
+            return static::userCanEditEventTemplateProgram();
+        }
+
+        return static::userCanEditEventTemplate();
     }
 
     protected static function requiresFullTemplateEdit(): bool
@@ -37,12 +41,25 @@ trait AuthorizesEventTemplatePages
         );
     }
 
+    /**
+     * Kto może zapisywać po świadomym odblokowaniu edycji (admin od razu, biuro po potwierdzeniu).
+     */
+    protected static function userCanMutateEventTemplate(): bool
+    {
+        $user = Auth::user();
+
+        return $user && (
+            $user->hasRole(['admin', 'super_admin', 'biuro'])
+            || $user->can('edit event_template')
+        );
+    }
+
     protected static function userCanEditEventTemplateProgram(): bool
     {
         $user = Auth::user();
 
         return $user && (
-            $user->hasRole(['admin', 'super_admin'])
+            $user->hasRole(['admin', 'super_admin', 'biuro'])
             || $user->can('edit event_template')
             || $user->can('edit event_template_program')
         );
@@ -53,8 +70,10 @@ trait AuthorizesEventTemplatePages
         $user = Auth::user();
 
         return $user && (
-            $user->hasRole(['admin', 'super_admin'])
+            $user->hasRole(['admin', 'super_admin', 'biuro'])
             || $user->can('view event_template')
+            || $user->can('edit event_template')
+            || $user->can('edit event_template_program')
         );
     }
 }

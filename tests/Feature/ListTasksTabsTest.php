@@ -40,7 +40,7 @@ class ListTasksTabsTest extends TestCase
             'assignee_id' => $user->id,
         ]);
 
-        Task::create([
+        $authored = Task::create([
             'title' => 'Zlecone przeze mnie',
             'status_id' => Task::getDefaultStatusId(),
             'priority' => 'normal',
@@ -62,8 +62,8 @@ class ListTasksTabsTest extends TestCase
             ->test(ListTasks::class)
             ->assertSet('activeTab', 'active')
             ->assertSet('tasksScope', 'assigned')
-            ->assertCanSeeTableRecords([$assigned])
-            ->assertCountTableRecords(1);
+            ->assertCanSeeTableRecords([$assigned, $authored])
+            ->assertCountTableRecords(2);
     }
 
     public function test_list_can_show_all_tasks_when_scope_is_all(): void
@@ -92,6 +92,73 @@ class ListTasksTabsTest extends TestCase
             ->test(ListTasks::class)
             ->call('setTasksScope', 'all')
             ->assertCountTableRecords(2);
+    }
+
+    public function test_authored_scope_hides_system_tasks_from_list(): void
+    {
+        $user = User::factory()->create();
+        $user->assignRole('admin');
+        $other = User::factory()->create();
+
+        $office = Task::create([
+            'title' => 'Zlecone biurowe',
+            'status_id' => Task::getDefaultStatusId(),
+            'priority' => 'normal',
+            'source' => 'office',
+            'author_id' => $user->id,
+            'assignee_id' => $other->id,
+        ]);
+
+        $system = Task::create([
+            'title' => 'Kopia systemowa',
+            'status_id' => Task::getDefaultStatusId(),
+            'priority' => 'normal',
+            'source' => 'system',
+            'author_id' => $user->id,
+            'assignee_id' => $user->id,
+        ]);
+
+        Livewire::actingAs($user)
+            ->test(ListTasks::class)
+            ->call('setTasksScope', 'authored')
+            ->assertCanSeeTableRecords([$office])
+            ->assertCanNotSeeTableRecords([$system]);
+    }
+
+    public function test_finished_tab_shows_only_finished_tasks(): void
+    {
+        $user = User::factory()->create();
+        $user->assignRole('admin');
+
+        $open = Task::create([
+            'title' => 'Otwarte',
+            'status_id' => Task::getDefaultStatusId(),
+            'priority' => 'normal',
+            'source' => 'office',
+            'author_id' => $user->id,
+            'assignee_id' => $user->id,
+        ]);
+
+        $finishedStatusId = \App\Models\TaskStatus::query()
+            ->where('name', 'Zakończone')
+            ->value('id');
+
+        $finished = Task::create([
+            'title' => 'Zakończone zadanie',
+            'status_id' => $finishedStatusId,
+            'priority' => 'normal',
+            'source' => 'office',
+            'author_id' => $user->id,
+            'assignee_id' => $user->id,
+        ]);
+
+        Livewire::actingAs($user)
+            ->test(ListTasks::class)
+            ->assertSee('Zlecone przeze mnie')
+            ->assertSee('Zakończone')
+            ->set('activeTab', 'finished')
+            ->assertCanSeeTableRecords([$finished])
+            ->assertCanNotSeeTableRecords([$open]);
     }
 
     public function test_new_tab_shows_only_open_todo_tasks_for_user(): void
@@ -236,5 +303,26 @@ class ListTasksTabsTest extends TestCase
             ->assertCanSeeTableRecords([$beta, $alpha], inOrder: true)
             ->sortTable('modified_at', 'desc')
             ->assertCanSeeTableRecords([$alpha, $beta], inOrder: true);
+    }
+
+    public function test_list_shows_from_and_to_ownership_on_each_task(): void
+    {
+        $user = User::factory()->create(['name' => 'Anna Lista']);
+        $user->assignRole('admin');
+        $assignee = User::factory()->create(['name' => 'Jan Lista']);
+
+        Task::create([
+            'title' => 'Zadanie z nadawcą i odbiorcą',
+            'status_id' => Task::getDefaultStatusId(),
+            'priority' => 'normal',
+            'source' => 'office',
+            'author_id' => $user->id,
+            'assignee_id' => $assignee->id,
+        ]);
+
+        Livewire::actingAs($user)
+            ->test(ListTasks::class)
+            ->call('setTasksScope', 'all')
+            ->assertSee('Od Anna Lista dla Jan Lista');
     }
 }

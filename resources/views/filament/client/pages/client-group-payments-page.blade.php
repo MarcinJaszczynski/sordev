@@ -9,59 +9,59 @@
     ])
 
     @if(filled($archiveMessage))
-        <div class="mb-4 rounded-xl border border-blue-200 bg-blue-50 px-4 py-3 text-sm text-blue-950">
+        <div class="portal-notice portal-notice--accent">
             {{ $archiveMessage }}
         </div>
     @endif
 
     <div class="space-y-4">
         <section class="client-portal-section">
-            <h3 class="text-base font-semibold text-slate-900">Podsumowanie grupy</h3>
-            <p class="mt-1 text-sm text-slate-600">
+            <h3 class="text-base font-semibold text-[#2C2C2A]">Podsumowanie grupy</h3>
+            <p class="mt-1 text-sm text-[#5F5E5A]">
                 Raport zbiorczy. Płatność online:
-                <a href="{{ \App\Filament\Client\Pages\ClientPaymentsPage::urlFor($event) }}" class="font-medium text-[#0663fc] underline">
+                <a href="{{ \App\Filament\Client\Pages\ClientPaymentsPage::urlFor($event) }}" class="font-medium text-[#0C447C] underline">
                     Płatności
                 </a>
             </p>
             <dl class="mt-3 grid gap-3 text-sm md:grid-cols-4">
                 <div>
-                    <dt class="text-slate-500">Uczestników</dt>
+                    <dt class="text-[#888780]">Uczestników</dt>
                     <dd class="font-medium">{{ $summary['count'] ?? 0 }}</dd>
                 </div>
                 <div>
-                    <dt class="text-slate-500">Należne łącznie</dt>
+                    <dt class="text-[#888780]">Należne łącznie</dt>
                     <dd class="font-medium">{{ MoneyFormatter::format((float) ($summary['total_due'] ?? 0), 'PLN') }}</dd>
                 </div>
                 <div>
-                    <dt class="text-slate-500">Wpłacone łącznie</dt>
+                    <dt class="text-[#888780]">Wpłacone łącznie</dt>
                     <dd class="font-medium">{{ MoneyFormatter::format((float) ($summary['total_paid'] ?? 0), 'PLN') }}</dd>
                 </div>
                 <div>
-                    <dt class="text-slate-500">Różnica</dt>
+                    <dt class="text-[#888780]">Różnica</dt>
                     <dd class="font-medium">{{ MoneyFormatter::format((float) ($summary['total_remaining'] ?? 0), 'PLN') }}</dd>
                 </div>
             </dl>
         </section>
 
         <section class="client-portal-section overflow-hidden !p-0">
-            <header class="border-b border-slate-100 bg-slate-50 px-4 py-3">
-                <h3 class="text-sm font-semibold text-slate-900">Wpłaty uczestników</h3>
+            <header class="border-b border-[#E5E3DA] bg-[#F1EFE8] px-4 py-3">
+                <h3 class="text-sm font-semibold text-[#2C2C2A]">Wpłaty uczestników</h3>
             </header>
             @if($rows->isEmpty())
-                <p class="px-4 py-3 text-sm text-slate-500">Brak wpłat w rozliczeniu tej imprezy.</p>
+                <p class="px-4 py-3 text-sm text-[#888780]">Brak wpłat w rozliczeniu tej imprezy.</p>
             @else
                 <div class="overflow-x-auto">
                     <table class="min-w-full divide-y divide-slate-100 text-sm">
-                        <thead class="bg-slate-50">
+                        <thead class="bg-[#F1EFE8]">
                             <tr>
-                                <th class="px-4 py-2 text-left font-medium text-slate-600">Uczestnik</th>
-                                <th class="px-4 py-2 text-left font-medium text-slate-600">Referencja</th>
-                                <th class="px-4 py-2 text-right font-medium text-slate-600">Należne</th>
-                                <th class="px-4 py-2 text-right font-medium text-slate-600">Wpłacone</th>
-                                <th class="px-4 py-2 text-right font-medium text-slate-600">Różnica</th>
-                                <th class="px-4 py-2 text-left font-medium text-slate-600">Semafor</th>
-                                <th class="px-4 py-2 text-left font-medium text-slate-600">Następna rata</th>
-                                <th class="px-4 py-2 text-left font-medium text-slate-600">Status</th>
+                                <th class="px-4 py-2 text-left font-medium text-[#5F5E5A]">Uczestnik</th>
+                                <th class="px-4 py-2 text-left font-medium text-[#5F5E5A]">Referencja</th>
+                                <th class="px-4 py-2 text-right font-medium text-[#5F5E5A]">Należne</th>
+                                <th class="px-4 py-2 text-right font-medium text-[#5F5E5A]">Wpłacone</th>
+                                <th class="px-4 py-2 text-right font-medium text-[#5F5E5A]">Różnica</th>
+                                <th class="px-4 py-2 text-left font-medium text-[#5F5E5A]">Semafor</th>
+                                <th class="px-4 py-2 text-left font-medium text-[#5F5E5A]">Następna rata</th>
+                                <th class="px-4 py-2 text-left font-medium text-[#5F5E5A]">Status</th>
                             </tr>
                         </thead>
                         <tbody class="divide-y divide-slate-100">

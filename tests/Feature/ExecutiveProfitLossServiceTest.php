@@ -6,6 +6,7 @@ use App\Models\Event;
 use App\Models\EventSettlement;
 use App\Services\ExecutiveProfitLossService;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Carbon;
 use Tests\TestCase;
 
 class ExecutiveProfitLossServiceTest extends TestCase
@@ -14,14 +15,21 @@ class ExecutiveProfitLossServiceTest extends TestCase
 
     public function test_summarizes_revenue_costs_and_net_result(): void
     {
-        $event = Event::factory()->create(['code' => 'EXE2026']);
+        Carbon::setTestNow('2026-09-01');
+
+        $event = Event::factory()->create([
+            'code' => 'EXE2026',
+            'start_date' => '2026-07-01',
+            'end_date' => '2026-07-03',
+            'status' => Event::STATUS_SETTLED,
+        ]);
         $settlement = EventSettlement::findOrCreateActiveForEvent($event);
         $settlement->forceFill([
             'participant_paid_pln' => 10000,
             'participant_due_pln' => 10000,
             'actual_cost_pln' => 7200,
             'planned_cost_pln' => 7000,
-            'status' => 'active',
+            'status' => 'closed',
         ])->save();
 
         $rows = app(ExecutiveProfitLossService::class)->eventRows(['search' => 'EXE2026']);
@@ -31,5 +39,7 @@ class ExecutiveProfitLossServiceTest extends TestCase
         $this->assertSame(10000.0, $summary['revenue_pln']);
         $this->assertSame(7200.0, $summary['costs_pln']);
         $this->assertSame(2800.0, $summary['net_result_pln']);
+
+        Carbon::setTestNow();
     }
 }

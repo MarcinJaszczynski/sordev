@@ -17,7 +17,8 @@ class ImageCompressionService
 
     public const MAX_HEIGHT = 1080;
 
-    public const THUMBNAIL_SIZE = 300;
+    /** Kwadrat listingowy — 720 px wystarcza na Retinę przy slocie ~35% karty oferty. */
+    public const THUMBNAIL_SIZE = 720;
 
     /**
      * Kompresuje i optymalizuje uploadowany obraz
@@ -50,15 +51,9 @@ class ImageCompressionService
             Storage::disk($disk)->put($webpPath, $webpData);
         }
 
-        // Utwórz miniaturę
+        // Utwórz miniaturę (cover = zachowane proporcje + kadr do centrum)
         $thumbnailPath = $directory.'/thumbs/'.$filename;
-        $thumbnail = clone $image;
-        $thumbnail->resize(self::THUMBNAIL_SIZE, self::THUMBNAIL_SIZE, function ($constraint) {
-            $constraint->aspectRatio();
-            $constraint->upsize();
-        });
-        $thumbnail->crop(self::THUMBNAIL_SIZE, self::THUMBNAIL_SIZE, 0, 0);
-        $thumbnailData = self::compressImage($thumbnail, $extension);
+        $thumbnailData = self::compressImage(self::makeCenteredThumbnail($image), $extension);
         Storage::disk($disk)->put($thumbnailPath, $thumbnailData);
 
         $originalSize = $file->getSize();
@@ -85,24 +80,48 @@ class ImageCompressionService
      */
     public static function compressExistingImages(string $disk = 'public', string $directory = 'images', bool $force = false): array
     {
-        $files = Storage::disk($disk)->allFiles($directory);
+        $files = self::preferPrimarySources(
+            array_values(array_filter(
+                Storage::disk($disk)->allFiles($directory),
+                fn (string $filePath): bool => self::isProcessableSourceImage($filePath)
+            ))
+        );
         $results = [];
 
         foreach ($files as $filePath) {
-            if (self::isProcessableSourceImage($filePath)) {
-                try {
-                    $result = self::compressExistingImage($disk, $filePath, $force);
-                    $results[] = $result;
-                } catch (\Exception $e) {
-                    $results[] = [
-                        'file' => $filePath,
-                        'error' => $e->getMessage(),
-                    ];
-                }
+            try {
+                $results[] = self::compressExistingImage($disk, $filePath, $force);
+            } catch (\Exception $e) {
+                $results[] = [
+                    'file' => $filePath,
+                    'error' => $e->getMessage(),
+                ];
             }
         }
 
         return $results;
+    }
+
+    /**
+     * Usuwa wszystkie pliki w podkatalogach thumbs/ pod wskazanym katalogiem.
+     */
+    public static function purgeThumbnails(string $disk, string $directory): int
+    {
+        $storage = Storage::disk($disk);
+        $deleted = 0;
+
+        foreach ($storage->allFiles($directory) as $filePath) {
+            $normalized = str_replace('\\', '/', $filePath);
+
+            if (! str_contains($normalized, '/thumbs/')) {
+                continue;
+            }
+
+            $storage->delete($filePath);
+            $deleted++;
+        }
+
+        return $deleted;
     }
 
     /**
@@ -118,24 +137,25 @@ class ImageCompressionService
         $manager = new ImageManager(new Driver);
         $image = $manager->read($imageData);
 
-        // Optymalizuj
+        $widthBefore = $image->width();
+        $heightBefore = $image->height();
+
+        // Optymalizuj wymiary (bez rozciągania)
         $image = self::resizeIfNeeded($image);
         $extension = strtolower((string) pathinfo($filePath, PATHINFO_EXTENSION));
-        $compressedData = self::compressImage($image, $extension);
 
-        // Zapisz skompresowany obraz
-        $storage->put($filePath, $compressedData);
+        // Nadpisuj pełny plik tylko gdy wymiary faktycznie się zmieniły
+        // (unikamy ponownej kompresji JPEG i utraty jakości przy regeneracji miniaturek).
+        if ($image->width() !== $widthBefore || $image->height() !== $heightBefore) {
+            $storage->put($filePath, self::compressImage($image, $extension));
+        }
 
         $thumbnailPath = self::thumbnailPathFor($filePath);
         if ($force || ! $storage->exists($thumbnailPath)) {
-            $thumbnail = clone $image;
-            $thumbnail->resize(self::THUMBNAIL_SIZE, self::THUMBNAIL_SIZE, function ($constraint) {
-                $constraint->aspectRatio();
-                $constraint->upsize();
-            });
-            $thumbnail->crop(self::THUMBNAIL_SIZE, self::THUMBNAIL_SIZE, 0, 0);
-
-            $storage->put($thumbnailPath, self::compressImage($thumbnail, $extension));
+            $storage->put(
+                $thumbnailPath,
+                self::compressImage(self::makeCenteredThumbnail($image), $extension)
+            );
         }
 
         $webpPath = null;
@@ -161,21 +181,25 @@ class ImageCompressionService
     }
 
     /**
-     * Zmienia rozmiar obrazu jeśli jest za duży
+     * Zmniejsza obraz tylko gdy przekracza limity — bez rozciągania proporcji.
+     * Intervention v3: scaleDown (nie resize z callbackiem z v2).
      */
     private static function resizeIfNeeded($image)
     {
-        $width = $image->width();
-        $height = $image->height();
-
-        if ($width > self::MAX_WIDTH || $height > self::MAX_HEIGHT) {
-            $image->resize(self::MAX_WIDTH, self::MAX_HEIGHT, function ($constraint) {
-                $constraint->aspectRatio();
-                $constraint->upsize();
-            });
-        }
+        $image->scaleDown(self::MAX_WIDTH, self::MAX_HEIGHT);
 
         return $image;
+    }
+
+    /**
+     * Kwadratowa miniatura: wypełnia ramkę, kadruje do centrum, zachowuje proporcje.
+     */
+    private static function makeCenteredThumbnail($image)
+    {
+        $thumbnail = clone $image;
+        $thumbnail->cover(self::THUMBNAIL_SIZE, self::THUMBNAIL_SIZE, 'center');
+
+        return $thumbnail;
     }
 
     /**
@@ -211,6 +235,50 @@ class ImageCompressionService
         $normalized = str_replace('\\', '/', $filePath);
 
         return ! str_contains($normalized, '/thumbs/');
+    }
+
+    /**
+     * Pomija WebP-sibling gdy istnieje JPG/PNG/GIF o tej samej nazwie —
+     * prewki budujemy z oryginału, nie z już stratnej kopii WebP.
+     *
+     * @param  list<string>  $filePaths
+     * @return list<string>
+     */
+    private static function preferPrimarySources(array $filePaths): array
+    {
+        $grouped = [];
+
+        foreach ($filePaths as $filePath) {
+            $normalized = str_replace('\\', '/', $filePath);
+            $directory = pathinfo($normalized, PATHINFO_DIRNAME);
+            $basename = pathinfo($normalized, PATHINFO_FILENAME);
+            $extension = strtolower((string) pathinfo($normalized, PATHINFO_EXTENSION));
+            $key = ($directory === '.' ? '' : $directory).'/'.$basename;
+
+            $grouped[$key][$extension] = $normalized;
+        }
+
+        $preferred = [];
+
+        foreach ($grouped as $variants) {
+            $primary = array_filter(
+                $variants,
+                fn (string $path, string $extension): bool => $extension !== 'webp',
+                ARRAY_FILTER_USE_BOTH
+            );
+
+            if ($primary === []) {
+                $preferred[] = $variants['webp'];
+
+                continue;
+            }
+
+            foreach ($primary as $path) {
+                $preferred[] = $path;
+            }
+        }
+
+        return $preferred;
     }
 
     private static function thumbnailPathFor(string $filePath): string

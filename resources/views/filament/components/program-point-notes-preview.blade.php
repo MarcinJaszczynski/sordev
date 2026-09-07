@@ -20,13 +20,14 @@
 @if ($items->isEmpty())
     <span class="text-gray-400">—</span>
 @else
-    <div class="group relative max-w-sm">
-        <div class="space-y-2 text-xs leading-5">
+    <div class="group relative epp-notes-preview">
+        <div class="epp-notes-preview__list">
             @foreach ($items as $item)
-                <div>
-                    <div class="font-semibold text-gray-700 dark:text-gray-300">{{ $item['label'] }}:</div>
-                    <div class="text-gray-600 dark:text-gray-400">
-                        {{ \Illuminate\Support\Str::limit($item['plain'], 120) }}
+                <div class="epp-notes-preview__item">
+                    <div class="epp-notes-preview__label">{{ $item['label'] }}:</div>
+                    {{-- Pełna treść jak opis programu (line-clamp w CSS, bez limitu znaków). --}}
+                    <div class="epp-point-sub" title="{{ $item['plain'] }}">
+                        {{ $item['plain'] }}
                     </div>
                 </div>
             @endforeach

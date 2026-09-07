@@ -46,12 +46,34 @@
         @endif
     @endif
 
-    @if ($this->contextLinks() !== [])
+    @php
+        $contextTask = \App\Support\Tasks\TaskContextRegistry::resolveEffectiveContextTask($record);
+        if ($contextTask) {
+            $contextTask->loadMissing('taskable');
+        }
+        $contextType = $contextTask?->taskable_type_label;
+        $contextRecord = $contextTask?->taskable_label;
+        $contextLinks = $this->contextLinks();
+    @endphp
+
+    @if ($contextType || $contextLinks !== [])
         <div class="rounded-xl border border-gray-200 bg-gray-50 p-3 dark:border-gray-700 dark:bg-gray-900/40">
-            @include('filament.pages.partials.calendar-entry-links', [
-                'links' => $this->contextLinks(),
-                'openInNewTab' => true,
-            ])
+            @if ($contextType)
+                <div class="mb-2">
+                    <div class="text-[0.65rem] font-bold uppercase tracking-wide text-gray-500 dark:text-gray-400">
+                        {{ $contextType }}
+                    </div>
+                    <div class="mt-0.5 text-sm font-semibold text-gray-950 dark:text-gray-100">
+                        {{ $contextRecord }}
+                    </div>
+                </div>
+            @endif
+            @if ($contextLinks !== [])
+                @include('filament.pages.partials.calendar-entry-links', [
+                    'links' => $contextLinks,
+                    'openInNewTab' => true,
+                ])
+            @endif
         </div>
     @endif
 

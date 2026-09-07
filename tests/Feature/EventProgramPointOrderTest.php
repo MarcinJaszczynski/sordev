@@ -376,4 +376,26 @@ class EventProgramPointOrderTest extends TestCase
         $this->assertFalse($event->isFacultativeProgramDay(5));
         $this->assertTrue($event->isFacultativeProgramDay(6));
     }
+
+    public function test_resolve_program_days_count_caps_runaway_point_days_at_core_plus_one(): void
+    {
+        $event = Event::factory()->create([
+            'start_date' => '2026-06-01',
+            'end_date' => '2026-06-03',
+            'duration_days' => 3,
+        ]);
+
+        EventProgramPoint::factory()->create([
+            'event_id' => $event->id,
+            'day' => 99,
+            'order' => 1,
+            'name' => 'Błędny dzień',
+        ]);
+
+        $this->assertSame(3, $event->resolveCoreProgramDaysCount());
+        $this->assertSame(4, $event->resolveProgramDaysCount());
+        $this->assertSame(3, $event->clampProgramPointDay(99));
+        $this->assertSame(4, $event->clampProgramPointDay(4));
+        $this->assertSame(3, $event->clampProgramPointDay(4, allowFacultative: false));
+    }
 }

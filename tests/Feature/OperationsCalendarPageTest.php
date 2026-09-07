@@ -78,6 +78,129 @@ class OperationsCalendarPageTest extends TestCase
         $this->assertCount(2, $taskEvents);
     }
 
+    public function test_calendar_persists_filter_layout_in_session(): void
+    {
+        $user = User::factory()->create();
+        $user->assignRole('admin');
+
+        Livewire::actingAs($user)
+            ->test(OperationsCalendarPage::class)
+            ->call('toggleType', 'ksef')
+            ->call('setTasksScope', 'assigned')
+            ->set('tasksOnlyUrgent', true)
+            ->call('setLayoutMode', 'resources');
+
+        $second = Livewire::actingAs($user)
+            ->test(OperationsCalendarPage::class)
+            ->assertSet('tasksScope', 'assigned')
+            ->assertSet('tasksOnlyUrgent', true)
+            ->assertSet('layoutMode', 'resources');
+
+        $types = $second->get('enabledTypes');
+        $this->assertIsArray($types);
+        $this->assertNotContains('ksef', $types);
+        $this->assertContains('insurances', $types);
+
+        $user->refresh();
+        session()->flush();
+
+        $afterLogout = Livewire::actingAs($user)
+            ->test(OperationsCalendarPage::class)
+            ->assertSet('tasksScope', 'assigned')
+            ->assertSet('tasksOnlyUrgent', true)
+            ->assertSet('layoutMode', 'resources');
+
+        $this->assertNotContains('ksef', $afterLogout->get('enabledTypes'));
+    }
+
+    public function test_calendar_includes_insurance_entries_without_schema_change(): void
+    {
+        $user = User::factory()->create();
+        $user->assignRole('admin');
+
+        $event = \App\Models\Event::factory()->create([
+            'assigned_to' => $user->id,
+            'start_date' => now()->addDays(10)->toDateString(),
+            'end_date' => now()->addDays(12)->toDateString(),
+            'code' => 'UBZ-1',
+        ]);
+
+        $insurance = \App\Models\Insurance::query()->create([
+            'name' => 'NNW kalendarz',
+            'coverage_type' => \App\Models\Insurance::COVERAGE_NNW,
+            'price_per_person' => 10,
+            'active' => true,
+        ]);
+
+        $dayInsurance = \App\Models\EventDayInsurance::query()->create([
+            'event_id' => $event->id,
+            'day' => 2,
+            'insurance_id' => $insurance->id,
+            'is_done' => false,
+        ]);
+
+        $component = Livewire::actingAs($user)
+            ->test(OperationsCalendarPage::class);
+
+        $entry = collect($component->instance()->calendarEvents)
+            ->firstWhere('id', 'insurance-'.$dayInsurance->id);
+
+        $this->assertNotNull($entry);
+        $this->assertSame('insurances', $entry['type']);
+        $this->assertSame(
+            $event->start_date->copy()->addDay()->toDateString(),
+            $entry['start']
+        );
+        $this->assertStringContainsString('NNW kalendarz', (string) $entry['title']);
+    }
+
+    public function test_calendar_assigned_scope_includes_authored_tasks_like_topbar(): void
+    {
+        $user = User::factory()->create();
+        $user->assignRole('admin');
+        $other = User::factory()->create();
+
+        Task::create([
+            'title' => 'Przypisane z kalendarza',
+            'due_date' => now()->addDay(),
+            'status_id' => Task::getDefaultStatusId(),
+            'priority' => 'normal',
+            'author_id' => $other->id,
+            'assignee_id' => $user->id,
+        ]);
+
+        Task::create([
+            'title' => 'Utworzone przeze mnie z kalendarza',
+            'due_date' => now()->addDay(),
+            'status_id' => Task::getDefaultStatusId(),
+            'priority' => 'normal',
+            'author_id' => $user->id,
+            'assignee_id' => $other->id,
+        ]);
+
+        Task::create([
+            'title' => 'Obce z kalendarza',
+            'due_date' => now()->addDay(),
+            'status_id' => Task::getDefaultStatusId(),
+            'priority' => 'normal',
+            'author_id' => $other->id,
+            'assignee_id' => $other->id,
+        ]);
+
+        $component = Livewire::actingAs($user)
+            ->test(OperationsCalendarPage::class)
+            ->call('setTasksScope', 'assigned');
+
+        $titles = collect($component->instance()->calendarEvents)
+            ->filter(fn (array $event): bool => ($event['type'] ?? null) === 'tasks')
+            ->map(fn (array $event): string => (string) ($event['title'] ?? ''))
+            ->values();
+
+        $this->assertCount(2, $titles);
+        $this->assertTrue($titles->contains(fn (string $title): bool => str_contains($title, 'Przypisane z kalendarza')));
+        $this->assertTrue($titles->contains(fn (string $title): bool => str_contains($title, 'Utworzone przeze mnie z kalendarza')));
+    }
+
     public function test_calendar_can_narrow_to_assigned_scope(): void
     {
         $user = User::factory()->create();
@@ -296,6 +419,10 @@ class OperationsCalendarPageTest extends TestCase
         $this->assertNotNull($entry);
         $this->assertArrayNotHasKey('url', $entry);
         $this->assertNotEmpty($entry['links']);
+        $this->assertSame(
+            'Od '.$user->name.' dla —',
+            $entry['extendedProps']['ownershipPreview'] ?? null,
+        );
     }
 
     public function test_open_calendar_event_entry_mounts_context_action(): void

@@ -59,7 +59,7 @@ class EventPackageDocument extends Model
     public static array $hideSectionLabels = [
         'hotel_plan' => 'Plan noclegów / pokoje',
         'program' => 'Program imprezy',
-        'pilot_set_finance' => 'Finanse zestawu pilota',
+        'pilot_set_finance' => 'Wydatki / finanse pilota',
         'notes' => 'Notatki',
         'attachments_list' => 'Lista załączników w PDF',
     ];

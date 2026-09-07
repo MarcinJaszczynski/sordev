@@ -28,9 +28,7 @@ final class PilotProgramReservationDisplay
 
         $reservations = self::reservationsForPoint($point);
 
-        $start = filled($point->start_time)
-            ? substr((string) $point->start_time, 0, 5)
-            : null;
+        $start = $point->displayStartTime();
 
         return $reservations
             ->reject(fn (Reservation $reservation): bool => $reservation->status === 'not_required')

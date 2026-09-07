@@ -16,7 +16,7 @@ use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Pagination\LengthAwarePaginator;
 
 /**
- * Taby = skróty operacyjne (max ~7).
+ * Taby = skróty operacyjne (ścieżka statusów + filtry dat/właściciela).
  * Ścieżka oferty: kanonicznie EventsSalesPipelinePage (link w headerze).
  * „Bez wypłaty pilota”: filtr tabeli Wypłata pilotowi.
  */
@@ -39,9 +39,15 @@ class ListEvents extends ListRecords
             'inquiry' => Tab::make('Zapytania')
                 ->modifyQueryUsing(fn (Builder $query): Builder => $query
                     ->where('status', Event::STATUS_INQUIRY)),
+            'offer' => Tab::make('Oferta')
+                ->modifyQueryUsing(fn (Builder $query): Builder => $query
+                    ->where('status', Event::STATUS_OFFER)),
+            'provisional_reservation' => Tab::make('Wstępna rezerwacja')
+                ->modifyQueryUsing(fn (Builder $query): Builder => $query
+                    ->where('status', Event::STATUS_PROVISIONAL_RESERVATION)),
             'confirmed' => Tab::make('Potwierdzone')
                 ->modifyQueryUsing(fn (Builder $query): Builder => $query
-                    ->where('status', Event::STATUS_CONFIRMED)),
+                    ->whereIn('status', Event::getConfirmedLikeStatuses())),
             'upcoming' => Tab::make('Nadchodzące')
                 ->modifyQueryUsing(fn (Builder $query): Builder => $query
                     ->whereDate('start_date', '>=', $today)
@@ -50,15 +56,18 @@ class ListEvents extends ListRecords
                 ->modifyQueryUsing(fn (Builder $query): Builder => $query
                     ->whereDate('start_date', '>=', $today)
                     ->whereDate('start_date', '<=', $weekEnd)),
-            'to_settle' => Tab::make('Nierozliczone')
+            'to_settle' => Tab::make('Do rozliczenia')
                 ->modifyQueryUsing(fn (Builder $query): Builder => $query
                     ->whereIn('status', [Event::STATUS_TO_SETTLE, 'in_progress'])),
             'mine' => Tab::make('Moje')
                 ->modifyQueryUsing(fn (Builder $query): Builder => $query
                     ->where('assigned_to', auth()->id())),
+            'pending_cancellation' => Tab::make('Do anulacji')
+                ->modifyQueryUsing(fn (Builder $query): Builder => $query
+                    ->where('status', Event::STATUS_PENDING_CANCELLATION)),
             'cancelled' => Tab::make('Anulowane')
                 ->modifyQueryUsing(fn (Builder $query): Builder => $query
-                    ->whereIn('status', [Event::STATUS_CANCELLED, Event::STATUS_PENDING_CANCELLATION])),
+                    ->where('status', Event::STATUS_CANCELLED)),
             'settled' => Tab::make('Zakończone')
                 ->modifyQueryUsing(fn (Builder $query): Builder => $query
                     ->where('status', Event::STATUS_SETTLED)),
@@ -72,7 +81,7 @@ class ListEvents extends ListRecords
         $sortColumn = $this->activeTab === 'settled' ? 'updated_at' : 'start_date';
         $sortDirection = $this->activeTab === 'settled' ? 'desc' : 'asc';
 
-        if (in_array($this->activeTab, ['all', 'inquiry', 'confirmed', 'cancelled', 'to_settle', 'mine'], true)) {
+        if (in_array($this->activeTab, ['all', 'inquiry', 'offer', 'provisional_reservation', 'confirmed', 'pending_cancellation', 'cancelled', 'to_settle', 'mine'], true)) {
             $sortColumn = 'updated_at';
             $sortDirection = 'desc';
         }

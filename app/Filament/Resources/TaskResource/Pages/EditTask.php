@@ -71,9 +71,9 @@ class EditTask extends EditRecord
 
         if ($effectiveContextTask && $effectiveContextTask->taskable_type && $effectiveContextTask->taskable_id) {
             $effectiveContextTask->loadMissing('taskable');
-            $typeLabel = TaskContextRegistry::labelForType($effectiveContextTask->taskable_type) ?? 'Kontekst';
+            $typeLabel = TaskContextRegistry::labelForType($effectiveContextTask->taskable_type) ?? 'Powiązanie';
             $recordLabel = TaskContextRegistry::labelForRecord($effectiveContextTask->taskable) ?? ('#'.$effectiveContextTask->taskable_id);
-            $effectiveContext = 'Kontekst: '.$typeLabel.' - '.$recordLabel;
+            $effectiveContext = $typeLabel.': '.$recordLabel;
         }
 
         return collect([$parentContext, $effectiveContext])->filter()->join(' | ') ?: null;

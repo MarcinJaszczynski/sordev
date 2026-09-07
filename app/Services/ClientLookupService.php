@@ -5,6 +5,7 @@ namespace App\Services;
 use App\Models\Contact;
 use App\Models\Contractor;
 use App\Models\Event;
+use App\Support\PhoneValidation;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\Schema;
 
@@ -119,10 +120,11 @@ class ClientLookupService
         }
 
         $contractors = $contractorsQuery
-            ->where(function ($builder) use ($like): void {
+            ->where(function ($builder) use ($like, $term): void {
                 $builder->where('name', 'like', $like)
-                    ->orWhere('phone', 'like', $like)
                     ->orWhere('email', 'like', $like);
+
+                PhoneValidation::orWhereDigitsLike($builder, 'phone', $term);
 
                 if (Schema::hasColumn('contractors', 'street')) {
                     $builder->orWhere('street', 'like', $like);
@@ -146,11 +148,12 @@ class ClientLookupService
 
         // Kontakty: domyślnie tylko powiązane z typem „klient”; przy searchAll — też sieroty.
         $contactsQuery = Contact::query()
-            ->where(function ($builder) use ($like): void {
+            ->where(function ($builder) use ($like, $term): void {
                 $builder->where('first_name', 'like', $like)
                     ->orWhere('last_name', 'like', $like)
-                    ->orWhere('phone', 'like', $like)
                     ->orWhere('email', 'like', $like);
+
+                PhoneValidation::orWhereDigitsLike($builder, 'phone', $term);
 
                 if (Schema::hasColumn('contacts', 'address')) {
                     $builder->orWhere('address', 'like', $like);
@@ -408,8 +411,7 @@ class ClientLookupService
         }
 
         if ($this->isActiveTerm($criteria['phone'] ?? '')) {
-            $phone = $criteria['phone'];
-            $query->orWhere('phone', 'like', '%'.$phone.'%');
+            PhoneValidation::orWhereDigitsLike($query, 'phone', $criteria['phone']);
             $applied = true;
         }
 
@@ -437,7 +439,7 @@ class ClientLookupService
         }
 
         if ($this->isActiveTerm($criteria['phone'] ?? '')) {
-            $query->orWhere('phone', 'like', '%'.$criteria['phone'].'%');
+            PhoneValidation::orWhereDigitsLike($query, 'phone', $criteria['phone']);
             $applied = true;
         }
 
@@ -606,20 +608,22 @@ class ClientLookupService
             : null;
 
         if ($contact) {
-            return $this->makePairRow($contact, $contractor, $department, $notes);
+            $row = $this->makePairRow($contact, $contractor, $department, $notes);
+        } else {
+            $row = $this->makeContractorRow($contractor, $notes);
+
+            if ($department !== null) {
+                $row['preview']['department'] = $department;
+                $row['label'] = app(EventOrderingPartyService::class)->formatPartyItemHeading(
+                    null,
+                    $contractorId,
+                    $department,
+                    $notes,
+                );
+            }
         }
 
-        $row = $this->makeContractorRow($contractor, $notes);
-
-        if ($department !== null) {
-            $row['preview']['department'] = $department;
-            $row['label'] = app(EventOrderingPartyService::class)->formatPartyItemHeading(
-                null,
-                $contractorId,
-                $department,
-                $notes,
-            );
-        }
+        $row['goes_on_trip'] = (bool) ($party['goes_on_trip'] ?? false);
 
         return $row;
     }
@@ -663,6 +667,7 @@ class ClientLookupService
                 ? (string) $selected['preview']['department']
                 : null,
             'notes' => filled($selected['notes'] ?? null) ? (string) $selected['notes'] : null,
+            'goes_on_trip' => (bool) ($selected['goes_on_trip'] ?? false),
         ];
     }
 
@@ -780,7 +785,10 @@ class ClientLookupService
                 : null;
 
             if ($contractor && $contact) {
-                return $this->makePairRow($contact, $contractor, $department);
+                $row = $this->makePairRow($contact, $contractor, $department);
+                $row['goes_on_trip'] = (bool) ($first['goes_on_trip'] ?? false);
+
+                return $row;
             }
 
             if ($contractor) {
@@ -793,6 +801,7 @@ class ClientLookupService
                         $department,
                     );
                 }
+                $row['goes_on_trip'] = (bool) ($first['goes_on_trip'] ?? false);
 
                 return $row;
             }
@@ -808,6 +817,7 @@ class ClientLookupService
             'contractor_id' => $event->contractor_id ? (int) $event->contractor_id : null,
             'label' => (string) $event->client_name,
             'notes' => null,
+            'goes_on_trip' => true,
             'preview' => [
                 'person' => null,
                 'company' => (string) $event->client_name,

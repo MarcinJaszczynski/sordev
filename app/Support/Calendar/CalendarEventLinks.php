@@ -124,7 +124,7 @@ final class CalendarEventLinks
     /**
      * @return array{label: string, url: string, icon: string}|null
      */
-    public static function contractor(?int $contractorId): ?array
+    public static function contractor(?int $contractorId, string $label = 'Kontrahent'): ?array
     {
         if (! $contractorId) {
             return null;
@@ -132,7 +132,7 @@ final class CalendarEventLinks
 
         return self::link(
             ContractorResource::getUrl('edit', ['record' => $contractorId]),
-            'Kontrahent',
+            $label,
             'heroicon-o-building-office',
         );
     }
@@ -158,11 +158,11 @@ final class CalendarEventLinks
     /**
      * @return array{label: string, url: string, icon: string}|null
      */
-    public static function reservation(int $reservationId): ?array
+    public static function reservation(int $reservationId, string $label = 'Rezerwacja'): ?array
     {
         return self::link(
             ReservationResource::getUrl('edit', ['record' => $reservationId]),
-            'Rezerwacja',
+            $label,
             'heroicon-o-ticket',
         );
     }

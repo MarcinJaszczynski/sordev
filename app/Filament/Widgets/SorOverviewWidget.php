@@ -24,7 +24,7 @@ class SorOverviewWidget extends StatsOverviewWidget
 
         $eventsInProgress = Event::query()
             ->whereIn('status', [
-                Event::STATUS_CONFIRMED,
+                ...Event::getConfirmedLikeStatuses(),
                 Event::STATUS_PROVISIONAL_RESERVATION,
                 Event::STATUS_TO_SETTLE,
                 Event::STATUS_OFFER,
@@ -34,7 +34,7 @@ class SorOverviewWidget extends StatsOverviewWidget
         $upcomingTrips = Event::query()
             ->whereDate('start_date', '>=', $today)
             ->whereIn('status', [
-                Event::STATUS_CONFIRMED,
+                ...Event::getConfirmedLikeStatuses(),
                 Event::STATUS_PROVISIONAL_RESERVATION,
             ])
             ->count();
@@ -57,7 +57,7 @@ class SorOverviewWidget extends StatsOverviewWidget
                 ->whereNotNull('assigned_to')
                 ->where('pilot_funds_paid', false)
                 ->whereIn('status', [
-                    Event::STATUS_CONFIRMED,
+                    ...Event::getConfirmedLikeStatuses(),
                     Event::STATUS_TO_SETTLE,
                     Event::STATUS_SETTLED,
                 ])

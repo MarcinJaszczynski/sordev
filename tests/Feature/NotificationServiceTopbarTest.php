@@ -194,7 +194,7 @@ class NotificationServiceTopbarTest extends TestCase
         $this->assertContains('Moje utworzone', $titles);
     }
 
-    public function test_shared_system_task_stays_unread_for_other_office_users(): void
+    public function test_office_user_does_not_see_colleague_system_task_in_topbar(): void
     {
         $assignee = User::factory()->create();
         $assignee->assignRole('admin');
@@ -202,11 +202,20 @@ class NotificationServiceTopbarTest extends TestCase
         $colleague->assignRole('biuro');
         $statusId = TaskStatus::query()->where('name', 'Do zrobienia')->value('id');
 
-        $task = Task::factory()->create([
+        $assigneeTask = Task::factory()->create([
             'title' => 'Impreza potwierdzona — lista kontrolna',
             'description' => "Umowy i zaliczki.\n\nevent-status:1:confirmed",
             'assignee_id' => $assignee->id,
             'author_id' => $assignee->id,
+            'status_id' => $statusId,
+            'source' => TaskSource::System->value,
+        ]);
+
+        $colleagueTask = Task::factory()->create([
+            'title' => 'Impreza potwierdzona — lista kontrolna',
+            'description' => "Umowy i zaliczki.\n\nevent-status:1:confirmed",
+            'assignee_id' => $colleague->id,
+            'author_id' => $colleague->id,
             'status_id' => $statusId,
             'source' => TaskSource::System->value,
         ]);
@@ -218,11 +227,14 @@ class NotificationServiceTopbarTest extends TestCase
         $colleagueData = NotificationService::getTopbarDataForUser($colleague->id, fresh: true);
 
         $assigneeItem = collect($assigneeData['items_by_type']['task'])
-            ->first(fn (array $row): bool => (int) ($row['id'] ?? 0) === $task->id);
+            ->first(fn (array $row): bool => (int) ($row['id'] ?? 0) === $assigneeTask->id);
+        $colleagueSeesAssigneeCopy = collect($colleagueData['items_by_type']['task'])
+            ->first(fn (array $row): bool => (int) ($row['id'] ?? 0) === $assigneeTask->id);
         $colleagueItem = collect($colleagueData['items_by_type']['task'])
-            ->first(fn (array $row): bool => (int) ($row['id'] ?? 0) === $task->id);
+            ->first(fn (array $row): bool => (int) ($row['id'] ?? 0) === $colleagueTask->id);
 
         $this->assertNotNull($assigneeItem);
+        $this->assertNull($colleagueSeesAssigneeCopy);
         $this->assertNotNull($colleagueItem);
 
         NotificationService::markAsRead($assignee->id, $assigneeItem['fingerprint']);
@@ -230,17 +242,12 @@ class NotificationServiceTopbarTest extends TestCase
         $assigneeAfter = NotificationService::getTopbarDataForUser($assignee->id, fresh: true);
         $colleagueAfter = NotificationService::getTopbarDataForUser($colleague->id, fresh: true);
 
-        $this->assertFalse(
-            collect($assigneeAfter['items_by_type']['task'])
-                ->contains(fn (array $row): bool => (int) ($row['id'] ?? 0) === $task->id && ! ($row['is_read'] ?? false))
-        );
         $this->assertSame(0, $assigneeAfter['counts']['tasks']);
-
-        $colleagueUnread = collect($colleagueAfter['items_by_type']['task'])
-            ->first(fn (array $row): bool => (int) ($row['id'] ?? 0) === $task->id);
-        $this->assertNotNull($colleagueUnread);
-        $this->assertFalse((bool) ($colleagueUnread['is_read'] ?? false));
         $this->assertGreaterThanOrEqual(1, $colleagueAfter['counts']['tasks']);
+        $this->assertTrue(
+            collect($colleagueAfter['items_by_type']['task'])
+                ->contains(fn (array $row): bool => (int) ($row['id'] ?? 0) === $colleagueTask->id)
+        );
     }
 
     public function test_new_task_visible_after_create_despite_list_visit(): void
@@ -589,14 +596,14 @@ class NotificationServiceTopbarTest extends TestCase
         $before = NotificationService::getTopbarDataForUser($assignee->id, fresh: true);
         $this->assertSame(1, $before['counts']['comments']);
 
+        // Otwarcie modala (z dowolnego poziomu) od razu czyści powiadomienia.
         Livewire::actingAs($assignee)
             ->test(\App\Filament\Resources\TaskResource\Pages\ListTasks::class)
-            ->call('openEditTaskModal', $task->id)
-            ->call('callMountedAction');
+            ->call('openEditTaskModal', $task->id);
 
-        $afterClose = NotificationService::getTopbarDataForUser($assignee->id, fresh: true);
-        $this->assertSame(0, $afterClose['counts']['comments']);
-        $this->assertSame([], $afterClose['items_by_type']['comment']);
+        $afterOpen = NotificationService::getTopbarDataForUser($assignee->id, fresh: true);
+        $this->assertSame(0, $afterOpen['counts']['comments']);
+        $this->assertSame([], $afterOpen['items_by_type']['comment']);
     }
 
     public function test_invoice_request_for_finance_roles(): void

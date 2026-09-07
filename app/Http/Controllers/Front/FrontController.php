@@ -12,6 +12,7 @@ use App\Models\EventType;
 use App\Models\Place;
 use App\Models\Tag;
 use App\Models\TransportType;
+use App\Services\Documents\WordOfferContent;
 use Illuminate\Http\Request;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\Cache;
@@ -394,20 +395,54 @@ class FrontController extends Controller
             ->firstOrFail();
 
         $pivotDate = $blogPost->published_at ?? $blogPost->created_at ?? now();
+        $isGuide = $blogPost->isGuide();
+        $navScope = $isGuide ? 'guide' : 'news';
 
-        // Previous/next navigation
+        // Previous/next navigation within the same content type
         $previousPost = BlogPost::published()
+            ->{$navScope}()
+            ->where('id', '!=', $blogPost->id)
             ->whereRaw('COALESCE(published_at, created_at) < ?', [$pivotDate])
             ->orderByDesc($orderExpression)
             ->orderByDesc('id')
             ->first();
         $nextPost = BlogPost::published()
+            ->{$navScope}()
+            ->where('id', '!=', $blogPost->id)
             ->whereRaw('COALESCE(published_at, created_at) > ?', [$pivotDate])
             ->orderBy($orderExpression)
             ->orderBy('id')
             ->first();
 
-        return view('front.blog-post', compact('blogPost', 'previousPost', 'nextPost'));
+        $relatedPostsQuery = BlogPost::published()
+            ->{$navScope}()
+            ->where('id', '!=', $blogPost->id);
+
+        if ($isGuide && filled($blogPost->guide_category)) {
+            $relatedPostsQuery->where('guide_category', $blogPost->guide_category);
+        }
+
+        $relatedPosts = $relatedPostsQuery
+            ->orderByDesc($orderExpression)
+            ->orderByDesc('id')
+            ->take(3)
+            ->get();
+
+        if ($relatedPosts->count() < 3 && $isGuide) {
+            $extra = BlogPost::published()
+                ->guide()
+                ->where('id', '!=', $blogPost->id)
+                ->whereNotIn('id', $relatedPosts->pluck('id'))
+                ->orderByDesc($orderExpression)
+                ->orderByDesc('id')
+                ->take(3 - $relatedPosts->count())
+                ->get();
+            $relatedPosts = $relatedPosts->concat($extra);
+        }
+
+        return view('front.blog-post', compact('blogPost', 'previousPost', 'nextPost', 'relatedPosts') + [
+            'guideMode' => $isGuide,
+        ]);
     }
 
     public function directorypackages(Request $request)
@@ -1691,6 +1726,7 @@ class FrontController extends Controller
                 'pricesPerPerson.currency',
                 'pricesPerPerson.startPlace',
                 'eventPriceDescription',
+                'eventTypes',
             ])
             ->firstOrFail();
 
@@ -1764,29 +1800,16 @@ class FrontController extends Controller
             : '—';
         $startPlaceDisplay = $this->sanitizeWordText($startPlaceName) ?: '—';
 
-        $companyLines = [
-            'Organizator: Biuro Podróży RAFA',
-            'Ul. Marii Konopnickiej 6, 00-491 Warszawa',
-            'tel. +48 606 102 243 • rafa@bprafa.pl',
-            'www.bprafa.pl • NIP 716-250-87-61 • Bank Millennium S.A. 10 1160 2202 0000 0002 0065 6958',
-        ];
-
-        $coverDetails = [
-            'Data przygotowania oferty' => $preparedAt->format('d.m.Y'),
-            'Termin ważności oferty' => '21 dni od daty przygotowania oferty',
-            'Wyjazd z' => $startPlaceDisplay,
-            'Liczba dni' => $daysDisplay,
-            'Zamawiający' => $orgName !== '' ? $orgName : '—',
-            'Opiekun / nauczyciel' => $contactPerson !== '' ? $contactPerson : '—',
-            'Telefon' => $contactPhone !== '' ? $contactPhone : '—',
-            'Email' => $contactEmail !== '' ? $contactEmail : '—',
-        ];
+        $offerContent = app(WordOfferContent::class);
+        $metaPara = ['spaceBefore' => 40, 'spaceAfter' => 40, 'lineHeight' => 1.5];
+        $labelStyle = ['bold' => true, 'size' => 11, 'color' => '000000'];
+        $valueStyle = ['size' => 11, 'color' => '000000'];
 
         $coverSection = $phpWord->addSection($coverSectionStyle);
         $this->configureWordSectionBranding($coverSection);
 
-        $coverSection->addText('Oferta wycieczki', ['size' => 26, 'bold' => true], ['alignment' => 'center']);
-        $coverSection->addText($titleDisplay, ['size' => 26, 'bold' => true, 'color' => 'C00000'], ['alignment' => 'center']);
+        $coverSection->addText('Oferta wycieczki', ['size' => 26, 'bold' => true, 'color' => 'C00000'], ['alignment' => 'center']);
+        $coverSection->addText($titleDisplay, ['size' => 22, 'bold' => true, 'color' => '0070C0'], ['alignment' => 'center']);
         if ($docSubtitle !== '') {
             $coverSection->addText($docSubtitle, ['size' => 18, 'color' => '444444'], ['alignment' => 'center']);
         }
@@ -1794,45 +1817,66 @@ class FrontController extends Controller
 
         $coverSection->addTextBreak(1);
         $coverTable = $coverSection->addTable([
-            'alignment' => \PhpOffice\PhpWord\SimpleType\JcTable::CENTER,
-            'cellMargin' => 120,
+            'alignment' => \PhpOffice\PhpWord\SimpleType\JcTable::START,
+            'cellMargin' => 40,
             'width' => 9000,
+            'borderSize' => 0,
+            'borderColor' => 'FFFFFF',
         ]);
-        foreach ($coverDetails as $label => $value) {
+
+        $addCoverMeta = function (string $label, string $value) use ($coverTable, $labelStyle, $valueStyle, $metaPara): void {
             $row = $coverTable->addRow();
-            $row->addCell(3500)->addText($label.':', ['color' => '0070C0', 'bold' => true]);
-            $row->addCell(5500)->addText($value, ['bold' => true]);
+            $row->addCell(3500)->addText($label, $labelStyle, $metaPara);
+            $row->addCell(5500)->addText($value, $valueStyle, $metaPara);
+        };
+
+        $addCoverMeta('Data przygotowania oferty:', $preparedAt->format('d.m.Y'));
+        $addCoverMeta('Termin ważności oferty:', $offerContent->offerValidityLabel());
+        $addCoverMeta('Wyjazd z:', $startPlaceDisplay);
+        $addCoverMeta('Liczba dni:', $daysDisplay);
+
+        $coverTable->addRow();
+        $coverTable->addCell(3500)->addText('', $valueStyle, $metaPara);
+        $coverTable->addCell(5500)->addText('', $valueStyle, $metaPara);
+
+        $coverTable->addRow();
+        $coverTable->addCell(3500)->addText('Zamawiający:', $labelStyle, $metaPara);
+        $clientCell = $coverTable->addCell(5500);
+        if ($orgName !== '') {
+            $clientCell->addText($orgName, $valueStyle, $metaPara);
+        }
+        if ($contactPerson !== '') {
+            $clientCell->addText($contactPerson, $valueStyle, $metaPara);
+        }
+        if ($orgName === '' && $contactPerson === '') {
+            $clientCell->addText('—', $valueStyle, $metaPara);
+        }
+        if ($contactPhone !== '') {
+            $clientCell->addText('tel. '.$contactPhone, $valueStyle, $metaPara);
+        }
+        if ($contactEmail !== '') {
+            $clientCell->addText($contactEmail, $valueStyle, $metaPara);
         }
 
-        $coverSection->addTextBreak(1);
-        foreach ($companyLines as $line) {
-            $coverSection->addText($line);
+        $coverTable->addRow();
+        $coverTable->addCell(3500)->addText('', $valueStyle, $metaPara);
+        $coverTable->addCell(5500)->addText('', $valueStyle, $metaPara);
+
+        $coverTable->addRow();
+        $coverTable->addCell(3500)->addText('Organizator:', $labelStyle, $metaPara);
+        $orgCell = $coverTable->addCell(5500);
+        foreach (WordOfferContent::ORGANIZER_LINES as $line) {
+            $orgCell->addText($line, $valueStyle, $metaPara);
         }
 
         $section = $phpWord->addSection($sectionStyle);
         $this->configureWordSectionBranding($section);
 
-        $section->addText($titleDisplay, ['size' => 20, 'bold' => true, 'color' => 'C00000'], ['alignment' => 'center']);
+        $section->addText($titleDisplay, ['size' => 20, 'bold' => true, 'color' => '0070C0'], ['alignment' => 'center']);
         if ($docSubtitle !== '') {
             $section->addText($docSubtitle, ['size' => 14, 'color' => '444444'], ['alignment' => 'center']);
         }
-
-        $section->addTextBreak(1);
-        $section->addText('Wyjazd z: '.$startPlaceDisplay);
-        $section->addText('Liczba dni: '.$daysDisplay);
-
-        $section->addTextBreak(1);
-        $section->addText('Dane zamawiającego', ['bold' => true, 'size' => 14, 'color' => '0070C0']);
-        $section->addText('Nazwa grupy: '.($orgName !== '' ? $orgName : '—'));
-        $section->addText('Opiekun / nauczyciel: '.($contactPerson !== '' ? $contactPerson : '—'));
-        $section->addText('Telefon: '.($contactPhone !== '' ? $contactPhone : '—'));
-        $section->addText('Email: '.($contactEmail !== '' ? $contactEmail : '—'));
-
-        $section->addTextBreak(1);
-        $section->addText('Dane biura podróży', ['bold' => true, 'size' => 14, 'color' => '0070C0']);
-        foreach ($companyLines as $line) {
-            $section->addText($line);
-        }
+        $section->addText('Termin: do ustalenia', ['size' => 14, 'bold' => true], ['alignment' => 'center']);
 
         if ($additionalNotes !== '') {
             $section->addTextBreak(1);
@@ -1848,19 +1892,17 @@ class FrontController extends Controller
 
         if (! empty($program)) {
             $section->addTextBreak(1);
-            $section->addText('Program wycieczki', ['bold' => true, 'size' => 14, 'color' => '0070C0']);
+            $section->addText('Program wycieczki', ['bold' => true, 'size' => 14, 'color' => 'C00000']);
 
             foreach ($program as $block) {
                 $section->addTextBreak(1);
                 $section->addText($this->sanitizeWordText($block['label']), ['bold' => true, 'color' => '0070C0']);
                 foreach ($block['points'] as $point) {
-                    // Build a list item run so we can mix inline styles (only title may be fully bold)
                     $listRun = $section->addListItemRun(0);
                     $titleStyle = $point['bold'] ? ['bold' => true] : null;
                     $listRun->addText($this->sanitizeWordText($point['title']), $titleStyle);
 
                     if (! empty($point['description'])) {
-                        // separator between title and description (plain text, no inline styles)
                         $listRun->addText(' – ');
                         $listRun->addText($point['description']);
                     }
@@ -1880,28 +1922,38 @@ class FrontController extends Controller
             }
         }
 
-        if (! empty($priceRanges)) {
+        $formattedRanges = $offerContent->splitTopPriceTier(
+            array_map(function (array $range) use ($offerContent): array {
+                $from = (int) $range['from'];
+                $to = (int) $range['to'];
+                $gratisFromDb = (int) ($range['gratis'] ?? 0);
+
+                return [
+                    'from' => $from,
+                    'to' => $to,
+                    'price' => (int) $range['price'],
+                    'other' => array_values($range['other'] ?? []),
+                    'gratis' => $gratisFromDb > 0
+                        ? $gratisFromDb
+                        : $offerContent->defaultGratisForRange($from, $to),
+                ];
+            }, $priceRanges)
+        );
+
+        if (! empty($formattedRanges)) {
             $section->addTextBreak(1);
-            $section->addText('Cennik (PLN – aktualne miejsce wyjazdu)', ['bold' => true, 'size' => 14, 'color' => 'C00000']);
+            $section->addText('Cennik', ['bold' => true, 'size' => 14, 'color' => 'C00000']);
+            $section->addTextBreak(1);
 
-            $table = $section->addTable([
-                'borderColor' => 'cccccc',
-                'borderSize' => 6,
-                'cellMargin' => 80,
-                'alignment' => \PhpOffice\PhpWord\SimpleType\JcTable::CENTER,
-            ]);
-
-            $headerRow = $table->addRow();
-            $headerRow->addCell(2000, ['valign' => 'center'])->addText('Liczba osób', ['bold' => true, 'color' => '0070C0']);
-            $headerRow->addCell(2000, ['valign' => 'center'])->addText('Cena /os. (PLN)', ['bold' => true, 'color' => '0070C0']);
-            $headerRow->addCell(3000, ['valign' => 'center'])->addText('Uwagi', ['bold' => true, 'color' => '0070C0']);
-
-            foreach ($priceRanges as $range) {
-                $row = $table->addRow();
-                $label = $range['from'] === $range['to'] ? $range['from'].' osób' : $range['from'].'–'.$range['to'].' osób';
-                $row->addCell(2000)->addText($label);
-                $row->addCell(2000)->addText(number_format($range['price'], 0, ',', ' ').' zł');
-                $row->addCell(3000)->addText(! empty($range['other']) ? implode(', ', $range['other']) : '');
+            foreach ($formattedRanges as $range) {
+                $line = $offerContent->formatPriceLine(
+                    (int) $range['price'],
+                    (int) $range['from'],
+                    (int) $range['to'],
+                    (int) $range['gratis'],
+                    array_values($range['other'] ?? [])
+                );
+                $section->addText($this->sanitizeWordText($line), ['bold' => true, 'size' => 12]);
             }
         } else {
             $section->addTextBreak(1);
@@ -1909,48 +1961,49 @@ class FrontController extends Controller
         }
 
         $section->addTextBreak(1);
-        $section->addText('W cenie', ['bold' => true, 'size' => 14, 'color' => '0070C0']);
+        $section->addText('Cena zawiera', ['bold' => true, 'size' => 14, 'color' => 'C00000']);
+        $section->addTextBreak(1);
 
-        if (! empty($priceDescriptionHtml)) {
-            $this->appendHtmlSnippetToSection($section, $priceDescriptionHtml);
-        } else {
-            $section->addText($this->sanitizeWordText('Cena zawiera:'), ['bold' => true]);
-            $defaultIncludes = [
-                'zakwaterowanie w pokojach z łazienkami',
-                'wyżywienie zgodnie z programem (2 śniadania, 2 obiady, 2 kolacje)',
-                'przejazd autokarem',
-                'opłaty drogowe i parkingowe',
-                'opiekę pilota na całej trasie wycieczki',
-                'bilety wstępu do zwiedzanych obiektów',
-                'realizację programu',
-                'przewodników lokalnych',
-                'ubezpieczenie NNW uczestników wycieczki do kwoty 10 000 zł/osoba',
-                'podatek VAT',
-                'miejsca dla opiekunów/dodatkowych (1 opiekun na 15 uczestników)',
-            ];
-            foreach ($defaultIncludes as $line) {
-                $section->addListItem($this->sanitizeWordText($line));
-            }
+        $parsedPrice = $offerContent->parsePriceDescriptionHtml((string) $priceDescriptionHtml);
+        $defaultIncludes = [
+            'zakwaterowanie w pokojach z łazienkami',
+            'wyżywienie zgodnie z programem (2 śniadania, 2 obiady, 2 kolacje)',
+            'przejazd autokarem',
+            'opłaty drogowe i parkingowe',
+            'opiekę pilota na całej trasie wycieczki',
+            'bilety wstępu do zwiedzanych obiektów',
+            'realizację programu',
+            'przewodników lokalnych',
+            'ubezpieczenie NNW uczestników wycieczki do kwoty 10 000 zł/osoba',
+            'podatek VAT',
+            'miejsca dla opiekunów/dodatkowych (1 opiekun na 15 uczestników)',
+        ];
+        $defaultExcludes = [
+            'wydatków własnych',
+            'punktów programu opisanych i proponowanych jako „Fakultatywne”',
+        ];
+        $includes = $parsedPrice['includes'] !== [] ? $parsedPrice['includes'] : $defaultIncludes;
+        $excludes = $parsedPrice['excludes'] !== [] ? $parsedPrice['excludes'] : $defaultExcludes;
 
-            $section->addText($this->sanitizeWordText('Cena nie zawiera:'), ['bold' => true]);
-            $defaultExcludes = [
-                'wydatków własnych',
-                'punktów programu opisanych i proponowanych jako „Fakultatywne”',
-            ];
-            foreach ($defaultExcludes as $line) {
-                $section->addListItem($this->sanitizeWordText($line));
-            }
+        foreach ($includes as $line) {
+            $section->addListItem($this->sanitizeWordText($line));
         }
 
         $section->addTextBreak(1);
-        $section->addText('Dodatkowe ubezpieczenie', ['bold' => true, 'size' => 14, 'color' => '0070C0']);
-        $insuranceItems = [
-            'Ubezpieczenie kosztów rezygnacji: dobrowolne ubezpieczenie zwraca 100% kosztów w przypadku losowej rezygnacji (choroba, wypadek, pożar, śmierć bliskiej osoby). Składka wynosi 3,2% wartości imprezy. Polisę należy wykupić w dniu podpisania umowy lub do 7 dni od zawarcia umowy, jeśli wyjazd rozpoczyna się później niż za 30 dni.',
-            'Choroby przewlekłe: osoby cierpiące na choroby przewlekłe powinny rozszerzyć polisę o ryzyko zaostrzenia choroby (dotyczy ubezpieczenia kosztów rezygnacji i kosztów leczenia).',
-            'Zwiększenie sumy ubezpieczenia: istnieje możliwość indywidualnego podniesienia sumy ubezpieczenia – prosimy o kontakt z biurem.',
-        ];
-        foreach ($insuranceItems as $line) {
+        $section->addText('Cena nie zawiera', ['bold' => true, 'size' => 14, 'color' => 'C00000']);
+        $section->addTextBreak(1);
+        foreach ($excludes as $line) {
             $section->addListItem($this->sanitizeWordText($line));
+        }
+
+        $coreDays = max(1, (int) ($eventTemplate->duration_days ?? 1));
+        if ($offerContent->shouldShowAccommodation($coreDays)) {
+            $section->addTextBreak(1);
+            $section->addText('Zakwaterowanie', ['bold' => true, 'size' => 14, 'color' => 'C00000']);
+            $section->addTextBreak(1);
+            foreach ($offerContent->accommodationLines([]) as $line) {
+                $section->addListItem($this->sanitizeWordText($line));
+            }
         }
 
         $section->addTextBreak(1);
@@ -1962,19 +2015,11 @@ class FrontController extends Controller
         $section->addText($this->sanitizeWordText('Wniosek o fakturę za imprezę turystyczną (osoba fizyczna lub firma): '.$invoiceRequestUrl));
 
         $section->addTextBreak(1);
-        $section->addText('Dodatkowe informacje', ['bold' => true, 'size' => 14, 'color' => '0070C0']);
-        $additionalInfoItems = [
-            'Program ma charakter ramowy – kolejność zwiedzania może ulec zmianie.',
-            'Na życzenie klienta program można dostosować do indywidualnych potrzeb.',
-            'Specjalne diety mogą wiązać się z dodatkowymi opłatami.',
-        ];
-        foreach ($additionalInfoItems as $line) {
+        $section->addText('Uwagi', ['bold' => true, 'size' => 14, 'color' => 'C00000']);
+        $section->addTextBreak(1);
+        foreach ($offerContent->notes($eventTemplate->isForeignTrip()) as $line) {
             $section->addListItem($this->sanitizeWordText($line));
         }
-
-        $section->addTextBreak(1);
-        $section->addText('Kontakt i zapytania', ['bold' => true, 'size' => 14, 'color' => '0070C0']);
-        $section->addText($this->sanitizeWordText('W przypadku pytań lub chęci uzyskania oferty dla innej liczby uczestników napisz do nas na adres rafa@bprafa.pl lub skorzystaj z formularza kontaktowego na stronie wycieczki.'));
 
         $section->addTextBreak(2);
         $section->addText('Dokument wygenerowany: '.now()->format('Y-m-d H:i'), ['size' => 9, 'color' => '777777']);
@@ -2191,6 +2236,7 @@ class FrontController extends Controller
                 'to' => (int) $rangeEnd,
                 'price' => (int) ceil(((float) $price->price_per_person) / 5) * 5,
                 'other' => $otherLabels,
+                'gratis' => max(0, (int) optional($price->eventTemplateQty)->gratis),
             ];
         }
 
@@ -2310,7 +2356,7 @@ class FrontController extends Controller
 
         if (! empty($facultativePoints)) {
             $program[] = [
-                'label' => 'Fakultatywnie proponujemy',
+                'label' => 'Fakultatywnie proponujemy:',
                 'points' => $facultativePoints,
             ];
         }

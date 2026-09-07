@@ -23,5 +23,8 @@ readonly class UpdateSettlementCostPaymentData
         public ?float $rate = null,
         public int|string|null $currencyId = null,
         public ?int $reservationId = null,
+        public bool $convertToPln = true,
+        /** Świadome potwierdzenie nadpłaty względem planu (przy zapisie wpłaty). */
+        public bool $approveOverpayment = false,
     ) {}
 }

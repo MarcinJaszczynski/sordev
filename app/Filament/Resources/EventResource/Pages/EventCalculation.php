@@ -2,6 +2,7 @@
 
 namespace App\Filament\Resources\EventResource\Pages;
 
+use App\Filament\Actions\CreateEventSnapshotAction;
 use App\Filament\Resources\EventResource;
 use App\Filament\Resources\EventResource\Concerns\HasEventFinanceSubNavigation;
 use App\Filament\Resources\EventResource\Concerns\InteractsWithEventRecord;
@@ -9,6 +10,7 @@ use App\Services\EventPriceCalculator;
 use Filament\Actions;
 use Filament\Actions\ActionGroup;
 use Filament\Resources\Pages\Page;
+use Illuminate\Support\Facades\Schema;
 
 class EventCalculation extends Page
 {
@@ -58,24 +60,9 @@ class EventCalculation extends Page
                     \Filament\Notifications\Notification::make()->title('Kalkulacja wykonana')->success()->send();
                     $this->dispatch('event-price-table-refresh');
                 }),
+            CreateEventSnapshotAction::make()
+                ->visible(fn (): bool => Schema::hasTable('event_snapshots')),
             ActionGroup::make([
-                Actions\Action::make('create_snapshot')
-                    ->label('Zapisz migawkę')
-                    ->icon('heroicon-o-camera')
-                    ->tooltip('Zapisuje aktualny stan kalkulacji do porównania później.')
-                    ->form([
-                        \Filament\Forms\Components\TextInput::make('name')
-                            ->label('Nazwa migawki')
-                            ->required()
-                            ->default('Migawka kalkulacji '.now()->format('d.m.Y H:i')),
-                        \FilamentTiptapEditor\TiptapEditor::make('description')
-                            ->label('Opis')
-                            ->maxLength(500),
-                    ])
-                    ->action(function (array $data) {
-                        $this->record->createManualSnapshot($data['name'], $data['description'] ?? null);
-                        \Filament\Notifications\Notification::make()->title('Migawka zapisana')->success()->send();
-                    }),
                 Actions\Action::make('export_pdf')
                     ->label('Pobierz PDF')
                     ->tooltip('Pobierz kalkulację w formacie PDF.')

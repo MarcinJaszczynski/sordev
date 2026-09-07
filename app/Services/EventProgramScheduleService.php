@@ -75,6 +75,35 @@ class EventProgramScheduleService
 
     public function applyManualTimeChange(EventProgramPoint $point, string $startTime, string $endTime): void
     {
+        $this->applyTimeChange($point, $startTime, $endTime, cascadeFollowing: true, shiftChildren: false);
+    }
+
+    /**
+     * Planer: ta sama polityka co Lista — przesuwa kolejne odblokowane punkty dnia.
+     * Dzieci setu przesuwa o ten sam delta (drag między dniami / godzinami).
+     */
+    public function applyPlannerTimeChange(EventProgramPoint $point, string $startTime, string $endTime, ?int $newDay = null): void
+    {
+        EventProgramPoint::runWithoutSideEffects(function () use ($point, $startTime, $endTime, $newDay): void {
+            $this->applyTimeChange(
+                $point,
+                $startTime,
+                $endTime,
+                cascadeFollowing: true,
+                shiftChildren: true,
+                newDay: $newDay,
+            );
+        });
+    }
+
+    public function applyTimeChange(
+        EventProgramPoint $point,
+        string $startTime,
+        string $endTime,
+        bool $cascadeFollowing = true,
+        bool $shiftChildren = false,
+        ?int $newDay = null,
+    ): void {
         if ((bool) ($point->hide_times ?? false)) {
             return;
         }
@@ -91,10 +120,17 @@ class EventProgramScheduleService
             throw new InvalidArgumentException('Godzina końca musi być późniejsza niż godzina startu.');
         }
 
+        $previousDay = (int) ($point->day ?? 1);
+        $previousStart = $point->start_time;
+
         $payload = [
             'start_time' => $startTime,
             'end_time' => $endTime,
         ];
+
+        if ($newDay !== null && $newDay !== $previousDay) {
+            $payload['day'] = $newDay;
+        }
 
         if ($this->supportsManualLockColumn()) {
             $payload['times_manually_locked'] = true;
@@ -103,15 +139,68 @@ class EventProgramScheduleService
         $point->update($payload);
         $point = $point->fresh();
 
-        if ($point->parent_id === null) {
+        if ($cascadeFollowing && $point->parent_id === null) {
             $this->cascadeFollowingUnlocked($point);
         }
 
-        if ($point->children()->exists()) {
+        if ($shiftChildren && $point->parent_id === null) {
+            $this->shiftChildrenWithParent($point, $previousDay, $previousStart);
+        } elseif ($point->children()->exists()) {
             $this->setTimePropagator->propagateFromParent($point->fresh());
         }
 
-        $this->orderService->repairOrderByStartTimes($point->event);
+        $days = array_values(array_unique(array_filter([
+            $previousDay,
+            (int) ($point->day ?? $previousDay),
+        ])));
+
+        foreach ($days as $day) {
+            $this->orderService->repairOrderByStartTimes($point->event, (int) $day);
+        }
+    }
+
+    protected function shiftChildrenWithParent(EventProgramPoint $parent, int $previousDay, mixed $previousStart): void
+    {
+        $children = EventProgramPoint::query()
+            ->where('parent_id', $parent->id)
+            ->get();
+
+        if ($children->isEmpty()) {
+            return;
+        }
+
+        $dayDelta = (int) ($parent->day ?? $previousDay) - $previousDay;
+        $startDelta = 0;
+
+        if (filled($previousStart) && filled($parent->start_time)) {
+            $startDelta = $this->timeToMinutes((string) $parent->start_time)
+                - $this->timeToMinutes((string) $previousStart);
+        }
+
+        if ($dayDelta === 0 && $startDelta === 0) {
+            return;
+        }
+
+        foreach ($children as $child) {
+            $payload = [];
+
+            if ($dayDelta !== 0) {
+                $payload['day'] = max(1, (int) ($child->day ?? $previousDay) + $dayDelta);
+            }
+
+            if ($startDelta !== 0 && filled($child->start_time) && filled($child->end_time)) {
+                $payload['start_time'] = $this->minutesToTime(
+                    $this->timeToMinutes((string) $child->start_time) + $startDelta
+                );
+                $payload['end_time'] = $this->minutesToTime(
+                    $this->timeToMinutes((string) $child->end_time) + $startDelta
+                );
+            }
+
+            if ($payload !== []) {
+                $child->update($payload);
+            }
+        }
     }
 
     public function cascadeFollowingUnlocked(EventProgramPoint $anchor): int

@@ -11,7 +11,7 @@
         : null;
 @endphp
 
-<div class="epp-scope" title="Program = oferta/PDF. Kalkulacja = kosztorys i rozliczenie.">
+<div class="epp-scope" title="Program = oferta/PDF. W kosztach = lista kosztów i rozliczenie.">
     <span @class([
         'epp-scope-chip',
         'epp-scope-chip--program-on' => $inProgram,
@@ -21,7 +21,7 @@
         'epp-scope-chip',
         'epp-scope-chip--calc-on' => $inCalc,
         'epp-scope-chip--calc-off' => ! $inCalc,
-    ])>{{ $inCalc ? 'Kalkulacja' : 'Poza kalk.' }}</span>
+    ])>{{ $inCalc ? 'W kosztach' : 'Poza kosztami' }}</span>
     @if ($reservation && ! in_array((string) $reservationStatus, ['cancelled', 'not_required'], true))
         <span @class([
             'epp-scope-chip',

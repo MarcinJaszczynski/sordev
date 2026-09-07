@@ -14,13 +14,14 @@ class AdminUserSeeder extends Seeder
         $user = User::updateOrCreate(
             ['email' => 'm.jaszczynski@gmail.com'],
             [
-                'name' => 'Michał Jaszczynski',
+                'name' => 'Marcin Jaszczyński',
                 'password' => Hash::make('1234'),
                 'email_verified_at' => now(),
             ]
         );
 
-        $role = Role::firstOrCreate(['name' => 'admin']);
-        $user->assignRole($role);
+        Role::firstOrCreate(['name' => 'super_admin']);
+        Role::firstOrCreate(['name' => 'admin']);
+        $user->syncRoles(['super_admin', 'admin']);
     }
 }

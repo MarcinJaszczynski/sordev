@@ -1,67 +1,12 @@
-<div class="rounded-xl border border-gray-200 bg-white p-4 shadow-sm dark:border-gray-700 dark:bg-gray-900">
-    <div class="mb-4">
-        <h3 class="text-sm font-semibold text-gray-900 dark:text-gray-100">Log korespondencji z obiektem</h3>
-        <p class="text-xs text-gray-500 dark:text-gray-400">
-            Ręczny zapis rozmów, maili i ustaleń z hotelem — bez integracji e-mail.
-        </p>
+<div class="hotel-card">
+    <div class="hotel-card-header mb-4">
+        <div>
+            <h3 class="hotel-card-title">Log korespondencji z obiektem</h3>
+            <p class="text-xs text-gray-500 dark:text-gray-400">
+                Ręczny zapis rozmów, maili i ustaleń z hotelem — bez integracji e-mail.
+            </p>
+        </div>
     </div>
-
-    <form wire:submit.prevent="save" class="mb-6 space-y-3 rounded-lg border border-gray-100 bg-gray-50 p-4 dark:border-gray-800 dark:bg-gray-950/40">
-        <div class="grid gap-3 sm:grid-cols-2">
-            <div>
-                <label class="mb-1 block text-xs font-medium text-gray-700 dark:text-gray-300">Kierunek</label>
-                <select wire:model.live.debounce.500ms="direction" class="w-full rounded-lg border border-gray-300 text-sm dark:border-gray-700 dark:bg-gray-900">
-                    @foreach ($directions as $value => $label)
-                        <option value="{{ $value }}">{{ $label }}</option>
-                    @endforeach
-                </select>
-            </div>
-            <div>
-                <label class="mb-1 block text-xs font-medium text-gray-700 dark:text-gray-300">Data kontaktu</label>
-                <input type="datetime-local" wire:model.live.debounce.500ms="contactedAt" class="w-full rounded-lg border border-gray-300 text-sm dark:border-gray-700 dark:bg-gray-900">
-            </div>
-            <div>
-                <label class="mb-1 block text-xs font-medium text-gray-700 dark:text-gray-300">Hotel / kontrahent</label>
-                <select wire:model.live.debounce.500ms="contractorId" class="w-full rounded-lg border border-gray-300 text-sm dark:border-gray-700 dark:bg-gray-900">
-                    <option value="">— wybierz —</option>
-                    @foreach ($contractorOptions as $id => $name)
-                        <option value="{{ $id }}">{{ $name }}</option>
-                    @endforeach
-                </select>
-            </div>
-            <div>
-                <label class="mb-1 block text-xs font-medium text-gray-700 dark:text-gray-300">Noc (opcjonalnie)</label>
-                <select wire:model.live.debounce.500ms="eventHotelStayId" class="w-full rounded-lg border border-gray-300 text-sm dark:border-gray-700 dark:bg-gray-900">
-                    <option value="">— cała impreza —</option>
-                    @foreach ($stayOptions as $id => $label)
-                        <option value="{{ $id }}">{{ $label }}</option>
-                    @endforeach
-                </select>
-            </div>
-            <div class="sm:col-span-2">
-                <label class="mb-1 block text-xs font-medium text-gray-700 dark:text-gray-300">Osoba kontaktowa</label>
-                <input type="text" wire:model.live.debounce.500ms="contactPerson" placeholder="np. recepcja, opiekun grupy" class="w-full rounded-lg border border-gray-300 text-sm dark:border-gray-700 dark:bg-gray-900">
-            </div>
-            <div class="sm:col-span-2">
-                <label class="mb-1 block text-xs font-medium text-gray-700 dark:text-gray-300">Temat</label>
-                <input type="text" wire:model.live.debounce.500ms="subject" placeholder="np. Potwierdzenie listy pokoi" class="w-full rounded-lg border border-gray-300 text-sm dark:border-gray-700 dark:bg-gray-900">
-            </div>
-            <div class="sm:col-span-2">
-                <label class="mb-1 block text-xs font-medium text-gray-700 dark:text-gray-300">Treść / ustalenia</label>
-                <textarea wire:model.live.debounce.500ms="body" rows="3" class="w-full rounded-lg border border-gray-300 text-sm dark:border-gray-700 dark:bg-gray-900"></textarea>
-            </div>
-            <div class="sm:col-span-2">
-                <label class="mb-1 block text-xs font-medium text-gray-700 dark:text-gray-300">Załącznik (opcjonalnie)</label>
-                <input type="file" wire:model.live.debounce.500ms="attachment" class="w-full text-sm">
-                <div wire:loading wire:target="attachment" class="mt-1 text-xs text-gray-500">Wgrywanie…</div>
-            </div>
-        </div>
-        <div class="flex justify-end">
-            <button type="submit" class="rounded-lg bg-teal-600 px-4 py-2 text-sm font-semibold text-white hover:bg-teal-700">
-                Dodaj wpis
-            </button>
-        </div>
-    </form>
 
     @if ($logs->isEmpty())
         <p class="text-sm text-gray-500 dark:text-gray-400">Brak zapisanej korespondencji dla tej imprezy.</p>
@@ -108,4 +53,64 @@
             @endforeach
         </ul>
     @endif
+
+    <details class="hotel-accordion">
+        <summary>Dodaj wpis korespondencji</summary>
+        <form wire:submit.prevent="save" class="mt-3 space-y-3 rounded-lg border border-gray-100 bg-gray-50 p-4 dark:border-gray-800 dark:bg-gray-950/40">
+            <div class="grid gap-3 sm:grid-cols-2">
+                <div>
+                    <label class="mb-1 block text-xs font-medium text-gray-700 dark:text-gray-300">Kierunek</label>
+                    <select wire:model.live.debounce.500ms="direction" class="w-full rounded-lg border border-gray-300 text-sm dark:border-gray-700 dark:bg-gray-900">
+                        @foreach ($directions as $value => $label)
+                            <option value="{{ $value }}">{{ $label }}</option>
+                        @endforeach
+                    </select>
+                </div>
+                <div>
+                    <label class="mb-1 block text-xs font-medium text-gray-700 dark:text-gray-300">Data kontaktu</label>
+                    <input type="datetime-local" wire:model.live.debounce.500ms="contactedAt" class="w-full rounded-lg border border-gray-300 text-sm dark:border-gray-700 dark:bg-gray-900">
+                </div>
+                <div>
+                    <label class="mb-1 block text-xs font-medium text-gray-700 dark:text-gray-300">Hotel / kontrahent</label>
+                    <select wire:model.live.debounce.500ms="contractorId" class="w-full rounded-lg border border-gray-300 text-sm dark:border-gray-700 dark:bg-gray-900">
+                        <option value="">— wybierz —</option>
+                        @foreach ($contractorOptions as $id => $name)
+                            <option value="{{ $id }}">{{ $name }}</option>
+                        @endforeach
+                    </select>
+                </div>
+                <div>
+                    <label class="mb-1 block text-xs font-medium text-gray-700 dark:text-gray-300">Noc (opcjonalnie)</label>
+                    <select wire:model.live.debounce.500ms="eventHotelStayId" class="w-full rounded-lg border border-gray-300 text-sm dark:border-gray-700 dark:bg-gray-900">
+                        <option value="">— cała impreza —</option>
+                        @foreach ($stayOptions as $id => $label)
+                            <option value="{{ $id }}">{{ $label }}</option>
+                        @endforeach
+                    </select>
+                </div>
+                <div class="sm:col-span-2">
+                    <label class="mb-1 block text-xs font-medium text-gray-700 dark:text-gray-300">Osoba kontaktowa</label>
+                    <input type="text" wire:model.live.debounce.500ms="contactPerson" placeholder="np. recepcja, opiekun grupy" class="w-full rounded-lg border border-gray-300 text-sm dark:border-gray-700 dark:bg-gray-900">
+                </div>
+                <div class="sm:col-span-2">
+                    <label class="mb-1 block text-xs font-medium text-gray-700 dark:text-gray-300">Temat</label>
+                    <input type="text" wire:model.live.debounce.500ms="subject" placeholder="np. Potwierdzenie listy pokoi" class="w-full rounded-lg border border-gray-300 text-sm dark:border-gray-700 dark:bg-gray-900">
+                </div>
+                <div class="sm:col-span-2">
+                    <label class="mb-1 block text-xs font-medium text-gray-700 dark:text-gray-300">Treść / ustalenia</label>
+                    <textarea wire:model.live.debounce.500ms="body" rows="3" class="w-full rounded-lg border border-gray-300 text-sm dark:border-gray-700 dark:bg-gray-900"></textarea>
+                </div>
+                <div class="sm:col-span-2">
+                    <label class="mb-1 block text-xs font-medium text-gray-700 dark:text-gray-300">Załącznik (opcjonalnie)</label>
+                    <input type="file" wire:model.live.debounce.500ms="attachment" class="w-full text-sm">
+                    <div wire:loading wire:target="attachment" class="mt-1 text-xs text-gray-500">Wgrywanie…</div>
+                </div>
+            </div>
+            <div class="flex justify-end">
+                <button type="submit" class="rounded-lg bg-teal-600 px-4 py-2 text-sm font-semibold text-white hover:bg-teal-700">
+                    Dodaj wpis
+                </button>
+            </div>
+        </form>
+    </details>
 </div>

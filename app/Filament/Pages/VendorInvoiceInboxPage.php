@@ -32,7 +32,7 @@ class VendorInvoiceInboxPage extends Page implements HasTable
     {
         $user = auth()->user();
 
-        return $user && ($user->hasRole(['admin', 'super_admin']) || static::canViewInvoices() || static::canManageAssignment());
+        return $user && ($user->hasRole(['admin', 'super_admin', 'biuro']) || static::canViewInvoices() || static::canManageAssignment());
     }
 
     public function getTitle(): string

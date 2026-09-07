@@ -88,7 +88,7 @@ class CreateEvent extends CreateRecord
 
             Forms\Components\Section::make('Zamawiający')
                 ->icon('heroicon-o-user-circle')
-                ->description('Wymagane: wyszukaj osobę w bazie albo — gdy jej nie ma — wprowadź ręcznie z telefonem lub e-mailem.')
+                ->description('Wyszukaj w bazie albo „Dodaj nowego klienta” → „Zapisz klienta i wybierz go”. Dopiero potem zapisuj zapytanie.')
                 ->schema(EventOrderingPartyFields::clientLookupFields()),
 
             Forms\Components\Section::make('Szablon')
@@ -154,7 +154,7 @@ class CreateEvent extends CreateRecord
             Forms\Components\Section::make('Grupa i miejsce startu')
                 ->icon('heroicon-o-users')
                 ->description('Potrzebne do utworzenia z szablonu i wstępnej kalkulacji. Resztę parametrów operacyjnych uzupełnisz później.')
-                ->columns(['default' => 1, 'md' => 2])
+                ->columns(['default' => 1, 'md' => 2, 'xl' => 4])
                 ->schema([
                     ...EventKeyInfoFields::participantFields(
                         onUpdated: fn (callable $get, callable $set) => $this->refreshTotalCostFromTemplateState($set, $get),
@@ -363,6 +363,8 @@ class CreateEvent extends CreateRecord
                 'name' => $data['name'] ?? null,
                 'participant_count' => $data['participant_count'] ?? null,
                 'gratis_count' => $data['gratis_count'] ?? null,
+                'staff_count' => $data['staff_count'] ?? null,
+                'driver_count' => $data['driver_count'] ?? null,
                 'start_date' => $data['start_date'] ?? null,
                 'duration_days' => $data['duration_days'] ?? null,
                 'start_place_id' => $data['start_place_id'] ?? null,
@@ -389,17 +391,28 @@ class CreateEvent extends CreateRecord
             $event->syncOrderingContractors($orderingContractorIds);
         }
 
-        if ($event instanceof Event && array_key_exists('gratis_count', $data)) {
+        if (
+            $event instanceof Event
+            && (
+                array_key_exists('gratis_count', $data)
+                || array_key_exists('staff_count', $data)
+                || array_key_exists('driver_count', $data)
+            )
+        ) {
             try {
                 $event->syncQtyVariantForGroup(
                     (int) ($data['participant_count'] ?? 1),
-                    (int) ($data['gratis_count'] ?? 0)
+                    (int) ($data['gratis_count'] ?? 0),
+                    array_key_exists('staff_count', $data) ? (int) $data['staff_count'] : null,
+                    array_key_exists('driver_count', $data) ? (int) $data['driver_count'] : null,
                 );
             } catch (\Throwable $e) {
                 Log::warning('CreateEvent:web:sync_qty_variant_failed_no_template', [
                     'event_id' => $event->id,
                     'participant_count' => $data['participant_count'] ?? null,
                     'gratis_count' => $data['gratis_count'] ?? null,
+                    'staff_count' => $data['staff_count'] ?? null,
+                    'driver_count' => $data['driver_count'] ?? null,
                     'error' => $e->getMessage(),
                 ]);
             }

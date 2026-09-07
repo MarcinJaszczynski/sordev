@@ -52,4 +52,31 @@ class PhoneValidationTest extends TestCase
 
         $this->assertTrue($validator->passes());
     }
+
+    public function test_normalize_strips_separators(): void
+    {
+        $this->assertSame('123456789', PhoneValidation::normalize('123 456 789'));
+        $this->assertSame('48606102243', PhoneValidation::normalize('+48 606-102-243'));
+        $this->assertSame('123456789', PhoneValidation::normalize("123\u{00A0}456\u{00A0}789"));
+        $this->assertNull(PhoneValidation::normalize('   '));
+        $this->assertNull(PhoneValidation::normalize(null));
+    }
+
+    public function test_looks_like_phone_requires_phone_only_characters(): void
+    {
+        $this->assertTrue(PhoneValidation::looksLikePhone('123 456 789'));
+        $this->assertTrue(PhoneValidation::looksLikePhone('123456789'));
+        $this->assertTrue(PhoneValidation::looksLikePhone('+48 606 102 243'));
+        $this->assertFalse(PhoneValidation::looksLikePhone('Kowalski 603846062'));
+        $this->assertFalse(PhoneValidation::looksLikePhone('12345'));
+        $this->assertFalse(PhoneValidation::looksLikePhone(''));
+    }
+
+    public function test_digits_sql_nests_replace_calls(): void
+    {
+        $sql = PhoneValidation::digitsSql('phone');
+
+        $this->assertStringContainsString("REPLACE(phone, ' ', '')", $sql);
+        $this->assertStringStartsWith('REPLACE(', $sql);
+    }
 }

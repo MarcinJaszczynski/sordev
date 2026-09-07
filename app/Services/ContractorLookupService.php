@@ -3,6 +3,7 @@
 namespace App\Services;
 
 use App\Models\Contractor;
+use App\Support\PhoneValidation;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Support\Facades\Schema;
 
@@ -111,9 +112,26 @@ class ContractorLookupService
      * Każdy token z frazy musi pasować do któregoś z pól kontrahenta (AND).
      * Dzięki temu „Michał Chruściel” trafia w name / firstname+surname,
      * a nie wymaga dokładnego LIKE na całej frazie w jednej kolumnie.
+     *
+     * Wyjątek: fraza wyglądająca jak telefon — jedno porównanie znormalizowane
+     * (ignoruje spacje / separatory), bez dzielenia na tokeny.
      */
     protected function applySearchFilter(Builder $query, string $search): void
     {
+        if (PhoneValidation::looksLikePhone($search)) {
+            $query->where(function (Builder $phoneQuery) use ($search): void {
+                PhoneValidation::constrainDigitsLike($phoneQuery, 'phone', $search);
+
+                if (Contractor::hasContactPivotTable()) {
+                    $phoneQuery->orWhereHas('contacts', function (Builder $contactQuery) use ($search): void {
+                        PhoneValidation::constrainDigitsLike($contactQuery, 'phone', $search);
+                    });
+                }
+            });
+
+            return;
+        }
+
         $tokens = preg_split('/\s+/u', $search, -1, PREG_SPLIT_NO_EMPTY) ?: [];
 
         if ($tokens === []) {
@@ -127,13 +145,14 @@ class ContractorLookupService
         foreach ($tokens as $token) {
             $like = '%'.$token.'%';
 
-            $query->where(function (Builder $tokenQuery) use ($like, $hasPersonColumns, $hasNip): void {
+            $query->where(function (Builder $tokenQuery) use ($like, $token, $hasPersonColumns, $hasNip): void {
                 $tokenQuery->where('name', 'like', $like)
-                    ->orWhere('phone', 'like', $like)
                     ->orWhere('email', 'like', $like)
                     ->orWhere('street', 'like', $like)
                     ->orWhere('city', 'like', $like)
                     ->orWhere('postal_code', 'like', $like);
+
+                PhoneValidation::orWhereDigitsLike($tokenQuery, 'phone', $token);
 
                 if ($hasNip) {
                     $tokenQuery->orWhere('nip', 'like', $like);
@@ -148,9 +167,11 @@ class ContractorLookupService
                         );
                 }
 
-                $tokenQuery->orWhereHas('contacts', function (Builder $contactQuery) use ($like): void {
+                $tokenQuery->orWhereHas('contacts', function (Builder $contactQuery) use ($like, $token): void {
                     $contactQuery->where('first_name', 'like', $like)
                         ->orWhere('last_name', 'like', $like);
+
+                    PhoneValidation::orWhereDigitsLike($contactQuery, 'phone', $token);
                 });
             });
         }

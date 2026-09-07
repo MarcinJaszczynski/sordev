@@ -4,6 +4,7 @@ namespace App\Filament\Resources\TaskResource\RelationManagers;
 
 use App\Filament\Concerns\InteractsWithTaskEditModal;
 use App\Filament\Concerns\InteractsWithTaskListQuickActions;
+use App\Filament\Concerns\InteractsWithTaskOwnershipScope;
 use App\Filament\Resources\TaskResource;
 use App\Models\Event;
 use App\Models\EventProgramPoint;
@@ -15,12 +16,12 @@ use Filament\Tables;
 use Filament\Tables\Table;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Relations\Relation;
-use Illuminate\Support\Facades\Auth;
 
 class TasksRelationManager extends RelationManager
 {
     use InteractsWithTaskEditModal;
     use InteractsWithTaskListQuickActions;
+    use InteractsWithTaskOwnershipScope;
 
     /**
      * Lazy RM ładuje się przez /livewire/update bez query stringa — deep link ?editTask=
@@ -36,18 +37,50 @@ class TasksRelationManager extends RelationManager
 
     public function mount(): void
     {
-        $this->mountInteractsWithTaskEditModal();
-        if (method_exists($this, 'bootInteractsWithTaskListQuickActions')) {
-            $this->bootInteractsWithTaskListQuickActions();
-        }
+        parent::mount();
+
+        $this->tasksScope = $this->defaultTasksScope();
+        $this->showFinishedTasks = $this->defaultShowFinishedTasks();
+        $this->restoreTaskQuickFiltersFromSession();
+    }
+
+    protected function defaultTasksScope(): string
+    {
+        return 'all';
+    }
+
+    protected function defaultShowFinishedTasks(): bool
+    {
+        return true;
+    }
+
+    protected function taskQuickFiltersSessionKey(): ?string
+    {
+        return 'tasks.event.filters.'.(auth()->id() ?? 'guest');
+    }
+
+    protected function taskQuickFiltersPreferenceKey(): ?string
+    {
+        return 'task_filters.event';
     }
 
     public function table(Table $table): Table
     {
         return $table
+            ->header(fn (): \Illuminate\Contracts\View\View => view('filament.tasks.ownership-quick-filters', [
+                'tasksScope' => $this->tasksScope,
+                'dueFilter' => $this->dueFilter,
+                'tasksOnlyUrgent' => $this->tasksOnlyUrgent,
+                'showFinishedTasks' => $this->showFinishedTasks,
+                'sourceFilter' => $this->sourceFilter,
+                'showSource' => true,
+                'showFinishedToggle' => true,
+                'hasActive' => $this->hasActiveTaskQuickFilters(),
+            ]))
             ->modifyQueryUsing(function (Builder $query): Builder {
                 TaskQueryFilters::applyDefaultListScopes($query, officeOnly: true);
                 TaskQueryFilters::withLatestActivityAtColumn($query);
+                $this->applyTaskQuickFiltersTo($query, applyFinished: true, applySource: true);
 
                 return $query;
             })
@@ -57,15 +90,6 @@ class TasksRelationManager extends RelationManager
             )
             ->columns(TaskResource::eventWorkspaceTableColumns())
             ->searchable()
-            ->filters([
-                TaskResource::finishedVisibilityTableFilter(),
-                TaskResource::sourceTableFilter(),
-                Tables\Filters\Filter::make('mine_only')
-                    ->label('Tylko moje')
-                    ->query(function (Builder $query): Builder {
-                        return TaskQueryFilters::mine($query, Auth::id());
-                    }),
-            ])
             ->recordUrl(null)
             ->recordAction(null)
             ->actionsColumnLabel('Akcje')
@@ -132,6 +156,11 @@ class TasksRelationManager extends RelationManager
     }
 
     protected function afterTaskModalSaved(Task $task): void
+    {
+        $this->resetTable();
+    }
+
+    protected function afterTasksScopeChanged(): void
     {
         $this->resetTable();
     }

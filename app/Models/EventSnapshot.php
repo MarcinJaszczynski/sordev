@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use App\Services\EventCalculationSnapshotBuilder;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
@@ -104,31 +105,9 @@ class EventSnapshot extends Model
             'assigned_user_name' => $event->assignedUser?->name,
         ];
 
-        // Pobierz kalkulacje (sumowanie kosztów)
-        $allPoints = $event->programPoints()->with('templatePoint')->get();
-        $activePoints = $allPoints->where('active', true);
-        $includedForCalculation = \App\Services\ProgramPointHelper::filterIncluded($activePoints);
-
-        $calculations = [
-            'total_program_cost' => \App\Services\ProgramPointHelper::sumIncluded($activePoints, 'total_price'),
-            'points_count' => $allPoints->count(),
-            'active_points_count' => $activePoints->count(),
-            'included_in_calculation_count' => \App\Services\ProgramPointHelper::countIncluded($activePoints),
-            'cost_breakdown_by_day' => $includedForCalculation
-                ->groupBy('day')
-                ->map(function ($points) {
-                    return [
-                        'day_total' => $points->sum('total_price'),
-                        'points_count' => $points->count(),
-                        'points' => $points->map(function ($point) {
-                            return [
-                                'name' => $point->templatePoint?->name ?? $point->name ?? ('Punkt #'.$point->id),
-                                'total_price' => $point->total_price,
-                            ];
-                        }),
-                    ];
-                }),
-        ];
+        // Pełna kalkulacja bieżącego wariantu (SSoT: EventCalculationSnapshotBuilder).
+        $calculations = app(EventCalculationSnapshotBuilder::class)
+            ->buildPersistableCalculation($event);
 
         // Pobierz aktualne kursy walut (jeśli są używane)
         $currencyRates = self::getCurrentCurrencyRates();
@@ -141,6 +120,8 @@ class EventSnapshot extends Model
             default => 'Snapshot',
         };
 
+        $totalCostSnapshot = (float) ($calculations['summary']['total_cost'] ?? $event->total_cost ?? 0);
+
         return self::create([
             'event_id' => $event->id,
             'type' => $type,
@@ -151,10 +132,31 @@ class EventSnapshot extends Model
             'calculations' => $calculations,
             'currency_rates' => $currencyRates,
             'template_prices_snapshot' => $templatePrices,
-            'total_cost_snapshot' => $event->total_cost,
+            'total_cost_snapshot' => $totalCostSnapshot,
             'created_by' => Auth::id(),
             'snapshot_date' => now(),
         ]);
+    }
+
+    /**
+     * Cena za osobę zamrożona w migawce (v2) albo null dla starych rekordów.
+     */
+    public function pricePerPersonSnapshot(): ?float
+    {
+        $summary = $this->calculations['summary'] ?? null;
+        if (! is_array($summary)) {
+            return null;
+        }
+
+        if (array_key_exists('price_per_person_rounded', $summary) && $summary['price_per_person_rounded'] !== null) {
+            return (float) $summary['price_per_person_rounded'];
+        }
+
+        if (array_key_exists('price_per_person', $summary) && $summary['price_per_person'] !== null) {
+            return (float) $summary['price_per_person'];
+        }
+
+        return null;
     }
 
     /**

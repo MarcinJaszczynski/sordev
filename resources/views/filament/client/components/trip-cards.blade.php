@@ -9,7 +9,7 @@
 
 @if($trips->isEmpty())
     <div class="client-portal-section">
-        <p class="text-sm text-slate-600">Nie masz jeszcze przypisanych wycieczek.</p>
+        <p class="portal-muted" style="margin:0;">Nie masz jeszcze przypisanych wycieczek.</p>
     </div>
 @else
     <div class="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
@@ -31,8 +31,8 @@
                 </div>
                 <div class="client-portal-card__body">
                     <div>
-                        <h3 class="text-base font-semibold text-slate-900 leading-snug">{{ $trip->name }}</h3>
-                        <p class="mt-1 text-sm text-slate-500">
+                        <h3 class="text-base font-medium leading-snug text-[#2C2C2A]">{{ $trip->name }}</h3>
+                        <p class="mt-1 text-sm text-[#5F5E5A]">
                             @if($dates){{ $dates }}@endif
                             @if($dates && $place) · @endif
                             @if($place){{ $place }}@endif
@@ -40,11 +40,11 @@
                     </div>
                     <div class="mt-auto flex flex-wrap items-center gap-2 pt-1">
                         @if($archived)
-                            <span class="rounded-full bg-slate-100 px-2.5 py-0.5 text-[11px] font-semibold text-slate-600">Archiwum</span>
+                            <span class="portal-status-pill" style="background:#F1EFE8;color:#5F5E5A;">Archiwum</span>
                         @elseif(filled($trip->status))
-                            <span class="rounded-full bg-blue-50 px-2.5 py-0.5 text-[11px] font-semibold text-blue-800">{{ $trip->status }}</span>
+                            <span class="portal-status-pill">{{ $trip->status }}</span>
                         @endif
-                        <span class="ml-auto text-sm font-semibold text-[#0663fc]">Otwórz →</span>
+                        <span class="ml-auto text-sm font-semibold" style="color:#0C447C;">Otwórz →</span>
                     </div>
                 </div>
             </a>

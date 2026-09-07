@@ -71,7 +71,7 @@ class ClientInvoiceRequestPage extends Page implements HasForms
 
     public function getTitle(): string|Htmlable
     {
-        return 'Wniosek o fakturę: '.$this->event->name;
+        return $this->event->name;
     }
 
     protected function getHeaderActions(): array

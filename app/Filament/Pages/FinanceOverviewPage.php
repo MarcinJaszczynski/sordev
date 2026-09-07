@@ -7,6 +7,7 @@ use App\Filament\Resources\VendorInvoiceResource;
 use App\Models\Event;
 use App\Models\EventSettlement;
 use App\Models\VendorInvoice;
+use App\Support\ExecutiveAccess;
 use App\Support\FilamentNavigation;
 use App\Support\FinanceModuleNavigation;
 use App\Support\MoneyFormatter;
@@ -27,9 +28,7 @@ class FinanceOverviewPage extends Page
 
     public static function canAccess(): bool
     {
-        $user = auth()->user();
-
-        return $user && ($user->hasRole(['admin', 'super_admin', 'ksiegowosc']) || $user->can('view_any_event::settlement'));
+        return ExecutiveAccess::canAccessSensitiveAnalytics();
     }
 
     public function getTitle(): string
@@ -57,7 +56,7 @@ class FinanceOverviewPage extends Page
                     }
                 })
                 ->whereIn('status', [
-                    Event::STATUS_CONFIRMED,
+                    ...Event::getConfirmedLikeStatuses(),
                     Event::STATUS_TO_SETTLE,
                     Event::STATUS_SETTLED,
                 ])

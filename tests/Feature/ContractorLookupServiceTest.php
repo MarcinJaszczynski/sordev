@@ -182,11 +182,55 @@ class ContractorLookupServiceTest extends TestCase
         $this->assertCount(1, $results);
     }
 
-    private function createContractor(string $name, string $typeName): Contractor
+    public function test_search_by_phone_ignores_spaces_and_separators(): void
+    {
+        $spaced = $this->createContractor('Klient Spacje', 'klient', phone: '123 456 789');
+        $dashed = $this->createContractor('Klient Myślniki', 'klient', phone: '987-654-321');
+        $this->createContractor('Inny numer', 'klient', phone: '111 222 333');
+
+        $byCompact = $this->lookup->searchOptions(
+            search: '123456789',
+            typeNames: ['klient'],
+        );
+        $bySpacedQuery = $this->lookup->searchOptions(
+            search: '123 456 789',
+            typeNames: ['klient'],
+        );
+        $byDashedCompact = $this->lookup->searchOptions(
+            search: '987654321',
+            typeNames: ['klient'],
+        );
+
+        $this->assertArrayHasKey($spaced->id, $byCompact);
+        $this->assertArrayHasKey($spaced->id, $bySpacedQuery);
+        $this->assertArrayHasKey($dashed->id, $byDashedCompact);
+        $this->assertCount(1, $byCompact);
+        $this->assertCount(1, $byDashedCompact);
+    }
+
+    public function test_search_by_phone_matches_contact_phone_with_separators(): void
+    {
+        $contractor = $this->createContractor('Firma bez telefonu', 'klient');
+        $contractor->contacts()->create([
+            'first_name' => 'Anna',
+            'last_name' => 'Nowak',
+            'phone' => '555 666 777',
+        ]);
+
+        $results = $this->lookup->searchOptions(
+            search: '555666777',
+            typeNames: ['klient'],
+        );
+
+        $this->assertArrayHasKey($contractor->id, $results);
+    }
+
+    private function createContractor(string $name, string $typeName, ?string $phone = null): Contractor
     {
         $contractor = Contractor::create([
             'name' => $name,
             'status' => 'active',
+            'phone' => $phone,
         ]);
 
         $type = ContractorType::query()->firstOrCreate(['name' => $typeName]);

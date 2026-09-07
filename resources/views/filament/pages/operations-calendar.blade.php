@@ -34,6 +34,7 @@
                 @foreach([
                     'events' => ['label' => 'Imprezy', 'color' => '#2563eb', 'tip' => 'Terminy imprez i wyjazdy.'],
                     'tasks' => ['label' => 'Zadania', 'color' => '#7c3aed', 'tip' => 'Terminy zadań biurowych.'],
+                    'insurances' => ['label' => 'Ubezpieczenia', 'color' => '#059669', 'tip' => 'Ubezpieczenia dnia programu (nieoznaczone jako zrobione).'],
                     'ksef' => ['label' => 'KSeF', 'color' => '#dc2626', 'tip' => 'Faktury z KSeF.'],
                     'payments' => ['label' => 'Płatności', 'color' => '#ea580c', 'tip' => 'Terminy płatności kosztów.'],
                     'pilots' => ['label' => 'Zaliczki pilota', 'color' => '#0d9488', 'tip' => 'Planowane wypłaty zaliczek dla pilota.'],
@@ -78,17 +79,15 @@
             </div>
 
             <div class="flex flex-wrap items-center gap-2">
-                @include('filament.tasks.ownership-quick-filters', ['tasksScope' => $this->tasksScope])
-
-                <label class="flex items-center gap-2 rounded-full border border-violet-300 bg-white px-3 py-1 text-sm dark:border-violet-700 dark:bg-gray-900" title="Pokaż tylko zadania oznaczone jako pilne.">
-                    <input type="checkbox" wire:model.live="tasksOnlyUrgent" class="rounded border-gray-400" />
-                    <span class="text-violet-800 dark:text-violet-200">Tylko pilne</span>
-                </label>
-
-                <label class="flex items-center gap-2 rounded-full border border-violet-300 bg-white px-3 py-1 text-sm dark:border-violet-700 dark:bg-gray-900" title="Domyślnie zakończone i anulowane zadania są ukryte.">
-                    <input type="checkbox" wire:model.live="showFinishedTasks" class="rounded border-gray-400" />
-                    <span class="text-violet-800 dark:text-violet-200">Pokaż zakończone i anulowane</span>
-                </label>
+                @include('filament.tasks.ownership-quick-filters', [
+                    'tasksScope' => $this->tasksScope,
+                    'dueFilter' => $this->dueFilter,
+                    'tasksOnlyUrgent' => $this->tasksOnlyUrgent,
+                    'showFinishedTasks' => $this->showFinishedTasks,
+                    'showSource' => false,
+                    'showReset' => false,
+                    'hasActive' => false,
+                ])
             </div>
         </div>
     </div>

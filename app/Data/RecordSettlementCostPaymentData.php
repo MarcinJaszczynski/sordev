@@ -25,5 +25,9 @@ readonly class RecordSettlementCostPaymentData
         public ?float $rate = null,
         public int|string|null $currencyId = null,
         public ?int $reservationId = null,
+        /** Czy kwota obca ma wejść do sum PLN (actual_amount_pln). */
+        public bool $convertToPln = true,
+        /** Świadome potwierdzenie nadpłaty względem planu (przy zapisie wpłaty). */
+        public bool $approveOverpayment = false,
     ) {}
 }

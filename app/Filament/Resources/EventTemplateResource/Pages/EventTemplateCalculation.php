@@ -3,6 +3,7 @@
 namespace App\Filament\Resources\EventTemplateResource\Pages;
 
 use App\Filament\Concerns\AuthorizesEventTemplatePages;
+use App\Filament\Concerns\ConfirmsEventTemplateEditing;
 use App\Filament\Resources\EventTemplateResource;
 use App\Filament\Resources\EventTemplateResource\Concerns\HasEventTemplateWorkflowContext;
 use App\Filament\Resources\EventTemplateResource\Concerns\HasGenerateEventAction;
@@ -14,6 +15,7 @@ use Filament\Resources\Pages\Page;
 class EventTemplateCalculation extends Page
 {
     use AuthorizesEventTemplatePages;
+    use ConfirmsEventTemplateEditing;
     use HasEventTemplateWorkflowContext;
     use HasGenerateEventAction;
     use InteractsWithRecord;
@@ -38,6 +40,7 @@ class EventTemplateCalculation extends Page
     public function mount(int|string $record): void
     {
         $this->record = $this->resolveRecord($record);
+        $this->bootTemplateEditingGate();
 
         $this->availableStartPlaces = $this->resolveAvailableStartPlaceOptions();
 
@@ -66,7 +69,8 @@ class EventTemplateCalculation extends Page
             $params['start_place'] = $placeId;
         }
 
-        $this->redirect(static::getResource()::getUrl('calculation', $params), navigate: true);
+        // Pełny reload — SPA navigate psuje layout Filament (czarna treść).
+        $this->redirect(static::getResource()::getUrl('calculation', $params), navigate: false);
     }
 
     /**
@@ -118,6 +122,7 @@ class EventTemplateCalculation extends Page
     protected function getHeaderActions(): array
     {
         return [
+            ...$this->templateEditingHeaderActions(),
             $this->makePreviewOfferAction(),
             $this->makeGenerateEventAction(),
         ];

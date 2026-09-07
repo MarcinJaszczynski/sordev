@@ -5,6 +5,7 @@ namespace App\Filament\Pilot\Pages;
 use App\Filament\Pilot\Concerns\AuthorizesPilotTrip;
 use App\Filament\Pilot\Concerns\HasPilotTripNav;
 use App\Models\Event;
+use App\Services\PilotAccessService;
 use Filament\Pages\Page;
 use Illuminate\Contracts\Support\Htmlable;
 use Illuminate\Support\Facades\Auth;
@@ -55,7 +56,7 @@ class PilotAdvancePage extends Page
             return true;
         }
 
-        return $user->hasRole(['admin', 'super_admin']) && \App\Http\Middleware\PilotPreviewMiddleware::isActive();
+        return app(PilotAccessService::class)->canStaffPreviewPortal($user);
     }
 
     public static function urlFor(Event $event): string

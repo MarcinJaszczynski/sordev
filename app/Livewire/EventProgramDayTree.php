@@ -8,12 +8,15 @@ use App\Models\Event;
 use App\Models\EventProgramPoint;
 use App\Models\EventTemplateProgramPoint;
 use App\Services\EventProgramPointCreator;
+use App\Services\EventProgramPointDeletionService;
 use App\Services\EventProgramPointOrderService;
 use App\Support\ProgramTimeSlots;
 use Filament\Actions\Concerns\InteractsWithActions;
 use Filament\Actions\Contracts\HasActions;
 use Filament\Forms\Concerns\InteractsWithForms;
 use Filament\Forms\Contracts\HasForms;
+use Filament\Notifications\Actions\Action as NotificationAction;
+use Filament\Notifications\Notification;
 use Illuminate\Support\Collection;
 use Illuminate\Validation\ValidationException;
 use Livewire\Component;
@@ -57,7 +60,6 @@ class EventProgramDayTree extends Component implements HasActions, HasForms
     {
         $this->eventId = $eventId;
         $this->activeDay = $this->resolveInitialDay();
-        $this->mountInteractsWithTaskEditModal();
     }
 
     public function openCreateTaskForPoint(int $pointId): void
@@ -77,7 +79,7 @@ class EventProgramDayTree extends Component implements HasActions, HasForms
     public function setActiveDay(int $day): void
     {
         $event = Event::query()->findOrFail($this->eventId);
-        $maxDay = max(1, (int) ($event->duration_days ?? 1));
+        $maxDay = $event->resolveCoreProgramDaysCount();
         $this->activeDay = max(1, min($day, $maxDay));
         $this->selectedPointIds = [];
     }
@@ -158,21 +160,27 @@ class EventProgramDayTree extends Component implements HasActions, HasForms
 
     public function openAddBlock(int $day): void
     {
+        $event = Event::query()->findOrFail($this->eventId);
         $this->resetAddForm();
         $this->addModalMode = 'block';
         $this->addParentId = null;
-        $this->addForm['day'] = $day;
+        $this->addForm['day'] = $event->clampProgramPointDay($day, allowFacultative: false);
+        $this->activeDay = (int) $this->addForm['day'];
         $this->showAddModal = true;
     }
 
     public function openAddChild(int $parentId): void
     {
         $parent = $this->findEventPoint($parentId);
+        $event = Event::query()->findOrFail($this->eventId);
 
         $this->resetAddForm();
         $this->addModalMode = 'child';
         $this->addParentId = $parent->id;
-        $this->addForm['day'] = (int) ($parent->day ?? 1);
+        $this->addForm['day'] = $event->clampProgramPointDay(
+            (int) ($parent->day ?? 1),
+            allowFacultative: $event->isFacultativeProgramDay((int) ($parent->day ?? 1)),
+        );
         $this->showAddModal = true;
     }
 
@@ -195,8 +203,23 @@ class EventProgramDayTree extends Component implements HasActions, HasForms
     public function saveAdd(): void
     {
         $event = Event::query()->findOrFail($this->eventId);
-        $maxDay = max(1, (int) ($event->duration_days ?? 1));
         $creator = app(EventProgramPointCreator::class);
+
+        // Najpierw ustal dzień docelowy (aktywna zakładka / rodzic) — zanim walidacja
+        // odrzuci „uciekiniera” z formularza i zanim powstanie dodatkowa zakładka.
+        if ($this->addModalMode === 'child' && $this->addParentId) {
+            $parent = $this->findEventPoint($this->addParentId);
+            $day = $event->clampProgramPointDay(
+                (int) ($parent->day ?? 1),
+                allowFacultative: $event->isFacultativeProgramDay((int) ($parent->day ?? 1)),
+            );
+        } else {
+            $day = $event->clampProgramPointDay($this->activeDay, allowFacultative: false);
+        }
+
+        $this->addForm['day'] = $day;
+
+        $maxDay = $event->facultativeProgramDay();
 
         $this->validate([
             'addForm.day' => 'required|integer|min:1|max:'.$maxDay,
@@ -219,7 +242,6 @@ class EventProgramDayTree extends Component implements HasActions, HasForms
             ]);
         }
 
-        $day = (int) $this->addForm['day'];
         $parentId = $this->addModalMode === 'child' ? $this->addParentId : null;
         $options = $this->addOptionsFromForm();
 
@@ -293,7 +315,7 @@ class EventProgramDayTree extends Component implements HasActions, HasForms
         }
 
         $event = Event::query()->findOrFail($this->eventId);
-        $maxDay = max(1, (int) ($event->duration_days ?? 1));
+        $maxDay = $event->facultativeProgramDay();
 
         $this->validate([
             'editForm.name' => 'nullable|string|max:255',
@@ -321,7 +343,11 @@ class EventProgramDayTree extends Component implements HasActions, HasForms
         }
 
         $point = $this->findEventPoint($this->editingPointId);
-        $newDay = (int) $this->editForm['day'];
+        $requestedDay = (int) $this->editForm['day'];
+        $newDay = $event->clampProgramPointDay(
+            $requestedDay,
+            allowFacultative: $event->isFacultativeProgramDay($requestedDay),
+        );
         $oldDay = (int) ($point->day ?? 1);
 
         $point->update([
@@ -350,19 +376,53 @@ class EventProgramDayTree extends Component implements HasActions, HasForms
     public function deletePoint(int $pointId): void
     {
         $point = $this->findEventPoint($pointId);
-        $name = $point->name ?? $point->templatePoint?->name ?? ('Punkt #'.$point->id);
+        $result = app(EventProgramPointDeletionService::class)->softDelete($point);
+        $name = $result['label'] !== ''
+            ? $result['label']
+            : ($point->name ?? $point->templatePoint?->name ?? ('Punkt #'.$pointId));
 
-        if ($point->parent_id === null) {
-            EventProgramPoint::query()
-                ->where('event_id', $this->eventId)
-                ->where('parent_id', $point->id)
-                ->each(fn (EventProgramPoint $child) => $child->delete());
-        }
-
-        $point->delete();
+        Notification::make()
+            ->title($result['title'] !== '' ? $result['title'] : ('Usunięto: '.$name))
+            ->body($result['body'])
+            ->success()
+            ->persistent()
+            ->actions([
+                NotificationAction::make('undo')
+                    ->label('Cofnij')
+                    ->button()
+                    ->dispatch('undo-last-program-point-deletion'),
+            ])
+            ->send();
 
         $this->dispatch('event-program-points-refresh');
-        $this->dispatch('notify', type: 'success', message: 'Usunięto: '.$name);
+    }
+
+    #[\Livewire\Attributes\On('undo-last-program-point-deletion')]
+    public function undoLastProgramPointDeletion(): void
+    {
+        $service = app(EventProgramPointDeletionService::class);
+        $pending = $service->pendingUndo((int) $this->eventId);
+
+        if ($pending === null) {
+            Notification::make()
+                ->title('Brak usunięcia do cofnięcia')
+                ->warning()
+                ->send();
+
+            return;
+        }
+
+        $restored = $service->restoreByIds((int) $this->eventId, $pending['point_ids']);
+
+        Notification::make()
+            ->title($restored > 0 ? 'Cofnięto usunięcie' : 'Nie przywrócono punktów')
+            ->body($restored > 0
+                ? 'Przywrócono „'.$pending['label'].'”.'
+                : 'Punkty nie były już w koszu.')
+            ->success()
+            ->send();
+
+        $this->dispatch('event-program-points-refresh');
     }
 
     public function detachFromSet(int $pointId): void
@@ -506,7 +566,7 @@ class EventProgramDayTree extends Component implements HasActions, HasForms
     /** @return array<int, string> */
     protected function dayOptions(Event $event): array
     {
-        $maxDay = max(1, (int) ($event->duration_days ?? 1));
+        $maxDay = $event->resolveCoreProgramDaysCount();
         $options = [];
 
         for ($day = 1; $day <= $maxDay; $day++) {
@@ -579,7 +639,7 @@ class EventProgramDayTree extends Component implements HasActions, HasForms
         $points = $service->loadPoints($event);
         $firstWithPoints = (int) ($points->whereNull('parent_id')->min('day') ?? 1);
 
-        return max(1, min($firstWithPoints, (int) ($event->duration_days ?? 1)));
+        return max(1, min($firstWithPoints, $event->resolveCoreProgramDaysCount()));
     }
 
     /**
@@ -588,7 +648,7 @@ class EventProgramDayTree extends Component implements HasActions, HasForms
      */
     protected function buildDayTabs(Event $event, Collection $days): array
     {
-        $maxDay = max(1, (int) ($event->duration_days ?? 1));
+        $maxDay = $event->resolveCoreProgramDaysCount();
         $byDay = $days->keyBy('day');
         $tabs = [];
 

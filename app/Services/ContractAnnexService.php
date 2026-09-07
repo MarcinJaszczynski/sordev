@@ -147,15 +147,15 @@ class ContractAnnexService
             'order' => $point->order,
             'name' => $point->name,
             'description' => $point->description,
-            'start_time' => $point->start_time,
-            'end_time' => $point->end_time,
+            'start_time' => $point->displayStartTime(),
+            'end_time' => $point->displayEndTime(),
             'children' => $point->children
                 ->map(fn (EventProgramPoint $child): array => [
                     'id' => $child->id,
                     'name' => $child->name,
                     'description' => $child->description,
-                    'start_time' => $child->start_time,
-                    'end_time' => $child->end_time,
+                    'start_time' => $child->displayStartTime(),
+                    'end_time' => $child->displayEndTime(),
                 ])
                 ->values()
                 ->all(),

@@ -356,6 +356,28 @@ class EventAdditionalOrderingPartiesLookup extends Component
         $this->dispatchAdditionalUpdated();
     }
 
+    public function setAsTripContact(int $index): void
+    {
+        if (! isset($this->additional[$index])) {
+            return;
+        }
+
+        foreach ($this->additional as $i => &$row) {
+            $row['goes_on_trip'] = $i === $index;
+        }
+
+        $this->dispatch('ordering-party-trip-contact-set', partyIndex: $index + 1);
+        $this->dispatchAdditionalUpdated();
+    }
+
+    #[On('ordering-party-trip-contact-set')]
+    public function onTripContactSet(int $partyIndex): void
+    {
+        foreach ($this->additional as $i => &$row) {
+            $row['goes_on_trip'] = $partyIndex === ($i + 1);
+        }
+    }
+
     public function removeAdditional(int $index): void
     {
         if (! isset($this->additional[$index])) {

@@ -45,17 +45,19 @@ final class PilotTripModuleNavigation
 
             $tabs[] = [
                 'key' => 'checklist',
-                'label' => 'Checklista',
+                'label' => 'Checklista i czynności',
                 'url' => PilotChecklistPage::urlFor($event),
                 'icon' => 'heroicon-o-clipboard-document-check',
             ];
 
-            $tabs[] = [
-                'key' => 'attendance',
-                'label' => 'Obecność',
-                'url' => PilotAttendancePage::urlFor($event),
-                'icon' => 'heroicon-o-clipboard-document-list',
-            ];
+            if ($event->showsPilotAttendance()) {
+                $tabs[] = [
+                    'key' => 'attendance',
+                    'label' => 'Obecność',
+                    'url' => PilotAttendancePage::urlFor($event),
+                    'icon' => 'heroicon-o-clipboard-document-list',
+                ];
+            }
 
             $tabs[] = [
                 'key' => 'settlement',
@@ -67,7 +69,7 @@ final class PilotTripModuleNavigation
 
         $hasHotelPlan = $event->hotelStays()->exists();
 
-        if ($fullAccess && $user && $hasHotelPlan && ($user->hasRole(['admin', 'super_admin']) || $user->hasRole('pilot') || app(PilotAccessService::class)->isOfficePreview($user))) {
+        if ($fullAccess && $user && $hasHotelPlan && ($user->hasRole('pilot') || app(PilotAccessService::class)->canStaffPreviewPortal($user))) {
             $tabs[] = [
                 'key' => 'hotel',
                 'label' => 'Hotele',

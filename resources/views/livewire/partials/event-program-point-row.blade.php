@@ -56,7 +56,16 @@
                 @else
                     <button type="button" wire:click="detachFromSet({{ $point->id }})" wire:confirm="Odpiąć od setu?">Odepnij od setu</button>
                 @endif
-                <button type="button" class="epp-menu__danger" wire:click="deletePoint({{ $point->id }})" wire:confirm="Usunąć ten punkt{{ $isSetParent ? ' wraz z podpunktami' : '' }}?">Usuń</button>
+                <button
+                    type="button"
+                    class="epp-menu__danger"
+                    wire:click="deletePoint({{ $point->id }})"
+                    wire:confirm="{{ $isSetParent
+                        ? 'Usunąć cały set „'.e($name).'” wraz z '.$childCount.' podpunktami? Po usunięciu możesz to cofnąć w liście programu.'
+                        : ($isChild
+                            ? 'Usunąć podpunkt „'.e($name).'” z setu?'
+                            : 'Usunąć punkt „'.e($name).'”?') }}"
+                >Usuń</button>
             </div>
         </details>
     </div>

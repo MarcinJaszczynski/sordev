@@ -7,6 +7,8 @@ use App\Filament\Concerns\InteractsWithTaskOwnershipScope;
 use App\Models\Task;
 use App\Services\CalendarEventAggregator;
 use App\Support\FilamentNavigation;
+use App\Support\Tasks\TaskDueDates;
+use App\Support\UserUiPreferences;
 use Carbon\Carbon;
 use Filament\Actions\Action;
 use Filament\Pages\Page;
@@ -16,6 +18,34 @@ class OperationsCalendarPage extends Page
 {
     use InteractsWithTaskEditModal;
     use InteractsWithTaskOwnershipScope;
+
+    private const SESSION_KEY = 'operations_calendar.filters';
+
+    /** @var list<string> */
+    private const AVAILABLE_TYPES = [
+        'events',
+        'tasks',
+        'insurances',
+        'ksef',
+        'payments',
+        'pilots',
+        'reservations',
+        'transport',
+        'hotels',
+    ];
+
+    /** @var list<string> */
+    private const DEFAULT_ENABLED_TYPES = [
+        'events',
+        'tasks',
+        'insurances',
+        'ksef',
+        'payments',
+        'pilots',
+        'reservations',
+        'transport',
+        'hotels',
+    ];
 
     protected static ?string $navigationIcon = 'heroicon-o-calendar-days';
 
@@ -27,11 +57,7 @@ class OperationsCalendarPage extends Page
 
     protected static ?int $navigationSort = 1;
 
-    public array $enabledTypes = ['events', 'tasks', 'ksef', 'payments', 'pilots', 'reservations', 'transport', 'hotels'];
-
-    public bool $showFinishedTasks = false;
-
-    public bool $tasksOnlyUrgent = false;
+    public array $enabledTypes = self::DEFAULT_ENABLED_TYPES;
 
     public string $viewMode = 'dayGridMonth';
 
@@ -55,8 +81,14 @@ class OperationsCalendarPage extends Page
 
     public function mount(): void
     {
-        // Kalendarz operacyjny: pełny obraz biura, nie tylko „przypisane do mnie”.
-        $this->tasksScope = 'all';
+        // Kalendarz operacyjny: domyślnie pełny obraz biura; sesja nadpisuje ostatni układ filtrów.
+        $this->tasksScope = $this->defaultTasksScope();
+        $this->restoreFiltersFromSession();
+    }
+
+    protected function defaultTasksScope(): string
+    {
+        return 'all';
     }
 
     public function getTitle(): string
@@ -107,9 +139,11 @@ class OperationsCalendarPage extends Page
 
     protected function createTaskDefaultDueDate(): mixed
     {
-        return $this->clickedDate
-            ? Carbon::parse($this->clickedDate)->startOfDay()
-            : $this->pendingCreateDueDate;
+        if ($this->clickedDate) {
+            return TaskDueDates::defaultForNew(Carbon::parse($this->clickedDate));
+        }
+
+        return $this->pendingCreateDueDate ?? TaskDueDates::defaultForNew();
     }
 
     public function openCalendarEntry(string $entryId): void
@@ -153,27 +187,31 @@ class OperationsCalendarPage extends Page
 
         $this->visibleFrom = $normalizedFrom;
         $this->visibleTo = $normalizedTo;
+        $this->persistFilters();
         $this->invalidateCalendarEvents();
     }
 
     public function resetTaskFilters(): void
     {
-        $this->tasksScope = 'all';
+        $this->tasksScope = $this->defaultTasksScope();
         $this->tasksOnlyUrgent = false;
         $this->showFinishedTasks = false;
+        $this->dueFilter = '';
 
         if (! in_array('tasks', $this->enabledTypes, true)) {
             $this->enabledTypes[] = 'tasks';
         }
 
+        $this->persistFilters();
         $this->invalidateCalendarEvents();
     }
 
     public function hasActiveTaskFilters(): bool
     {
-        return $this->tasksScope !== 'all'
+        return $this->tasksScope !== $this->defaultTasksScope()
             || $this->tasksOnlyUrgent
             || $this->showFinishedTasks
+            || $this->dueFilter !== ''
             || ! in_array('tasks', $this->enabledTypes, true);
     }
 
@@ -193,6 +231,7 @@ class OperationsCalendarPage extends Page
                 'show_finished_tasks' => $this->showFinishedTasks,
                 'tasks_scope' => $this->tasksScope,
                 'tasks_only_urgent' => $this->tasksOnlyUrgent,
+                'tasks_due_filter' => $this->dueFilter,
                 'user_id' => auth()->id(),
             ])
             ->all();
@@ -210,6 +249,7 @@ class OperationsCalendarPage extends Page
     public function setLayoutMode(string $mode): void
     {
         $this->layoutMode = in_array($mode, ['calendar', 'resources'], true) ? $mode : 'calendar';
+        $this->persistFilters();
         unset($this->resourceTimeline);
     }
 
@@ -245,6 +285,10 @@ class OperationsCalendarPage extends Page
 
     public function toggleType(string $type): void
     {
+        if (! in_array($type, self::AVAILABLE_TYPES, true)) {
+            return;
+        }
+
         if (in_array($type, $this->enabledTypes, true)) {
             $this->enabledTypes = array_values(array_filter(
                 $this->enabledTypes,
@@ -254,21 +298,13 @@ class OperationsCalendarPage extends Page
             $this->enabledTypes[] = $type;
         }
 
+        $this->persistFilters();
         $this->invalidateCalendarEvents();
     }
 
     protected function afterTasksScopeChanged(): void
     {
-        $this->invalidateCalendarEvents();
-    }
-
-    public function updatedShowFinishedTasks(): void
-    {
-        $this->invalidateCalendarEvents();
-    }
-
-    public function updatedTasksOnlyUrgent(): void
-    {
+        $this->persistFilters();
         $this->invalidateCalendarEvents();
     }
 
@@ -296,5 +332,52 @@ class OperationsCalendarPage extends Page
         }
 
         return now()->addMonths(12)->endOfMonth();
+    }
+
+    protected function filtersSessionKey(): string
+    {
+        return self::SESSION_KEY.'.'.(auth()->id() ?? 'guest');
+    }
+
+    protected function restoreFiltersFromSession(): void
+    {
+        $saved = session($this->filtersSessionKey(), []);
+
+        if (! is_array($saved) || $saved === []) {
+            $saved = UserUiPreferences::get('calendar_filters');
+        }
+
+        if (! is_array($saved) || $saved === []) {
+            return;
+        }
+
+        if (isset($saved['enabledTypes']) && is_array($saved['enabledTypes'])) {
+            $this->enabledTypes = array_values(array_filter(
+                $saved['enabledTypes'],
+                fn (mixed $type): bool => is_string($type) && in_array($type, self::AVAILABLE_TYPES, true),
+            ));
+
+            if ($this->enabledTypes === []) {
+                $this->enabledTypes = self::DEFAULT_ENABLED_TYPES;
+            }
+        }
+
+        $this->applyRestoredTaskQuickFilters($saved);
+
+        if (isset($saved['layoutMode']) && in_array($saved['layoutMode'], ['calendar', 'resources'], true)) {
+            $this->layoutMode = $saved['layoutMode'];
+        }
+    }
+
+    protected function persistFilters(): void
+    {
+        $payload = [
+            'enabledTypes' => array_values($this->enabledTypes),
+            ...$this->taskQuickFiltersState(),
+            'layoutMode' => $this->layoutMode,
+        ];
+
+        session([$this->filtersSessionKey() => $payload]);
+        UserUiPreferences::put('calendar_filters', $payload);
     }
 }

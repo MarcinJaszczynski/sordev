@@ -271,4 +271,262 @@ class RecordSettlementCostPaymentActionTest extends TestCase
             0.01
         );
     }
+
+    public function test_payment_can_use_currency_different_from_plan(): void
+    {
+        Role::findOrCreate('admin');
+        $user = User::factory()->create(['status' => 'active']);
+        $user->assignRole('admin');
+        $this->actingAs($user);
+
+        $pln = Currency::factory()->pln()->create();
+        $eur = Currency::factory()->eur()->create(['exchange_rate' => 4.2]);
+        $event = Event::factory()->create();
+        $settlement = EventSettlement::findOrCreateActiveForEvent($event);
+
+        $plan = $settlement->costs()->create([
+            'source_type' => 'manual',
+            'name' => 'Hotel PLN',
+            'planned_amount' => 1000,
+            'planned_amount_pln' => 1000,
+            'planned_currency_id' => $pln->id,
+            'planned_convert_to_pln' => true,
+            'paid_by' => 'office',
+            'payment_status' => 'planned',
+            'order' => 1,
+        ]);
+
+        $payment = app(RecordSettlementCostPaymentAction::class)(new RecordSettlementCostPaymentData(
+            planCost: $plan->fresh(['plannedCurrency']),
+            amountPln: 210,
+            paymentMethod: 'transfer',
+            paidBy: 'office',
+            advanceType: 'advance',
+            amount: 50,
+            rate: 4.2,
+            currencyId: $eur->id,
+            convertToPln: true,
+        ));
+
+        $this->assertSame($eur->id, (int) $payment->actual_currency_id);
+        $this->assertEqualsWithDelta(50.0, (float) $payment->actual_amount, 0.01);
+        $this->assertEqualsWithDelta(210.0, (float) $payment->actual_amount_pln, 0.01);
+        $this->assertTrue((bool) $payment->planned_convert_to_pln);
+    }
+
+    public function test_foreign_payment_without_convert_skips_pln_total(): void
+    {
+        Role::findOrCreate('admin');
+        $user = User::factory()->create(['status' => 'active']);
+        $user->assignRole('admin');
+        $this->actingAs($user);
+
+        $eur = Currency::factory()->eur()->create(['exchange_rate' => 4.2]);
+        $event = Event::factory()->create();
+        $settlement = EventSettlement::findOrCreateActiveForEvent($event);
+
+        $plan = $settlement->costs()->create([
+            'source_type' => 'manual',
+            'name' => 'Bilety EUR',
+            'planned_amount' => 100,
+            'planned_amount_pln' => 420,
+            'planned_currency_id' => $eur->id,
+            'planned_convert_to_pln' => true,
+            'planned_rate' => 4.2,
+            'paid_by' => 'office',
+            'payment_status' => 'planned',
+            'order' => 1,
+        ]);
+
+        $payment = app(RecordSettlementCostPaymentAction::class)(new RecordSettlementCostPaymentData(
+            planCost: $plan->fresh(['plannedCurrency']),
+            amountPln: 0,
+            paymentMethod: 'transfer',
+            paidBy: 'office',
+            advanceType: 'advance',
+            amount: 40,
+            rate: 4.2,
+            currencyId: $eur->id,
+            convertToPln: false,
+        ));
+
+        $this->assertSame($eur->id, (int) $payment->actual_currency_id);
+        $this->assertEqualsWithDelta(40.0, (float) $payment->actual_amount, 0.01);
+        $this->assertNull($payment->actual_amount_pln);
+        $this->assertFalse((bool) $payment->planned_convert_to_pln);
+
+        $eval = app(SettlementPaymentHealthService::class)
+            ->evaluatePlanCost($plan->fresh(), $settlement->fresh()->costs()->get());
+        $this->assertEqualsWithDelta(0.0, $eval['paid_pln'], 0.01);
+    }
+
+    public function test_scheduled_advance_with_due_date_only_is_not_booked(): void
+    {
+        Role::findOrCreate('admin');
+        $user = User::factory()->create(['status' => 'active']);
+        $user->assignRole('admin');
+        $this->actingAs($user);
+
+        $event = Event::factory()->create();
+        $point = \App\Models\EventProgramPoint::factory()->create([
+            'event_id' => $event->id,
+            'name' => 'Przewodnik',
+            'planned_price' => 800,
+        ]);
+        $settlement = EventSettlement::findOrCreateActiveForEvent($event);
+        $plan = $settlement->upsertCostFromProgramPoint($point->fresh(['templatePoint', 'currency', 'event']));
+
+        $due = now()->addDays(10)->startOfDay();
+        $payment = app(RecordSettlementCostPaymentAction::class)(new RecordSettlementCostPaymentData(
+            planCost: $plan->fresh(),
+            amountPln: 200,
+            paymentMethod: 'transfer',
+            paidBy: 'office',
+            advanceType: 'advance',
+            paidAt: null,
+            dueDate: $due,
+        ));
+
+        $this->assertNull($payment->paid_at);
+        $this->assertNull($payment->actual_amount);
+        $this->assertNull($payment->actual_amount_pln);
+        $this->assertSame('advance_required', $payment->payment_status);
+        $this->assertEqualsWithDelta(200.0, (float) $payment->advance_amount, 0.01);
+        $this->assertTrue($payment->advance_due_date?->isSameDay($due));
+
+        $plan->refresh();
+        $this->assertSame('advance_required', $plan->payment_status);
+
+        $eval = app(SettlementPaymentHealthService::class)
+            ->evaluatePlanCost($plan, $settlement->fresh()->costs()->get());
+        $this->assertEqualsWithDelta(0.0, $eval['paid_pln'], 0.01);
+
+        $cache = new \App\Services\ProgramPointSettlementCostCache;
+        $cache->warm(collect([$point->fresh()]), $event->fresh());
+        $summary = app(\App\Services\ProgramPointListFinanceDisplay::class)
+            ->summarizePoint($point->fresh(['event', 'currency', 'templatePoint']), $cache);
+
+        $this->assertNotEmpty($summary['paymentLines']);
+        $this->assertStringContainsString('Zal. do zapł.', (string) ($summary['paymentLines'][0]['text'] ?? ''));
+        $this->assertStringContainsString('do '.$due->format('d.m'), (string) ($summary['paymentLines'][0]['text'] ?? ''));
+        $this->assertSame('pending', $summary['paymentLines'][0]['tone'] ?? null);
+        $this->assertSame('none', $summary['paidStatus']);
+    }
+
+    public function test_full_overpayment_without_ack_stays_partially_paid(): void
+    {
+        Role::findOrCreate('admin');
+        $user = User::factory()->create(['status' => 'active']);
+        $user->assignRole('admin');
+        $this->actingAs($user);
+
+        $event = Event::factory()->create(['use_manual_transport_cost' => true, 'manual_transport_cost' => 1000]);
+        $settlement = EventSettlement::findOrCreateActiveForEvent($event);
+        $event->refreshActiveSettlementCosts();
+        $plan = $settlement->costs()->where('source_type', 'transport')->firstOrFail();
+
+        app(RecordSettlementCostPaymentAction::class)(new RecordSettlementCostPaymentData(
+            planCost: $plan,
+            amountPln: 1200,
+            paymentMethod: 'transfer',
+            paidBy: 'office',
+            advanceType: 'full',
+            paidAt: now(),
+            approveOverpayment: false,
+        ));
+
+        $plan->refresh();
+        $this->assertSame('partially_paid', $plan->payment_status);
+        $this->assertSame('pending', $plan->approval_status);
+    }
+
+    public function test_full_overpayment_with_ack_marks_paid(): void
+    {
+        Role::findOrCreate('admin');
+        $user = User::factory()->create(['status' => 'active']);
+        $user->assignRole('admin');
+        $this->actingAs($user);
+
+        $event = Event::factory()->create(['use_manual_transport_cost' => true, 'manual_transport_cost' => 1000]);
+        $settlement = EventSettlement::findOrCreateActiveForEvent($event);
+        $event->refreshActiveSettlementCosts();
+        $plan = $settlement->costs()->where('source_type', 'transport')->firstOrFail();
+
+        app(RecordSettlementCostPaymentAction::class)(new RecordSettlementCostPaymentData(
+            planCost: $plan,
+            amountPln: 1200,
+            paymentMethod: 'transfer',
+            paidBy: 'office',
+            advanceType: 'full',
+            paidAt: now(),
+            approveOverpayment: true,
+        ));
+
+        $plan->refresh();
+        $this->assertSame('paid', $plan->payment_status);
+        $this->assertSame('approved', $plan->approval_status);
+        $this->assertSame($user->id, (int) $plan->reviewed_by);
+
+        $eval = app(SettlementPaymentHealthService::class)
+            ->evaluatePlanCost($plan, $settlement->fresh()->costs()->get());
+        $this->assertSame(SettlementPaymentHealthService::STATUS_OK, $eval['coverage_status']);
+        $this->assertTrue($eval['overpayment_approved']);
+    }
+
+    public function test_zero_booked_payment_marks_plan_paid(): void
+    {
+        Role::findOrCreate('admin');
+        $user = User::factory()->create(['status' => 'active']);
+        $user->assignRole('admin');
+        $this->actingAs($user);
+
+        $event = Event::factory()->create(['use_manual_transport_cost' => true, 'manual_transport_cost' => 500]);
+        $settlement = EventSettlement::findOrCreateActiveForEvent($event);
+        $event->refreshActiveSettlementCosts();
+        $plan = $settlement->costs()->where('source_type', 'transport')->firstOrFail();
+
+        $payment = app(RecordSettlementCostPaymentAction::class)(new RecordSettlementCostPaymentData(
+            planCost: $plan,
+            amountPln: 0,
+            paymentMethod: 'transfer',
+            paidBy: 'office',
+            advanceType: 'full',
+            paidAt: now(),
+        ));
+
+        $this->assertSame('paid', $payment->payment_status);
+        $this->assertEqualsWithDelta(0.0, (float) $payment->actual_amount_pln, 0.001);
+        $this->assertSame('paid', $plan->fresh()->payment_status);
+
+        $eval = app(SettlementPaymentHealthService::class)
+            ->evaluatePlanCost($plan->fresh(), $settlement->fresh()->costs()->get());
+        $this->assertSame(SettlementPaymentHealthService::STATUS_OK, $eval['coverage_status']);
+    }
+
+    public function test_zero_scheduled_payment_is_allowed_without_closing_plan(): void
+    {
+        Role::findOrCreate('admin');
+        $user = User::factory()->create(['status' => 'active']);
+        $user->assignRole('admin');
+        $this->actingAs($user);
+
+        $event = Event::factory()->create(['use_manual_transport_cost' => true, 'manual_transport_cost' => 500]);
+        $settlement = EventSettlement::findOrCreateActiveForEvent($event);
+        $event->refreshActiveSettlementCosts();
+        $plan = $settlement->costs()->where('source_type', 'transport')->firstOrFail();
+
+        $payment = app(RecordSettlementCostPaymentAction::class)(new RecordSettlementCostPaymentData(
+            planCost: $plan,
+            amountPln: 0,
+            paymentMethod: 'transfer',
+            paidBy: 'office',
+            advanceType: 'full',
+            paidAt: null,
+            dueDate: now()->addWeek(),
+        ));
+
+        $this->assertSame('planned', $payment->payment_status);
+        $this->assertNull($payment->actual_amount_pln);
+        $this->assertNotSame('paid', $plan->fresh()->payment_status);
+    }
 }

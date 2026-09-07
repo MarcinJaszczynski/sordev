@@ -207,10 +207,10 @@ class UpsertReservationActionTest extends TestCase
         $links = TaskContextRegistry::linksForRecord($reservation->fresh());
         $labels = collect($links)->pluck('label')->all();
 
-        $this->assertContains('Rezerwacja', $labels);
-        $this->assertContains('Impreza', $labels);
-        $this->assertContains('Program imprezy', $labels);
-        $this->assertContains('Rezerwacje imprezy', $labels);
+        $this->assertContains('Rezerwacja: REF-9', $labels);
+        $this->assertContains('Impreza: Impreza context', $labels);
+        $this->assertContains('Punkt programu: Zwiedzanie', $labels);
+        $this->assertContains('Rezerwacje: Impreza context', $labels);
     }
 
     public function test_retire_all_on_delete(): void

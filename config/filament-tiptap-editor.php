@@ -24,11 +24,12 @@ return [
             'superscript', 'subscript', '|',
             'align-left', 'align-center', 'align-right', 'align-justify',
         ],
-        /* Uwagi imprezy — bez wyrównania do środka; kolor i highlight jak w default */
+        /* Uwagi imprezy — bez wyrównania do środka; kolor, highlight i tabele (wklejka + toolbar) */
         'notes' => [
             'undo', 'redo', '|',
             'heading', 'bullet-list', 'ordered-list', 'blockquote', '|',
-            'bold', 'italic', 'strike', 'underline', 'color', 'highlight', 'link',
+            'bold', 'italic', 'strike', 'underline', 'color', 'highlight', 'link', '|',
+            'table',
         ],
         'simple' => ['heading', 'bullet-list', 'ordered-list', '|', 'bold', 'italic', 'underline', 'color', 'highlight', '|', 'link'],
         'minimal' => ['bold', 'italic', 'link', 'bullet-list', 'ordered-list'],

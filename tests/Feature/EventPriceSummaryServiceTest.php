@@ -63,6 +63,7 @@ class EventPriceSummaryServiceTest extends TestCase
             'convert_to_pln' => true,
             'include_in_calculation' => true,
             'include_in_program' => true,
+            'include_gratis_in_cost' => true,
             'active' => true,
         ]);
 
@@ -242,7 +243,7 @@ class EventPriceSummaryServiceTest extends TestCase
             'driver' => 1,
         ]);
 
-        // 42 × 100 = 4200 baza → przy 0% marży/podatków PPP = 100 (już wielokrotność 5).
+        // Koszt z gratisami: (42+3)×100 = 4500; PPP raw = 4500/42 ≈ 107.14 → ceil 5 = 110.
         EventProgramPoint::create([
             'event_id' => $event->id,
             'day' => 1,
@@ -255,6 +256,7 @@ class EventPriceSummaryServiceTest extends TestCase
             'convert_to_pln' => true,
             'include_in_calculation' => true,
             'include_in_program' => true,
+            'include_gratis_in_cost' => true,
             'active' => true,
         ]);
 
@@ -264,6 +266,9 @@ class EventPriceSummaryServiceTest extends TestCase
         $this->assertTrue($summary['ready']);
         $this->assertSame(110.0, (float) $summary['price_per_person_rounded']);
         $this->assertSame(4620.0, (float) $summary['payable_total_pln']); // 110 × 42
+        $this->assertSame((float) $summary['markup_pln'], (float) $summary['net_profit_pln']);
+        $this->assertArrayHasKey('tax_breakdown', $summary);
+        $this->assertArrayHasKey('labels', $summary);
         $this->assertNotSame(
             (float) $summary['payable_total_pln'],
             (float) $summary['total_pln'],

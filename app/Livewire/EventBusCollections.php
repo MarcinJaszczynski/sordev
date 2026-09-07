@@ -44,23 +44,25 @@ class EventBusCollections extends Component
 
     /**
      * Wstępne wartości z imprezy: pojemność, waluta→pilot z harmonogramu, data startu.
+     * Cennik jest podpowiedzią — po zapisie nie nadpisuje wpisanej kwoty.
      */
     public function applyEventDefaults(): void
     {
-        $hints = [];
+        $this->fillFieldsFromEventDefaults();
+        $this->refreshDefaultsHint();
+        $this->notes = '';
+    }
 
+    protected function fillFieldsFromEventDefaults(): void
+    {
         $count = $this->resolveDefaultParticipantCount();
         $this->participantCount = $count > 0 ? (string) $count : '';
-        if ($count > 0) {
-            $hints[] = $count.' os. (pojemność imprezy)';
-        }
 
         $pilotDue = $this->resolvePilotCurrencyDue();
         if ($pilotDue !== null) {
             $this->unitAmount = (string) $pilotDue['amount'];
             $this->currencyId = $pilotDue['currency_id'];
             $this->title = $pilotDue['title'];
-            $hints[] = number_format($pilotDue['amount'], 2, ',', ' ').' '.$pilotDue['currency_code'].'/os. (harmonogram)';
         } else {
             $this->currencyId = Currency::defaultPlnId();
             $this->unitAmount = '';
@@ -68,13 +70,28 @@ class EventBusCollections extends Component
         }
 
         $this->collectedAt = $this->resolveDefaultCollectedAt();
+    }
+
+    protected function refreshDefaultsHint(): void
+    {
+        $hints = [];
+
+        $count = $this->resolveDefaultParticipantCount();
+        if ($count > 0) {
+            $hints[] = $count.' os. (pojemność imprezy)';
+        }
+
+        $pilotDue = $this->resolvePilotCurrencyDue();
+        if ($pilotDue !== null) {
+            $hints[] = number_format($pilotDue['amount'], 2, ',', ' ').' '.$pilotDue['currency_code'].'/os. (cennik — tylko podpowiedź)';
+        }
+
         if ($this->event->start_date) {
             $hints[] = 'data: start imprezy '.$this->event->start_date->format('d.m.Y');
         }
 
-        $this->notes = '';
         $this->defaultsHint = $hints !== []
-            ? 'Wstępnie: '.implode(' · ', $hints)
+            ? 'Podpowiedź z imprezy: '.implode(' · ', $hints)
             : '';
     }
 
@@ -90,40 +107,36 @@ class EventBusCollections extends Component
         return round($unit * $count, 2);
     }
 
+    public function addPlan(): void
+    {
+        $this->storeCollection(EventBusCollection::STATUS_PLANNED);
+    }
+
     public function addCollection(): void
+    {
+        $this->storeCollection(EventBusCollection::STATUS_COLLECTED);
+    }
+
+    public function markCollected(int $id): void
     {
         if ($this->readOnly) {
             return;
         }
 
-        $this->validate([
-            'title' => 'required|string|max:255',
-            'collectedAt' => 'required|date',
-            'unitAmount' => 'required|numeric|min:0.01',
-            'currencyId' => 'required|exists:currencies,id',
-            'participantCount' => 'required|integer|min:1',
-            'notes' => 'nullable|string|max:2000',
+        $collection = EventBusCollection::query()
+            ->where('event_id', $this->event->id)
+            ->where('status', EventBusCollection::STATUS_PLANNED)
+            ->findOrFail($id);
+
+        $collection->update([
+            'status' => EventBusCollection::STATUS_COLLECTED,
+            'collected_at' => $collection->collected_at ?? now(),
+            'planned_amount' => $collection->planned_amount ?? $collection->amount,
         ]);
 
-        $unit = round((float) $this->unitAmount, 2);
-        $count = (int) $this->participantCount;
-        $total = round($unit * $count, 2);
+        $this->notifyCashDesk();
 
-        EventBusCollection::create([
-            'event_id' => $this->event->id,
-            'title' => $this->title,
-            'collected_at' => $this->collectedAt,
-            'amount' => $total,
-            'amount_per_person' => $unit,
-            'currency_id' => $this->currencyId,
-            'participant_count' => $count,
-            'notes' => filled($this->notes) ? $this->notes : null,
-            'status' => 'collected',
-        ]);
-
-        $this->applyEventDefaults();
-
-        Notification::make()->title('Zbiórka zapisana')->success()->send();
+        Notification::make()->title('Oznaczono jako zebrane — zasila saldo pilota')->success()->send();
     }
 
     public function updateStatus(int $id, string $status): void
@@ -136,11 +149,17 @@ class EventBusCollections extends Component
             return;
         }
 
+        if ($status === EventBusCollection::STATUS_PLANNED) {
+            return;
+        }
+
         $collection = EventBusCollection::query()
             ->where('event_id', $this->event->id)
             ->findOrFail($id);
 
         $collection->update(['status' => $status]);
+
+        $this->notifyCashDesk();
 
         Notification::make()->title('Status zaktualizowany')->success()->send();
     }
@@ -156,7 +175,67 @@ class EventBusCollections extends Component
             ->where('id', $id)
             ->delete();
 
+        $this->notifyCashDesk();
+
         Notification::make()->title('Zbiórka usunięta')->success()->send();
+    }
+
+    protected function storeCollection(string $status): void
+    {
+        if ($this->readOnly) {
+            return;
+        }
+
+        $rules = [
+            'title' => 'required|string|max:255',
+            'unitAmount' => 'required|numeric|min:0.01',
+            'currencyId' => 'required|exists:currencies,id',
+            'participantCount' => 'required|integer|min:1',
+            'notes' => 'nullable|string|max:2000',
+        ];
+
+        if ($status === EventBusCollection::STATUS_COLLECTED) {
+            $rules['collectedAt'] = 'required|date';
+        } else {
+            $rules['collectedAt'] = 'nullable|date';
+        }
+
+        $this->validate($rules);
+
+        $unit = round((float) $this->unitAmount, 2);
+        $count = (int) $this->participantCount;
+        $total = round($unit * $count, 2);
+
+        EventBusCollection::create([
+            'event_id' => $this->event->id,
+            'title' => $this->title,
+            'collected_at' => filled($this->collectedAt) ? $this->collectedAt : (
+                $status === EventBusCollection::STATUS_COLLECTED ? now() : null
+            ),
+            'amount' => $total,
+            'planned_amount' => $total,
+            'amount_per_person' => $unit,
+            'currency_id' => $this->currencyId,
+            'participant_count' => $count,
+            'notes' => filled($this->notes) ? $this->notes : null,
+            'status' => $status,
+        ]);
+
+        $this->notes = '';
+        $this->refreshDefaultsHint();
+        $this->notifyCashDesk();
+
+        Notification::make()
+            ->title($status === EventBusCollection::STATUS_PLANNED
+                ? 'Plan zbiórki zapisany'
+                : 'Zbiórka zapisana — zasila saldo pilota')
+            ->success()
+            ->send();
+    }
+
+    protected function notifyCashDesk(): void
+    {
+        $this->dispatch('bus-collections-updated', eventId: $this->event->id);
     }
 
     protected function resolveDefaultParticipantCount(): int
@@ -250,18 +329,39 @@ class EventBusCollections extends Component
         $collections = EventBusCollection::query()
             ->where('event_id', $this->event->id)
             ->with(['currency', 'recorder'])
+            ->orderByRaw("CASE status WHEN 'planned' THEN 0 WHEN 'collected' THEN 1 WHEN 'handed_to_office' THEN 2 ELSE 3 END")
             ->orderByDesc('collected_at')
+            ->orderByDesc('id')
             ->get();
 
         $selectedCurrency = $this->currencyId
             ? Currency::query()->find($this->currencyId)
             : null;
 
+        $totalsByCurrency = $collections
+            ->groupBy(fn (EventBusCollection $row) => (int) $row->currency_id)
+            ->map(function ($rows) {
+                /** @var \Illuminate\Support\Collection<int, EventBusCollection> $rows */
+                $first = $rows->first();
+
+                return [
+                    'currency' => $first?->currency,
+                    'planned' => round((float) $rows->where('status', EventBusCollection::STATUS_PLANNED)->sum('amount'), 2),
+                    'held' => round((float) $rows->whereIn('status', EventBusCollection::HELD_STATUSES)->sum('amount'), 2),
+                    'handed' => round((float) $rows->whereIn('status', [
+                        EventBusCollection::STATUS_HANDED_TO_OFFICE,
+                        EventBusCollection::STATUS_CONFIRMED,
+                    ])->sum('amount'), 2),
+                ];
+            })
+            ->values();
+
         return view('livewire.event-bus-collections', [
             'collections' => $collections,
             'currencyOptions' => Currency::filamentSelectOptions(),
             'computedTotal' => $this->computedTotalAmount(),
             'currency' => $selectedCurrency,
+            'totalsByCurrency' => $totalsByCurrency,
             'money' => fn (?float $amount, ?Currency $currency): string => MoneyFormatter::format(
                 $amount,
                 $currency?->symbol ?? 'PLN',

@@ -100,9 +100,90 @@ class CreateEventPageTest extends TestCase
                 'start_place_id' => $place->id,
             ])
             ->call('create')
-            ->assertHasFormErrors();
+            ->assertHasFormErrors(['ordering_parties']);
+
+        $errors = app(\App\Services\EventOrderingPartyService::class)->validateForEventCreation(
+            null,
+            null,
+            null,
+            null,
+        );
+        $this->assertStringContainsString('Dodaj nowego klienta', $errors['ordering_parties'] ?? '');
+        $this->assertStringContainsString('Zapisz klienta i wybierz go', $errors['client_name'] ?? '');
 
         $this->assertSame(0, Event::query()->where('name', 'Bez klienta')->count());
+    }
+
+    public function test_create_event_after_lookup_quick_create_flow(): void
+    {
+        $admin = User::factory()->create(['status' => 'active']);
+        $admin->assignRole('admin');
+
+        $place = Place::factory()->starting()->create();
+        $template = EventTemplate::factory()->create([
+            'start_place_id' => $place->id,
+            'duration_days' => 2,
+        ]);
+
+        $this->actingAs($admin);
+
+        $lookup = Livewire::test(\App\Livewire\EventClientLookup::class)
+            ->call('openQuickCreate')
+            ->assertSee('Zapisz klienta i wybierz go')
+            ->set('companyName', 'Szkoła Quick Create')
+            ->set('firstName', 'Ola')
+            ->set('lastName', 'Nowa')
+            ->set('phone', '601602603')
+            ->call('quickCreate')
+            ->assertSee('Wybrany zamawiający')
+            ->assertSee('Ola Nowa')
+            ->assertDispatched('client-lookup-applied');
+
+        $selected = $lookup->get('selected');
+        $this->assertIsArray($selected);
+        $this->assertNotEmpty($selected['contractor_id'] ?? null);
+
+        $orderingParties = [[
+            'contact_id' => filled($selected['contact_id'] ?? null) ? (string) $selected['contact_id'] : null,
+            'contractor_id' => (string) $selected['contractor_id'],
+            'department_label' => null,
+            'notes' => null,
+        ]];
+        $attrs = app(\App\Services\EventOrderingPartyService::class)->primaryClientAttributes($orderingParties);
+
+        Livewire::test(CreateEvent::class)
+            ->call(
+                'applyClientLookup',
+                $orderingParties,
+                (string) ($attrs['client_name'] ?? ''),
+                $attrs['client_email'] ?? null,
+                $attrs['client_phone'] ?? null,
+            )
+            ->assertSet('data.client_phone', '601602603')
+            ->fillForm([
+                'event_template_id' => $template->id,
+                'name' => 'Impreza po quick create',
+                'start_date' => '2026-08-01',
+                'duration_days' => 2,
+                'participant_count' => 12,
+                'start_place_id' => $place->id,
+            ])
+            ->call('create')
+            ->assertHasNoFormErrors();
+
+        $this->assertDatabaseHas('events', [
+            'name' => 'Impreza po quick create',
+            'client_phone' => '601602603',
+        ]);
+        $this->assertDatabaseHas('contractors', [
+            'name' => 'Szkoła Quick Create',
+            'phone' => '601602603',
+        ]);
+        $this->assertDatabaseHas('contacts', [
+            'first_name' => 'Ola',
+            'last_name' => 'Nowa',
+            'phone' => '601602603',
+        ]);
     }
 
     public function test_create_event_after_quick_create_with_phone_only(): void

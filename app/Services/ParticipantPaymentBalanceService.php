@@ -339,28 +339,23 @@ final class ParticipantPaymentBalanceService
             $expectedCount = max($registeredPayingCount, 1);
         }
 
-        $priceSummary = app(EventPriceSummaryService::class)->forEvent($event, includeNearest: false);
-        $pricePerPerson = round((float) ($priceSummary['price_per_person_rounded'] ?? $priceSummary['price_per_person'] ?? 0), 2);
-        if ($pricePerPerson <= 0) {
-            $pricePerPerson = round((float) $event->resolvedPricePerPerson($expectedCount), 2);
-        }
-        if ($pricePerPerson <= 0 && $groupContract) {
-            $pricePerPerson = round(app(ContractGroupPricingService::class)->resolvedUnitPrice($groupContract, $event), 2);
-        }
-
-        $expectedDuePln = round($expectedCount * $pricePerPerson, 2);
+        // Cena bazowa: umowa/ręczna, potem kalkulacja.
+        // Należność PLN: suma ledgeru (z rabatami / due=0) + osoby poza listą × cena.
+        $unitPrices = $this->resolveCapacityUnitPrices($event, $expectedCount, $groupContract);
+        $pricePerPerson = $unitPrices['PLN'];
+        $registeredCount = $payments->count();
+        $unregisteredCount = max(0, $expectedCount - $registeredCount);
+        $expectedDuePln = round($ledgerDue + ($unregisteredCount * $pricePerPerson), 2);
+        // FX: pełna pojemność listy (N), bez obniżania przez due=0 na liście.
+        $capacitySeats = $registeredCount + $unregisteredCount;
         $paidForeignByCode = $this->sumPaidForeignByCurrency($payments);
         $expectedForeign = [];
-        foreach ($priceSummary['foreign_prices'] ?? [] as $foreign) {
-            if (! is_array($foreign)) {
-                continue;
-            }
-            $ppp = round((float) ($foreign['price_per_person'] ?? 0), 2);
+        foreach ($unitPrices['foreign'] as $code => $ppp) {
+            $ppp = round((float) $ppp, 2);
             if ($ppp <= 0) {
                 continue;
             }
-            $code = strtoupper((string) ($foreign['currency'] ?? ''));
-            $expectedAmount = round($expectedCount * $ppp, 2);
+            $expectedAmount = round($capacitySeats * $ppp, 2);
             $paidAmount = round((float) ($paidForeignByCode[$code] ?? 0), 2);
             $expectedForeign[] = [
                 'currency' => $code,
@@ -368,7 +363,7 @@ final class ParticipantPaymentBalanceService
                 'amount' => $expectedAmount,
                 'paid' => $paidAmount,
                 'remaining' => round(max(0, $expectedAmount - $paidAmount), 2),
-                'label' => (string) ($foreign['label'] ?? ($code !== '' ? "{$ppp} {$code}" : '')),
+                'label' => "{$ppp} {$code}",
             ];
             unset($paidForeignByCode[$code]);
         }
@@ -389,7 +384,6 @@ final class ParticipantPaymentBalanceService
         }
 
         $capacityRemaining = round(max(0, $expectedDuePln - $ledgerPaid), 2);
-        $unregisteredCount = max(0, $expectedCount - $registeredPayingCount);
         $installmentGaps = $this->buildInstallmentGaps($event, $expectedCount, $pricePerPerson, $ledgerPaid);
         $plnGaps = array_values(array_filter($installmentGaps, fn (array $g): bool => empty($g['is_foreign'])));
         $foreignGaps = array_values(array_filter($installmentGaps, fn (array $g): bool => ! empty($g['is_foreign'])));
@@ -810,6 +804,76 @@ final class ParticipantPaymentBalanceService
             ->where('contract_type', Contract::TYPE_GROUP)
             ->orderByDesc('id')
             ->first();
+    }
+
+    /**
+     * Cena/os. do pojemności imprezy: umowa/ręczna (effective), inaczej kalkulacja.
+     *
+     * @return array{PLN: float, foreign: array<string, float>}
+     */
+    private function resolveCapacityUnitPrices(Event $event, int $expectedCount, ?Contract $groupContract): array
+    {
+        $pln = 0.0;
+        $foreign = [];
+
+        try {
+            $comparison = app(EventClientPriceComparisonService::class)->forEvent($event);
+            foreach ($comparison['currencies'] ?? [] as $row) {
+                if (! is_array($row)) {
+                    continue;
+                }
+                $code = strtoupper(trim((string) ($row['currency'] ?? '')));
+                $unit = $row['effective'] ?? $row['calculation'] ?? null;
+                if ($code === '' || $unit === null) {
+                    continue;
+                }
+                $unit = round((float) $unit, 2);
+                if ($unit <= SettlementPaymentHealthService::TOLERANCE) {
+                    continue;
+                }
+                if ($code === 'PLN') {
+                    $pln = $unit;
+                } else {
+                    $foreign[$code] = $unit;
+                }
+            }
+        } catch (\Throwable $e) {
+            report($e);
+        }
+
+        if ($pln <= SettlementPaymentHealthService::TOLERANCE) {
+            try {
+                $priceSummary = app(EventPriceSummaryService::class)->forEvent($event, includeNearest: false);
+                $pln = round((float) ($priceSummary['price_per_person_rounded'] ?? $priceSummary['price_per_person'] ?? 0), 2);
+                if ($foreign === []) {
+                    foreach ($priceSummary['foreign_prices'] ?? [] as $fx) {
+                        if (! is_array($fx)) {
+                            continue;
+                        }
+                        $code = strtoupper(trim((string) ($fx['currency'] ?? '')));
+                        $ppp = round((float) ($fx['price_per_person'] ?? 0), 2);
+                        if ($code === '' || $code === 'PLN' || $ppp <= SettlementPaymentHealthService::TOLERANCE) {
+                            continue;
+                        }
+                        $foreign[$code] = $ppp;
+                    }
+                }
+            } catch (\Throwable $e) {
+                report($e);
+            }
+        }
+
+        if ($pln <= SettlementPaymentHealthService::TOLERANCE) {
+            $pln = round((float) $event->resolvedPricePerPerson($expectedCount), 2);
+        }
+        if ($pln <= SettlementPaymentHealthService::TOLERANCE && $groupContract) {
+            $pln = round(app(ContractGroupPricingService::class)->resolvedUnitPrice($groupContract, $event), 2);
+        }
+
+        return [
+            'PLN' => $pln,
+            'foreign' => $foreign,
+        ];
     }
 
     /**

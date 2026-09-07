@@ -1,0 +1,279 @@
+<!--
+  PLIK REFERENCYJNY — nie wdrażać 1:1 do produkcji.
+  Cel: pokazać Cursorowi dokładny układ wizualny tabeli "Program imprezy" oraz panelu
+  bocznego (drawer) ze szczegółami punktu, który ma odwzorować, PODPINAJĄC pod niego
+  prawdziwe dane (drag&drop kolejności punktów, statusy rezerwacji/płatności, 3 rodzaje
+  kwot, wpłaty, rezerwacje, dokumenty). Nazwy pól, walidację, logikę przeliczeń,
+  drag&drop, relacje itd. zostawić bez zmian.
+
+  Ta sama paleta co w pozostałych plikach referencyjnych modułu Operacje
+  (mockup-reference-transport/hotele/pilot/portal-pilota.html):
+  - tło strony:        #F5F4EF
+  - karta/panel:        #FFFFFF, border 1px solid #E5E3DA, border-radius 12px
+  - karta wyciszona:    #F1EFE8, border-radius 8px
+  - tekst główny:       #2C2C2A
+  - tekst drugorzędny:  #5F5E5A
+  - tekst muted:        #888780
+  - accent (plan):      #E6F1FB tło, #0C447C tekst
+  - success (zapłacone/potwierdzona): #EAF3DE tło, #27500A tekst
+  - warning (częściowo): #FAEEDA tło, #633806 tekst
+  - danger (brak/pozostało): #FCEBEB tło, #791F1F tekst
+  - czcionka: system-ui / sans-serif
+  - promienie: 12px karty, 8px pigułki statusów, 20px pigułki dni (pełne zaokrąglenie)
+
+  TRZY KWOTY — kluczowa logika biznesowa, tylko prezentacja się zmienia:
+  1. Szablon   — cena z szablonu wycieczki (punkt wyjścia, zwykle stała).
+  2. Plan      — ile faktycznie planujemy wydać po ustaleniach (domyślnie = szablon,
+                 ale może być zmieniona ręcznie, np. przez upust).
+  3. Zapłacono — suma rzeczywistych wpłat (zaliczki, raty, dopłaty) ze statusem i datą.
+  Różnica Plan − Zapłacono = "Pozostało do zapłaty", pokazywana w drawerze.
+
+  STRUKTURA:
+  - Górny pasek dni jako przewijane pigułki (Dzień 1..5 + Opcje fakultatywne) z licznikiem
+    punktów przy każdym dniu, zamiast dużych kafli zajmujących cały wiersz.
+  - Tabela punktów programu: Godzina / Punkt programu (nazwa+opis+tagi) / Status rezerwacji /
+    Status płatności / 3 kwoty w mini-zestawieniu / ikona dokumentu / menu akcji.
+  - Klik w wiersz (lub w kwoty/menu) otwiera DRAWER z pełnymi szczegółami: 3 kwoty jako
+    karty + pozostało do zapłaty, listę wpłat z przyciskiem dodania, sekcję rezerwacji,
+    sekcję dokumentów z podglądem plików (ikona pliku + podgląd/otwórz), sekcję zaawansowaną
+    zwiniętą w <details>.
+-->
+<!DOCTYPE html>
+<html lang="pl">
+<head>
+<meta charset="UTF-8">
+<title>Referencja wizualna — Program imprezy (tabela + drawer)</title>
+<style>
+  * { box-sizing: border-box; }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    background: #F5F4EF;
+    color: #2C2C2A;
+    margin: 0;
+    padding: 24px;
+  }
+  .wrap { max-width: 1280px; margin: 0 auto; display: grid; grid-template-columns: 1fr 380px; gap: 20px; align-items: start; }
+  @media (max-width: 1000px) { .wrap { grid-template-columns: 1fr; } }
+
+  input, select, textarea, button {
+    font-family: inherit; font-size: 13px; border: 1px solid #D3D1C7; border-radius: 8px;
+    padding: 8px 10px; background: #FFFFFF; color: #2C2C2A;
+  }
+  button { cursor: pointer; }
+  button:hover { background: #F1EFE8; }
+
+  /* ===== Pasek dni ===== */
+  .day-tabs { display: flex; gap: 6px; margin-bottom: 12px; flex-wrap: wrap; }
+  .day-tabs .pill {
+    font-size: 12px; padding: 6px 12px; border-radius: 20px; cursor: pointer;
+    background: #F1EFE8; color: #5F5E5A;
+  }
+  .day-tabs .pill.active { background: #2C2C2A; color: #FFFFFF; }
+  .day-tabs .spacer { margin-left: auto; background: #FFFFFF; border: 1px solid #E5E3DA; color: #2C2C2A; }
+
+  /* ===== Tabela ===== */
+  .table-card { background: #FFFFFF; border: 1px solid #E5E3DA; border-radius: 12px; overflow: hidden; }
+  .row {
+    display: grid; grid-template-columns: 70px 2.2fr 1fr 1fr 1.5fr 60px 30px;
+    padding: 12px 14px; align-items: start; border-bottom: 1px solid #E5E3DA; cursor: pointer;
+  }
+  .row:last-child { border-bottom: none; }
+  .row:nth-child(even) { background: #F5F4EF; }
+  .row.header { padding: 8px 14px; font-size: 11px; color: #888780; border-bottom: 1px solid #E5E3DA; cursor: default; }
+  .row.header:nth-child(even) { background: transparent; }
+  .row.selected { background: #E6F1FB; }
+
+  .time { font-size: 12px; color: #5F5E5A; line-height: 1.4; }
+  .point-title { margin: 0; font-size: 13px; font-weight: 500; }
+  .point-sub { margin: 2px 0 0; font-size: 12px; color: #888780; }
+
+  .status-pill { font-size: 11px; padding: 2px 8px; border-radius: 8px; display: inline-block; }
+  .status-pill.danger { background: #FCEBEB; color: #791F1F; }
+  .status-pill.success { background: #EAF3DE; color: #27500A; }
+  .status-pill.warning { background: #FAEEDA; color: #633806; }
+  .status-pill.neutral { background: #F1EFE8; color: #5F5E5A; }
+
+  .prices { font-size: 11px; line-height: 1.5; }
+  .prices .line { display: flex; justify-content: space-between; }
+  .prices .label { color: #888780; }
+
+  .doc-icon { font-size: 16px; }
+  .doc-icon.has-file { color: #0C447C; }
+  .doc-icon.no-file { color: #888780; }
+
+  .row-menu { font-size: 16px; color: #888780; text-align: right; }
+
+  .table-footer { padding: 10px 14px; font-size: 12px; color: #888780; }
+
+  /* ===== Drawer ===== */
+  .drawer { background: #FFFFFF; border: 1px solid #E5E3DA; border-radius: 12px; padding: 20px; position: sticky; top: 24px; }
+  .drawer-header { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 4px; }
+  .drawer-header p { margin: 0; font-size: 15px; font-weight: 500; max-width: 300px; }
+  .drawer-header .close { cursor: pointer; color: #888780; }
+  .drawer-sub { margin: 0 0 16px; font-size: 12px; color: #5F5E5A; }
+
+  .price-cards { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; margin-bottom: 12px; }
+  .price-card { border-radius: 8px; padding: 10px; text-align: center; }
+  .price-card.neutral { background: #F1EFE8; }
+  .price-card.accent { background: #E6F1FB; }
+  .price-card.success { background: #EAF3DE; }
+  .price-card p:first-child { margin: 0 0 4px; font-size: 10px; }
+  .price-card.neutral p:first-child { color: #888780; }
+  .price-card.accent p:first-child { color: #0C447C; }
+  .price-card.success p:first-child { color: #27500A; }
+  .price-card p:last-child { margin: 0; font-size: 14px; font-weight: 500; }
+  .price-card.accent p:last-child { color: #0C447C; }
+  .price-card.success p:last-child { color: #27500A; }
+
+  .remaining-bar { background: #FCEBEB; border-radius: 8px; padding: 8px 10px; margin-bottom: 16px; display: flex; justify-content: space-between; font-size: 12px; color: #791F1F; }
+  .remaining-bar strong { font-weight: 500; }
+
+  .drawer-section { border-top: 1px solid #E5E3DA; padding-top: 12px; margin-bottom: 14px; }
+  .drawer-section-title { display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px; }
+  .drawer-section-title p { margin: 0; font-size: 13px; font-weight: 500; }
+  .drawer-section-title .add-link { font-size: 12px; color: #0C447C; cursor: pointer; }
+
+  .payment-row { display: flex; justify-content: space-between; align-items: center; padding: 6px 0; border-top: 1px solid #E5E3DA; font-size: 12px; }
+  .payment-row:first-of-type { border-top: none; }
+  .payment-row .amount { font-weight: 500; }
+  .payment-row .meta { margin: 0; color: #888780; font-size: 11px; }
+
+  .doc-row { display: flex; align-items: center; gap: 10px; background: #F1EFE8; border-radius: 8px; padding: 8px 10px; }
+  .doc-row .name { margin: 0; font-size: 12px; }
+  .doc-row .size { margin: 0; font-size: 11px; color: #888780; }
+  .doc-row .preview { margin-left: auto; color: #888780; cursor: pointer; }
+
+  details summary { font-size: 12px; color: #888780; cursor: pointer; }
+  .advanced-row { display: flex; justify-content: space-between; font-size: 12px; color: #5F5E5A; padding: 2px 0; }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <!-- LEWA: TABELA -->
+  <div>
+    <div class="day-tabs">
+      <span class="pill active">Dzień 2 · 11.09 · 16</span>
+      <span class="pill">Dzień 3 · 12.09 · 23</span>
+      <span class="pill">Dzień 4 · 13.09 · 9</span>
+      <span class="pill">Dzień 5 · 14.09 · 6</span>
+      <span class="pill">Opcje fakultatywne · 2</span>
+      <span class="pill spacer">+ Dodaj punkt programu</span>
+    </div>
+
+    <div class="table-card">
+      <div class="row header">
+        <span>Godzina</span><span>Punkt programu</span><span>Rezerwacja</span><span>Płatność</span><span>Kwoty (szablon / plan / zapł.)</span><span>Dok.</span><span></span>
+      </div>
+
+      <div class="row">
+        <div class="time">08:00<br>09:00</div>
+        <div>
+          <p class="point-title">Dojazd do Paryża w godzinach porannych</p>
+          <p class="point-sub">Program · poza kalkulacją</p>
+        </div>
+        <div><span class="status-pill danger">Brak</span></div>
+        <div><span class="status-pill danger">Brak kwoty</span></div>
+        <div class="prices">
+          <div class="line"><span class="label">Szablon</span><span>0,00 zł</span></div>
+          <div class="line"><span class="label">Plan</span><span>—</span></div>
+          <div class="line"><span class="label">Zapł.</span><span>0,00 zł</span></div>
+        </div>
+        <div><i class="doc-icon no-file">📄</i></div>
+        <div class="row-menu">⋮</div>
+      </div>
+
+      <div class="row selected">
+        <div class="time">10:00<br>11:00</div>
+        <div>
+          <p class="point-title">Paryż — zwiedzanie z przewodnikiem</p>
+          <p class="point-sub">Dzielnica Łacińska, Wyspa La Cité…</p>
+        </div>
+        <div><span class="status-pill success">Potwierdzona</span></div>
+        <div><span class="status-pill warning">Częściowo</span></div>
+        <div class="prices">
+          <div class="line"><span class="label">Szablon</span><span>1 236 zł</span></div>
+          <div class="line"><span class="label">Plan</span><span>1 122 zł</span></div>
+          <div class="line"><span class="label">Zapł.</span><span>500 zł</span></div>
+        </div>
+        <div><i class="doc-icon has-file">📄</i></div>
+        <div class="row-menu">⋮</div>
+      </div>
+
+      <div class="row">
+        <div class="time">12:30<br>14:00</div>
+        <div>
+          <p class="point-title">Obiadokolacja Paryż</p>
+          <p class="point-sub">Zaliczka biura · płatnik: Biuro</p>
+        </div>
+        <div><span class="status-pill neutral">—</span></div>
+        <div><span class="status-pill success">Zapłacone</span></div>
+        <div class="prices">
+          <div class="line"><span class="label">Szablon</span><span>924 EUR</span></div>
+          <div class="line"><span class="label">Plan</span><span>924 EUR</span></div>
+          <div class="line"><span class="label">Zapł.</span><span>924 EUR</span></div>
+        </div>
+        <div><i class="doc-icon has-file">📄</i></div>
+        <div class="row-menu">⋮</div>
+      </div>
+
+      <div class="table-footer">Wiersze przeciągalne (drag&amp;drop) — kolejność zapisuje się automatycznie, jak dziś.</div>
+    </div>
+  </div>
+
+  <!-- PRAWA: DRAWER -->
+  <div class="drawer">
+    <div class="drawer-header">
+      <p>Paryż — zwiedzanie z przewodnikiem</p>
+      <span class="close">✕</span>
+    </div>
+    <p class="drawer-sub">Program · płatnik planu: Biuro · częściowo zapłacone</p>
+
+    <div class="price-cards">
+      <div class="price-card neutral"><p>Szablon</p><p>1 236 zł</p></div>
+      <div class="price-card accent"><p>Plan</p><p>1 122 zł</p></div>
+      <div class="price-card success"><p>Zapłacono</p><p>500 zł</p></div>
+    </div>
+    <div class="remaining-bar">
+      <span>Pozostało do zapłaty</span>
+      <strong>622 zł</strong>
+    </div>
+
+    <div class="drawer-section">
+      <div class="drawer-section-title"><p>Wpłaty</p><span class="add-link">+ Dodaj wpłatę</span></div>
+      <div class="payment-row">
+        <div><p style="margin:0;">Zaliczka</p><p class="meta">02.08.2026 · przelew</p></div>
+        <span class="amount">500 zł</span>
+      </div>
+    </div>
+
+    <div class="drawer-section">
+      <div class="drawer-section-title"><p>Rezerwacja</p><span class="add-link">+ Dodaj</span></div>
+      <p style="margin:0; font-size:12px; color:#888780;">Ta sama rezerwacja co w Operacje → Rezerwacje.</p>
+    </div>
+
+    <div class="drawer-section">
+      <div class="drawer-section-title"><p>Dokumenty i faktury</p><span class="add-link">+ Dodaj plik</span></div>
+      <div class="doc-row">
+        <span>📄</span>
+        <div>
+          <p class="name">faktura_przewodnik_paryz.pdf</p>
+          <p class="size">240 KB</p>
+        </div>
+        <span class="preview">👁</span>
+      </div>
+    </div>
+
+    <details>
+      <summary>Zaawansowane</summary>
+      <div style="margin-top:8px;">
+        <div class="advanced-row"><span>ID kosztu</span><span>926</span></div>
+        <div class="advanced-row"><span>Grupa</span><span>10</span></div>
+        <div class="advanced-row"><span>Źródło</span><span>program_point</span></div>
+      </div>
+    </details>
+  </div>
+
+</div>
+</body>
+</html>

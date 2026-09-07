@@ -70,6 +70,7 @@
                             <thead class="border-b text-xs uppercase text-gray-500">
                                 <tr>
                                     <th class="px-2 py-2">Imię i nazwisko</th>
+                                    <th class="px-2 py-2">Płeć</th>
                                     <th class="px-2 py-2">Data urodzenia</th>
                                     <th class="px-2 py-2">PESEL</th>
                                     <th class="px-2 py-2">Kontakt</th>
@@ -84,6 +85,7 @@
                                 @foreach ($participants as $participant)
                                     <tr wire:key="participant-{{ $participant['id'] }}">
                                         <td class="px-2 py-2 font-medium text-gray-900">{{ $participant['full_name'] }}</td>
+                                        <td class="px-2 py-2 text-gray-700">{{ $participant['gender_label'] ?: '—' }}</td>
                                         <td class="px-2 py-2 text-gray-700">{{ $participant['birth_date'] ?: '—' }}</td>
                                         <td class="px-2 py-2 text-gray-700">{{ $participant['pesel'] ?: '—' }}</td>
                                         <td class="px-2 py-2 text-gray-600">
@@ -141,6 +143,15 @@
                     <div>
                         <label class="mb-1 block text-xs font-medium text-gray-700">Nazwisko</label>
                         <input type="text" wire:model.live.debounce.500ms="formLastName" class="fi-input block w-full rounded-lg border-gray-300 text-sm" />
+                    </div>
+                    <div>
+                        <label class="mb-1 block text-xs font-medium text-gray-700">Płeć</label>
+                        <select wire:model.live="formGender" class="fi-input block w-full rounded-lg border-gray-300 text-sm">
+                            <option value="">—</option>
+                            @foreach (\App\Models\EventParticipant::$genders as $value => $label)
+                                <option value="{{ $value }}">{{ $label }}</option>
+                            @endforeach
+                        </select>
                     </div>
                     <div>
                         <label class="mb-1 block text-xs font-medium text-gray-700">Data urodzenia</label>

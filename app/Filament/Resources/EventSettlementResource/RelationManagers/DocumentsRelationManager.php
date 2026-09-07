@@ -10,6 +10,7 @@ use Filament\Forms\Form;
 use Filament\Resources\RelationManagers\RelationManager;
 use Filament\Tables;
 use Filament\Tables\Table;
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Support\Facades\Auth;
 
 class DocumentsRelationManager extends RelationManager
@@ -174,6 +175,7 @@ class DocumentsRelationManager extends RelationManager
                     $query->where('document_type', $this->documentTypeFilter);
                 }
             })
+            ->defaultSort('created_at', 'desc')
             ->columns([
                 Tables\Columns\BadgeColumn::make('document_type')
                     ->label('Typ')
@@ -247,6 +249,18 @@ class DocumentsRelationManager extends RelationManager
                     ->dateTime('d.m.Y H:i')
                     ->placeholder('—')
                     ->toggleable(isToggledHiddenByDefault: true),
+
+                Tables\Columns\TextColumn::make('created_at')
+                    ->label('Dodano')
+                    ->dateTime('d.m.Y H:i')
+                    ->sortable()
+                    ->toggleable(),
+
+                Tables\Columns\TextColumn::make('updated_at')
+                    ->label('Zmieniono')
+                    ->dateTime('d.m.Y H:i')
+                    ->sortable()
+                    ->toggleable(isToggledHiddenByDefault: true),
             ])
             ->filters([
                 Tables\Filters\Filter::make('approval_pending')
@@ -260,6 +274,26 @@ class DocumentsRelationManager extends RelationManager
                 Tables\Filters\Filter::make('approval_rejected')
                     ->label('Odrzucone')
                     ->query(fn ($query) => $query->where('approval_status', 'rejected')),
+
+                Tables\Filters\Filter::make('created_at')
+                    ->label('Data dodania')
+                    ->form([
+                        Forms\Components\DatePicker::make('from')
+                            ->label('Od'),
+                        Forms\Components\DatePicker::make('until')
+                            ->label('Do'),
+                    ])
+                    ->query(function (Builder $query, array $data): Builder {
+                        return $query
+                            ->when(
+                                $data['from'],
+                                fn (Builder $query, $date): Builder => $query->whereDate('created_at', '>=', $date),
+                            )
+                            ->when(
+                                $data['until'],
+                                fn (Builder $query, $date): Builder => $query->whereDate('created_at', '<=', $date),
+                            );
+                    }),
             ])
             ->headerActions([
                 Tables\Actions\CreateAction::make()

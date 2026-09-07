@@ -57,7 +57,16 @@ class TaskAttachment extends Model
 
     public function getPublicUrlAttribute(): ?string
     {
-        return $this->download_url;
+        return $this->preview_url;
+    }
+
+    public function getPreviewUrlAttribute(): ?string
+    {
+        if (! $this->exists) {
+            return null;
+        }
+
+        return route('admin.task-attachments.download', ['attachment' => $this->getKey()]);
     }
 
     public function getDownloadUrlAttribute(): ?string
@@ -66,7 +75,10 @@ class TaskAttachment extends Model
             return null;
         }
 
-        return route('admin.task-attachments.download', ['attachment' => $this->getKey()]);
+        return route('admin.task-attachments.download', [
+            'attachment' => $this->getKey(),
+            'download' => 1,
+        ]);
     }
 
     public function getReadableSizeAttribute(): ?string

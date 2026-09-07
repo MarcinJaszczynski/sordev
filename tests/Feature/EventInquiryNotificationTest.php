@@ -27,7 +27,7 @@ class EventInquiryNotificationTest extends TestCase
         }
     }
 
-    public function test_notify_office_about_new_inquiry_creates_single_shared_task(): void
+    public function test_notify_office_about_new_inquiry_creates_task_per_office_user(): void
     {
         [$admin, $biuro] = $this->makeOfficeUsers();
         $event = $this->makeInquiryEvent($admin);
@@ -39,13 +39,12 @@ class EventInquiryNotificationTest extends TestCase
             ->where('taskable_id', $event->id)
             ->get();
 
-        $this->assertCount(1, $tasks);
-        $this->assertSame($admin->id, (int) $tasks->first()->assignee_id);
-        $this->assertNotSame($biuro->id, (int) $tasks->first()->assignee_id);
+        $this->assertCount(2, $tasks);
+        $this->assertEqualsCanonicalizing([$admin->id, $biuro->id], $tasks->pluck('assignee_id')->all());
 
         $editUrl = EventResource::getUrl('edit', ['record' => $event]);
-        $this->assertStringContainsString('Nowe zapytanie:', (string) $tasks->first()->title);
-        $this->assertStringContainsString($editUrl, (string) $tasks->first()->description);
+        $this->assertTrue($tasks->every(fn (Task $task): bool => str_contains((string) $task->title, 'Nowe zapytanie:')));
+        $this->assertTrue($tasks->every(fn (Task $task): bool => str_contains((string) $task->description, $editUrl)));
     }
 
     public function test_notify_office_skips_duplicate_inquiry_within_five_minutes(): void
@@ -57,7 +56,7 @@ class EventInquiryNotificationTest extends TestCase
         $service->notifyOfficeAboutNewInquiry($event, $admin);
         $service->notifyOfficeAboutNewInquiry($event, $admin);
 
-        $this->assertSame(1, Task::query()->where('taskable_id', $event->id)->count());
+        $this->assertSame(2, Task::query()->where('taskable_id', $event->id)->count());
     }
 
     private function makeInquiryEvent(User $creator): Event

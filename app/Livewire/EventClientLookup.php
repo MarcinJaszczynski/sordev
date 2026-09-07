@@ -135,6 +135,9 @@ class EventClientLookup extends Component
 
         try {
             $orderingParties = app(ClientLookupService::class)->resultToOrderingParties($result);
+            if (isset($orderingParties[0])) {
+                $orderingParties[0]['goes_on_trip'] = true;
+            }
             $clientAttributes = app(ClientLookupService::class)->clientAttributesFromParties($orderingParties);
         } catch (\InvalidArgumentException $exception) {
             Notification::make()
@@ -147,6 +150,7 @@ class EventClientLookup extends Component
         }
 
         $this->selected = $result;
+        $this->selected['goes_on_trip'] = true;
         $this->searchQuery = '';
         $this->results = [];
         $this->showResults = false;
@@ -176,6 +180,10 @@ class EventClientLookup extends Component
         }
 
         $this->selected = $payload['selected'];
+        $this->selected['goes_on_trip'] = true;
+        if (isset($payload['ordering_parties'][0])) {
+            $payload['ordering_parties'][0]['goes_on_trip'] = true;
+        }
         $this->searchQuery = '';
         $this->results = [];
         $this->showResults = false;
@@ -190,8 +198,8 @@ class EventClientLookup extends Component
         );
 
         Notification::make()
-            ->title('Klient dodany')
-            ->body('Utworzono wpis w bazie kontaktów i kontrahentów.')
+            ->title('Zamawiający wybrany')
+            ->body('Klient jest już w bazie i przypięty do formularza. Możesz zapisać imprezę.')
             ->success()
             ->send();
     }
@@ -224,6 +232,26 @@ class EventClientLookup extends Component
             'results',
             'selected',
         ]);
+    }
+
+    public function setAsTripContact(): void
+    {
+        if (! is_array($this->selected)) {
+            return;
+        }
+
+        $this->selected['goes_on_trip'] = true;
+        $this->dispatch('ordering-party-trip-contact-set', partyIndex: 0);
+    }
+
+    #[On('ordering-party-trip-contact-set')]
+    public function onTripContactSet(int $partyIndex): void
+    {
+        if (! is_array($this->selected)) {
+            return;
+        }
+
+        $this->selected['goes_on_trip'] = $partyIndex === 0;
     }
 
     /**

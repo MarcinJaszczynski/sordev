@@ -107,7 +107,7 @@ class HotelStayReservationSyncTest extends TestCase
 
         $items = collect(EventReadinessIndicators::forEvent($event->fresh(['hotelStays.reservation', 'hotelStays.contractor'])));
         $hotelItem = $items->firstWhere('key', 'hotel');
-        $this->assertSame('brak', $hotelItem['short']);
+        $this->assertSame('do potw.', $hotelItem['short']);
 
         $reservation->update(['status' => 'confirmed', 'confirmed_at' => now()->toDateString()]);
 

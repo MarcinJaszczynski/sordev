@@ -6,7 +6,7 @@
 @if ($record)
     @php
         $title = $record->title ?: '—';
-        $author = \App\Support\Tasks\TaskListColumn::authorLabel($record);
+        $ownershipLine = \App\Support\Tasks\TaskListColumn::ownershipLine($record);
         $description = \App\Support\Tasks\TaskListColumn::sanitizeTaskText($record->description, 512);
         $comment = $record->relationLoaded('comments') ? $record->comments->first() : null;
         if ($comment) {
@@ -52,8 +52,8 @@
             {{ $title }}
         </button>
 
-        <div class="mt-0.5 text-[0.72rem] italic leading-tight text-gray-500 dark:text-gray-400">
-            {{ $author }}
+        <div class="mt-0.5 text-[0.72rem] leading-tight text-gray-500 dark:text-gray-400">
+            {{ $ownershipLine }}
         </div>
 
         @if ($description !== '')
@@ -71,7 +71,7 @@
                     @endphp
                     @if ($fileExists)
                         <a
-                            href="{{ $attachment->download_url }}"
+                            href="{{ $attachment->preview_url }}"
                             target="_blank"
                             rel="noopener"
                             class="block text-[0.78rem] leading-snug text-primary-600 underline dark:text-primary-400"

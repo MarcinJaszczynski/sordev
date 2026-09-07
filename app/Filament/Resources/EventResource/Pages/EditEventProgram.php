@@ -172,8 +172,14 @@ class EditEventProgram extends Page
     public function updateProgramDayStartTime(?string $time = null): void
     {
         $time = $time ?? $this->programDayStartTime;
+        $time = is_string($time) ? trim($time) : '';
 
-        if (! preg_match('/^\d{2}:\d{2}$/', $time)) {
+        // Select / Livewire może podać H:i lub H:i:s — normalizujemy do H:i.
+        if (preg_match('/^\d{2}:\d{2}(:\d{2})?$/', $time) === 1) {
+            $time = substr($time, 0, 5);
+        }
+
+        if (preg_match('/^\d{2}:\d{2}$/', $time) !== 1) {
             $this->syncProgramDayStartTimeProperty();
 
             return;

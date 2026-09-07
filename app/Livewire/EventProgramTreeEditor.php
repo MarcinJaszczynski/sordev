@@ -15,6 +15,8 @@ class EventProgramTreeEditor extends Component
 {
     public EventTemplate $eventTemplate;
 
+    public bool $readOnly = false;
+
     public $programByDays = [];
 
     public $showModal = false;
@@ -67,10 +69,16 @@ class EventProgramTreeEditor extends Component
         'modalData.day.max' => 'Dzień nie może być większy niż liczba dni szablonu plus fakultatywne.',
     ];
 
-    public function mount(EventTemplate $eventTemplate)
+    public function mount(EventTemplate $eventTemplate, bool $readOnly = false)
     {
         $this->eventTemplate = $eventTemplate;
+        $this->readOnly = $readOnly;
         $this->loadProgramByDays();
+    }
+
+    protected function ensureWritable(): void
+    {
+        abort_if($this->readOnly, 403, 'Program szablonu jest w trybie podglądu.');
     }
 
     public function loadProgramByDays()
@@ -251,6 +259,7 @@ class EventProgramTreeEditor extends Component
 
     public function showAddModal()
     {
+        $this->ensureWritable();
         $this->resetModalData();
         $this->editPoint = null;
         $this->modalData['day'] = 1;
@@ -259,6 +268,7 @@ class EventProgramTreeEditor extends Component
 
     public function showEditModal($pivotId)
     {
+        $this->ensureWritable();
         $pointPivot = DB::table('event_template_event_template_program_point')->where('id', $pivotId)->first();
         if ($pointPivot) {
             $this->editPoint = $pivotId;
@@ -313,6 +323,7 @@ class EventProgramTreeEditor extends Component
 
     public function savePoint()
     {
+        $this->ensureWritable();
         $this->validate();
 
         $startTime = $this->normalizeTime($this->modalData['start_time'] ?? null);
@@ -382,6 +393,7 @@ class EventProgramTreeEditor extends Component
 
     public function deletePoint($pivotId)
     {
+        $this->ensureWritable();
         $pivotId = (int) $pivotId;
         if ($pivotId <= 0) {
             $this->dispatch('notify', ['type' => 'error', 'message' => 'Nieprawidłowy identyfikator punktu programu.']);
@@ -429,6 +441,7 @@ class EventProgramTreeEditor extends Component
 
     public function updateProgramOrder($list)
     {
+        $this->ensureWritable();
         try {
             DB::beginTransaction();
             foreach ($list as $dayNumber => $pointPivotIds) {

@@ -89,6 +89,36 @@ class EventTemplateProgramPointResource extends Resource
                             ->hint('Podaj dodatkowe minuty (0-59).')
                             ->numeric()
                             ->required(),
+
+                        Forms\Components\Toggle::make('is_hotel')
+                            ->label('Nocleg / Hotel')
+                            ->helperText('Oznacz jeśli ten punkt to miejsce noclegu. Przy generowaniu imprezy trafi do raportu hotelowego.')
+                            ->default(false)
+                            ->inline(false)
+                            ->live()
+                            ->afterStateUpdated(function ($state, Set $set): void {
+                                if ($state) {
+                                    $set('is_hotel_service', false);
+                                }
+                            }),
+
+                        Forms\Components\Toggle::make('is_transport')
+                            ->label('Transport')
+                            ->helperText('Oznacz jeśli ten punkt dotyczy transportu. Przy generowaniu imprezy uzupełni dane transportowe.')
+                            ->default(false)
+                            ->inline(false),
+
+                        Forms\Components\Toggle::make('is_hotel_service')
+                            ->label('Usługa hotelu')
+                            ->helperText('Dodatkowa usługa hotelu (bankiet, obiad, DJ…). Nie zaznaczaj razem z „Nocleg / Hotel”.')
+                            ->default(false)
+                            ->inline(false)
+                            ->live()
+                            ->afterStateUpdated(function ($state, Set $set): void {
+                                if ($state) {
+                                    $set('is_hotel', false);
+                                }
+                            }),
                     ]),
 
                 // Sekcja uwag organizacyjnych
@@ -376,7 +406,21 @@ class EventTemplateProgramPointResource extends Resource
                 Tables\Columns\TextColumn::make('name')
                     ->label('Nazwa')
                     ->sortable()
-                    ->searchable(),
+                    ->searchable()
+                    ->formatStateUsing(function (string $state, EventTemplateProgramPoint $record): string {
+                        $icons = [];
+                        if ($record->is_transport) {
+                            $icons[] = '🚌';
+                        }
+                        if ($record->is_hotel) {
+                            $icons[] = '🏨';
+                        }
+                        if ($record->is_hotel_service) {
+                            $icons[] = '🍽';
+                        }
+
+                        return $icons === [] ? $state : implode(' ', $icons).' '.$state;
+                    }),
                 Tables\Columns\TextColumn::make('description')
                     ->label('Opis')
                     ->limit(50)

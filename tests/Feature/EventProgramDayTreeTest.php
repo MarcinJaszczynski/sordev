@@ -91,6 +91,32 @@ class EventProgramDayTreeTest extends TestCase
         ]);
     }
 
+    public function test_save_add_ignores_runaway_day_and_uses_active_day(): void
+    {
+        $user = User::factory()->create();
+        $event = Event::factory()->create([
+            'start_date' => '2026-06-01',
+            'end_date' => '2026-06-03',
+            'duration_days' => 3,
+        ]);
+
+        Livewire::actingAs($user)
+            ->test(EventProgramDayTree::class, ['eventId' => $event->id])
+            ->call('setActiveDay', 2)
+            ->call('openAddBlock', 2)
+            ->set('addForm.name', 'Nie twórz dnia 9')
+            ->set('addForm.day', 9)
+            ->call('saveAdd')
+            ->assertSet('showAddModal', false);
+
+        $this->assertDatabaseHas('event_program_points', [
+            'event_id' => $event->id,
+            'name' => 'Nie twórz dnia 9',
+            'day' => 2,
+        ]);
+        $this->assertSame(3, $event->fresh()->resolveProgramDaysCount());
+    }
+
     public function test_save_add_from_template_clones_set_children(): void
     {
         $user = User::factory()->create();

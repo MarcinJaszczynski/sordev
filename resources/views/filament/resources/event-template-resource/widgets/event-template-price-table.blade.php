@@ -1,4 +1,5 @@
-<div class="overflow-x-auto mt-8">
+<x-filament-widgets::widget>
+<div class="overflow-x-auto">
     <div class="mb-4 flex items-center gap-4">
         <h3 class="text-lg font-bold mb-2">Kalkulacja cen za osobę</h3>
         <x-filament::button wire:click="recalculatePrices" color="primary" size="sm">
@@ -311,3 +312,4 @@
         </div>
     @endif
 </div>
+</x-filament-widgets::widget>

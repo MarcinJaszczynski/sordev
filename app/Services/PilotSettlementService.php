@@ -9,6 +9,7 @@ use App\Data\RecordSettlementCostPaymentData;
 use App\Data\UpdateSettlementCostPaymentData;
 use App\Models\Currency;
 use App\Models\Event;
+use App\Models\EventBusCollection;
 use App\Models\EventSettlement;
 use App\Models\EventSettlementCost;
 use App\Models\EventSettlementDocument;
@@ -213,15 +214,18 @@ class PilotSettlementService
             ->map(function (PilotCashPreparation $cash) use ($settlement) {
                 $currencyId = (int) $cash->currency_id;
                 $fromOffice = (float) ($cash->provided_amount ?? $cash->approved_amount ?? 0);
+                $fromBus = $this->sumBusCollectionsHeldForCurrency($settlement, $currencyId);
+                $busPlanned = $this->sumBusCollectionsPlannedForCurrency($settlement, $currencyId);
                 $exchangeIn = (float) $settlement->currencyExchanges()->where('to_currency_id', $currencyId)->sum('to_amount');
                 $exchangeOut = (float) $settlement->currencyExchanges()->where('from_currency_id', $currencyId)->sum('from_amount');
-                $available = round($fromOffice + $exchangeIn - $exchangeOut, 2);
+                $available = round($fromOffice + $fromBus + $exchangeIn - $exchangeOut, 2);
                 $plannedExpenses = $this->sumPilotCostsForCurrency($settlement, $currencyId, plannedOnly: true);
                 $officeAdvancesOnCosts = $this->sumOfficeAdvancesOnPilotCosts($settlement, $currencyId);
                 $actualSpent = $this->sumPilotCostsForCurrency($settlement, $currencyId);
                 $returned = (float) ($cash->returned_amount ?? 0);
                 $remaining = round($available - $actualSpent - $returned, 2);
                 $needed = round((float) ($cash->calculated_amount ?? 0), 2);
+                $origin = $this->resolveCashOrigin($fromOffice, $fromBus, $exchangeIn, $exchangeOut);
 
                 return (object) [
                     'cash' => $cash,
@@ -229,6 +233,8 @@ class PilotSettlementService
                     'currency_code' => $cash->currency?->code ?: $cash->currency?->symbol ?: '—',
                     'currency_name' => $cash->currency?->name ?? 'Waluta #'.$currencyId,
                     'from_office' => round($fromOffice, 2),
+                    'from_bus' => $fromBus,
+                    'bus_planned' => $busPlanned,
                     'needed' => $needed,
                     'calculated' => $needed,
                     'plan_total' => $plannedExpenses,
@@ -236,6 +242,11 @@ class PilotSettlementService
                     'is_top_up' => $officeAdvancesOnCosts > 0.009 && $needed > 0.009,
                     'exchange_in' => round($exchangeIn, 2),
                     'exchange_out' => round($exchangeOut, 2),
+                    'office_held' => $origin['office_held'],
+                    'bus_held' => $origin['bus_held'],
+                    'exchange_held' => $origin['exchange_held'],
+                    'origin' => $origin['origin'],
+                    'origin_label' => $origin['origin_label'],
                     'office_provided' => $available, // dostępne po wymianie (kompatybilność)
                     'available' => $available,
                     'planned_expenses' => $plannedExpenses,
@@ -245,6 +256,471 @@ class PilotSettlementService
                     'to_pay_pilot' => max(0, -$remaining),
                 ];
             });
+    }
+
+    /**
+     * Narracja zasobów + mini-ledger (wypłaty / wymiany) — warstwa prezentacji nad saldami.
+     *
+     * @return object{
+     *     holdings: \Illuminate\Support\Collection<int, object>,
+     *     summary_label: string,
+     *     chain_lines: list<string>,
+     *     ledger: \Illuminate\Support\Collection<int, object>,
+     *     has_movements: bool,
+     *     has_exchanges: bool,
+     *     exchange_label: string
+     * }
+     */
+    public function getCashResourceStory(EventSettlement $settlement, ?Collection $rows = null): object
+    {
+        $rows ??= $this->getCashReconciliation($settlement);
+
+        $holdings = $rows
+            ->filter(fn ($row) => abs((float) $row->available) > 0.009
+                || (float) $row->from_office > 0.009
+                || (float) ($row->from_bus ?? 0) > 0.009
+                || (float) $row->exchange_in > 0.009
+                || (float) $row->exchange_out > 0.009)
+            ->values();
+
+        $summaryParts = [];
+        foreach ($holdings as $row) {
+            if (abs((float) $row->available) <= 0.009) {
+                continue;
+            }
+            $part = $this->formatCashAmount((float) $row->available).' '.$row->currency_code;
+            if ($row->origin_label !== '') {
+                $part .= ' ('.$row->origin_label.')';
+            }
+            $summaryParts[] = $part;
+        }
+
+        $exchanges = $settlement->currencyExchanges()
+            ->with(['fromCurrency', 'toCurrency'])
+            ->orderBy('exchanged_at')
+            ->orderBy('id')
+            ->get();
+
+        $payouts = $settlement->pilotCashPreparations()
+            ->with('currency')
+            ->whereNotNull('provided_amount')
+            ->where('provided_amount', '>', 0)
+            ->orderBy('provided_at')
+            ->orderBy('currency_id')
+            ->get();
+
+        $chainLines = [];
+        foreach ($payouts as $cash) {
+            $code = $cash->currency?->code ?: $cash->currency?->symbol ?: '—';
+            $chainLines[] = 'Wypłata '.$this->formatCashAmount((float) $cash->provided_amount).' '.$code;
+        }
+        foreach ($exchanges as $ex) {
+            $fromCode = $ex->fromCurrency?->code ?: $ex->fromCurrency?->symbol ?: '—';
+            $toCode = $ex->toCurrency?->code ?: $ex->toCurrency?->symbol ?: '—';
+            $line = 'Wymiana '.$this->formatCashAmount((float) $ex->from_amount).' '.$fromCode
+                .' → '.$this->formatCashAmount((float) $ex->to_amount).' '.$toCode;
+            if ((float) ($ex->exchange_rate ?? 0) > 0) {
+                $line .= ' @ '.$this->formatCashRate((float) $ex->exchange_rate);
+            }
+            $chainLines[] = $line;
+        }
+
+        $ledger = collect();
+        foreach ($payouts as $cash) {
+            $code = $cash->currency?->code ?: $cash->currency?->symbol ?: '—';
+            $at = $cash->provided_at;
+            $ledger->push((object) [
+                'type' => 'payout',
+                'id' => 'payout-'.$cash->currency_id,
+                'exchange_id' => null,
+                'currency_id' => (int) $cash->currency_id,
+                'at' => $at,
+                'sort_at' => $at?->timestamp ?? 0,
+                'sort_id' => (int) $cash->currency_id,
+                'title' => 'Wypłata z biura',
+                'label' => $this->formatCashAmount((float) $cash->provided_amount).' '.$code,
+                'detail' => $cash->notes ?: null,
+            ]);
+        }
+        foreach ($exchanges as $ex) {
+            $fromCode = $ex->fromCurrency?->code ?: $ex->fromCurrency?->symbol ?: '—';
+            $toCode = $ex->toCurrency?->code ?: $ex->toCurrency?->symbol ?: '—';
+            $at = $ex->exchanged_at;
+            $detailParts = [];
+            if ((float) ($ex->exchange_rate ?? 0) > 0) {
+                $detailParts[] = 'kurs '.$this->formatCashRate((float) $ex->exchange_rate);
+            }
+            if (filled($ex->notes)) {
+                $detailParts[] = (string) $ex->notes;
+            }
+            $ledger->push((object) [
+                'type' => 'exchange',
+                'id' => 'exchange-'.$ex->id,
+                'exchange_id' => (int) $ex->id,
+                'currency_id' => null,
+                'at' => $at,
+                'sort_at' => $at?->timestamp ?? 0,
+                'sort_id' => (int) $ex->id,
+                'title' => 'Wymiana walut',
+                'label' => $this->formatCashAmount((float) $ex->from_amount).' '.$fromCode
+                    .' → '.$this->formatCashAmount((float) $ex->to_amount).' '.$toCode,
+                'detail' => $detailParts !== [] ? implode(' · ', $detailParts) : null,
+            ]);
+        }
+
+        $ledger = $ledger
+            ->sortBy([
+                ['sort_at', 'asc'],
+                ['sort_id', 'asc'],
+            ])
+            ->values();
+
+        $exchangeLabelParts = [];
+        foreach ($exchanges as $ex) {
+            $fromCode = $ex->fromCurrency?->code ?: $ex->fromCurrency?->symbol ?: '—';
+            $toCode = $ex->toCurrency?->code ?: $ex->toCurrency?->symbol ?: '—';
+            $exchangeLabelParts[] = number_format((float) $ex->from_amount, 0, ',', ' ').' '.$fromCode
+                .'→'.number_format((float) $ex->to_amount, 0, ',', ' ').' '.$toCode;
+        }
+
+        return (object) [
+            'holdings' => $holdings,
+            'summary_label' => $summaryParts !== [] ? implode(' · ', $summaryParts) : '—',
+            'chain_lines' => $chainLines,
+            'ledger' => $ledger,
+            'has_movements' => $ledger->isNotEmpty(),
+            'has_exchanges' => $exchanges->isNotEmpty(),
+            'exchange_label' => $exchangeLabelParts !== [] ? implode(' / ', $exchangeLabelParts) : '—',
+        ];
+    }
+
+    /**
+     * Plan źródeł gotówki + instrukcja wypłaty (wymiana PLN ↔ natura).
+     *
+     * Źródła pokazują pełną zbiórkę (nie ucinają do potrzeby programu).
+     * Zbiórka planowana obniża lukę biura. Nadwyżka zbiórki = informacja.
+     * Kurs wymiany: orientacyjny z tabeli currencies.
+     *
+     * @return object{
+     *     needed_label: string,
+     *     sources_label: string,
+     *     bus_label: string,
+     *     bus_surplus_label: ?string,
+     *     has_bus: bool,
+     *     bus_covers_need: bool,
+     *     has_office_gap: bool,
+     *     payout_exchange_label: string,
+     *     payout_natura_label: string,
+     *     payout_exchange_detail: ?string,
+     *     cash_to_pay_label: string,
+     *     cash_to_pay_danger: bool,
+     *     lines: \Illuminate\Support\Collection<int, object>
+     * }
+     */
+    public function getCashFundingPlan(EventSettlement $settlement, ?Collection $rows = null): object
+    {
+        $rows ??= $this->getCashReconciliation($settlement);
+        $plnIds = Currency::plnIds();
+
+        $neededParts = [];
+        $sourceParts = [];
+        $busParts = [];
+        $surplusBits = [];
+        $surplusNeedBits = [];
+        $lines = collect();
+
+        $plnOfficeShare = 0.0;
+        $plnGap = 0.0;
+        $foreignOfficeShares = []; // list of [code, amount, rate, currency_id]
+        $foreignGaps = [];
+
+        foreach ($rows as $row) {
+            $needed = round((float) ($row->needed ?? 0), 2);
+            $fromOffice = round((float) ($row->from_office ?? 0), 2);
+            $fromBus = round((float) ($row->from_bus ?? 0), 2);
+            $busPlanned = round((float) ($row->bus_planned ?? 0), 2);
+            $exchangeIn = round((float) ($row->exchange_in ?? 0), 2);
+            $busCover = round($fromBus + $busPlanned, 2);
+            $code = (string) ($row->currency_code ?? '—');
+            $currencyId = (int) ($row->currency_id ?? 0);
+            $isPln = in_array($currencyId, $plnIds, true);
+
+            if ($needed <= 0.009 && $busCover <= 0.009 && $fromOffice <= 0.009) {
+                continue;
+            }
+
+            $busShare = round(min(max($needed, 0), $busCover), 2);
+            $officeShare = round(max(0, $needed - $busShare), 2);
+            $surplus = round(max(0, $busCover - max($needed, 0)), 2);
+            // Luka nadal do pokrycia z biura (po wypłacie / zbiórce / wymianie).
+            $gap = round(max(0, $needed - $busCover - $fromOffice - $exchangeIn), 2);
+
+            if ($needed > 0.009) {
+                $neededParts[] = $this->formatCashAmount($needed).' '.$code;
+            }
+            if ($officeShare > 0.009) {
+                $sourceParts[] = $this->formatCashAmount($officeShare).' '.$code.' z biura';
+            }
+            if ($busCover > 0.009) {
+                $statusHint = $fromBus > 0.009 && $busPlanned <= 0.009
+                    ? 'zebrane'
+                    : ($fromBus > 0.009 ? 'część zebrana' : 'plan');
+                $sourceParts[] = $this->formatCashAmount($busCover).' '.$code.' z autokaru ('.$statusHint.')';
+                $busParts[] = $this->formatCashAmount($busCover).' '.$code.' ('.$statusHint.')';
+            }
+            if ($surplus > 0.009) {
+                $surplusBits[] = $this->formatCashAmount($surplus).' '.$code;
+                $surplusNeedBits[] = $this->formatCashAmount($needed).' '.$code;
+            }
+
+            $rate = $isPln ? 1.0 : $this->resolveCurrencyRate($currencyId);
+
+            $lines->push((object) [
+                'currency_id' => $currencyId,
+                'currency_code' => $code,
+                'is_pln' => $isPln,
+                'needed' => $needed,
+                'bus_cover' => $busCover,
+                'bus_share' => $busShare,
+                'office_share' => $officeShare,
+                'gap' => $gap,
+                'surplus' => $surplus,
+                'rate' => $rate,
+            ]);
+
+            if ($isPln) {
+                $plnOfficeShare = $officeShare;
+                $plnGap = $gap;
+            } else {
+                if ($officeShare > 0.009) {
+                    $foreignOfficeShares[] = [
+                        'currency_id' => $currencyId,
+                        'code' => $code,
+                        'amount' => $officeShare,
+                        'rate' => $rate,
+                        'pln_cost' => round($officeShare * $rate, 2),
+                    ];
+                }
+                if ($gap > 0.009) {
+                    $foreignGaps[] = [
+                        'currency_id' => $currencyId,
+                        'code' => $code,
+                        'amount' => $gap,
+                        'rate' => $rate,
+                        'pln_cost' => round($gap * $rate, 2),
+                    ];
+                }
+            }
+        }
+
+        $exchangeGross = $this->buildExchangePayoutLabel($plnOfficeShare, $foreignOfficeShares);
+        $naturaGross = $this->buildNaturaPayoutLabel($plnOfficeShare, $foreignOfficeShares);
+        $exchangeRemaining = $this->buildExchangePayoutLabel($plnGap, $foreignGaps);
+        $naturaRemaining = $this->buildNaturaPayoutLabel($plnGap, $foreignGaps);
+
+        $hasOfficeGap = $plnGap > 0.009 || $foreignGaps !== [];
+        $hasBus = $busParts !== [];
+        $neededLabel = $neededParts !== [] ? implode(' · ', $neededParts) : '—';
+        $busCoversNeed = $hasBus && ! $hasOfficeGap && $neededParts !== [];
+        $cashToPayLabel = $exchangeRemaining['label'];
+        if ($cashToPayLabel === '—' && $naturaRemaining['label'] !== '—') {
+            $cashToPayLabel = $naturaRemaining['label'];
+        }
+
+        $surplusLabel = null;
+        if ($surplusBits !== []) {
+            $surplusLabel = 'Zbiórka jest o '.implode(', ', $surplusBits)
+                .' wyższa niż potrzeba z programu ('.implode(', ', $surplusNeedBits).').'
+                .' Nadwyżka wraca w rozliczeniu — to nie wypłata z biura.';
+        }
+
+        return (object) [
+            'needed_label' => $neededLabel,
+            'sources_label' => $sourceParts !== [] ? implode(' · ', $sourceParts) : '—',
+            'bus_label' => $busParts !== [] ? implode(' · ', $busParts) : '—',
+            'bus_surplus_label' => $surplusLabel,
+            'has_bus' => $hasBus,
+            'bus_covers_need' => $busCoversNeed,
+            'has_office_gap' => $hasOfficeGap,
+            'payout_exchange_label' => $exchangeRemaining['label'],
+            'payout_natura_label' => $naturaRemaining['label'],
+            'payout_exchange_detail' => $exchangeRemaining['detail'],
+            'payout_exchange_gross_label' => $exchangeGross['label'],
+            'payout_natura_gross_label' => $naturaGross['label'],
+            'cash_to_pay_label' => $cashToPayLabel,
+            'cash_to_pay_danger' => $hasOfficeGap,
+            'lines' => $lines,
+        ];
+    }
+
+    /**
+     * @param  list<array{currency_id: int, code: string, amount: float, rate: float, pln_cost: float}>  $foreignParts
+     * @return array{label: string, detail: ?string}
+     */
+    protected function buildExchangePayoutLabel(float $plnForSpend, array $foreignParts): array
+    {
+        $exchangePln = 0.0;
+        $detailBits = [];
+        foreach ($foreignParts as $part) {
+            $exchangePln += $part['pln_cost'];
+            $detailBits[] = $this->formatCashAmount($part['pln_cost']).' PLN na zakup '
+                .$this->formatCashAmount($part['amount']).' '.$part['code']
+                .' (kurs ~'.$this->formatCashRate($part['rate']).')';
+        }
+        $exchangePln = round($exchangePln, 2);
+        $totalPln = round($plnForSpend + $exchangePln, 2);
+
+        if ($totalPln <= 0.009) {
+            return ['label' => '—', 'detail' => null];
+        }
+
+        $label = $this->formatCashAmount($totalPln).' PLN';
+        if ($exchangePln > 0.009 && $plnForSpend > 0.009) {
+            $label .= ' (w tym '.$this->formatCashAmount($exchangePln).' na zakup)';
+        } elseif ($exchangePln > 0.009 && $plnForSpend <= 0.009) {
+            $label .= ' na zakup waluty';
+        }
+
+        return [
+            'label' => $label,
+            'detail' => $detailBits !== [] ? implode('; ', $detailBits) : null,
+        ];
+    }
+
+    /**
+     * @param  list<array{currency_id: int, code: string, amount: float, rate: float, pln_cost: float}>  $foreignParts
+     * @return array{label: string, detail: ?string}
+     */
+    protected function buildNaturaPayoutLabel(float $plnForSpend, array $foreignParts): array
+    {
+        $parts = [];
+        if ($plnForSpend > 0.009) {
+            $parts[] = $this->formatCashAmount($plnForSpend).' PLN';
+        }
+        foreach ($foreignParts as $part) {
+            if ($part['amount'] > 0.009) {
+                $parts[] = $this->formatCashAmount($part['amount']).' '.$part['code'];
+            }
+        }
+
+        return [
+            'label' => $parts !== [] ? implode(' + ', $parts) : '—',
+            'detail' => null,
+        ];
+    }
+
+    /**
+     * Suma zbiórek nadal u pilota (status collected) — zasila saldo gotówki.
+     */
+    public function sumBusCollectionsHeldForCurrency(EventSettlement $settlement, int $currencyId): float
+    {
+        if (! Schema::hasTable('event_bus_collections')) {
+            return 0.0;
+        }
+
+        $query = EventBusCollection::query()
+            ->where('currency_id', $currencyId)
+            ->whereIn('status', EventBusCollection::HELD_STATUSES);
+
+        if ($settlement->id) {
+            $query->where(function ($q) use ($settlement): void {
+                $q->where('settlement_id', $settlement->id)
+                    ->orWhere('event_id', $settlement->event_id);
+            });
+        } else {
+            $query->where('event_id', $settlement->event_id);
+        }
+
+        return round((float) $query->sum('amount'), 2);
+    }
+
+    /**
+     * Suma planów zbiórek (jeszcze nie zebranych) — informacyjnie, bez wpływu na saldo.
+     */
+    public function sumBusCollectionsPlannedForCurrency(EventSettlement $settlement, int $currencyId): float
+    {
+        if (! Schema::hasTable('event_bus_collections')) {
+            return 0.0;
+        }
+
+        $query = EventBusCollection::query()
+            ->where('currency_id', $currencyId)
+            ->where('status', EventBusCollection::STATUS_PLANNED);
+
+        if ($settlement->id) {
+            $query->where(function ($q) use ($settlement): void {
+                $q->where('settlement_id', $settlement->id)
+                    ->orWhere('event_id', $settlement->event_id);
+            });
+        } else {
+            $query->where('event_id', $settlement->event_id);
+        }
+
+        return round((float) $query->sum('amount'), 2);
+    }
+
+    /**
+     * @return array{
+     *     origin: string,
+     *     origin_label: string,
+     *     office_held: float,
+     *     bus_held: float,
+     *     exchange_held: float
+     * }
+     */
+    protected function resolveCashOrigin(
+        float $fromOffice,
+        float $fromBus,
+        float $exchangeIn,
+        float $exchangeOut,
+    ): array {
+        $officeHeld = round(max(0, $fromOffice - $exchangeOut), 2);
+        $busHeld = round(max(0, $fromBus), 2);
+        $exchangeHeld = round(max(0, $exchangeIn), 2);
+        $hasOffice = $officeHeld > 0.009 || ($fromOffice > 0.009 && $exchangeOut <= 0.009);
+        $hasBus = $busHeld > 0.009;
+        $hasExchange = $exchangeHeld > 0.009;
+
+        $sources = array_filter([
+            $hasOffice ? 'biuro' : null,
+            $hasBus ? 'autokar' : null,
+            $hasExchange ? 'wymiana' : null,
+        ]);
+
+        if (count($sources) > 1) {
+            $origin = 'mixed';
+            $label = 'mieszane';
+        } elseif ($hasBus) {
+            $origin = 'bus';
+            $label = 'z autokaru';
+        } elseif ($hasExchange) {
+            $origin = 'exchange';
+            $label = 'z wymiany';
+        } elseif ($hasOffice) {
+            $origin = 'office';
+            $label = 'z biura';
+        } else {
+            $origin = 'none';
+            $label = '';
+        }
+
+        return [
+            'origin' => $origin,
+            'origin_label' => $label,
+            'office_held' => $officeHeld,
+            'bus_held' => $busHeld,
+            'exchange_held' => $exchangeHeld,
+        ];
+    }
+
+    protected function formatCashAmount(float $amount): string
+    {
+        return number_format($amount, 2, ',', ' ');
+    }
+
+    protected function formatCashRate(float $rate): string
+    {
+        return rtrim(rtrim(number_format($rate, 5, ',', ' '), '0'), ',');
     }
 
     /**
@@ -1138,6 +1614,46 @@ class PilotSettlementService
     {
         // Auto-taski z rozliczenia pilota wyłączone — zaśmiecały skrzynkę biura.
         // Biuro widzi update w Finanse / Pilot; ręczne zadanie można dodać z belki.
+    }
+
+    /**
+     * Biuro potwierdza i zamyka rozliczenie pilota (po weryfikacji gotówki + wynagrodzenia).
+     */
+    public function confirmOfficeClose(Event $event): EventSettlement
+    {
+        $settlement = $event->latestSettlement
+            ?? EventSettlement::findOrCreateActiveForEvent($event);
+
+        if ($settlement->status === 'closed') {
+            return $settlement;
+        }
+
+        $settlement->update([
+            'status' => 'closed',
+        ]);
+
+        return $settlement->fresh();
+    }
+
+    /**
+     * Biuro otwiera ponownie zamknięte rozliczenie (korekta).
+     */
+    public function reopenOfficeSettlement(Event $event): EventSettlement
+    {
+        $settlement = $event->settlements()
+            ->where('status', 'closed')
+            ->latest('id')
+            ->first();
+
+        if (! $settlement) {
+            throw new \InvalidArgumentException('Brak zamkniętego rozliczenia do otwarcia.');
+        }
+
+        $settlement->update([
+            'status' => 'active',
+        ]);
+
+        return $settlement->fresh();
     }
 
     protected function resolveCurrencyRate(?int $currencyId): float

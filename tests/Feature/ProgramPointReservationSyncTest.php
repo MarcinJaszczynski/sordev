@@ -205,4 +205,95 @@ class ProgramPointReservationSyncTest extends TestCase
         $this->assertSame($reservation->id, (int) $day1->fresh()->reservation_id);
         $this->assertNull($day2->fresh()->reservation_id);
     }
+
+    public function test_link_points_does_not_backfill_contractor_on_przejazd_do_hotelu(): void
+    {
+        $user = User::factory()->create();
+        $this->actingAs($user);
+
+        $hotel = Contractor::create(['name' => 'Hotel Central', 'status' => 'active']);
+        $event = Event::factory()->create(['duration_days' => 2]);
+
+        $transfer = EventProgramPoint::factory()->create([
+            'event_id' => $event->id,
+            'day' => 1,
+            'order' => 1,
+            'name' => 'Przejazd do hotelu',
+            'is_hotel' => true,
+            'contractor_id' => $hotel->id,
+        ]);
+        $hotelPoint = EventProgramPoint::factory()->create([
+            'event_id' => $event->id,
+            'day' => 1,
+            'order' => 2,
+            'name' => 'Nocleg',
+            'is_hotel' => true,
+            'contractor_id' => $hotel->id,
+        ]);
+
+        $reservation = app(UpsertReservationAction::class)(new UpsertReservationData(
+            attributes: [
+                'status' => 'pending',
+                'participant_count' => 10,
+            ],
+            programPoint: $hotelPoint,
+            createdBy: $user->id,
+        ));
+
+        app(ProgramPointReservationSync::class)->linkPoints($reservation, $hotelPoint);
+
+        $transfer->refresh();
+        $hotelPoint->refresh();
+
+        $this->assertSame($hotel->id, (int) $transfer->contractor_id);
+        $this->assertNull($transfer->reservation_id);
+        $this->assertSame($hotel->id, (int) $hotelPoint->contractor_id);
+        $this->assertSame($reservation->id, (int) $hotelPoint->reservation_id);
+    }
+
+    public function test_set_parent_with_same_contractor_does_not_join_child_reservation_group(): void
+    {
+        $user = User::factory()->create();
+        $this->actingAs($user);
+
+        $place = Contractor::create(['name' => 'Liceum Batorego', 'status' => 'active']);
+        $event = Event::factory()->create(['duration_days' => 1]);
+
+        $parent = EventProgramPoint::factory()->create([
+            'event_id' => $event->id,
+            'name' => 'Wizyta w szkole',
+            'day' => 1,
+            'order' => 1,
+            'contractor_id' => $place->id,
+        ]);
+        $child = EventProgramPoint::factory()->create([
+            'event_id' => $event->id,
+            'parent_id' => $parent->id,
+            'name' => 'Opłata za salę',
+            'day' => 1,
+            'order' => 2,
+            'contractor_id' => $place->id,
+        ]);
+
+        $this->assertNull(ProgramPointReservationGroup::coverageLabel($parent->fresh(['contractor'])));
+        $this->assertSame([(int) $parent->id], ProgramPointReservationGroup::ids($parent));
+        $this->assertSame([(int) $child->id], ProgramPointReservationGroup::ids($child));
+
+        $reservation = app(UpsertReservationAction::class)(new UpsertReservationData(
+            attributes: [
+                'status' => 'pending',
+                'participant_count' => 10,
+            ],
+            programPoint: $child,
+            createdBy: $user->id,
+        ));
+
+        $this->assertSame($reservation->id, (int) $child->fresh()->reservation_id);
+        $this->assertNull($parent->fresh()->reservation_id);
+
+        app(ProgramPointReservationSync::class)->backfillForEvent($event);
+
+        $this->assertSame($reservation->id, (int) $child->fresh()->reservation_id);
+        $this->assertNull($parent->fresh()->reservation_id);
+    }
 }

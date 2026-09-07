@@ -23,11 +23,26 @@ final class EventProgramDayRouteFields
 
         for ($day = 1; $day <= $days; $day++) {
             $date = $record?->dateForProgramDay($day)?->format('d.m.Y');
-            $fields[] = Forms\Components\TextInput::make("program_day_routes.{$day}")
-                ->label($date ? "Dzień {$day} ({$date})" : "Dzień {$day}")
-                ->placeholder('Wpisz trasę przejazdu')
-                ->maxLength(500)
-                ->columnSpanFull();
+            $label = $date ? "Dzień {$day} ({$date})" : "Dzień {$day}";
+
+            $daySection = Forms\Components\Section::make($label)
+                ->collapsible()
+                ->compact()
+                ->schema([
+                    Forms\Components\TextInput::make("program_day_routes.{$day}")
+                        ->hiddenLabel()
+                        ->placeholder('Wpisz trasę przejazdu')
+                        ->maxLength(500)
+                        ->columnSpanFull(),
+                ])
+                ->columns(1)
+                ->extraAttributes(['class' => 'transport-route-row']);
+
+            if ($day > 1) {
+                $daySection->collapsed();
+            }
+
+            $fields[] = $daySection;
         }
 
         return $fields;

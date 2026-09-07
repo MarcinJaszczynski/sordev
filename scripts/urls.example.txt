@@ -1,0 +1,8 @@
+# Cała oferta — base URL + --catalog
+local|http://127.0.0.1:8000
+prod|https://bprafa.pl
+dev|https://sor41.webgarage.pl
+
+# Pojedyncza impreza (bez --catalog) — zapisz jako urls-pages.txt:
+# local|http://127.0.0.1:8000/warszawa/2-dniowe/25/torun-2
+# prod|https://bprafa.pl/warszawa/2-dniowe/25/torun-2

@@ -4,6 +4,7 @@ namespace App\Services;
 
 use App\Models\Contractor;
 use App\Models\ContractorLocation;
+use App\Support\PhoneValidation;
 use Illuminate\Support\Facades\Schema;
 
 class ContractorLocationService
@@ -30,8 +31,9 @@ class ContractorLocationService
                 $inner->where('name', 'like', "%{$search}%")
                     ->orWhere('city', 'like', "%{$search}%")
                     ->orWhere('street', 'like', "%{$search}%")
-                    ->orWhere('phone', 'like', "%{$search}%")
                     ->orWhere('email', 'like', "%{$search}%");
+
+                PhoneValidation::orWhereDigitsLike($inner, 'phone', $search);
             });
         }
 

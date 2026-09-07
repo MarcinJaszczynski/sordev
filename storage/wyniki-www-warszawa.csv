@@ -1,0 +1,425 @@
+﻿miasto;template_id;nazwa;status;max_delta_pln;cena_local_pln;cena_prod_pln;cena_dev_pln;szczegoly
+Warszawa;26;Roztocze Lubelskie;price_diff;5;1000;995;995;max Δ 5 zł
+Warszawa;31;Agroturystyka Julianówka;ok;;315;315;315;
+Warszawa;29;Agroturystyka – dzień na wsi w Dolinie Bobrów;ok;;255;255;255;
+Warszawa;25;Toruń;ok;;730;730;730;
+Warszawa;30;Agroturystyka dla najmłodszych – Malowana Zagroda (Gościniec Wiecha);ok;;235;235;235;
+Warszawa;32;Bałtów – Bałtowski Kompleks Turystyczny;ok;;240;240;240;
+Warszawa;33;Białowieża - Białowieski Park Narodowy;ok;;295;295;295;
+Warszawa;34;Białystok;ok;;245;245;245;
+Warszawa;35;Biebrzański Park Narodowy;ok;;235;235;235;
+Warszawa;36;Biskupin, Gniezno;ok;;340;340;340;
+Warszawa;38;Biwak Przygody – Alpinistyka;fetch_error;;260;260;;dev: Nie znaleziono wierszy cennika (people_price w sekcji Cennik).
+Warszawa;39;Biwak Przygody – Integracja;price_diff;20;255;255;260;max Δ 20 zł
+Warszawa;40;Biwak Przygody – Militarne Manewry;price_diff;20;265;265;275;max Δ 20 zł
+Warszawa;41;Biwak Przygody – Dziecięce Figle;price_diff;15;235;235;240;max Δ 15 zł
+Warszawa;42;Ciechanowiec - Skansen Muzeum Rolnictwa;price_diff;20;200;180;180;max Δ 20 zł
+Warszawa;43;Czarnolas, Zwoleń, Sycyna – Śladami Jana Kochanowskiego;ok;;190;190;190;
+Warszawa;44;Częstochowa - Jasna Góra;ok;;220;220;220;
+Warszawa;45;Dinopark Kołacinek;ok;;235;235;235;
+Warszawa;46;Energylandia (dla szkół podstawowych);ok;;405;405;405;
+Warszawa;47;Energylandia (dla szkół średnich i studentów);ok;;440;440;440;
+Warszawa;48;Farma Iluzji;ok;;235;235;235;
+Warszawa;49;Gdańsk i Westerplatte;ok;;335;335;335;
+Warszawa;52;Gdańsk i Muzeum II Wojny Światowej;ok;;370;370;370;
+Warszawa;53;Gniezno i Ostrów Lednicki;ok;;350;350;350;
+Warszawa;55;Góry Świętokrzyskie;ok;;210;210;210;
+Warszawa;56;Góry Świętokrzyskie i Osada Średniowieczna;ok;;235;235;235;
+Warszawa;57;Góry Świętokrzyskie i Park Legend;ok;;245;245;245;
+Warszawa;58;Indiańska Przygoda - Fort Hantajo;ok;;230;230;230;
+Warszawa;59;Julinek - Park Rozrywki;price_diff;15;300;300;310;max Δ 15 zł
+Warszawa;60;Kazimierz Dolny;ok;;195;195;195;
+Warszawa;61;Kazimierz Dolny z meleksami i rejsem statkiem;ok;;280;280;280;
+Warszawa;63;Kazimierz Dolny, Puławy;ok;;205;205;205;
+Warszawa;64;Kazimierz Dolny, Czarnolas;ok;;235;235;235;
+Warszawa;65;Kazimierz Dolny, Wojciechów;ok;;230;230;230;
+Warszawa;66;Kopalnia Soli Kłodawa;ok;;260;260;260;
+Warszawa;67;Kozłówka, Puławy;ok;;250;250;250;
+Warszawa;68;Kraina Świętego Mikołaja - Kołacinek;ok;;280;280;280;
+Warszawa;69;Kraków;ok;;340;340;340;
+Warszawa;71;Krówki ciągutki i instrumenty folkowe (Milanówek i Grodzisk Mazowiecki);ok;;215;215;215;
+Warszawa;72;Las Odkrywców;ok;;200;200;200;
+Warszawa;73;Laserowa gra militarna i Escape Room;ok;;225;225;225;
+Warszawa;74;Laserowa gra militarna i park trampolin;ok;;240;240;240;
+Warszawa;75;Łódź i Muzeum Fabryki;ok;;180;180;180;
+Warszawa;76;Łódź i Orientarium;ok;;225;225;225;
+Warszawa;77;Łódź i Orientarium z warsztatami;ok;;255;255;255;
+Warszawa;78;Łódź z Orientarium i grą laserową;ok;;265;265;265;
+Warszawa;79;Łódź – szlakiem łódzkich Żydów;fetch_error;;250;250;;dev: Nie znaleziono wierszy cennika (people_price w sekcji Cennik).
+Warszawa;80;Łowicz i Skansen Ziemi Łowickiej;price_diff;20;215;215;225;max Δ 20 zł
+Warszawa;81;Łowicz, Arkadia, Nieborów;ok;;250;250;250;
+Warszawa;82;Lublin i Muzeum Wsi Lubelskiej;ok;;240;240;240;
+Warszawa;84;Magiczne Ogrody;ok;;240;240;240;
+Warszawa;85;Mandoria – całoroczny park rozrywki;ok;;305;305;305;
+Warszawa;86;Mandoria i Orientarium;ok;;370;370;370;
+Warszawa;83;Lublin, Majdanek;missing;;215;215;;brak oferty na: dev
+Warszawa;87;Narwiański Park Narodowy;ok;;215;215;215;
+Warszawa;88;Nieborów, Bednary;ok;;225;225;225;
+Warszawa;89;Ogród ziołowy;ok;;210;210;210;
+Warszawa;90;Ojcowski Park Narodowy;ok;;280;280;280;
+Warszawa;91;Olsztyn;price_diff;10;260;255;255;max Δ 10 zł
+Warszawa;92;Olsztyn, Grunwald;ok;;280;280;280;
+Warszawa;93;Opinogóra, Gołotczyzna - szlakiem pozytywizmu;ok;;180;180;180;
+Warszawa;94;Oświęcim – Auschwitz Birkenau;ok;;325;325;325;
+Warszawa;95;Suntago – Park of Poland - Park Wodny (dzieci do 16 lat);ok;;250;250;250;
+Warszawa;96;Suntago – Park of Poland - Park Wodny (młodzież powyżej 16 lat);ok;;275;275;275;
+Warszawa;97;Partyzanci Kampinoscy;ok;;315;315;315;
+Warszawa;100;Poznań;ok;;280;280;280;
+Warszawa;101;Poznań – animowane zwiedzanie;ok;;285;285;285;
+Warszawa;102;Poznań i Muzeum Rogalowe;ok;;330;330;330;
+Warszawa;103;Pułtusk – Nauka poprawnego zachowania przy stole;ok;;220;220;220;
+Warszawa;104;Puszcza Kampinoska;ok;;145;145;145;
+Warszawa;106;Roztocze Lubelskie;ok;;305;305;305;
+Warszawa;107;Sady Klemensa;ok;;220;220;220;
+Warszawa;108;Sandomierz;ok;;240;240;240;
+Warszawa;109;Sandomierz i Podziemna Trasa Turystyczna;ok;;265;265;265;
+Warszawa;110;Sandomierz i rejs statkiem po Wiśle;ok;;285;285;285;
+Warszawa;111;Sandomierz z meleksami, Trasą Podziemną i rejsem statkiem po Wiśle;ok;;330;330;330;
+Warszawa;112;Sierpc – Muzeum Wsi Mazowieckiej;ok;;230;230;230;
+Warszawa;113;Żelazowa Wola, Warszawa - Śladami Fryderyka Chopina;ok;;245;245;245;
+Warszawa;114;Żelazowa Wola - Śladami Fryderyka Chopina;ok;;165;165;165;
+Warszawa;115;Spływ kajakowy Pilicą;ok;;245;245;245;
+Warszawa;116;Spływ kajakowy Wkrą;ok;;215;215;215;
+Warszawa;117;Szkoła Przetrwania;ok;;290;290;290;
+Warszawa;118;Szkoła Przetrwania MAX;ok;;300;300;300;
+Warszawa;119;Szlak Tatarski;price_diff;15;245;245;255;max Δ 15 zł
+Warszawa;120;Szlakiem Henryka Sienkiewicza - Wola Okrzejska, Okrzeja, Wola Gułowska;price_diff;20;160;160;170;max Δ 20 zł
+Warszawa;121;Tarnowskie Góry – kopalnia srebra;price_diff;20;425;425;435;max Δ 20 zł
+Warszawa;122;Tomaszów Mazowiecki, Spała, Konewka;ok;;205;205;205;
+Warszawa;123;Toruń z warsztatami piernikowymi;ok;;285;285;285;
+Warszawa;124;Toruń z warsztatami piernikowymi i planetarium;ok;;310;310;310;
+Warszawa;125;Toruń i planetarium;ok;;265;265;265;
+Warszawa;126;Toruń i Młyn Wiedzy;ok;;275;275;275;
+Warszawa;127;Toruń, Ciechocinek;ok;;245;245;245;
+Warszawa;128;Tykocin, Wizna, Drozdowo;ok;;240;240;240;
+Warszawa;129;Uniejów i zoo safari w Borysewie;ok;;325;325;325;
+Warszawa;132;Wrocław;ok;;315;315;315;
+Warszawa;134;Wrocław i Afrykarium;ok;;405;405;405;
+Warszawa;136;Wrocław i Panorama Racławicka;ok;;360;360;360;
+Warszawa;137;Zamość;ok;;285;285;285;
+Warszawa;138;Żelazowa Wola i Puszcza Kampinoska;price_diff;20;190;190;195;max Δ 20 zł
+Warszawa;139;Zoo safari w Borysewie;price_diff;20;240;240;250;max Δ 20 zł
+Warszawa;144;Biebrzański Park Narodowy;ok;;645;645;645;
+Warszawa;145;Biebrzański Park Narodowy i biwak przygody;ok;;665;665;665;
+Warszawa;146;Gdańsk z Muzeum II Wojny Światowej i Europejskim Centrum Solidarności;ok;;745;745;745;
+Warszawa;157;Trójmiasto - Gdańsk, Gdynia, Sopot;ok;;770;770;770;
+Warszawa;158;Gdynia z Oceanarium, Darem Pomorza i Muzeum Emigracji;ok;;820;820;820;
+Warszawa;159;Góry Świętokrzyskie;ok;;690;690;690;
+Warszawa;160;Góry Świętokrzyskie dla aktywnych;ok;;790;790;790;
+Warszawa;161;Góry Świętokrzyskie, Bałtów;ok;;680;680;680;
+Warszawa;162;Góry Świętokrzyskie, Sandomierz;ok;;640;640;640;
+Warszawa;163;Jura Krakowsko – Częstochowska;ok;;720;720;720;
+Warszawa;164;Jura Krakowsko – Częstochowska dla aktywnych - zajęcia wspinaczkowe i spływ kajakowy;ok;;880;880;880;
+Warszawa;165;Jura Krakowsko – Częstochowska, Energylandia (dla szkół podstawowych);ok;;830;830;830;
+Warszawa;166;Jura Krakowsko – Częstochowska, Energylandia (dla szkół średnich);price_diff;35;865;865;880;max Δ 35 zł
+Warszawa;167;Kazimierz Dolny, Bałtów;price_diff;35;675;675;695;max Δ 35 zł
+Warszawa;168;Kazimierz Dolny, Lublin, Majdanek;ok;;730;730;730;
+Warszawa;169;Kazimierz Dolny, Magiczne Ogrody;ok;;685;685;685;
+Warszawa;170;Kazimierz Dolny z meleksami i rejsem statkiem, Magiczne Ogrody;ok;;770;770;770;
+Warszawa;171;Kraków – Stare Miasto i Kazimierz;ok;;670;670;670;
+Warszawa;172;Kraków i Energylandia (dla szkół podstawowych);ok;;800;800;800;
+Warszawa;173;Kraków i Energylandia (dla szkół średnich);ok;;835;835;835;
+Warszawa;174;Kraków i Ojcowski Park Narodowy;ok;;695;695;695;
+Warszawa;175;Kraków i zamki jurajskie;ok;;705;705;705;
+Warszawa;176;Kraków i Kopalnia Soli Bochnia;ok;;710;710;710;
+Warszawa;177;Kraków i Kopalnia Soli Wieliczka (dla szkół podstawowych);price_diff;35;690;690;710;max Δ 35 zł
+Warszawa;178;Kraków i Kopalnia Soli Wieliczka (dla szkół średnich);price_diff;35;750;750;765;max Δ 35 zł
+Warszawa;179;Kraków i Oświęcim (Muzeum Auschwitz-Birkenau);fetch_error;;710;710;;dev: Nie znaleziono wierszy cennika (people_price w sekcji Cennik).
+Warszawa;180;Kraków i Kopalnia Soli Bochnia z noclegiem w podziemiach kopalni;ok;;790;790;790;
+Warszawa;181;Łódź;ok;;685;685;685;
+Warszawa;182;Łódź i Mandoria;ok;;805;805;805;
+Warszawa;183;Lublin, Kozłówka;ok;;730;730;730;
+Warszawa;184;Lublin, Zamość;ok;;675;675;675;
+Warszawa;185;Mazury - spływ kajakowy, Wilczy Szaniec;ok;;765;765;765;
+Warszawa;186;Mazury - spływ kajakowy i biwak przygody;price_diff;115;725;610;610;max Δ 115 zł
+Warszawa;188;Mazury dla aktywnych z rajdem rowerowym i spływem kajakowym;ok;;710;710;710;
+Warszawa;189;Mierzeja Wiślana;ok;;555;555;555;
+Warszawa;190;Mierzeja Wiślana - Skarby Mierzei Wiślanej;price_diff;165;680;545;695;max Δ 165 zł
+Warszawa;191;Ojcowski Park Narodowy;price_diff;35;700;700;720;max Δ 35 zł
+Warszawa;192;Olsztyn, Olsztynek, Grunwald;ok;;680;680;680;
+Warszawa;193;Pieniny;ok;;910;910;910;
+Warszawa;194;Pieniny dla aktywnych;ok;;810;810;810;
+Warszawa;195;Polesie Lubelskie;ok;;670;670;670;
+Warszawa;196;Poznań, Biskupin, Gniezno - Szlak Piastowski;ok;;720;720;720;
+Warszawa;197;Kruszwica, Biskupin, Gniezno, Ostrów Lednicki - Szlak Piastowski;ok;;700;700;700;
+Warszawa;198;Białowieża - Puszcza Białowieska;ok;;625;625;625;
+Warszawa;199;Roztocze Lubelskie;price_diff;5;580;580;580;max Δ 5 zł
+Warszawa;200;Roztocze Lubelskie aktywnie;ok;;660;660;660;
+Warszawa;205;Sandomierz, Bałtów;ok;;645;645;645;
+Warszawa;207;Sandomierz, Kazimierz Dolny;ok;;715;715;715;
+Warszawa;208;Suwalszczyzna – Augustów, Wigierski Park Narodowy;ok;;725;725;725;
+Warszawa;209;Szlak Piastowski dla aktywnych - Gniezno, Ostrów Lednicki i zajęcia integracyjne;ok;;750;750;750;
+Warszawa;211;Szlakiem Zamków Krzyżackich;ok;;770;770;770;
+Warszawa;212;Tarnowskie Góry i Jura Krakowsko – Częstochowska;ok;;830;830;830;
+Warszawa;213;Toruń, Bydgoszcz;ok;;760;760;760;
+Warszawa;214;Toruń, Gniezno, Biskupin;ok;;760;760;760;
+Warszawa;215;Toruń, Sierpc;ok;;730;730;730;
+Warszawa;216;Malbork, Gdańsk, Gdynia;price_diff;85;825;800;845;max Δ 85 zł
+Warszawa;218;Wrocław;ok;;795;795;795;
+Warszawa;219;Żeglarska Przygoda - rejs po Mazurach;ok;;855;855;855;
+Warszawa;231;Kraków – Stare Miasto, Komnaty Królewskie na Wawelu i Rynek Podziemny;ok;;730;730;730;
+Warszawa;232;Beskidy;ok;;1015;1015;1015;
+Warszawa;233;Biebrzański Park Narodowy;ok;;1060;1060;1060;
+Warszawa;235;Bieszczady;ok;;995;995;995;
+Warszawa;234;Biebrzański Park Narodowy i Biwak Przygody;price_diff;50;1085;1085;1110;max Δ 50 zł
+Warszawa;237;Bieszczady dla aktywnych - gra terenowa, off road, rejs jachtami;ok;;1070;1070;1070;
+Warszawa;239;Góry Świętokrzyskie;price_diff;45;1110;1085;1085;max Δ 45 zł
+Warszawa;240;Góry Świętokrzyskie dla aktywnych;ok;;1250;1250;1250;
+Warszawa;241;Góry Świętokrzyskie z Łysicą i warsztatami;ok;;1125;1125;1125;
+Warszawa;242;Jura Krakowsko – Częstochowska;price_diff;50;1105;1105;1130;max Δ 50 zł
+Warszawa;243;Jura Krakowsko – Częstochowska i Energylandia (dla grup ze szkół podstawowych);ok;;1185;1185;1185;
+Warszawa;244;Jura Krakowsko – Częstochowska i Energylandia (dla grup ze szkół średnich);ok;;1220;1220;1220;
+Warszawa;245;Jura Krakowsko – Częstochowska i Kraków;ok;;1125;1125;1125;
+Warszawa;246;Jura Krakowsko – Częstochowska, Kraków i Energylandia (dla grup ze szkół podstawowych);ok;;1175;1175;1175;
+Warszawa;247;Jura Krakowsko – Częstochowska, Kraków i Energylandia (dla grup ze szkół średnich);ok;;1210;1210;1210;
+Warszawa;248;Jura  Krakowsko - Częstochowska dla aktywnych i Kraków;ok;;1245;1245;1245;
+Warszawa;249;Karkonosze;ok;;1050;1050;1050;
+Warszawa;251;Karkonosze, Wrocław;price_diff;50;1040;1040;1065;max Δ 50 zł
+Warszawa;253;Karkonosze dla aktywnych;ok;;1190;1190;1190;
+Warszawa;255;Karkonosze, Praga;price_diff;85;1205;1160;1160;max Δ 85 zł
+Warszawa;257;Kaszuby, Toruń;ok;;1110;1110;1110;
+Warszawa;258;Kotlina Kłodzka, Wrocław;ok;;1100;1100;1100;
+Warszawa;260;Kotlina KĹ‚odzka;fetch_error;;;1165;1165;local: Nie znaleziono wierszy cennika (people_price w sekcji Cennik).
+Warszawa;262;Kotlina Kłodzka, Praga;ok;;1235;1235;1235;
+Warszawa;264;Kotlina Kłodzka, Wrocław, Praga;ok;;1195;1195;1195;
+Warszawa;266;Kotlina Kłodzka, Wrocław, Skalne Miasto;price_diff;65;1150;1130;1175;max Δ 65 zł
+Warszawa;268;Kotlina Kłodzka, Skalne Miasto;ok;;1210;1210;1210;
+Warszawa;270;Kraków i Zakopane;ok;;955;955;955;
+Warszawa;272;Kraków, Energylandia (dla grup ze szkół podstawowych);ok;;1175;1175;1175;
+Warszawa;274;Kraków, Energylandia (dla grup ze szkół średnich);price_diff;50;1210;1210;1235;max Δ 50 zł
+Warszawa;276;Kraków, Ojcowski Park Narodowy, Energylandia (dla grup ze szkół podstawowych);ok;;1200;1200;1200;
+Warszawa;278;Kraków, Ojcowski Park Narodowy, Energylandia (dla grup ze szkół średnich);ok;;1235;1235;1235;
+Warszawa;280;Kraków, Wieliczka (dla grup ze szkół podstawowych);ok;;1140;1140;1140;
+Warszawa;282;Kraków, Wieliczka (dla grup ze szkół średnich);price_diff;55;1200;1200;1225;max Δ 55 zł
+Warszawa;284;Kraków, Wieliczka, Auschwitz-Birkenau (dla grup ze szkół podstawowych);ok;;1130;1130;1130;
+Warszawa;286;Kraków, Wieliczka, Energylandia (dla grup ze szkół podstawowych);fetch_error;;1175;1175;;dev: Nie znaleziono wierszy cennika (people_price w sekcji Cennik).
+Warszawa;289;KrakĂłw, Wieliczka, Auschwitz-Birkenau (dla grup ze szkĂłĹ‚ Ĺ›rednich);fetch_error;;;1190;1190;local: Nie znaleziono wierszy cennika (people_price w sekcji Cennik).
+Warszawa;292;Kraków, Wieliczka, Energylandia (dla grup ze szkół średnich);ok;;1265;1265;1265;
+Warszawa;295;Kraków, Wieliczka, Ojcowski Park Narodowy (dla grup ze szkół podstawowych);ok;;1125;1125;1125;
+Warszawa;296;Kraków, Wieliczka, Ojcowski Park Narodowy (dla grup ze szkół średnich);ok;;1185;1185;1185;
+Warszawa;299;Kraków;ok;;1105;1105;1105;
+Warszawa;301;Kraków, Ojcowski Park Narodowy;ok;;1115;1115;1115;
+Warszawa;303;Krynica Zdrój;ok;;1080;1080;1080;
+Warszawa;305;Łeba i Słowiński Park Narodowy;price_diff;50;1195;1195;1220;max Δ 50 zł
+Warszawa;307;Mazury - Spływ Kajakowy, Biwak Przygody, Wilczy Szaniec;ok;;1195;1195;1195;
+Warszawa;309;Mazury - Spływ Kajakowy, Rajd Rowerowy, Wilczy Szaniec;ok;;1165;1165;1165;
+Warszawa;311;Mierzeja Wiślana, Gdańsk, Sopot;ok;;935;935;935;
+Warszawa;312;Mierzeja Wiślana, Gdańsk, Gdynia;ok;;965;965;965;
+Warszawa;313;Mierzeja Wiślana - Skarby Mierzei Wiślanej;ok;;995;995;995;
+Warszawa;314;Pieniny;price_diff;50;1165;1165;1190;max Δ 50 zł
+Warszawa;315;Pieniny dla aktywnych z raftingiem i rajdem rowerowym;price_diff;85;1145;1065;1065;max Δ 85 zł
+Warszawa;316;Pomorze Gdańskie - Gdańsk, Sopot, Gdynia, Hel, Malbork;price_diff;50;1110;1085;1085;max Δ 50 zł
+Warszawa;317;Pomorze Gdańskie dla aktywnych - park linowy, gra terenowa, Gdańsk, Gdynia, Hel;ok;;1120;1120;1120;
+Warszawa;318;Pomorze Gdańskie dla aktywnych - park linowy, rajd rowerowy, spływ kajakowy, Gdańsk, Hel;ok;;1215;1215;1215;
+Warszawa;319;Pomorze Zachodnie;ok;;1200;1200;1200;
+Warszawa;323;Roztocze Lubelskie dla aktywnych;ok;;1070;1070;1070;
+Warszawa;325;Suwalszczyzna – Augustów, Wigierski Park Narodowy, spływ kajakowy, rajd rowerowy;ok;;1165;1165;1165;
+Warszawa;327;Szlak Piastowski;ok;;1085;1085;1085;
+Warszawa;329;Szlak Piastowski dla aktywnych;ok;;1125;1125;1125;
+Warszawa;331;Tatry i Zakopane;price_diff;125;1015;945;945;max Δ 125 zł
+Warszawa;333;Tatry i Zakopane z wjazdem na Gubałówkę;ok;;1020;1020;1020;
+Warszawa;335;Tatry, Zakopane i Spływ Dunajcem;ok;;1100;1100;1100;
+Warszawa;337;Toruń, Bydgoszcz;ok;;1195;1195;1195;
+Warszawa;339;Trójmiasto - Gdańsk, Gdynia, Sopot;ok;;1120;1120;1120;
+Warszawa;341;Trójmiasto - Gdańsk, Gdynia, Sopot i Muzeum II Wojny Światowej;ok;;1150;1150;1150;
+Warszawa;343;Gdańsk, Gdynia;ok;;1215;1215;1215;
+Warszawa;345;Gdańsk, Gdynia, Malbork;price_diff;50;1230;1205;1205;max Δ 50 zł
+Warszawa;347;Gdańsk, Malbork;price_diff;45;1165;1140;1140;max Δ 45 zł
+Warszawa;349;Wrocław;ok;;1185;1185;1185;
+Warszawa;351;Wrocław, Karkonosze;ok;;1135;1135;1135;
+Warszawa;367;Beskidy;fetch_error;;;1450;1450;local: Nie znaleziono wierszy cennika (people_price w sekcji Cennik).
+Warszawa;369;Bieszczady;ok;;1335;1335;1335;
+Warszawa;371;Bieszczady dla aktywnych;price_diff;70;1410;1410;1445;max Δ 70 zł
+Warszawa;373;Góry Świętokrzyskie;ok;;1610;1610;1610;
+Warszawa;375;Jura Krakowsko – Częstochowska;ok;;1515;1515;1515;
+Warszawa;377;Karkonosze;price_diff;20;1490;1470;1470;max Δ 20 zł
+Warszawa;379;Karkonosze, Wrocław;price_diff;20;1475;1455;1455;max Δ 20 zł
+Warszawa;381;Karkonosze, Praga, Wrocław;ok;;1465;1465;1465;
+Warszawa;383;Karkonosze, Skalne Miasto, Wrocław;price_diff;65;1470;1470;1505;max Δ 65 zł
+Warszawa;385;Karkonosze, Praga, Skalne Miasto;ok;;1565;1565;1565;
+Warszawa;388;Karkonosze dla aktywnych;price_diff;20;1495;1475;1475;max Δ 20 zł
+Warszawa;390;Kotlina Kłodzka;ok;;1480;1480;1480;
+Warszawa;392;Kotlina Kłodzka, Praga;ok;;1525;1525;1525;
+Warszawa;394;Kotlina Kłodzka, Skalne Miasto;ok;;1500;1500;1500;
+Warszawa;396;Kotlina Kłodzka, Praga, Skalne Miasto;ok;;1560;1560;1560;
+Warszawa;398;Łeba, Słowiński Park Narodowy, Hel, Szymbark;ok;;1615;1615;1615;
+Warszawa;399;Mazury dla aktywnych;ok;;1650;1650;1650;
+Warszawa;401;Mazury dla aktywnych i żeglarska przygoda;ok;;1735;1735;1735;
+Warszawa;403;Pieniny;ok;;1550;1550;1550;
+Warszawa;405;Pieniny dla aktywnych;ok;;1575;1575;1575;
+Warszawa;407;Pomorze Gdańskie, Malbork, Grunwald;ok;;1415;1415;1415;
+Warszawa;409;Pomorze Gdańskie dla aktywnych z grą terenową i parkiem linowym;ok;;1440;1440;1440;
+Warszawa;412;Pomorze Gdańskie dla aktywnych z rajdem rowerowym, wycieczką kajakową, grą terenową i parkiem linowym;ok;;1470;1470;1470;
+Warszawa;414;Pomorze Zachodnie;price_diff;65;1495;1495;1530;max Δ 65 zł
+Warszawa;416;Roztocze Lubelskie;ok;;1370;1370;1370;
+Warszawa;418;Roztocze Lubelskie dla aktywnych;ok;;1440;1440;1440;
+Warszawa;420;Mierzeja Wiślana - Skarby Mierzei Wiślanej, Malbork, Gdańsk, Gdynia, Sopot;price_diff;70;1480;1480;1515;max Δ 70 zł
+Warszawa;422;Mierzeja Wiślana - Malbork, Gdańsk, Gdynia, Sopot , Krynica Morska;ok;;1350;1350;1350;
+Warszawa;424;Tatry, Zakopane, Kraków;ok;;1345;1345;1345;
+Warszawa;426;Tatry, Zakopane, Kraków, Pieniny (Spływ Dunajcem);price_diff;65;1475;1475;1510;max Δ 65 zł
+Warszawa;428;Tatry, Zakopane, kolej na Kasprowy Wierch, baseny termalne Bukowina,  Kraków;ok;;1595;1595;1595;
+Warszawa;430;Trójmiasto - Gdańsk, Gdynia, Sopot;ok;;1630;1630;1630;
+Warszawa;432;Tatry, Zakopane;ok;;1290;1290;1290;
+Warszawa;434;Beskidy;ok;;1855;1855;1855;
+Warszawa;436;Bieszczady;ok;;1705;1705;1705;
+Warszawa;438;Bieszczady dla aktywnych;ok;;1845;1845;1845;
+Warszawa;440;Karkonosze;ok;;1815;1815;1815;
+Warszawa;442;Karkonosze, Drezno;ok;;1840;1840;1840;
+Warszawa;445;Karkonosze, Praga;ok;;1720;1720;1720;
+Warszawa;447;Karkonosze, Skalne Miasto;price_diff;305;1755;1755;1910;max Δ 305 zł
+Warszawa;449;Karkonosze, Praga, Skalne Miasto;ok;;1845;1845;1845;
+Warszawa;451;Karkonosze dla aktywnych;ok;;1885;1885;1885;
+Warszawa;453;Kotlina KĹ‚odzka;fetch_error;;;1820;1820;local: Nie znaleziono wierszy cennika (people_price w sekcji Cennik).
+Warszawa;455;Kotlina Kłodzka, Praga;ok;;1905;1905;1905;
+Warszawa;457;Kotlina Kłodzka, Skalne Miasto;price_diff;80;1890;1890;1930;max Δ 80 zł
+Warszawa;459;Kotlina Kłodzka, Praga, Skalne Miasto;ok;;1925;1925;1925;
+Warszawa;461;Łeba, Słowiński Park Narodowy, Hel, Szymbark;ok;;2035;2035;2035;
+Warszawa;463;Mazury dla aktywnych;ok;;2055;2055;2055;
+Warszawa;465;Mazury dla aktywnych i żeglarska przygoda;ok;;2180;2180;2180;
+Warszawa;467;Mierzeja Wiślana, Gdańsk, Gdynia, Sopot, Malbork, Grunwald;ok;;1730;1730;1730;
+Warszawa;469;Mierzeja Wiślana dla aktywnych, Gdańsk, Gdynia, Sopot, Malbork;ok;;1820;1820;1820;
+Warszawa;471;Pieniny;ok;;2020;2020;2020;
+Warszawa;473;Pieniny dla aktywnych;ok;;2045;2045;2045;
+Warszawa;475;Pomorze Gdańskie;ok;;1770;1770;1770;
+Warszawa;477;Pomorze Gdańskie dla aktywnych;ok;;1835;1835;1835;
+Warszawa;479;Pomorze Gdańskie dla aktywnych z rajdem rowerowym i spływem kajakowym;ok;;1950;1950;1950;
+Warszawa;481;Pomorze Zachodnie;ok;;1825;1825;1825;
+Warszawa;484;Pomorze Zachodnie, Berlin;ok;;2130;2130;2130;
+Warszawa;485;Pomorze Zachodnie dla aktywnych;ok;;1910;1910;1910;
+Warszawa;487;Roztocze Lubelskie;price_diff;60;1750;1750;1780;max Δ 60 zł
+Warszawa;489;Roztocze Lubelskie dla aktywnych;ok;;1835;1835;1835;
+Warszawa;491;Tatry, Zakopane, Kraków, Ojcowski Park Narodowy;ok;;1700;1700;1700;
+Warszawa;494;Tatry, Zakopane, Kraków, Spływ Dunajcem;ok;;1655;1655;1655;
+Warszawa;496;Tatry, Zakopane, kolej na Kasprowy Wierch, baseny termalne Bukowina;ok;;1945;1945;1945;
+Warszawa;498;Trójmiasto – Gdańsk, Gdynia, Sopot i Malbork;ok;;2070;2070;2070;
+Warszawa;506;Słowenia;price_diff;60;2715;2715;2745;max Δ 60 zł
+Warszawa;509;Berlin;price_diff;290;1110;1110;1255;max Δ 290 zł
+Warszawa;511;Berlin, Poczdam;price_diff;300;1625;1625;1775;max Δ 300 zł
+Warszawa;513;Berlin, Poczdam;price_diff;315;2175;2175;2330;max Δ 315 zł
+Warszawa;515;Berlin, Poczdam, Tropical Island;price_diff;315;2150;2150;2305;max Δ 315 zł
+Warszawa;516;Berlin - Jarmarki Bożonarodzeniowe;price_diff;290;1110;1110;1255;max Δ 290 zł
+Warszawa;517;Bratysława, Wiedeń (4 dni, 3 noclegi);price_diff;45;1925;1925;1950;max Δ 45 zł
+Warszawa;519;Bratysława, Wiedeń (4 dni, 2 noclegi);price_diff;45;1565;1565;1585;max Δ 45 zł
+Warszawa;520;Budapeszt, Zakole Dunaju (4 dni, 2 noclegi);price_diff;50;1370;1370;1395;max Δ 50 zł
+Warszawa;521;Budapeszt, Zakole Dunaju (4 dni, 3 noclegi);price_diff;45;1650;1650;1675;max Δ 45 zł
+Warszawa;523;Budapeszt, Zakole Dunaju, Bratysława;price_diff;45;1710;1710;1735;max Δ 45 zł
+Warszawa;527;Litwa, Łotwa, Estonia;price_diff;60;2465;2465;2495;max Δ 60 zł
+Warszawa;529;Litwa, Łotwa, Estonia, Finlandia;price_diff;70;3120;3120;3155;max Δ 70 zł
+Warszawa;530;Paryż, Eurodisneyland;price_diff;60;2605;2605;2635;max Δ 60 zł
+Warszawa;531;Paryż;price_diff;60;2640;2640;2670;max Δ 60 zł
+Warszawa;532;Paryż, Wersal;price_diff;60;2655;2655;2685;max Δ 60 zł
+Warszawa;533;Paryż, Eurodisneylad;price_diff;70;3110;3110;3145;max Δ 70 zł
+Warszawa;534;Paryż;price_diff;75;3150;3150;3185;max Δ 75 zł
+Warszawa;535;Paryż, Wersal;price_diff;70;3165;3165;3200;max Δ 70 zł
+Warszawa;536;Paryż, Wersal, zamki nad Loarą;price_diff;85;3855;3855;3895;max Δ 85 zł
+Warszawa;537;Praga;price_diff;25;870;870;880;max Δ 25 zł
+Warszawa;538;Praga;price_diff;35;1215;1215;1235;max Δ 35 zł
+Warszawa;540;Praga i Skalne Miasto;price_diff;75;1265;1265;1325;max Δ 75 zł
+Warszawa;543;Praga i Skalne Miasto;price_diff;85;1540;1540;1605;max Δ 85 zł
+Warszawa;544;Wiedeń (4 dni, 2 noclegi);price_diff;45;1810;1810;1835;max Δ 45 zł
+Warszawa;545;Wiedeń, Bratysława, Budapeszt;price_diff;60;2425;2425;2455;max Δ 60 zł
+Warszawa;548;Wilno, Kowno, Troki;price_diff;35;1250;1250;1265;max Δ 35 zł
+Warszawa;549;Wilno, Kowno, Troki;price_diff;45;1665;1665;1685;max Δ 45 zł
+Warszawa;551;Włochy klasyczne - Wenecja, Florencja, Rzym, Piza (7 dni, 5 noclegów);price_diff;80;3500;3500;3545;max Δ 80 zł
+Warszawa;552;Włochy klasyczne - Wenecja, Florencja, Rzym, Piza (7 dni, 6 noclegów);price_diff;85;3800;3800;3840;max Δ 85 zł
+Warszawa;553;Rzym, Neapol, Pompeje;price_diff;70;2930;2930;2965;max Δ 70 zł
+Warszawa;554;Włochy - Toskania i Wenecja;price_diff;75;3080;3080;3120;max Δ 75 zł
+Warszawa;555;Włochy - Toskania;price_diff;60;2835;2835;2865;max Δ 60 zł
+Warszawa;556;Włochy klasyczne - Wenecja,  Rzym, Florencja;price_diff;70;3420;3420;3455;max Δ 70 zł
+Warszawa;559;Słowenia;price_diff;70;3145;3145;3180;max Δ 70 zł
+Warszawa;560;Słowenia, Wenecja;price_diff;70;3160;3160;3195;max Δ 70 zł
+Warszawa;561;Ryga, Tallin, Sztokholm;price_diff;60;2360;2360;2390;max Δ 60 zł
+Warszawa;562;Płock;price_diff;20;200;200;210;max Δ 20 zł
+Warszawa;563;Łódź i Suntago (dzieci do 16 lat);ok;;770;770;770;
+Warszawa;564;Łódź i Suntago (młodzież powyżej 16 lat);ok;;790;790;790;
+Warszawa;566;Łódź - Orientarium i EC1;ok;;295;295;295;
+Warszawa;567;Kotlina Kłodzka, Praga, Skalne Miasto;ok;;1260;1260;1260;
+Warszawa;569;Energylandia i Oświęcim (Muzeum Auschwitz-Birkenau) (dla grup ze szkół podstawowych);ok;;840;840;840;
+Warszawa;570;Energylandia i Oświęcim (Muzeum Auschwitz-Birkenau) (dla grup ze szkół średnich);ok;;875;875;875;
+Warszawa;571;Agroturystyka w Dolinie Liwca wersja świąteczna z malowaniem bombek choinkowych;ok;;275;275;275;
+Warszawa;577;Malbork - Muzeum Zamkowe w Malborku;price_diff;120;300;300;365;max Δ 120 zł
+Warszawa;586;Wrocław, Książ, Świdnica;ok;;1215;1215;1215;
+Warszawa;588;Kraków, Tatry, Wieliczka (dla grup ze szkoły podstawowej);ok;;980;980;980;
+Warszawa;589;KrakĂłw, Tatry, Wieliczka (dla grup ze szkĂłĹ‚ Ĺ›rednich);fetch_error;;;1035;1035;local: Nie znaleziono wierszy cennika (people_price w sekcji Cennik).
+Warszawa;590;Gdańsk, Gdynia;price_diff;35;885;885;905;max Δ 35 zł
+Warszawa;591;Grecja - Saloniki, Meteory, Ateny, Mykeny, Delfy;price_diff;105;5230;5230;5285;max Δ 105 zł
+Warszawa;595;Pomiechówek - Park Doliny Wkry;ok;;225;225;225;
+Warszawa;600;Drezno i Szwajcaria Saksońska;price_diff;140;1145;1145;1215;max Δ 140 zł
+Warszawa;606;Jura Krakowsko – Częstochowska dla aktywnych - zajęcia wspinaczkowe i rajd rowerowy;ok;;810;810;810;
+Warszawa;607;Jura  Krakowsko - Częstochowska dla aktywnych;ok;;1300;1300;1300;
+Warszawa;609;"Warszawa szlakiem bohaterów ""Kamieni na szaniec""";ok;;145;145;145;
+Warszawa;610;Łódź i warsztaty filmowe;ok;;280;280;280;
+Warszawa;611;Dania, Szwecja - Karlskrona, Malmo, Kopenhaga, Odense, Kronborg;price_diff;75;3710;3710;3745;max Δ 75 zł
+Warszawa;613;Dania, Szwecja - Karlskrona, Malmo, Kopenhaga, Kronborg;price_diff;60;2945;2945;2975;max Δ 60 zł
+Warszawa;616;Chorwacja - Zagrzeb, Trogir, Split, Dubrownik, Jeziora Plitwickie;price_diff;85;3990;3990;4030;max Δ 85 zł
+Warszawa;617;Karlskrona;price_diff;35;1400;1400;1415;max Δ 35 zł
+Warszawa;619;Hiszpania - Barcelona, Girona, Figueres;price_diff;45;1620;1620;1645;max Δ 45 zł
+Warszawa;620;Londyn;price_diff;60;2475;2475;2505;max Δ 60 zł
+Warszawa;621;Londyn;price_diff;45;1940;1940;1965;max Δ 45 zł
+Warszawa;622;Paryż;price_diff;45;1775;1775;1800;max Δ 45 zł
+Warszawa;623;Paryż, Eurodisneyland;price_diff;60;2250;2250;2280;max Δ 60 zł
+Warszawa;624;Rzym;price_diff;50;2700;2700;2720;max Δ 50 zł
+Warszawa;641;Kraków i Krakowski Kazimierz;ok;;205;205;205;
+Warszawa;642;Kraków – Stare Miasto i Kazimierz;ok;;630;630;630;
+Warszawa;643;Kraków – Stare Miasto, Komnaty Królewskie na Wawelu i Rynek Podziemny;ok;;695;695;695;
+Warszawa;644;Kraków i Energylandia (dla szkół podstawowych);ok;;725;725;725;
+Warszawa;645;KrakĂłw i Energylandia (dla szkĂłĹ‚ Ĺ›rednich);fetch_error;;;760;760;local: Nie znaleziono wierszy cennika (people_price w sekcji Cennik).
+Warszawa;646;Kraków i Kopalnia Soli Bochnia;ok;;635;635;635;
+Warszawa;647;Kraków i Kopalnia Soli Bochnia z noclegiem w podziemiach kopalni;ok;;655;655;655;
+Warszawa;648;Kraków i Kopalnia Soli Wieliczka (dla szkół podstawowych);ok;;635;635;635;
+Warszawa;649;Kraków i Kopalnia Soli Wieliczka (dla szkół średnich);ok;;695;695;695;
+Warszawa;650;Kraków i Ojcowski Park Narodowy;ok;;645;645;645;
+Warszawa;651;Kraków i Oświęcim (Muzeum Auschwitz-Birkenau);ok;;630;630;630;
+Warszawa;652;Jura Krakowsko – Częstochowska i Kraków;ok;;1080;1080;1080;
+Warszawa;653;Kraków;ok;;1085;1085;1085;
+Warszawa;654;Kraków, Energylandia (dla grup ze szkół podstawowych);ok;;1145;1145;1145;
+Warszawa;655;Kraków, Energylandia (dla grup ze szkół średnich);ok;;1180;1180;1180;
+Warszawa;656;Kraków, Wieliczka (dla grup ze szkół podstawowych);ok;;1125;1125;1125;
+Warszawa;657;Kraków, Wieliczka (dla grup ze szkół średnich);ok;;1180;1180;1180;
+Warszawa;658;Gdańsk i Muzeum II Wojny Światowej;ok;;125;125;125;
+Warszawa;659;Gdańsk i Westerplatte;fetch_error;;180;180;;dev: Nie znaleziono wierszy cennika (people_price w sekcji Cennik).
+Warszawa;660;Gdańsk z Muzeum II Wojny Światowej i Europejskim Centrum Solidarności;ok;;670;670;670;
+Warszawa;661;Gdańsk, Gdynia;ok;;760;760;760;
+Warszawa;662;Trójmiasto - Gdańsk, Gdynia, Sopot;ok;;640;640;640;
+Warszawa;663;Gdańsk, Gdynia;ok;;1190;1190;1190;
+Warszawa;664;Trójmiasto - Gdańsk, Gdynia, Sopot;ok;;1040;1040;1040;
+Warszawa;665;Trójmiasto - Gdańsk, Gdynia, Sopot i Muzeum II Wojny Światowej;ok;;1070;1070;1070;
+Warszawa;666;Wrocław i Afrykarium;ok;;240;240;240;
+Warszawa;667;Wrocław i Panorama Racławicka;ok;;200;200;200;
+Warszawa;668;Wrocław;ok;;150;150;150;
+Warszawa;674;Wrocław;ok;;715;715;715;
+Warszawa;675;Łódź - Orientarium i EC1;ok;;280;280;280;
+Warszawa;676;Łódź i Muzeum Fabryki;ok;;165;165;165;
+Warszawa;677;Łódź i Orientarium;ok;;210;210;210;
+Warszawa;678;Łódź i warsztaty filmowe;ok;;260;260;260;
+Warszawa;679;Łódź;ok;;700;700;700;
+Warszawa;680;Łódź i Mandoria;ok;;795;795;795;
+Warszawa;681;Kraków;ok;;170;170;170;
+Warszawa;682;Toruń i planetarium;ok;;175;175;175;
+Warszawa;683;Toruń z warsztatami piernikowymi;ok;;200;200;200;
+Warszawa;684;Toruń z warsztatami piernikowymi i planetarium;ok;;220;220;220;
+Warszawa;685;Toruń;ok;;710;710;710;
+Warszawa;686;Toruń, Bydgoszcz;ok;;705;705;705;
+Warszawa;687;Łódź i warsztaty filmowe;ok;;775;775;775;
+Warszawa;688;Łódź i warsztaty filmowe;ok;;765;765;765;
+Warszawa;689;Grecja - Saloniki, Riwiera Olimpijska, Meteory, Delfy, Peloponez, Ateny;price_diff;75;3260;3260;3295;max Δ 75 zł
+Warszawa;690;Ateny, Delfy, Peloponez;price_diff;50;2315;2315;2335;max Δ 50 zł
+Warszawa;691;Wiedeń, Bratysława, Budapeszt (nocny powrót);price_diff;60;2140;2140;2170;max Δ 60 zł
+Warszawa;692;Praga, Drezno;price_diff;60;1735;1735;1765;max Δ 60 zł
+Warszawa;694;Włochy północne (Lombardia i Wenecja Euganejska) - Wenecja, Padwa, Werona, Jezioro Garda, Monte Baldo, Mediolan;price_diff;70;3090;3090;3125;max Δ 70 zł
+Warszawa;696;Kielce i Chęciny;ok;;260;260;260;
+Warszawa;697;Kraków, Wieliczka (dla grup ze szkół podstawowych);ok;;385;385;385;
+Warszawa;700;Kraków, Wieliczka (dla grup ze szkół średnich);ok;;445;445;445;
+Warszawa;706;Toruń z warsztatami piernikowymi i Młyn Wiedzy;ok;;320;320;320;
+Warszawa;707;Toruń z warsztatami piernikowymi i Dom Mikołaja Kopernika;ok;;335;335;335;
+Warszawa;708;Góry Świętokrzyskie i Kielce;ok;;235;235;235;
+Warszawa;715;Sochaczew - Muzeum Kolei Wąskotorowych;ok;;195;195;195;
+Warszawa;719;Kraków i rynek podziemny;ok;;395;395;395;
+Warszawa;716;Kadzidło - Skansen Kultury Kurpiowskiej;ok;;175;175;175;
+Warszawa;721;Kopalnia Soli Kłodawa i Zamek w Łęczycy;price_diff;15;305;305;315;max Δ 15 zł
+Warszawa;722;Roztocze Lubelskie aktywnie z paintball i tyrolką;price_diff;35;740;740;760;max Δ 35 zł
+Warszawa;723;Praga, Drezno (nocny powrót);price_diff;50;1410;1410;1435;max Δ 50 zł
+Warszawa;726;Białystok i Biebrzański Park Narodowy;ok;;635;635;635;
+Warszawa;727;Podlasie - Białystok i Białowieża;ok;;690;690;690;
+Warszawa;728;Podlasie - Białystok, Supraśl, Bohoniki, Kruszyniany, Białowieża;ok;;1145;1145;1145;
+Warszawa;729;Biebrzański Park Narodowy i spływ kajakowy Biebrzą;ok;;670;670;670;

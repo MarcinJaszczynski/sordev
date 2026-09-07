@@ -43,8 +43,7 @@ class TaskArchiveBulkActionTest extends TestCase
         Livewire::actingAs($user)
             ->test(ListTasks::class)
             ->call('setTasksScope', 'all')
-            ->set('activeTab', 'all')
-            ->filterTable('finished_visibility', true)
+            ->set('activeTab', 'finished')
             ->callTableBulkAction('archive', [$finishedTask]);
 
         $this->assertSame((int) $archivedId, (int) $finishedTask->fresh()->status_id);

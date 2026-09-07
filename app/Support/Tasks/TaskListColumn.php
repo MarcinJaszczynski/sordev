@@ -40,6 +40,21 @@ final class TaskListColumn
         return $record->author?->name ?: '—';
     }
 
+    public static function assigneeLabel(Task $record): string
+    {
+        $record->loadMissing('assignee');
+
+        return $record->assignee?->name ?: '—';
+    }
+
+    /**
+     * Jedna linia „Od X dla Y” — listy, kanban, kalendarz, powiadomienia.
+     */
+    public static function ownershipLine(Task $record): string
+    {
+        return 'Od '.self::authorLabel($record).' dla '.self::assigneeLabel($record);
+    }
+
     public static function effectiveModifiedAt(Task $record): ?\Illuminate\Support\Carbon
     {
         $created = $record->created_at;
@@ -82,7 +97,7 @@ final class TaskListColumn
         }
 
         $links = $attachments->map(function ($attachment): string {
-            $url = e($attachment->download_url ?? '#');
+            $url = e($attachment->preview_url ?? '#');
             $label = e($attachment->filename);
 
             return '<a href="'.$url.'" target="_blank" rel="noopener"'
@@ -117,7 +132,7 @@ final class TaskListColumn
 
         return '<table style="border-collapse:collapse;min-width:160px">'
             .$row('Nadrzędne:', $parentLine)
-            .$row('Kontekst:', $contextType.' / '.$contextRecordHtml)
+            .$row(e($contextType).':', $contextRecordHtml)
             .'</table>';
     }
 

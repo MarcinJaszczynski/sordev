@@ -18,6 +18,7 @@ readonly class UpsertEventParticipantData
         public ?EventParticipant $participant = null,
         public ?string $firstName = null,
         public ?string $lastName = null,
+        public ?string $gender = null,
         public CarbonInterface|string|null $birthDate = null,
         public ?string $pesel = null,
         public ?string $email = null,

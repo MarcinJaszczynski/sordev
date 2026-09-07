@@ -11,40 +11,37 @@ class PruneOrphanSettlementRows extends Command
 {
     protected $signature = 'app:prune-orphan-settlement-rows {--dry-run : Only report counts}';
 
-    protected $description = 'Remove settlement costs pointing at deleted program points or settlements';
+    protected $description = 'Remove empty settlement costs pointing at deleted program points; keep rows with payments';
 
     public function handle(): int
     {
         $dryRun = (bool) $this->option('dry-run');
 
-        $orphanProgramCosts = EventSettlementCost::query()
-            ->where('source_type', 'program_point')
+        $orphans = EventSettlementCost::query()
+            ->whereIn('source_type', ['program_point', 'program_point_payment'])
             ->whereNotNull('source_id')
             ->whereNotIn('source_id', EventProgramPoint::withTrashed()->select('id'))
-            ->count();
+            ->orderByRaw("CASE WHEN source_type = 'program_point' THEN 0 ELSE 1 END")
+            ->get();
 
-        $orphanPayments = EventSettlementCost::query()
-            ->where('source_type', 'program_point_payment')
-            ->whereNotNull('source_id')
-            ->whereNotIn('source_id', EventProgramPoint::withTrashed()->select('id'))
-            ->count();
+        $preserved = $orphans->filter(fn (EventSettlementCost $cost): bool => $cost->mustBePreserved());
+        $prunable = $orphans->reject(fn (EventSettlementCost $cost): bool => $cost->mustBePreserved());
 
-        $this->info("Orphan program_point costs: {$orphanProgramCosts}");
-        $this->info("Orphan program_point_payment rows: {$orphanPayments}");
+        $this->info('Orphan settlement rows: '.$orphans->count());
+        $this->info('With payments (kept): '.$preserved->count());
+        $this->info('Empty (prunable): '.$prunable->count());
 
         if ($dryRun) {
             return self::SUCCESS;
         }
 
-        DB::transaction(function (): void {
-            EventSettlementCost::query()
-                ->whereIn('source_type', ['program_point', 'program_point_payment'])
-                ->whereNotNull('source_id')
-                ->whereNotIn('source_id', EventProgramPoint::withTrashed()->select('id'))
-                ->delete();
+        DB::transaction(function () use ($orphans): void {
+            foreach ($orphans as $cost) {
+                $cost->discardIfNotPreserved('osierocony po usunięciu punktu');
+            }
         });
 
-        $this->info('Orphan settlement rows pruned.');
+        $this->info('Empty orphan settlement rows pruned. Payments were kept.');
 
         return self::SUCCESS;
     }

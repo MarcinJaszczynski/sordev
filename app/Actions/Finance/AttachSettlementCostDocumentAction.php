@@ -102,12 +102,18 @@ final class AttachSettlementCostDocumentAction
             throw new InvalidArgumentException('Dokument nie jest powiązany z tą pozycją.');
         }
 
+        $settlement = $planCost->settlement;
+
+        // Polisa zsynchronizowana z Operacji: kasuj źródło + cały dokument (nie tylko unlink jednego dnia).
+        $clearedSyncedPolicy = app(\App\Services\EventInsurancePolicySettlementSync::class)
+            ->clearSourceAfterSettlementDocumentDeleted($document);
+
         $remaining = array_values(array_filter(
             $linked,
             fn (int $id): bool => $id !== (int) $planCost->id,
         ));
 
-        if ($remaining === []) {
+        if ($clearedSyncedPolicy || $remaining === []) {
             foreach ($document->files ?? [] as $path) {
                 if (is_string($path) && $path !== '') {
                     Storage::disk('public')->delete($path);
@@ -115,9 +121,17 @@ final class AttachSettlementCostDocumentAction
             }
             $document->delete();
 
+            if ($settlement?->event_id) {
+                \App\Services\EventFinanceOverviewService::forgetOverviewCacheForEvent((int) $settlement->event_id);
+            }
+
             return;
         }
 
         $document->update(['linked_cost_ids' => $remaining]);
+
+        if ($settlement?->event_id) {
+            \App\Services\EventFinanceOverviewService::forgetOverviewCacheForEvent((int) $settlement->event_id);
+        }
     }
 }

@@ -12,6 +12,7 @@ class EventDayInsurance extends Model
         'event_id',
         'day',
         'insurance_id',
+        'event_insurance_policy_id',
         'is_done',
     ];
 
@@ -27,5 +28,10 @@ class EventDayInsurance extends Model
     public function insurance()
     {
         return $this->belongsTo(Insurance::class);
+    }
+
+    public function policy()
+    {
+        return $this->belongsTo(EventInsurancePolicy::class, 'event_insurance_policy_id');
     }
 }

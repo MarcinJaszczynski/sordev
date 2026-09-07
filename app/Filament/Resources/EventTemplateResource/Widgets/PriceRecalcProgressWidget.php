@@ -4,14 +4,13 @@ namespace App\Filament\Resources\EventTemplateResource\Widgets;
 
 use App\Services\PriceRecalcProgress;
 use Filament\Widgets\Widget;
-use Illuminate\Contracts\View\View;
 use Illuminate\Support\Facades\Auth;
 
 class PriceRecalcProgressWidget extends Widget
 {
     protected static string $view = 'filament.resources.event-template-resource.widgets.price-recalc-progress-widget';
 
-    protected static bool $isLazy = false;
+    protected static bool $isLazy = true;
 
     public $progress = [];
 
@@ -27,20 +26,22 @@ class PriceRecalcProgressWidget extends Widget
 
     protected int|string|array $columnSpan = 1;
 
-    // Livewire polling every 5 seconds
-    protected static ?int $pollingInterval = 5;
+    /** Poll tylko gdy trwa przeliczanie — bez zbędnych requestów Livewire na liście szablonów. */
+    protected function getPollingInterval(): ?string
+    {
+        if ($this->dismissed) {
+            return null;
+        }
+
+        $total = $this->progress['total'] ?? 0;
+        $finished = $this->progress['finished'] ?? false;
+
+        return ($total > 0 && ! $finished) ? '5s' : null;
+    }
 
     public function mount()
     {
         $this->refreshProgress();
-    }
-
-    public function render(): View
-    {
-        // ensure progress is fresh on each render
-        $this->refreshProgress();
-
-        return view(static::$view);
     }
 
     public function refreshProgress(): void

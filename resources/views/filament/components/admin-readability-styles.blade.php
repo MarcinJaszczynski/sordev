@@ -1,19 +1,27 @@
 <style>
+    /*
+     * Typografia zaplecza — wzorzec: Operacje (Transport/Hotele/Pilot), wartości w px.
+     * Wcześniej rem × rosnący --admin-root-font dawało podwójne skalowanie
+     * (np. body ~16–19px przy root 16–19px zamiast faktycznych 13px z mockupu).
+     * Tokeny są w px (jak Operacje); root zostaje lekko skalowany tylko pod Tailwind rem.
+     *
+     * Referencja desktop (≥768): body/input/cell 13px, label 12px, helper/th 11px, heading 15px.
+     */
     :root {
         --admin-root-font: 14px;
         --admin-line-height: 1.5;
-        --admin-body-size: 0.95rem;
-        --admin-input-size: 0.95rem;
-        --admin-label-size: 0.9rem;
-        --admin-helper-size: 0.82rem;
-        --admin-heading-size: 1.08rem;
-        --admin-table-cell-size: 0.9rem;
-        --admin-table-header-size: 0.78rem;
-        --admin-sidebar-label-size: 0.92rem;
-        --admin-topbar-size: 0.9rem;
+        --admin-body-size: 12.5px;
+        --admin-input-size: 12.5px;
+        --admin-label-size: 11.5px;
+        --admin-helper-size: 11px;
+        --admin-heading-size: 14px;
+        --admin-table-cell-size: 12.5px;
+        --admin-table-header-size: 10.5px;
+        --admin-sidebar-label-size: 12.5px;
+        --admin-topbar-size: 12.5px;
         --admin-table-min-width: 36rem;
         --admin-column-min-width: 18rem;
-        --admin-touch-min: 2.75rem;
+        --admin-touch-min: 38px;
 
         /* SOR41 design tokens — docs/DESIGN_SYSTEM.md */
         --sor-brand-primary: #B45309;
@@ -34,6 +42,7 @@
         --sor-module-finance: #059669;
         --sor-module-executive: #7C3AED;
         --sor-module-contacts: #0891B2;
+        --sor-module-people: #C2410C;
         --sor-module-dictionaries: #64748B;
         --sor-module-system: #475569;
         --sor-module-pilot-trips: #0D9488;
@@ -76,106 +85,107 @@
         --sor-field-placeholder: #a1a1aa;
     }
 
-    @media (min-width: 1024px) and (max-width: 1439.98px) {
-        :root {
-            --admin-root-font: 15px;
-            --admin-body-size: 0.97rem;
-            --admin-input-size: 0.97rem;
-            --admin-label-size: 0.93rem;
-            --admin-heading-size: 1.14rem;
-            --admin-table-cell-size: 0.91rem;
-            --admin-table-header-size: 0.81rem;
-            --admin-table-min-width: 42rem;
-            --admin-column-min-width: 17rem;
-        }
-    }
-
+    /* ≥640: lekko bliżej skali Operacji */
     @media (min-width: 640px) {
         :root {
-            --admin-root-font: 15px;
-            --admin-body-size: 0.96rem;
-            --admin-input-size: 0.96rem;
-            --admin-label-size: 0.91rem;
-            --admin-heading-size: 1.12rem;
-            --admin-table-cell-size: 0.92rem;
-            --admin-table-header-size: 0.8rem;
-            --admin-topbar-size: 0.92rem;
+            --admin-root-font: 14px;
+            --admin-body-size: 12.5px;
+            --admin-input-size: 12.5px;
+            --admin-label-size: 12px;
+            --admin-helper-size: 11px;
+            --admin-heading-size: 14.5px;
+            --admin-table-cell-size: 12.5px;
+            --admin-table-header-size: 11px;
+            --admin-sidebar-label-size: 12.5px;
+            --admin-topbar-size: 12.5px;
             --admin-table-min-width: 40rem;
         }
     }
 
+    /* ≥768: referencja Operacji (faktyczne px z mockupu / transport-page-styles) */
     @media (min-width: 768px) {
         :root {
-            --admin-root-font: 15px;
-            --admin-body-size: 0.98rem;
-            --admin-input-size: 0.98rem;
-            --admin-label-size: 0.94rem;
-            --admin-helper-size: 0.84rem;
-            --admin-heading-size: 1.16rem;
-            --admin-table-cell-size: 0.94rem;
-            --admin-table-header-size: 0.82rem;
-            --admin-sidebar-label-size: 0.95rem;
-            --admin-topbar-size: 0.94rem;
+            --admin-root-font: 14px;
+            --admin-body-size: 13px;
+            --admin-input-size: 13px;
+            --admin-label-size: 12px;
+            --admin-helper-size: 11px;
+            --admin-heading-size: 15px;
+            --admin-table-cell-size: 13px;
+            --admin-table-header-size: 11px;
+            --admin-sidebar-label-size: 13px;
+            --admin-topbar-size: 13px;
             --admin-table-min-width: 44rem;
             --admin-column-min-width: 19rem;
         }
     }
 
+    /* ≥1280: ta sama skala typografii, szerszy layout */
     @media (min-width: 1280px) {
         :root {
-            --admin-root-font: 16px;
-            --admin-body-size: 1rem;
-            --admin-input-size: 1rem;
-            --admin-label-size: 0.96rem;
-            --admin-helper-size: 0.86rem;
-            --admin-heading-size: 1.22rem;
-            --admin-table-cell-size: 0.96rem;
-            --admin-table-header-size: 0.84rem;
-            --admin-sidebar-label-size: 0.97rem;
-            --admin-topbar-size: 0.96rem;
+            --admin-root-font: 14px;
+            --admin-body-size: 13px;
+            --admin-input-size: 13px;
+            --admin-label-size: 12px;
+            --admin-helper-size: 11.5px;
+            --admin-heading-size: 15px;
+            --admin-table-cell-size: 13px;
+            --admin-table-header-size: 11px;
+            --admin-sidebar-label-size: 13px;
+            --admin-topbar-size: 13px;
             --admin-table-min-width: 48rem;
             --admin-column-min-width: 20rem;
         }
     }
 
+    /* ≥1536: +0.5px względem referencji */
     @media (min-width: 1536px) {
         :root {
-            --admin-root-font: 17px;
-            --admin-body-size: 1.02rem;
-            --admin-input-size: 1rem;
-            --admin-label-size: 0.97rem;
-            --admin-heading-size: 1.26rem;
-            --admin-table-cell-size: 0.98rem;
-            --admin-table-header-size: 0.86rem;
+            --admin-root-font: 15px;
+            --admin-body-size: 13.5px;
+            --admin-input-size: 13.5px;
+            --admin-label-size: 12.5px;
+            --admin-helper-size: 12px;
+            --admin-heading-size: 15.5px;
+            --admin-table-cell-size: 13.5px;
+            --admin-table-header-size: 11.5px;
+            --admin-sidebar-label-size: 13.5px;
+            --admin-topbar-size: 13.5px;
             --admin-table-min-width: 52rem;
         }
     }
 
+    /* ≥2560: +1px względem referencji (czytelność na dużym monitorze, bez puchnięcia do ~19px) */
     @media (min-width: 2560px) {
         :root {
-            --admin-root-font: 18px;
-            --admin-body-size: 1.06rem;
-            --admin-input-size: 1.04rem;
-            --admin-label-size: 1rem;
-            --admin-helper-size: 0.9rem;
-            --admin-heading-size: 1.34rem;
-            --admin-table-cell-size: 1rem;
-            --admin-table-header-size: 0.9rem;
-            --admin-sidebar-label-size: 1rem;
-            --admin-topbar-size: 1rem;
+            --admin-root-font: 15px;
+            --admin-body-size: 14px;
+            --admin-input-size: 14px;
+            --admin-label-size: 13px;
+            --admin-helper-size: 12px;
+            --admin-heading-size: 16px;
+            --admin-table-cell-size: 14px;
+            --admin-table-header-size: 12px;
+            --admin-sidebar-label-size: 14px;
+            --admin-topbar-size: 14px;
             --admin-table-min-width: 56rem;
             --admin-column-min-width: 22rem;
         }
     }
 
+    /* ≥3840: +1.5px względem referencji */
     @media (min-width: 3840px) {
         :root {
-            --admin-root-font: 19px;
-            --admin-body-size: 1.08rem;
-            --admin-input-size: 1.06rem;
-            --admin-heading-size: 1.4rem;
-            --admin-table-cell-size: 1.02rem;
-            --admin-table-header-size: 0.92rem;
+            --admin-root-font: 16px;
+            --admin-body-size: 14.5px;
+            --admin-input-size: 14.5px;
+            --admin-label-size: 13.5px;
+            --admin-helper-size: 12.5px;
+            --admin-heading-size: 17px;
+            --admin-table-cell-size: 14.5px;
+            --admin-table-header-size: 12.5px;
+            --admin-sidebar-label-size: 14.5px;
+            --admin-topbar-size: 14.5px;
         }
     }
 
@@ -220,6 +230,30 @@
         font-size: var(--admin-body-size);
         line-height: var(--admin-line-height);
         /* overflow-x intentionally omitted: hiding it blocks child table scrollbars */
+    }
+
+    /*
+     * Utility Tailwind w treści zaplecza → ta sama skala co tokeny.
+     * (text-sm/xs to rem od html; przy starym root 16–19px puchły vs Operacje 13/12px)
+     */
+    .fi-main .text-xs,
+    .fi-modal-window .text-xs,
+    .fi-main .text-\[11px\],
+    .fi-main .text-\[12px\] {
+        font-size: var(--admin-helper-size) !important;
+    }
+
+    .fi-main .text-sm,
+    .fi-modal-window .text-sm,
+    .fi-main .text-\[13px\],
+    .fi-main .text-base,
+    .fi-modal-window .text-base {
+        font-size: var(--admin-body-size) !important;
+    }
+
+    .fi-main .text-lg,
+    .fi-modal-window .text-lg {
+        font-size: var(--admin-heading-size) !important;
     }
 
     .fi-page,
@@ -948,37 +982,176 @@
 
     .fi-page:has(.admin-program-toolbar) .fi-resource-relation-managers .fi-ta-table {
         width: 100%;
-        min-width: 52rem;
+        min-width: 0;
         table-layout: auto;
     }
 
+    /* ===== Program point rows — soft card look (table, pełne dane) ===== */
+    .fi-page:has(.admin-program-toolbar) .fi-resource-relation-managers .fi-ta-table {
+        border-collapse: separate;
+        border-spacing: 0 0.5rem;
+    }
+
+    .fi-page:has(.admin-program-toolbar) .fi-ta-row.epp-program-row > td {
+        background: #fff !important;
+        border-top: 1px solid #e5e3da;
+        border-bottom: 1px solid #e5e3da;
+        transition: background 0.15s, border-color 0.15s;
+        overflow: hidden;
+    }
+
+    .fi-page:has(.admin-program-toolbar) .fi-ta-cell.epp-name-col {
+        overflow: hidden !important;
+    }
+
+    .fi-page:has(.admin-program-toolbar) .fi-ta-cell.epp-name-col:has(.epp-name-cell--has-set-preview) {
+        overflow: visible !important;
+    }
+
+    .fi-page:has(.admin-program-toolbar) .fi-ta-row.epp-program-row > td:first-child {
+        border-left: 1px solid #e5e3da;
+        border-radius: 0.75rem 0 0 0.75rem;
+    }
+
+    .fi-page:has(.admin-program-toolbar) .fi-ta-row.epp-program-row > td:last-child {
+        border-right: 1px solid #e5e3da;
+        border-radius: 0 0.75rem 0.75rem 0;
+    }
+
+    .fi-page:has(.admin-program-toolbar) .fi-ta-row.epp-program-row:hover > td {
+        background: #fafaf8 !important;
+        border-color: #d3d1c7;
+    }
+
+    .dark .fi-page:has(.admin-program-toolbar) .fi-ta-row.epp-program-row > td {
+        background: rgb(var(--gray-900)) !important;
+        border-color: rgb(var(--gray-700));
+    }
+
+    .fi-page:has(.admin-program-toolbar) .fi-ta-reorder-handle {
+        min-width: 2.75rem;
+        min-height: 2.75rem;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+    }
+
+    .fi-page:has(.admin-program-toolbar) .sortable-ghost,
+    .fi-page:has(.admin-program-toolbar) .fi-ta-row.sortable-ghost {
+        opacity: 0.55 !important;
+    }
+
+    .fi-page:has(.admin-program-toolbar) .sortable-drag,
+    .fi-page:has(.admin-program-toolbar) .fi-ta-row.sortable-drag {
+        opacity: 0.95 !important;
+    }
+
+    /* Program: ta sama skala co reszta zaplecza (wzorzec Operacje) */
+    .fi-page:has(.admin-program-toolbar) .fi-resource-relation-managers .fi-ta-cell,
+    .fi-page:has(.admin-program-toolbar) .fi-resource-relation-managers .fi-ta-cell * {
+        font-size: var(--admin-table-cell-size) !important;
+        line-height: 1.35 !important;
+    }
+
+    .fi-page:has(.admin-program-toolbar) .fi-resource-relation-managers .fi-ta-table th,
+    .fi-page:has(.admin-program-toolbar) .fi-resource-relation-managers .fi-ta-table td {
+        vertical-align: top;
+        padding-top: 0.4rem;
+        padding-bottom: 0.4rem;
+    }
+
+    .fi-page:has(.admin-program-toolbar) .fi-resource-relation-managers .fi-ta-header-cell,
+    .fi-page:has(.admin-program-toolbar) .fi-resource-relation-managers .fi-ta-header-cell * {
+        font-size: var(--admin-table-header-size) !important;
+        font-weight: 700 !important;
+    }
+
+    /* Nazwa + kontrahent / rez / płatność — ciasny layout listy programu */
     .fi-page:has(.admin-program-toolbar) .fi-resource-relation-managers .fi-ta-cell.epp-name-col,
     .fi-ta-cell.epp-name-col {
-        width: 28%;
-        min-width: 12rem;
-        max-width: 22rem;
+        width: 12rem !important;
+        min-width: 10rem !important;
+        max-width: 14rem !important;
         white-space: normal !important;
         word-break: break-word !important;
         overflow-wrap: anywhere;
     }
 
-    .fi-page:has(.admin-program-toolbar) .fi-resource-relation-managers .fi-ta-cell.epp-finance-col,
-    .fi-ta-cell.epp-finance-col {
-        width: 22%;
-        min-width: 12.5rem;
-        max-width: 20rem;
+    .fi-page:has(.admin-program-toolbar) .fi-resource-relation-managers .fi-ta-cell.epp-contractor-col,
+    .fi-ta-cell.epp-contractor-col {
+        width: 7.5rem !important;
+        min-width: 6.5rem !important;
+        max-width: 9rem !important;
         white-space: normal !important;
         word-break: break-word !important;
         overflow-wrap: anywhere;
         vertical-align: top;
     }
 
+    .fi-page:has(.admin-program-toolbar) .fi-resource-relation-managers .fi-ta-cell.epp-rez-col,
+    .fi-ta-cell.epp-rez-col {
+        width: 5.5rem !important;
+        min-width: 4.75rem !important;
+        max-width: 6.5rem !important;
+        white-space: normal !important;
+        overflow: hidden !important;
+    }
+
+    .fi-page:has(.admin-program-toolbar) .fi-resource-relation-managers .fi-ta-cell.epp-pay-col,
+    .fi-ta-cell.epp-pay-col {
+        width: 9.5rem !important;
+        min-width: 8rem !important;
+        max-width: 11rem !important;
+        white-space: normal !important;
+        overflow: hidden !important;
+        vertical-align: top;
+    }
+
+    .fi-page:has(.admin-program-toolbar) .fi-resource-relation-managers .fi-ta-cell.epp-finance-col,
+    .fi-ta-cell.epp-finance-col {
+        width: 7.25rem !important;
+        min-width: 6.75rem !important;
+        max-width: 8.25rem !important;
+        white-space: nowrap !important;
+        word-break: normal !important;
+        overflow-wrap: normal !important;
+        overflow: hidden !important;
+        vertical-align: top;
+    }
+
     .epp-ops--finance {
         margin-top: 0;
+        font-size: 0.65rem !important;
+        line-height: 1.3 !important;
+        min-width: 0;
+        width: 100%;
+    }
+
+    .epp-ops--finance .epp-ops__row {
+        display: flex;
+        align-items: baseline;
+        justify-content: space-between;
+        gap: 0.3rem;
+        min-width: 0;
     }
 
     .epp-ops--finance .epp-ops__label {
-        min-width: 5.5rem;
+        min-width: 0.7rem;
+        width: 0.7rem;
+        flex-shrink: 0;
+        color: #888780;
+        font-weight: 700;
+        letter-spacing: 0;
+        text-transform: none;
+    }
+
+    .epp-ops--finance .tabular-nums {
+        text-align: right;
+        white-space: nowrap;
+        font-variant-numeric: tabular-nums;
+        min-width: 0;
+        overflow: hidden;
+        text-overflow: ellipsis;
     }
 
     .fi-page:has(.admin-program-toolbar) .fi-resource-relation-managers .fi-ta-cell.epp-money-col,
@@ -996,9 +1169,55 @@
         white-space: nowrap !important;
         word-break: normal !important;
         overflow-wrap: normal !important;
-        width: 1%;
-        min-width: 7.5rem;
-        vertical-align: middle;
+        width: 4.5rem;
+        min-width: 4.25rem;
+        max-width: 5rem;
+        vertical-align: top;
+        text-align: center;
+    }
+
+    .fi-page:has(.admin-program-toolbar) .fi-resource-relation-managers .fi-ta-cell.epp-payer-col,
+    .fi-ta-cell.epp-payer-col {
+        width: 5rem !important;
+        min-width: 4.75rem !important;
+        max-width: 5.5rem !important;
+        vertical-align: top;
+        padding-top: 0.35rem !important;
+        padding-bottom: 0.35rem !important;
+        overflow: hidden !important;
+    }
+
+    /* Filament SelectColumn dokłada min-w-48 — bez tego kolumna rozpycha całą tabelę. */
+    .fi-page:has(.admin-program-toolbar) .fi-resource-relation-managers .fi-ta-cell.epp-payer-col .fi-ta-select,
+    .fi-ta-cell.epp-payer-col .fi-ta-select,
+    .fi-page:has(.admin-program-toolbar) .fi-resource-relation-managers .fi-ta-select.epp-payer-col,
+    .fi-ta-select.epp-payer-col {
+        min-width: 0 !important;
+        width: 100% !important;
+        max-width: 100% !important;
+        padding-inline: 0.35rem !important;
+    }
+
+    .fi-page:has(.admin-program-toolbar) .fi-resource-relation-managers .fi-ta-cell.epp-payer-col .fi-select-input,
+    .fi-page:has(.admin-program-toolbar) .fi-resource-relation-managers .fi-ta-cell.epp-payer-col select,
+    .fi-ta-cell.epp-payer-col .fi-select-input,
+    .fi-ta-cell.epp-payer-col select {
+        max-width: 100%;
+        min-width: 0 !important;
+        min-height: 1.65rem !important;
+        height: 1.65rem !important;
+        padding: 0.1rem 0.35rem !important;
+        font-size: var(--admin-helper-size) !important;
+        line-height: 1.25 !important;
+        border-radius: 6px !important;
+    }
+
+    .fi-page:has(.admin-program-toolbar) .fi-resource-relation-managers .fi-ta-cell.epp-payer-col .fi-input-wrp,
+    .fi-ta-cell.epp-payer-col .fi-input-wrp {
+        min-width: 0 !important;
+        width: 100% !important;
+        min-height: 1.65rem !important;
+        height: 1.65rem !important;
     }
 
     .fi-page:has(.admin-program-toolbar) .fi-resource-relation-managers .fi-dropdown-panel {
@@ -1204,7 +1423,7 @@
     }
 
     .fi-ta-row.epp-table-row--set-parent .epp-title {
-        font-size: 0.98rem;
+        font-size: 0.8125rem;
         color: #0f172a;
     }
 
@@ -1256,10 +1475,531 @@
     .epp-name-cell {
         display: flex;
         flex-direction: column;
-        gap: 0.28rem;
+        gap: 0.2rem;
         min-width: 0;
-        max-width: 22rem;
+        max-width: 100%;
         position: relative;
+    }
+
+    .epp-name-time {
+        display: inline-flex;
+        align-items: baseline;
+        gap: 0.15rem;
+        font-size: var(--admin-helper-size);
+        line-height: 1.25;
+        color: #5f5e5a;
+        font-variant-numeric: tabular-nums;
+        white-space: nowrap;
+    }
+
+    .epp-name-time__end,
+    .epp-name-time__sep {
+        color: #888780;
+    }
+
+    .dark .epp-name-time {
+        color: #a1a1aa;
+    }
+
+    .dark .epp-name-time__end,
+    .dark .epp-name-time__sep {
+        color: #71717a;
+    }
+
+    .epp-title-row {
+        display: flex;
+        flex-wrap: wrap;
+        align-items: center;
+        gap: 0.3rem 0.4rem;
+        min-width: 0;
+    }
+
+    .epp-title {
+        font-size: 0.78rem !important;
+        font-weight: 650 !important;
+        line-height: 1.3 !important;
+        color: #2c2c2a;
+        word-break: break-word;
+    }
+
+    .dark .epp-title {
+        color: #f5f5f4;
+    }
+
+    .epp-scope-pills {
+        display: inline-flex;
+        flex-wrap: wrap;
+        align-items: center;
+        gap: 0.15rem;
+        flex-shrink: 0;
+    }
+
+    .epp-mini-pill {
+        display: inline-flex;
+        align-items: center;
+        border-radius: 999px;
+        border: 1px solid transparent;
+        font-size: 0.55rem !important;
+        font-weight: 600 !important;
+        line-height: 1.15 !important;
+        padding: 0.06rem 0.32rem;
+        white-space: nowrap;
+        text-transform: lowercase;
+    }
+
+    .epp-mini-pill--program.epp-mini-pill--on {
+        border-color: #93c5fd;
+        background: #dbeafe;
+        color: #1d4ed8;
+    }
+
+    .epp-mini-pill--program.epp-mini-pill--off {
+        border-color: #dbeafe;
+        background: #f8fafc;
+        color: #93c5fd;
+        opacity: 0.9;
+    }
+
+    .epp-mini-pill--cost.epp-mini-pill--on {
+        border-color: #fdba74;
+        background: #ffedd5;
+        color: #c2410c;
+    }
+
+    .epp-mini-pill--cost.epp-mini-pill--off {
+        border-color: #ffedd5;
+        background: #fffaf5;
+        color: #fdba74;
+        opacity: 0.9;
+    }
+
+    .dark .epp-mini-pill--program.epp-mini-pill--on {
+        border-color: #3b82f6;
+        background: rgba(59, 130, 246, 0.18);
+        color: #93c5fd;
+    }
+
+    .dark .epp-mini-pill--cost.epp-mini-pill--on {
+        border-color: #f97316;
+        background: rgba(249, 115, 22, 0.18);
+        color: #fdba74;
+    }
+
+    .epp-mini-pill--on {
+        /* legacy no-op — kolory per program/cost */
+    }
+
+    .epp-mini-pill--off {
+        /* legacy no-op — kolory per program/cost */
+    }
+
+    .epp-point-sub {
+        margin: 0;
+        font-size: 0.68rem !important;
+        line-height: 1.35 !important;
+        font-weight: 400 !important;
+        color: #6b7280;
+        white-space: normal;
+        word-break: break-word;
+        overflow-wrap: anywhere;
+        max-width: 100%;
+        display: -webkit-box;
+        -webkit-box-orient: vertical;
+        -webkit-line-clamp: 3;
+        overflow: hidden;
+    }
+
+    .epp-contractor-cell {
+        display: flex;
+        flex-direction: column;
+        gap: 0.1rem;
+        font-size: 0.72rem !important;
+        line-height: 1.35 !important;
+        color: #2c2c2a;
+        font-weight: 500 !important;
+        white-space: normal;
+        word-break: break-word;
+        overflow-wrap: anywhere;
+        min-width: 0;
+        max-width: 100%;
+    }
+
+    .dark .epp-contractor-cell {
+        color: #f5f5f4;
+    }
+
+    .epp-contractor-cell--link {
+        text-decoration: none;
+        color: #1d4ed8;
+        transition: color 0.12s;
+    }
+
+    .epp-contractor-cell--link:hover {
+        color: #1e40af;
+        text-decoration: underline;
+    }
+
+    .dark .epp-contractor-cell--link {
+        color: #93c5fd;
+    }
+
+    .epp-contractor-cell__name {
+        font-weight: 600 !important;
+        font-size: 0.72rem !important;
+    }
+
+    .epp-contractor-cell__meta {
+        display: flex;
+        flex-direction: column;
+        gap: 0.05rem;
+        font-size: 0.65rem !important;
+        font-weight: 400 !important;
+        color: #6b7280;
+        line-height: 1.3 !important;
+    }
+
+    .dark .epp-contractor-cell__meta {
+        color: #9ca3af;
+    }
+
+    .epp-contractor-cell--muted {
+        color: #b0aea5;
+        font-weight: 400;
+    }
+
+    .epp-contractor-cell--missing {
+        display: none;
+    }
+
+    .epp-meta--compact {
+        font-size: 0.72rem;
+        line-height: 1.3;
+        color: #5f5e5a;
+        font-weight: 500;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        max-width: 100%;
+    }
+
+    .epp-meta__label {
+        font-weight: 700;
+        color: #888780;
+        margin-right: 0.15rem;
+    }
+
+    .epp-meta--missing {
+        color: #a16207;
+        font-weight: 600;
+    }
+
+    .epp-name-actions {
+        margin-top: 0.15rem;
+    }
+
+    .epp-task-btn {
+        display: inline-flex;
+        align-items: center;
+        border-radius: 999px;
+        border: 1px solid #d3d1c7;
+        background: #fff;
+        padding: 0.05rem 0.35rem;
+        font-size: 0.55rem !important;
+        font-weight: 600 !important;
+        color: #5f5e5a;
+        line-height: 1.15 !important;
+        flex-shrink: 0;
+    }
+
+    .epp-task-btn:hover {
+        background: #f1efe8;
+    }
+
+    .epp-scope--inline {
+        margin-top: 0.05rem;
+        gap: 0.25rem;
+    }
+
+    .epp-scope--inline .epp-scope-chip {
+        font-size: 0.625rem;
+        padding: 0.1rem 0.4rem;
+        border-radius: 0.35rem;
+    }
+
+    .epp-time-cell {
+        display: flex;
+        flex-direction: column;
+        gap: 0.05rem;
+        font-size: 0.6875rem;
+        line-height: 1.3;
+        color: #5f5e5a;
+        font-variant-numeric: tabular-nums;
+        white-space: nowrap;
+    }
+
+    .epp-time-cell--muted,
+    .epp-time-cell__end {
+        color: #888780;
+    }
+
+    .fi-ta-cell.epp-time-col {
+        width: 3.75rem;
+        min-width: 3.75rem;
+        max-width: 4rem;
+        vertical-align: top;
+    }
+
+    /* (duplikat szerokości — trzymamy spójnie z blokiem programu powyżej) */
+    .fi-ta-cell.epp-status-col {
+        vertical-align: top;
+        white-space: normal !important;
+    }
+
+    .epp-pay-status,
+    .epp-rez-status {
+        display: flex;
+        flex-direction: column;
+        align-items: flex-start;
+        gap: 0.2rem;
+        min-width: 0;
+        max-width: 100%;
+    }
+
+    .epp-pay-status__meta,
+    .epp-rez-status__deadline {
+        font-size: 0.68rem !important;
+        line-height: 1.35 !important;
+        color: #5f5e5a;
+        white-space: normal;
+        word-break: break-word;
+        overflow-wrap: anywhere;
+        max-width: 100%;
+    }
+
+    /* zielony = zapłacone / OK */
+    .epp-pay-status__meta--paid {
+        color: #166534;
+        background: #dcfce7;
+        font-weight: 700;
+        padding: 0.05rem 0.3rem;
+        border-radius: 0.3rem;
+    }
+
+    /* pomarańczowy = do zapłaty w terminie / częściowo */
+    .epp-pay-status__meta--pending,
+    .epp-pay-status__meta--warn {
+        color: #c2410c;
+        font-weight: 600;
+    }
+
+    /* niebieski = reszta / zobowiązanie pilota */
+    .epp-pay-status__meta--pilot {
+        color: #1d4ed8;
+        font-weight: 700;
+    }
+
+    /* czerwony = zaległość / po terminie */
+    .epp-pay-status__meta--due {
+        color: #b91c1c;
+        font-weight: 700;
+    }
+
+    .epp-card__meta-line--paid {
+        color: #27500a;
+        background: #eaf3de;
+        font-weight: 700;
+        padding: 0.05rem 0.3rem;
+        border-radius: 0.3rem;
+        display: inline-block;
+    }
+
+    .epp-card__meta-line--pilot {
+        color: #1d4ed8;
+        font-weight: 700;
+    }
+
+    .epp-card__meta-line--warn {
+        color: #b45309;
+        font-weight: 600;
+    }
+
+    .epp-card__meta-line--due {
+        color: #791f1f;
+        font-weight: 600;
+    }
+
+    .epp-card__meta-line--pending {
+        color: #633806;
+        font-weight: 600;
+    }
+
+    .epp-status-pill {
+        display: inline-block;
+        font-size: 0.65rem !important;
+        font-weight: 600 !important;
+        line-height: 1.3 !important;
+        padding: 0.1rem 0.38rem;
+        border-radius: 0.4rem;
+        white-space: nowrap;
+    }
+
+    .epp-status-pill--danger {
+        background: #fcebeb;
+        color: #791f1f;
+    }
+
+    .epp-status-pill--success {
+        background: #eaf3de;
+        color: #27500a;
+    }
+
+    .epp-status-pill--warning {
+        background: #faeeda;
+        color: #633806;
+    }
+
+    .epp-status-pill--neutral {
+        background: #f1efe8;
+        color: #5f5e5a;
+    }
+
+    .epp-ops__due {
+        color: #888780;
+        font-weight: 500;
+    }
+
+    .epp-rez-status__deadline {
+        font-size: 0.625rem;
+        line-height: 1.35;
+        color: #5f5e5a;
+        white-space: normal;
+        word-break: break-word;
+    }
+
+    .epp-rez-status__deadline--due {
+        color: #791f1f;
+        font-weight: 600;
+    }
+
+    .epp-rez-status__deadline--ok {
+        color: #27500a;
+    }
+
+    .fi-ta-cell.epp-rez-col,
+    .fi-ta-cell.epp-due-col,
+    .fi-ta-cell.epp-notes-col {
+        vertical-align: top;
+        white-space: normal !important;
+    }
+
+    .fi-ta-cell.epp-due-col {
+        min-width: 9rem;
+        max-width: 14rem;
+    }
+
+    .fi-ta-cell.epp-notes-col {
+        min-width: 5rem !important;
+        max-width: 7rem !important;
+        width: 5.5rem !important;
+    }
+
+    .epp-notes-preview {
+        max-width: 100%;
+        min-width: 0;
+    }
+
+    .epp-notes-preview__list {
+        display: flex;
+        flex-direction: column;
+        gap: 0.35rem;
+        min-width: 0;
+    }
+
+    .epp-notes-preview__item {
+        min-width: 0;
+    }
+
+    .epp-notes-preview__label {
+        font-size: 0.65rem;
+        font-weight: 600;
+        line-height: 1.2;
+        color: #4b5563;
+        margin-bottom: 0.05rem;
+    }
+
+    .dark .epp-notes-preview__label {
+        color: #d1d5db;
+    }
+
+    .epp-doc-icon {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        width: 1.75rem;
+        height: 1.75rem;
+        border-radius: 0.4rem;
+        text-decoration: none;
+    }
+
+    .epp-doc-icon__svg {
+        width: 1.05rem;
+        height: 1.05rem;
+    }
+
+    .epp-doc-icon--has {
+        color: #0c447c;
+        background: #e6f1fb;
+    }
+
+    .epp-doc-icon--has:hover {
+        background: #d6e8f8;
+    }
+
+    .epp-doc-icon--warn {
+        color: #633806;
+        background: #faeeda;
+    }
+
+    .epp-doc-icon--empty {
+        color: #888780;
+        background: #f1efe8;
+    }
+
+    .epp-doc-badge {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        max-width: 4.5rem;
+        padding: 0.15rem 0.4rem;
+        border-radius: 0.35rem;
+        font-size: 0.65rem;
+        font-weight: 700;
+        line-height: 1.15;
+        letter-spacing: 0.01em;
+        text-decoration: none;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+    }
+
+    .epp-doc-badge--has {
+        color: #0f5132;
+        background: #d1e7dd;
+    }
+
+    .epp-doc-badge--has:hover {
+        background: #badbcc;
+    }
+
+    .epp-doc-badge--warn {
+        color: #633806;
+        background: #faeeda;
+    }
+
+    .epp-doc-badge--empty {
+        color: #888780;
+        background: transparent;
+        font-weight: 500;
     }
 
     .epp-program-desc {
@@ -1637,14 +2377,14 @@
         display: flex;
         flex-wrap: wrap;
         align-items: center;
-        gap: 0.4rem 0.55rem;
+        gap: 0.3rem 0.4rem;
     }
 
     .epp-title {
-        font-size: 0.95rem;
-        font-weight: 700;
-        color: #0f172a;
-        line-height: 1.35;
+        font-size: 0.78rem !important;
+        font-weight: 650 !important;
+        color: #2c2c2a;
+        line-height: 1.3 !important;
         word-break: break-word;
     }
 
@@ -1740,8 +2480,10 @@
         font-weight: 600;
     }
 
+    /* zielony = pełna wpłata */
     .epp-ops__row--ok {
         color: #166534;
+        font-weight: 600;
     }
 
     .epp-ops__row--rez {
@@ -1749,12 +2491,16 @@
         font-weight: 700;
     }
 
+    /* pomarańczowy = plan ≠ szablon / częściowa wpłata */
     .epp-ops__row--warn {
-        color: #92400e;
+        color: #c2410c;
+        font-weight: 600;
     }
 
+    /* czerwony = zaległość */
     .epp-ops__row--due {
-        color: #9f1239;
+        color: #b91c1c;
+        font-weight: 600;
     }
 
     .epp-ops__row--muted {
@@ -1804,7 +2550,8 @@
     }
 
     .epp-finance-action {
-        min-width: 6.1rem;
+        min-width: 0;
+        padding-inline: 0.45rem !important;
         justify-content: center;
     }
 
@@ -2060,77 +2807,83 @@
         }
 
         .epp-title {
-            font-size: 0.9rem;
+            font-size: 0.78rem !important;
         }
     }
 
     .event-program-day-tree .epp-day-tabs,
     .admin-program-day-tabs.epp-day-tabs {
         display: flex;
-        flex-wrap: wrap;
-        gap: 0.25rem;
-        margin-bottom: 0.35rem;
-        padding-bottom: 0.35rem;
-        border-bottom: 1px solid #e2e8f0;
+        flex-wrap: nowrap;
+        gap: 0.375rem;
+        margin-bottom: 0.5rem;
+        padding-bottom: 0.5rem;
+        border-bottom: 1px solid #e5e3da;
+        overflow-x: auto;
+        scrollbar-width: thin;
     }
 
     .event-program-day-tree .epp-day-tab,
     .admin-program-day-tabs .epp-day-tab {
         display: inline-flex;
-        flex-direction: column;
-        align-items: flex-start;
-        gap: 0.05rem;
-        min-width: 4.75rem;
-        padding: 0.28rem 0.5rem;
-        border: 1px solid #e2e8f0;
-        border-radius: 0.4rem;
-        background: #fff;
-        color: #334155;
-        font-size: 0.72rem;
-        line-height: 1.15;
-        transition: border-color 0.15s, background 0.15s;
+        flex-direction: row;
+        flex-wrap: nowrap;
+        align-items: center;
+        gap: 0.35rem;
+        flex-shrink: 0;
+        min-width: 0;
+        padding: 0.375rem 0.75rem;
+        border: none;
+        border-radius: 9999px;
+        background: #f1efe8;
+        color: #5f5e5a;
+        font-size: 0.75rem;
+        line-height: 1.2;
+        transition: background 0.15s, color 0.15s;
     }
 
     .event-program-day-tree .epp-day-tab:hover,
     .admin-program-day-tabs .epp-day-tab:hover {
-        border-color: #93c5fd;
-        background: #f8fafc;
+        background: #e5e3da;
+        color: #2c2c2a;
     }
 
     .event-program-day-tree .epp-day-tab--active,
     .admin-program-day-tabs .epp-day-tab--active {
-        border-color: #3b82f6;
-        background: #eff6ff;
-        box-shadow: inset 0 0 0 1px #bfdbfe;
+        background: #2c2c2a;
+        color: #ffffff;
+        box-shadow: none;
+        border-color: transparent;
     }
 
     .event-program-day-tree .epp-day-tab__label,
     .admin-program-day-tabs .epp-day-tab__label {
-        font-weight: 700;
-        color: #1e3a8a;
+        font-weight: 600;
+        color: inherit;
     }
 
     .event-program-day-tree .epp-day-tab__date,
     .admin-program-day-tabs .epp-day-tab__date {
-        font-size: 0.68rem;
-        color: #64748b;
+        font-size: 0.72rem;
+        color: inherit;
+        opacity: 0.85;
     }
 
     .event-program-day-tree .epp-day-tab__count,
     .admin-program-day-tabs .epp-day-tab__count {
-        align-self: flex-end;
-        font-size: 0.65rem;
+        align-self: auto;
+        font-size: 0.6875rem;
         font-weight: 700;
-        padding: 0.05rem 0.35rem;
+        padding: 0.05rem 0.4rem;
         border-radius: 999px;
-        background: #e2e8f0;
-        color: #475569;
+        background: rgba(44, 44, 42, 0.08);
+        color: inherit;
     }
 
     .event-program-day-tree .epp-day-tab--active .epp-day-tab__count,
     .admin-program-day-tabs .epp-day-tab--active .epp-day-tab__count {
-        background: #dbeafe;
-        color: #1d4ed8;
+        background: rgba(255, 255, 255, 0.2);
+        color: #ffffff;
     }
 
     .admin-program-day-nav__hint {
@@ -2569,7 +3322,7 @@
     }
 
     .admin-table-title {
-        font-size: calc(var(--admin-body-size) + 0.08rem);
+        font-size: calc(var(--admin-body-size) + 1px);
         font-weight: 800;
         line-height: 1.3;
         color: #111827;
@@ -2588,7 +3341,7 @@
     }
 
     .admin-table-muted-label {
-        font-size: calc(var(--admin-helper-size) + 0.02rem);
+        font-size: calc(var(--admin-helper-size) + 0.5px);
         line-height: 1.3;
         color: #9ca3af;
     }
@@ -2598,7 +3351,7 @@
         width: fit-content;
         padding: 0.15rem 0.5rem;
         border-radius: 9999px;
-        font-size: calc(var(--admin-helper-size) + 0.06rem);
+        font-size: calc(var(--admin-helper-size) + 1px);
         font-weight: 700;
         line-height: 1.3;
     }
@@ -2837,11 +3590,11 @@
         pointer-events: none;
     }
 
-    /* Gotowość operacyjna — 5 kart w jednym rzędzie (telefon: kolumna).
+    /* Gotowość operacyjna — karty w jednym rzędzie (telefon: kolumna).
        !important: przebija utility Tailwind (grid-cols-1 / sm:grid-cols-2). */
     .event-readiness-overview {
         display: grid !important;
-        grid-template-columns: repeat(5, minmax(0, 1fr)) !important;
+        grid-template-columns: repeat(auto-fit, minmax(9.25rem, 1fr)) !important;
         gap: 0.55rem;
         width: 100%;
         align-items: stretch;
@@ -3042,7 +3795,9 @@
     }
 
     .event-list-status-cell--confirmed .fi-select-input,
-    .event-list-status-cell--confirmed select {
+    .event-list-status-cell--confirmed select,
+    .event-list-status-cell--odprawa_ok .fi-select-input,
+    .event-list-status-cell--odprawa_ok select {
         background: #d1fae5 !important;
         color: #047857 !important;
         border-color: #6ee7b7 !important;
@@ -3105,7 +3860,7 @@
     .finance-module-nav-item,
     .workflow-module-nav-item {
         text-decoration: none;
-        min-height: var(--admin-touch-min);
+        min-height: 0;
     }
 
     .workflow-module-nav {
@@ -3114,7 +3869,122 @@
         z-index: 20;
         max-width: 100%;
         background: linear-gradient(to bottom, var(--sor-surface-elevated) 85%, transparent);
-        padding-top: 0.25rem;
+        padding-top: 0.15rem;
+        margin-bottom: 0.65rem;
+    }
+
+    /* Chrome imprezy: breadcrumbs / zakładki / akcje — w rytmie paska informacyjnego */
+    .fi-page:has(.workflow-info-bar) .fi-breadcrumbs,
+    .fi-page:has(.workflow-info-bar) .fi-page-header .fi-breadcrumbs {
+        font-size: 0.75rem;
+        font-weight: 600;
+        gap: 0.35rem;
+        margin-bottom: 0.35rem;
+    }
+
+    .fi-page:has(.workflow-info-bar) .fi-breadcrumbs-item,
+    .fi-page:has(.workflow-info-bar) .fi-breadcrumbs-item-label,
+    .fi-page:has(.workflow-info-bar) .fi-breadcrumbs a {
+        font-size: 0.75rem;
+        font-weight: 600;
+        color: rgb(107 114 128);
+    }
+
+    .fi-page:has(.workflow-info-bar) .fi-breadcrumbs-item:last-child .fi-breadcrumbs-item-label,
+    .fi-page:has(.workflow-info-bar) .fi-breadcrumbs li:last-child {
+        color: rgb(17 24 39);
+        font-weight: 700;
+    }
+
+    .dark .fi-page:has(.workflow-info-bar) .fi-breadcrumbs-item:last-child .fi-breadcrumbs-item-label,
+    .dark .fi-page:has(.workflow-info-bar) .fi-breadcrumbs li:last-child {
+        color: rgb(243 244 246);
+    }
+
+    .fi-page:has(.workflow-info-bar) .fi-page-sub-navigation-tabs,
+    .fi-page:has(.workflow-info-bar) .fi-resource-sub-navigation {
+        margin-bottom: 0.5rem;
+    }
+
+    .fi-page:has(.workflow-info-bar) .fi-page-sub-navigation-tabs .fi-tabs,
+    .fi-page:has(.workflow-info-bar) .fi-resource-sub-navigation .fi-tabs {
+        gap: 0.35rem;
+        border-bottom: 1px solid rgb(243 244 246);
+        padding-bottom: 0.35rem;
+    }
+
+    .dark .fi-page:has(.workflow-info-bar) .fi-page-sub-navigation-tabs .fi-tabs,
+    .dark .fi-page:has(.workflow-info-bar) .fi-resource-sub-navigation .fi-tabs {
+        border-bottom-color: rgb(31 41 55);
+    }
+
+    .fi-page:has(.workflow-info-bar) .fi-page-sub-navigation-tabs .fi-tabs-item,
+    .fi-page:has(.workflow-info-bar) .fi-resource-sub-navigation .fi-tabs-item {
+        border-radius: 0.375rem;
+        padding: 0.25rem 0.55rem;
+        font-size: 0.75rem;
+        font-weight: 600;
+        min-height: 0;
+        background: rgb(243 244 246);
+        color: rgb(55 65 81);
+        box-shadow: none;
+    }
+
+    .dark .fi-page:has(.workflow-info-bar) .fi-page-sub-navigation-tabs .fi-tabs-item,
+    .dark .fi-page:has(.workflow-info-bar) .fi-resource-sub-navigation .fi-tabs-item {
+        background: rgb(31 41 55);
+        color: rgb(229 231 235);
+    }
+
+    .fi-page:has(.workflow-info-bar) .fi-page-sub-navigation-tabs .fi-tabs-item-label,
+    .fi-page:has(.workflow-info-bar) .fi-resource-sub-navigation .fi-tabs-item-label {
+        font-size: 0.75rem;
+        font-weight: 600;
+    }
+
+    .fi-page:has(.workflow-info-bar) .fi-page-sub-navigation-tabs .fi-tabs-item-icon,
+    .fi-page:has(.workflow-info-bar) .fi-resource-sub-navigation .fi-tabs-item-icon {
+        width: 0.875rem;
+        height: 0.875rem;
+    }
+
+    .fi-page:has(.workflow-info-bar) .fi-page-sub-navigation-tabs .fi-tabs-item[aria-selected="true"],
+    .fi-page:has(.workflow-info-bar) .fi-page-sub-navigation-tabs .fi-tabs-item.fi-active,
+    .fi-page:has(.workflow-info-bar) .fi-resource-sub-navigation .fi-tabs-item[aria-selected="true"],
+    .fi-page:has(.workflow-info-bar) .fi-resource-sub-navigation .fi-tabs-item.fi-active {
+        background: rgb(217 119 6);
+        color: #fff;
+    }
+
+    .fi-page:has(.workflow-info-bar) .fi-header-actions .fi-btn,
+    .fi-page:has(.workflow-info-bar) .fi-page-header-actions .fi-btn,
+    .fi-page:has(.workflow-info-bar) .fi-ac-btn-action {
+        min-height: 0 !important;
+        padding: 0.25rem 0.55rem !important;
+        font-size: 0.6875rem !important;
+        font-weight: 600 !important;
+        border-radius: 0.375rem !important;
+        gap: 0.35rem;
+        line-height: 1.25;
+    }
+
+    .fi-page:has(.workflow-info-bar) .fi-header-actions .fi-btn svg,
+    .fi-page:has(.workflow-info-bar) .fi-page-header-actions .fi-btn svg,
+    .fi-page:has(.workflow-info-bar) .fi-ac-btn-action svg {
+        width: 0.875rem !important;
+        height: 0.875rem !important;
+    }
+
+    .fi-page:has(.workflow-info-bar) .fi-header,
+    .fi-page:has(.workflow-info-bar) .fi-page-header {
+        gap: 0.5rem;
+        margin-bottom: 0.35rem;
+    }
+
+    .fi-page:has(.workflow-info-bar) .fi-header-heading,
+    .fi-page:has(.workflow-info-bar) .fi-page-header-heading {
+        font-size: 0.95rem;
+        line-height: 1.25;
     }
 
     .fi-header,
@@ -3126,6 +3996,317 @@
     .workflow-record-context {
         position: relative;
         z-index: 10;
+    }
+
+    /* Kompaktowy pasek informacji imprezy — kolumny wymuszone (Tailwind purge nie zawsze ma grid-cols-4/5). */
+    .workflow-info-bar {
+        display: flex;
+        flex-direction: column;
+        gap: 0.5rem;
+    }
+
+    .workflow-info-bar__header {
+        display: flex;
+        align-items: flex-start;
+        justify-content: space-between;
+        gap: 0.75rem;
+        padding-bottom: 0.5rem;
+        border-bottom: 1px solid rgb(243 244 246);
+    }
+
+    .dark .workflow-info-bar__header {
+        border-bottom-color: rgb(31 41 55);
+    }
+
+    .workflow-info-bar__title {
+        font-size: 1.25rem;
+        font-weight: 700;
+        line-height: 1.2;
+        color: rgb(17 24 39);
+    }
+
+    .dark .workflow-info-bar__title {
+        color: rgb(255 255 255);
+    }
+
+    .workflow-info-bar__schedule {
+        display: flex;
+        flex-wrap: wrap;
+        align-items: baseline;
+        gap: 0.35rem 1rem;
+        margin-top: 0.35rem;
+        font-size: 0.875rem;
+        font-weight: 600;
+        line-height: 1.35;
+        color: rgb(31 41 55);
+    }
+
+    .dark .workflow-info-bar__schedule {
+        color: rgb(229 231 235);
+    }
+
+    .workflow-info-bar__schedule-label {
+        font-size: 0.75rem;
+        font-weight: 600;
+        color: rgb(107 114 128);
+        margin-right: 0.2rem;
+    }
+
+    .dark .workflow-info-bar__schedule-label {
+        color: rgb(156 163 175);
+    }
+
+    .workflow-info-bar__chip {
+        display: inline-flex;
+        align-items: baseline;
+        gap: 0.25rem;
+        border-radius: 0.375rem;
+        background: rgb(243 244 246);
+        padding: 0.15rem 0.45rem;
+        font-size: 0.8125rem;
+        font-weight: 700;
+        line-height: 1.25;
+        color: rgb(17 24 39);
+    }
+
+    .dark .workflow-info-bar__chip {
+        background: rgb(31 41 55);
+        color: rgb(243 244 246);
+    }
+
+    .workflow-info-bar__meta {
+        display: grid;
+        grid-template-columns: repeat(5, minmax(0, 1fr));
+        gap: 0.5rem 0.75rem;
+        padding: 0.5rem 0.65rem;
+        border-radius: 0.5rem;
+        background: rgb(249 250 251);
+    }
+
+    .dark .workflow-info-bar__meta {
+        background: rgba(31, 41, 55, 0.5);
+    }
+
+    .workflow-info-bar__section-title {
+        display: flex;
+        align-items: center;
+        gap: 0.35rem;
+        margin-bottom: 0.35rem;
+        font-size: 10px;
+        font-weight: 700;
+        letter-spacing: 0.04em;
+        text-transform: uppercase;
+        color: rgb(55 65 81);
+    }
+
+    .dark .workflow-info-bar__section-title {
+        color: rgb(209 213 219);
+    }
+
+    .workflow-info-bar__vendors {
+        display: grid;
+        grid-template-columns: repeat(3, minmax(0, 1fr));
+        gap: 0.35rem;
+    }
+
+    .workflow-info-bar__pair {
+        display: grid;
+        grid-template-columns: 1fr;
+        gap: 0.35rem;
+        min-width: 0;
+    }
+
+    .workflow-info-bar__clients {
+        display: grid;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        gap: 0.35rem;
+    }
+
+    .workflow-info-bar__tile {
+        min-width: 0;
+        padding: 0.4rem 0.5rem;
+        border-radius: 0.5rem;
+        background: rgb(249 250 251);
+    }
+
+    .dark .workflow-info-bar__tile {
+        background: rgba(31, 41, 55, 0.35);
+    }
+
+    .workflow-info-bar__tile-label {
+        font-size: 10px;
+        line-height: 1.2;
+        color: rgb(107 114 128);
+        margin-bottom: 0.1rem;
+    }
+
+    .workflow-info-bar__tile-value {
+        font-size: 11px;
+        font-weight: 700;
+        line-height: 1.25;
+        color: rgb(17 24 39);
+        word-break: break-word;
+    }
+
+    .dark .workflow-info-bar__tile-value {
+        color: rgb(243 244 246);
+    }
+
+    .workflow-info-bar__tile--ok {
+        background: rgba(16, 185, 129, 0.08);
+        box-shadow: inset 0 0 0 1px rgba(16, 185, 129, 0.18);
+    }
+
+    .workflow-info-bar__tile--ok .workflow-info-bar__tile-label {
+        color: rgb(4 120 87);
+    }
+
+    .workflow-info-bar__tile--ok .workflow-info-bar__tile-value {
+        color: rgb(6 95 70);
+    }
+
+    .workflow-info-bar__tile--danger {
+        background: rgba(244, 63, 94, 0.08);
+        box-shadow: inset 0 0 0 1px rgba(244, 63, 94, 0.18);
+    }
+
+    .workflow-info-bar__tile--danger .workflow-info-bar__tile-label {
+        color: rgb(190 18 60);
+    }
+
+    .workflow-info-bar__tile--danger .workflow-info-bar__tile-value {
+        color: rgb(159 18 57);
+    }
+
+    .workflow-info-bar__tile--pilot {
+        background: rgba(99, 102, 241, 0.08);
+        box-shadow: inset 0 0 0 1px rgba(99, 102, 241, 0.18);
+    }
+
+    .workflow-info-bar__tile--pilot .workflow-info-bar__tile-label {
+        color: rgb(67 56 202);
+    }
+
+    .workflow-info-bar__tile--pilot .workflow-info-bar__tile-value {
+        color: rgb(49 46 129);
+    }
+
+    .workflow-info-bar__tile--info {
+        background: rgba(59, 130, 246, 0.08);
+        box-shadow: inset 0 0 0 1px rgba(59, 130, 246, 0.18);
+    }
+
+    .workflow-info-bar__tile--info .workflow-info-bar__tile-label {
+        color: rgb(29 78 216);
+    }
+
+    .workflow-info-bar__tile--info .workflow-info-bar__tile-value {
+        color: rgb(30 64 175);
+    }
+
+    .workflow-info-bar__tile--warn {
+        background: rgba(245, 158, 11, 0.1);
+        box-shadow: inset 0 0 0 1px rgba(245, 158, 11, 0.2);
+    }
+
+    .workflow-info-bar__tile--warn .workflow-info-bar__tile-label {
+        color: rgb(180 83 9);
+    }
+
+    .workflow-info-bar__tile--warn .workflow-info-bar__tile-value {
+        color: rgb(146 64 14);
+    }
+
+    /* Jedna belka finansów imprezy (strona Finanse) */
+    .event-finance-summary-bar__grid {
+        display: grid;
+        grid-template-columns: minmax(0, 1fr) minmax(0, 1.4fr) minmax(0, 1.2fr);
+        gap: 0.85rem 1rem;
+        align-items: start;
+    }
+
+    .event-finance-summary-bar__section {
+        min-width: 0;
+    }
+
+    .event-finance-summary-bar__section + .event-finance-summary-bar__section {
+        padding-left: 1rem;
+        border-left: 1px solid rgb(243 244 246);
+    }
+
+    .dark .event-finance-summary-bar__section + .event-finance-summary-bar__section {
+        border-left-color: rgb(31 41 55);
+    }
+
+    .event-finance-summary-bar__tiles {
+        display: grid;
+        gap: 0.35rem;
+    }
+
+    .event-finance-summary-bar__tiles--offer {
+        grid-template-columns: 1fr;
+    }
+
+    .event-finance-summary-bar__tiles--vendors {
+        grid-template-columns: repeat(3, minmax(0, 1fr));
+    }
+
+    .event-finance-summary-bar__tiles--clients {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+
+    @media (max-width: 1279px) {
+        .event-finance-summary-bar__grid {
+            grid-template-columns: 1fr;
+        }
+
+        .event-finance-summary-bar__section + .event-finance-summary-bar__section {
+            padding-left: 0;
+            padding-top: 0.75rem;
+            border-left: 0;
+            border-top: 1px solid rgb(243 244 246);
+        }
+
+        .dark .event-finance-summary-bar__section + .event-finance-summary-bar__section {
+            border-top-color: rgb(31 41 55);
+        }
+    }
+
+    @media (max-width: 639px) {
+        .event-finance-summary-bar__tiles--vendors,
+        .event-finance-summary-bar__tiles--clients {
+            grid-template-columns: 1fr;
+        }
+    }
+
+    .workflow-info-bar .workflow-record-context-action {
+        min-height: 0 !important;
+    }
+
+    @media (max-width: 1023px) {
+        .workflow-info-bar__meta {
+            grid-template-columns: repeat(3, minmax(0, 1fr));
+        }
+
+        .workflow-info-bar__vendors {
+            grid-template-columns: repeat(3, minmax(0, 1fr));
+        }
+
+        .workflow-info-bar__clients {
+            grid-template-columns: repeat(2, minmax(0, 1fr));
+        }
+    }
+
+    @media (max-width: 639px) {
+        .workflow-info-bar__header {
+            flex-direction: column;
+        }
+
+        .workflow-info-bar__meta,
+        .workflow-info-bar__vendors,
+        .workflow-info-bar__clients {
+            grid-template-columns: 1fr;
+        }
     }
 
     .workflow-record-context-link,
@@ -3212,7 +4393,7 @@
         }
 
         .workflow-module-nav-item {
-            min-width: 8.5rem;
+            min-width: 0;
         }
     }
 
@@ -3490,6 +4671,7 @@
     .fi-sidebar-group.sor-nav-group--finance { border-inline-start-color: var(--sor-module-finance); }
     .fi-sidebar-group.sor-nav-group--executive { border-inline-start-color: var(--sor-module-executive); }
     .fi-sidebar-group.sor-nav-group--contacts { border-inline-start-color: var(--sor-module-contacts); }
+    .fi-sidebar-group.sor-nav-group--people { border-inline-start-color: var(--sor-module-people); }
     .fi-sidebar-group.sor-nav-group--dictionaries { border-inline-start-color: var(--sor-module-dictionaries); }
     .fi-sidebar-group.sor-nav-group--system { border-inline-start-color: var(--sor-module-system); }
     .fi-sidebar-group.sor-nav-group--pilot-trips { border-inline-start-color: var(--sor-module-pilot-trips); }
@@ -3701,6 +4883,7 @@
     .sor-design-preview__nav-chip.sor-nav-group--finance { border-inline-start-color: var(--sor-module-finance); }
     .sor-design-preview__nav-chip.sor-nav-group--executive { border-inline-start-color: var(--sor-module-executive); }
     .sor-design-preview__nav-chip.sor-nav-group--contacts { border-inline-start-color: var(--sor-module-contacts); }
+    .sor-design-preview__nav-chip.sor-nav-group--people { border-inline-start-color: var(--sor-module-people); }
     .sor-design-preview__nav-chip.sor-nav-group--dictionaries { border-inline-start-color: var(--sor-module-dictionaries); }
     .sor-design-preview__nav-chip.sor-nav-group--system { border-inline-start-color: var(--sor-module-system); }
 
@@ -4100,23 +5283,94 @@
         pointer-events: none;
     }
 
-    .fi-body .fi-fo-field-wrp .tiptap-prosemirror-wrapper,
-    .fi-body .event-notes-editor .tiptap-prosemirror-wrapper {
+    .fi-body .fi-fo-field-wrp .tiptap-prosemirror-wrapper {
         min-height: 8rem;
         max-height: none;
+    }
+
+    /*
+     * Uwagi imprezy — przeciąganie wysokości (jak natywny textarea).
+     * Klasa .event-notes-editor jest na .tiptap-content (dziecko), więc celujemy
+     * przez .event-notes-field (wrapper) lub :has(.event-notes-editor).
+     * overflow ≠ visible + jawna wysokość startowa — wymagane dla CSS resize.
+     * !important przebija max-h-[40rem] / overflow-y-scroll z pakietu TipTap.
+     */
+    .fi-body .event-notes-field .tiptap-prosemirror-wrapper,
+    .fi-body .fi-fo-field-wrp .tiptap-prosemirror-wrapper:has(.event-notes-editor),
+    .fi-body .tiptap-prosemirror-wrapper:has(.event-notes-editor) {
+        min-height: 12rem !important;
+        height: 12rem;
+        max-height: 85vh !important;
+        overflow-x: auto !important;
+        overflow-y: auto !important;
+        resize: vertical !important;
+    }
+
+    .fi-body textarea.event-notes-textarea {
+        min-height: 4.5rem;
+        max-height: 85vh;
+        resize: vertical;
     }
 
     .task-full-editor-shell {
         overflow: visible !important;
     }
 
-    .fi-body .fi-fo-field-wrp .tiptap-editor .ProseMirror,
-    .fi-body .event-notes-editor .tiptap-editor .ProseMirror {
+    .fi-body .fi-fo-field-wrp .tiptap-editor .ProseMirror {
         min-height: 6rem;
         margin-inline: 0 !important;
         text-align: left !important;
         line-height: 1.6 !important;
         letter-spacing: normal !important;
+    }
+
+    .fi-body .event-notes-field .tiptap-editor .ProseMirror,
+    .fi-body .event-notes-editor.tiptap-content,
+    .fi-body .event-notes-editor.ProseMirror {
+        min-height: 10rem;
+        margin-inline: 0 !important;
+        text-align: left !important;
+        line-height: 1.6 !important;
+        letter-spacing: normal !important;
+    }
+
+    /* Tabele w uwagach — widoczne obramowanie / nagłówki (także poza samym TipTap CSS) */
+    .fi-body .event-notes-field .ProseMirror table,
+    .fi-body .tiptap-editor .ProseMirror table {
+        border-collapse: collapse;
+        width: 100%;
+        margin: 0.75rem 0;
+        table-layout: fixed;
+        overflow: hidden;
+    }
+
+    .fi-body .event-notes-field .ProseMirror table td,
+    .fi-body .event-notes-field .ProseMirror table th,
+    .fi-body .tiptap-editor .ProseMirror table td,
+    .fi-body .tiptap-editor .ProseMirror table th {
+        border: 1px solid rgb(156 163 175) !important;
+        padding: 0.35rem 0.5rem !important;
+        vertical-align: top;
+        text-align: left !important;
+        line-height: 1.45 !important;
+    }
+
+    .fi-body .event-notes-field .ProseMirror table th,
+    .fi-body .tiptap-editor .ProseMirror table th {
+        background-color: rgb(243 244 246);
+        font-weight: 700;
+    }
+
+    :is(.dark, html[data-theme="dark"]) .fi-body .event-notes-field .ProseMirror table td,
+    :is(.dark, html[data-theme="dark"]) .fi-body .event-notes-field .ProseMirror table th,
+    :is(.dark, html[data-theme="dark"]) .fi-body .tiptap-editor .ProseMirror table td,
+    :is(.dark, html[data-theme="dark"]) .fi-body .tiptap-editor .ProseMirror table th {
+        border-color: rgb(75 85 99) !important;
+    }
+
+    :is(.dark, html[data-theme="dark"]) .fi-body .event-notes-field .ProseMirror table th,
+    :is(.dark, html[data-theme="dark"]) .fi-body .tiptap-editor .ProseMirror table th {
+        background-color: rgb(31 41 55);
     }
 
     .fi-body .tiptap-prosemirror-wrapper {
@@ -4156,6 +5410,7 @@
         z-index: 90;
     }
 
+    .fi-body .fi-section:not(.fi-collapsed) .fi-fo-field-wrp.event-notes-field,
     .fi-body .fi-section:not(.fi-collapsed) .fi-fo-field-wrp:has(.event-notes-editor) {
         overflow: visible;
     }
@@ -4266,13 +5521,10 @@
 
     /* Opisy w workflow nav — chowamy na wąskich ekranach, zostaje label */
     @media (max-width: 1023.98px) {
-        .workflow-module-nav-desc {
-            display: none !important;
-        }
-
         .workflow-module-nav-item {
-            min-width: 7.25rem !important;
-            padding-block: 0.55rem !important;
+            min-width: 0 !important;
+            padding-block: 0.25rem !important;
+            padding-inline: 0.55rem !important;
         }
 
         .workflow-module-nav .text-\[0\.65rem\] {

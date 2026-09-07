@@ -2,9 +2,11 @@
 
 namespace App\Filament\Resources\LegacyEventResource\Pages;
 
+use App\Filament\Resources\ContractorResource;
 use App\Filament\Resources\LegacyEventResource;
 use App\Models\Event;
 use App\Models\LegacyEvent;
+use App\Services\Legacy\LegacyContractorArchiveStats;
 use Filament\Actions;
 use Filament\Actions\Action;
 use Filament\Resources\Pages\ViewRecord;
@@ -14,6 +16,8 @@ use Illuminate\Support\Collection;
 class ViewLegacyEvent extends ViewRecord
 {
     protected static string $resource = LegacyEventResource::class;
+
+    protected static string $view = 'filament.resources.legacy-event-resource.pages.view-legacy-event';
 
     protected function getHeaderActions(): array
     {
@@ -33,9 +37,68 @@ class ViewLegacyEvent extends ViewRecord
                         'criteria' => $this->getNormalizedCriteria(),
                     ]);
                 }),
+            Actions\Action::make('open_contractor')
+                ->label('Kartę kontrahenta')
+                ->icon('heroicon-o-building-office-2')
+                ->color('gray')
+                ->visible(fn (): bool => filled($this->getRecord()->contractor_id))
+                ->url(fn (): string => ContractorResource::getUrl('edit', ['record' => $this->getRecord()->contractor_id])),
             Actions\Action::make('back')
                 ->label('Powrót do listy')
                 ->url(LegacyEventResource::getUrl('index')),
+        ];
+    }
+
+    /**
+     * @return array{
+     *     name: string,
+     *     code: ?string,
+     *     status: ?string,
+     *     client: ?string,
+     *     dates: string,
+     *     participants: int,
+     *     guardians: int,
+     *     free: int,
+     *     duration: ?int,
+     *     contractor_url: ?string,
+     *     archive: array<string, mixed>
+     * }
+     */
+    public function legacyPageSummary(): array
+    {
+        /** @var LegacyEvent $record */
+        $record = $this->getRecord();
+
+        $start = $record->start_datetime?->format('d.m.Y');
+        $end = $record->end_datetime?->format('d.m.Y');
+        $dates = match (true) {
+            $start && $end && $start !== $end => $start.' – '.$end,
+            (bool) $start => $start,
+            default => '—',
+        };
+
+        $archive = ['total' => 0, 'completed' => 0, 'cancelled' => 0, 'participants_completed' => 0, 'years_label' => '—'];
+        if ($record->contractor_id) {
+            $contractor = $record->contractor;
+            if ($contractor) {
+                $archive = app(LegacyContractorArchiveStats::class)->forContractor($contractor);
+            }
+        }
+
+        return [
+            'name' => (string) $record->name,
+            'code' => $record->office_id,
+            'status' => $record->legacy_status,
+            'client' => $record->client_name,
+            'dates' => $dates,
+            'participants' => (int) ($record->participant_count ?? 0),
+            'guardians' => (int) ($record->guardians_count ?? 0),
+            'free' => (int) ($record->free_count ?? 0),
+            'duration' => $record->duration_days,
+            'contractor_url' => $record->contractor_id
+                ? ContractorResource::getUrl('edit', ['record' => $record->contractor_id])
+                : null,
+            'archive' => $archive,
         ];
     }
 
@@ -60,7 +123,11 @@ class ViewLegacyEvent extends ViewRecord
                 'client_email',
             ])
             ->where('id', '!=', $record->id)
-            ->where(function (Builder $query) use ($criteria): void {
+            ->where(function (Builder $query) use ($criteria, $record): void {
+                if (filled($record->contractor_id)) {
+                    $query->orWhere('contractor_id', $record->contractor_id);
+                }
+
                 if (filled($criteria['email'])) {
                     $query->orWhereRaw('LOWER(client_email) = ?', [$criteria['email']]);
                 }
@@ -81,6 +148,8 @@ class ViewLegacyEvent extends ViewRecord
     private function getMatchingEvents(): Collection
     {
         $criteria = $this->getNormalizedCriteria();
+        /** @var LegacyEvent $record */
+        $record = $this->record;
 
         return Event::query()
             ->select([
@@ -94,7 +163,11 @@ class ViewLegacyEvent extends ViewRecord
                 'client_phone',
                 'client_email',
             ])
-            ->where(function (Builder $query) use ($criteria): void {
+            ->where(function (Builder $query) use ($criteria, $record): void {
+                if (filled($record->contractor_id)) {
+                    $query->orWhere('contractor_id', $record->contractor_id);
+                }
+
                 if (filled($criteria['email'])) {
                     $query->orWhereRaw('LOWER(client_email) = ?', [$criteria['email']]);
                 }

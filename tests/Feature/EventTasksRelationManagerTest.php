@@ -130,6 +130,57 @@ class EventTasksRelationManagerTest extends TestCase
             ->assertSet('mountedActions', ['editTask']);
     }
 
+    public function test_event_tasks_deep_link_mount_hook_is_idempotent(): void
+    {
+        $user = User::factory()->create();
+        $user->assignRole('admin');
+
+        $event = Event::factory()->create();
+        $task = Task::factory()->create([
+            'title' => 'Impreza potwierdzona — lista kontrolna',
+            'taskable_type' => Event::class,
+            'taskable_id' => $event->id,
+            'author_id' => $user->id,
+            'assignee_id' => $user->id,
+            'status_id' => Task::getDefaultStatusId(),
+        ]);
+
+        $component = Livewire::actingAs($user)
+            ->withQueryParams(['editTask' => $task->id])
+            ->test(TasksRelationManager::class, [
+                'ownerRecord' => $event,
+                'pageClass' => ManageEventTasks::class,
+            ]);
+
+        $component->instance()->mountInteractsWithTaskEditModal();
+
+        $component
+            ->assertSet('editingTaskId', $task->id)
+            ->assertSet('mountedActions', ['editTask']);
+    }
+
+    public function test_manage_event_tasks_page_does_not_open_duplicate_modal_from_page_component(): void
+    {
+        $user = User::factory()->create();
+        $user->assignRole('admin');
+
+        $event = Event::factory()->create();
+        $task = Task::factory()->create([
+            'title' => 'Impreza potwierdzona — lista kontrolna',
+            'taskable_type' => Event::class,
+            'taskable_id' => $event->id,
+            'author_id' => $user->id,
+            'assignee_id' => $user->id,
+            'status_id' => Task::getDefaultStatusId(),
+        ]);
+
+        Livewire::actingAs($user)
+            ->withQueryParams(['editTask' => $task->id])
+            ->test(ManageEventTasks::class, ['record' => $event->getKey()])
+            ->assertSet('mountedActions', [])
+            ->assertSet('editingTaskId', null);
+    }
+
     public function test_event_tasks_include_reservation_tasks_and_resolve_navigation(): void
     {
         $user = User::factory()->create();
@@ -189,5 +240,88 @@ class EventTasksRelationManagerTest extends TestCase
             ->assertSet('editingTaskId', $task->id)
             ->assertSet('mountedActions', ['editTask'])
             ->assertSee('Do edycji z przycisku');
+    }
+
+    public function test_event_tasks_show_finished_by_default_and_ownership_filters(): void
+    {
+        $user = User::factory()->create();
+        $user->assignRole('admin');
+        $other = User::factory()->create();
+
+        $event = Event::factory()->create();
+        $finishedStatusId = \App\Models\TaskStatus::query()->where('name', 'Zakończone')->value('id');
+
+        $openMine = Task::factory()->create([
+            'title' => 'Otwarte moje imprezy',
+            'taskable_type' => Event::class,
+            'taskable_id' => $event->id,
+            'author_id' => $user->id,
+            'assignee_id' => $user->id,
+            'status_id' => Task::getDefaultStatusId(),
+        ]);
+
+        $finishedMine = Task::factory()->create([
+            'title' => 'Zakończone moje imprezy',
+            'taskable_type' => Event::class,
+            'taskable_id' => $event->id,
+            'author_id' => $user->id,
+            'assignee_id' => $user->id,
+            'status_id' => $finishedStatusId,
+        ]);
+
+        $authoredOnly = Task::factory()->create([
+            'title' => 'Utworzone przeze mnie cudze assignee',
+            'taskable_type' => Event::class,
+            'taskable_id' => $event->id,
+            'author_id' => $user->id,
+            'assignee_id' => $other->id,
+            'status_id' => Task::getDefaultStatusId(),
+        ]);
+
+        $foreign = Task::factory()->create([
+            'title' => 'Obce zadanie imprezy',
+            'taskable_type' => Event::class,
+            'taskable_id' => $event->id,
+            'author_id' => $other->id,
+            'assignee_id' => $other->id,
+            'status_id' => Task::getDefaultStatusId(),
+        ]);
+
+        Livewire::actingAs($user)
+            ->test(TasksRelationManager::class, [
+                'ownerRecord' => $event,
+                'pageClass' => ManageEventTasks::class,
+            ])
+            ->assertCanSeeTableRecords([$openMine, $finishedMine, $authoredOnly, $foreign])
+            ->call('setTasksScope', 'assigned')
+            ->assertCanSeeTableRecords([$openMine, $finishedMine, $authoredOnly])
+            ->assertCanNotSeeTableRecords([$foreign])
+            ->call('setTasksScope', 'for_me')
+            ->assertCanSeeTableRecords([$openMine, $finishedMine])
+            ->assertCanNotSeeTableRecords([$authoredOnly, $foreign]);
+    }
+
+    public function test_event_tasks_list_shows_from_and_to_ownership(): void
+    {
+        $author = User::factory()->create(['name' => 'Ewa Impreza']);
+        $author->assignRole('admin');
+        $assignee = User::factory()->create(['name' => 'Piotr Impreza']);
+
+        $event = Event::factory()->create();
+        Task::factory()->create([
+            'title' => 'Zadanie imprezy z nadawcą',
+            'taskable_type' => Event::class,
+            'taskable_id' => $event->id,
+            'author_id' => $author->id,
+            'assignee_id' => $assignee->id,
+            'status_id' => Task::getDefaultStatusId(),
+        ]);
+
+        Livewire::actingAs($author)
+            ->test(TasksRelationManager::class, [
+                'ownerRecord' => $event,
+                'pageClass' => ManageEventTasks::class,
+            ])
+            ->assertSee('Od Ewa Impreza dla Piotr Impreza');
     }
 }

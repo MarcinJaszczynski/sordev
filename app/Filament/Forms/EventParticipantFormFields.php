@@ -3,6 +3,7 @@
 namespace App\Filament\Forms;
 
 use App\Models\Event;
+use App\Models\EventParticipant;
 use App\Services\EventPriceSummaryService;
 use Filament\Forms;
 use Filament\Forms\Get;
@@ -27,6 +28,13 @@ class EventParticipantFormFields
             Forms\Components\TextInput::make('last_name')
                 ->label('Nazwisko')
                 ->maxLength(120),
+
+            Forms\Components\Select::make('gender')
+                ->label('Płeć')
+                ->options(EventParticipant::$genders)
+                ->placeholder('—')
+                ->nullable()
+                ->visible(fn (): bool => Schema::hasColumn('event_participants', 'gender')),
 
             Forms\Components\DatePicker::make('birth_date')
                 ->label('Data urodzenia')

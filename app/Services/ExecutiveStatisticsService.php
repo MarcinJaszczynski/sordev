@@ -14,10 +14,18 @@ class ExecutiveStatisticsService
      */
     public function overview(): array
     {
+        $profit = app(ExecutiveProfitLossService::class);
+        $rows = $profit->eventRows([
+            'date_from' => now()->startOfYear()->toDateString(),
+            'date_to' => now()->endOfYear()->toDateString(),
+        ]);
+        $summary = $profit->summarize($rows);
+        $byPhase = collect($profit->aggregateByPhase($rows))->keyBy('phase');
+
         return [
             'events_total' => Event::query()->count(),
             'events_active' => Event::query()->whereIn('status', [
-                Event::STATUS_CONFIRMED,
+                ...Event::getConfirmedLikeStatuses(),
                 Event::STATUS_PROVISIONAL_RESERVATION,
                 Event::STATUS_TO_SETTLE,
                 Event::STATUS_OFFER,
@@ -29,6 +37,13 @@ class ExecutiveStatisticsService
             'participants_upcoming' => (int) Event::query()
                 ->whereDate('start_date', '>=', now()->toDateString())
                 ->sum('participant_count'),
+            'year_recognized_margin_pln' => $summary['net_result_pln'],
+            'year_recognized_revenue_pln' => $summary['revenue_pln'],
+            'year_recognized_costs_pln' => $summary['costs_pln'],
+            'year_events_in_pl' => $summary['events'],
+            'future_margin_pln' => (float) ($byPhase->get('future')['net_result_pln'] ?? 0),
+            'in_progress_margin_pln' => (float) ($byPhase->get('in_progress')['net_result_pln'] ?? 0),
+            'completed_margin_pln' => (float) ($byPhase->get('completed')['net_result_pln'] ?? 0),
         ];
     }
 
@@ -41,6 +56,7 @@ class ExecutiveStatisticsService
             Event::STATUS_OFFER => 'Oferta',
             Event::STATUS_PROVISIONAL_RESERVATION => 'Rezerwacja',
             Event::STATUS_CONFIRMED => 'Potwierdzona',
+            Event::STATUS_ODPRAWA_OK => 'Odprawa OK',
             Event::STATUS_TO_SETTLE => 'Do rozliczenia',
             Event::STATUS_SETTLED => 'Rozliczona',
             Event::STATUS_CANCELLED => 'Anulowana',

@@ -173,6 +173,17 @@ class SettlementPaymentHealthServiceTest extends TestCase
         $this->assertSame('planned', $health->planPaymentStatusFromAmounts(0.0, 0.0));
     }
 
+    public function test_booked_zero_closure_marks_paid_and_ok(): void
+    {
+        $health = app(SettlementPaymentHealthService::class);
+
+        $this->assertSame(
+            SettlementPaymentHealthService::STATUS_OK,
+            $health->resolveStatus(0.0, 500.0, null, false, false, true),
+        );
+        $this->assertSame('paid', $health->planPaymentStatusFromAmounts(0.0, 500.0, false, false, true));
+    }
+
     public function test_non_converted_foreign_plan_is_due_not_n_a(): void
     {
         $eur = Currency::factory()->eur()->create(['exchange_rate' => 4.35]);

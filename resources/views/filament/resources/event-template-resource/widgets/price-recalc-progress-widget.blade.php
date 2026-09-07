@@ -6,7 +6,11 @@
     $pct = $total > 0 ? min(100, round(($processed / $total) * 100)) : 0;
 @endphp
 
-<div wire:poll.5s>
+<div
+    @if ($pollingInterval = $this->getPollingInterval())
+        wire:poll.{{ $pollingInterval }}="refreshProgress"
+    @endif
+>
     @if($visible || ($total > 0))
         <div x-data class="fixed bottom-6 right-6 z-50" aria-live="polite">
             <div class="max-w-xs w-80 bg-white shadow-lg rounded-lg border border-gray-200 overflow-hidden">

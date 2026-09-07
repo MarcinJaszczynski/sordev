@@ -38,6 +38,10 @@ final class DeleteSettlementCostPaymentAction
                 if ($freshSettlement) {
                     app(\App\Services\SettlementPaymentHealthService::class)
                         ->syncPlanPaymentStatus($plan, $freshSettlement->costs);
+
+                    if ($plan->source_type === 'insurance_day') {
+                        app(\App\Services\EventInsuranceOperationalSync::class)->syncFromPlanCost($plan->fresh());
+                    }
                 }
 
                 app(\App\Services\SyncReservationDepositFromCostPayment::class)
@@ -78,6 +82,26 @@ final class DeleteSettlementCostPaymentAction
             return EventSettlementCost::query()
                 ->where('settlement_id', $settlementId)
                 ->where('source_type', $planType)
+                ->whereNull('source_id')
+                ->orderBy('id')
+                ->first();
+        }
+
+        if (in_array($payment->source_type, [
+            'accommodation_hotel_payment',
+            'accommodation_hotel_stay_payment',
+            'transport_contractor_payment',
+        ], true)) {
+            $planType = str_replace('_payment', '', $payment->source_type);
+
+            return EventSettlementCost::query()
+                ->where('settlement_id', $settlementId)
+                ->where('source_type', $planType)
+                ->when(
+                    $payment->source_id !== null,
+                    fn ($q) => $q->where('source_id', (int) $payment->source_id),
+                    fn ($q) => $q->whereNull('source_id'),
+                )
                 ->orderBy('id')
                 ->first();
         }

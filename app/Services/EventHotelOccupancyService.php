@@ -9,6 +9,9 @@ use Illuminate\Support\Facades\Schema;
 
 /**
  * Read-model zajętości hotelowej imprezy (occupancy).
+ *
+ * Pilot i obsługa to ta sama pula miejsc — używamy {@see EventHotelPlanService::resolveAllocationGroupCounts()}
+ * (tak jak alokacja pokoi ze szablonu), zamiast doliczać pilota osobno do staff z wariantu qty.
  */
 final class EventHotelOccupancyService
 {
@@ -23,6 +26,7 @@ final class EventHotelOccupancyService
      *   staff: int,
      *   drivers: int,
      *   pilot: int,
+     *   pilot_staff: int,
      *   required_beds_per_night: int,
      *   stays: list<array<string, mixed>>
      * }
@@ -30,20 +34,23 @@ final class EventHotelOccupancyService
     public function forEvent(Event $event): array
     {
         $groupCounts = $this->hotelPlanService->resolveGroupCounts($event);
+        $allocationCounts = $this->hotelPlanService->resolveAllocationGroupCounts($event);
+
         $participants = max(0, (int) $groupCounts['qty']);
         $gratis = max(0, (int) $groupCounts['gratis']);
-        $staff = max(0, (int) $groupCounts['staff']);
-        $drivers = max(0, (int) $groupCounts['driver']);
-        $pilot = $event->assigned_to ? 1 : 0;
-        $requiredBedsPerNight = $participants + $gratis + $staff + $drivers + $pilot;
+        $drivers = max(0, (int) $allocationCounts['driver']);
+        // Jedna pula: obsługa z wariantu + ewentualnie assigned pilot (jak w alokacji pokoi).
+        $pilotStaff = max(0, (int) $allocationCounts['staff']);
+        $requiredBedsPerNight = $participants + $gratis + $pilotStaff + $drivers;
 
         if (! Schema::hasTable('event_hotel_stays')) {
             return [
                 'participants' => $participants,
                 'gratis' => $gratis,
-                'staff' => $staff,
+                'staff' => $pilotStaff,
                 'drivers' => $drivers,
-                'pilot' => $pilot,
+                'pilot' => $pilotStaff,
+                'pilot_staff' => $pilotStaff,
                 'required_beds_per_night' => $requiredBedsPerNight,
                 'stays' => [],
             ];
@@ -85,9 +92,10 @@ final class EventHotelOccupancyService
         return [
             'participants' => $participants,
             'gratis' => $gratis,
-            'staff' => $staff,
+            'staff' => $pilotStaff,
             'drivers' => $drivers,
-            'pilot' => $pilot,
+            'pilot' => $pilotStaff,
+            'pilot_staff' => $pilotStaff,
             'required_beds_per_night' => $requiredBedsPerNight,
             'stays' => $stays,
         ];

@@ -4,11 +4,15 @@ namespace App\Support;
 
 use App\Models\Bus;
 use App\Models\Event;
+use App\Models\Vehicle;
 use Illuminate\Support\HtmlString;
 
 /**
- * Ostrzeżenie UI: uczestnicy + opiekunowie vs pojemność autokaru.
+ * Ostrzeżenie UI: uczestnicy + opiekunowie vs pojemność pojazdu floty.
  * Nie obejmuje pilota/obsługi/kierowcy (te role są tylko w kalkulacji kosztów).
+ * Dla floty liczy Vehicle.capacity (pasażerowie), bez crew_seats.
+ * Autokar z cennika (Bus) służy do wyceny — resolveMessage zostaje dla kompatybilności,
+ * UI gotowości i Transport używają resolveFleetMessage.
  */
 final class EventBusSeatCapacity
 {
@@ -55,17 +59,17 @@ final class EventBusSeatCapacity
      */
     public static function warningHtml(callable $get, ?Event $record = null): ?HtmlString
     {
-        $message = self::resolveMessage($get, $record);
+        return self::wrapWarning(self::resolveMessage($get, $record));
+    }
 
-        if ($message === null) {
-            return null;
-        }
-
-        return new HtmlString(
-            '<div class="rounded-lg border border-danger-300 bg-danger-50 px-4 py-3 text-sm font-medium text-danger-700 dark:border-danger-700 dark:bg-danger-950/40 dark:text-danger-300">'
-            .e($message)
-            .'</div>'
-        );
+    /**
+     * Soft warning dla pojazdu floty (Vehicle.capacity — tylko miejsca pasażerskie).
+     *
+     * @param  callable(string): mixed  $get
+     */
+    public static function fleetWarningHtml(callable $get, ?Event $record = null): ?HtmlString
+    {
+        return self::wrapWarning(self::resolveFleetMessage($get, $record));
     }
 
     /**
@@ -97,6 +101,55 @@ final class EventBusSeatCapacity
             $gratis,
             (int) ($bus->capacity ?? 0),
             $bus->name
+        );
+    }
+
+    /**
+     * Alert miejsc względem pojazdu floty (nie autokaru z cennika).
+     * Preferuje main_fleet_vehicle_id z formularza; inaczej mainFleetVehicle z rekordu.
+     *
+     * @param  callable(string): mixed  $get
+     */
+    public static function resolveFleetMessage(callable $get, ?Event $record = null): ?string
+    {
+        $vehicle = null;
+        $vehicleId = (int) ($get('main_fleet_vehicle_id') ?: 0);
+
+        if ($vehicleId > 0) {
+            $vehicle = Vehicle::query()->find($vehicleId);
+        } elseif ($record) {
+            $vehicle = $record->mainFleetVehicle();
+        }
+
+        if (! $vehicle) {
+            return null;
+        }
+
+        $capacity = (int) ($vehicle->capacity ?? 0);
+        if ($capacity <= 0) {
+            return null;
+        }
+
+        $paying = self::resolvePaying($get, $record);
+        $gratis = self::resolveGratis($get, $record, $paying);
+
+        $label = filled($vehicle->registration_number)
+            ? (string) $vehicle->registration_number
+            : $vehicle->displayLabel();
+
+        return self::message($paying, $gratis, $capacity, $label);
+    }
+
+    private static function wrapWarning(?string $message): ?HtmlString
+    {
+        if ($message === null) {
+            return null;
+        }
+
+        return new HtmlString(
+            '<div class="rounded-lg border border-danger-300 bg-danger-50 px-4 py-3 text-sm font-medium text-danger-700 dark:border-danger-700 dark:bg-danger-950/40 dark:text-danger-300">'
+            .e($message)
+            .'</div>'
         );
     }
 

@@ -33,6 +33,9 @@ class EventTemplateProgramPointFactory extends Factory
             'group_size' => $this->faker->numberBetween(1, 10),
             'currency_id' => $currency->id,
             'convert_to_pln' => false,
+            'is_hotel' => false,
+            'is_transport' => false,
+            'is_hotel_service' => false,
         ];
     }
 }

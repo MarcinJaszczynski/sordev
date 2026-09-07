@@ -3,3 +3,7 @@ Disallow:
 
 # Sitemap for search engines
 Sitemap: /sitemap.xml
+
+# AI / LLM crawlers — katalog oferty (wycieczka × miasto wyjazdu)
+# https://llmstxt.org/
+LLMs-Txt: /llms.txt

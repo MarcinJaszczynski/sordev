@@ -13,6 +13,10 @@ class EventNotesFields
         return TiptapEditor::make($name)
             ->profile('notes')
             ->maxContentWidth('full')
+            // Klasa na wrapperze pola — CSS resize celuje w .tiptap-prosemirror-wrapper potomka.
+            // extraInputAttributes ląduje na wewnętrznym .tiptap-content (dziecko wrappera), więc samo nie wystarcza.
+            ->extraFieldWrapperAttributes(['class' => 'event-notes-field'])
+            ->extraInputAttributes(['class' => 'event-notes-editor'])
             ->columnSpanFull();
     }
 
@@ -20,7 +24,6 @@ class EventNotesFields
     {
         return self::editor('notes')
             ->label('Zapytanie klienta/Uwagi ogólne')
-            ->extraInputAttributes(['class' => 'event-notes-editor'])
             ->placeholder('Treść zapytania klienta lub dodatkowe uwagi o imprezie.')
             ->helperText('Zapytanie od klienta i informacje ogólne — widoczne przy podstawowych danych imprezy.');
     }
@@ -92,7 +95,9 @@ class EventNotesFields
                 ->helperText('Pole operacyjne dla pilota/hotelu. Uzupełnij ręcznie na podstawie listy powyżej lub własnej decyzji.')
                 ->visible(fn (): bool => Schema::hasColumn('events', 'diet_info'))
                 ->columnSpanFull()
-                ->rows(3),
+                ->rows(3)
+                ->autosize()
+                ->extraInputAttributes(['class' => 'event-notes-textarea']),
         ])->columnSpanFull();
     }
 }

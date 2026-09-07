@@ -9,6 +9,7 @@ use App\Filament\Resources\TaskResource\Pages;
 use App\Filament\Resources\TaskResource\RelationManagers;
 use App\Models\Task;
 use App\Models\TaskStatus;
+use App\Models\User;
 use App\Services\Tasks\TaskInboxService;
 use App\Support\FilamentNavigation;
 use App\Support\Tasks\TaskAuthorization;
@@ -141,13 +142,13 @@ class TaskResource extends Resource
 
         if ($showContextColumn) {
             $columns[] = Tables\Columns\ViewColumn::make('context_summary')
-                ->label('Kontekst')
+                ->label('Dotyczy')
                 ->view('filament.tasks.list-task-context-cell')
                 ->extraHeaderAttributes(['class' => 'fi-ta-col-task-context'])
                 ->extraCellAttributes(['class' => 'fi-ta-col-task-context']);
         } else {
             $columns[] = Tables\Columns\ViewColumn::make('context_summary')
-                ->label('Kontekst')
+                ->label('Dotyczy')
                 ->view('filament.tasks.list-task-context-cell')
                 ->viewData(['showContextRecord' => false])
                 ->extraHeaderAttributes(['class' => 'fi-ta-col-task-context'])
@@ -286,10 +287,21 @@ class TaskResource extends Resource
 
                     return 'Utworzenie';
                 }),
-            Tables\Columns\TextColumn::make('assignee.name')
-                ->label('Przypisane do')
-                ->placeholder('—')
-                ->sortable(),
+            Tables\Columns\TextColumn::make('ownership')
+                ->label('Od / dla')
+                ->state(fn (Task $record): string => TaskListColumn::ownershipLine($record))
+                ->wrap()
+                ->sortable(query: function (Builder $query, string $direction): Builder {
+                    $dir = strtolower($direction) === 'asc' ? 'asc' : 'desc';
+
+                    return $query->orderBy(
+                        User::query()
+                            ->select('name')
+                            ->whereColumn('users.id', 'tasks.assignee_id')
+                            ->limit(1),
+                        $dir,
+                    );
+                }),
             Tables\Columns\TextColumn::make('created_at')
                 ->label('Utworzono')
                 ->dateTime('d.m.Y H:i')
@@ -319,7 +331,7 @@ class TaskResource extends Resource
         if ($showContext) {
             array_splice($columns, 2, 0, [
                 Tables\Columns\TextColumn::make('taskable_type_label')
-                    ->label('Kontekst')
+                    ->label('Dotyczy')
                     ->state(fn (Task $record): string => $record->taskable_type_label ?: 'Wolne / nieprzypisane')
                     ->description(fn (Task $record): string => $record->taskable_label)
                     ->url(fn (Task $record): ?string => \App\Support\Tasks\TaskContextRegistry::urlForRecord($record->taskable))
@@ -343,12 +355,25 @@ class TaskResource extends Resource
     /**
      * @return array<int, Tables\Filters\BaseFilter>
      */
-    public static function sharedTableFilters(bool $includeTrashed = true): array
-    {
-        $filters = [
-            static::finishedVisibilityTableFilter(),
-            static::archivedVisibilityTableFilter(),
-            static::sourceTableFilter(),
+    public static function sharedTableFilters(
+        bool $includeTrashed = true,
+        bool $includeFinishedVisibility = true,
+        bool $includeSource = true,
+    ): array {
+        $filters = [];
+
+        if ($includeFinishedVisibility) {
+            $filters[] = static::finishedVisibilityTableFilter();
+        }
+
+        $filters[] = static::archivedVisibilityTableFilter();
+
+        // Źródło jest na chipach quick-filters — unikamy podwójnego filtra w lejku.
+        if ($includeSource) {
+            $filters[] = static::sourceTableFilter();
+        }
+
+        $filters = array_merge($filters, [
             Tables\Filters\SelectFilter::make('priority')
                 ->label('Priorytet')
                 ->options(TaskPriority::options()),
@@ -358,7 +383,7 @@ class TaskResource extends Resource
             Tables\Filters\SelectFilter::make('assignee')
                 ->label('Przypisane do')
                 ->relationship('assignee', 'name'),
-        ];
+        ]);
 
         if ($includeTrashed) {
             $filters[] = Tables\Filters\TrashedFilter::make();
@@ -378,10 +403,10 @@ class TaskResource extends Resource
                 TaskSource::System->value => 'Systemowe',
                 'all' => 'Wszystkie',
             ])
-            ->default(TaskSource::Office->value)
+            ->default('all')
             ->selectablePlaceholder(false)
             ->query(function (Builder $query, array $data): Builder {
-                $value = $data['value'] ?? TaskSource::Office->value;
+                $value = $data['value'] ?? 'all';
 
                 if ($value === 'all' || $value === null || $value === '') {
                     return $query;
@@ -439,7 +464,12 @@ class TaskResource extends Resource
                 'desc',
             )
             ->columns(static::adminListTableColumns($showContextColumn))
-            ->filters(static::sharedTableFilters($includeTrashed))
+            // Lista: zakładki statusów + chipy źródła — bez duplikatów w lejku.
+            ->filters(static::sharedTableFilters(
+                includeTrashed: $includeTrashed,
+                includeFinishedVisibility: false,
+                includeSource: false,
+            ))
             ->recordUrl(null)
             ->recordAction(null)
             ->actionsColumnLabel('Akcje')
@@ -489,26 +519,50 @@ class TaskResource extends Resource
             ]);
     }
 
-    public static function finishedVisibilityTableFilter(): Tables\Filters\TernaryFilter
+    public static function finishedVisibilityTableFilter(bool $defaultShow = true): Tables\Filters\TernaryFilter
     {
         return Tables\Filters\TernaryFilter::make('finished_visibility')
             ->label('Zakończone i anulowane')
             ->trueLabel('Pokaż')
             ->falseLabel('Ukryj')
-            ->default(false)
+            ->default($defaultShow)
             ->queries(
                 true: fn (Builder $query): Builder => $query,
                 false: fn (Builder $query): Builder => TaskQueryFilters::excludeFinished($query),
-                blank: fn (Builder $query): Builder => TaskQueryFilters::excludeFinished($query),
+                blank: fn (Builder $query): Builder => $defaultShow
+                    ? $query
+                    : TaskQueryFilters::excludeFinished($query),
             );
+    }
+
+    public static function ownershipTableFilter(string $default = 'all'): Tables\Filters\SelectFilter
+    {
+        return Tables\Filters\SelectFilter::make('ownership')
+            ->label('Widoczność')
+            ->options([
+                'all' => 'Wszystkie',
+                'assigned' => 'Moje',
+                'for_me' => 'Dla mnie',
+            ])
+            ->default($default)
+            ->selectablePlaceholder(false)
+            ->query(function (Builder $query, array $data): Builder {
+                $scope = is_string($data['value'] ?? null) ? $data['value'] : 'all';
+
+                return TaskQueryFilters::applyOwnershipScope($query, $scope, auth()->id());
+            });
     }
 
     public static function table(Table $table): Table
     {
         return static::configureAdminTaskListTable($table, officeOnly: true, includeTrashed: true)
-            ->filters(array_merge(static::sharedTableFilters(true), [
+            ->filters(array_merge(static::sharedTableFilters(
+                includeTrashed: true,
+                includeFinishedVisibility: false,
+                includeSource: false,
+            ), [
                 Tables\Filters\SelectFilter::make('taskable_type')
-                    ->label('Kontekst')
+                    ->label('Dotyczy')
                     ->options(Task::getTaskableTypeOptions()),
                 Tables\Filters\Filter::make('unassigned_context')
                     ->label('Wolne / nieprzypisane')

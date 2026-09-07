@@ -79,12 +79,44 @@
     </div>
 
     {{-- Kalkulacje --}}
+    @php
+        $summary = is_array($calculations['summary'] ?? null) ? $calculations['summary'] : [];
+        $currentVariant = is_array($calculations['current_variant'] ?? null) ? $calculations['current_variant'] : null;
+        $pricePerPerson = $snapshot->pricePerPersonSnapshot();
+        $transportCost = (float) ($summary['transport_cost'] ?? $calculations['transport_cost'] ?? 0);
+        $totalProgramCost = (float) ($summary['total_program_cost'] ?? $calculations['total_program_cost'] ?? 0);
+        $detailedCalculations = is_array($calculations['detailed_calculations'] ?? null)
+            ? $calculations['detailed_calculations']
+            : [];
+        $qtyVariants = [];
+        if ($currentVariant !== null) {
+            $qtyVariants[(int) ($currentVariant['qty'] ?? 0)] = $currentVariant;
+        }
+    @endphp
     <div class="bg-white dark:bg-gray-900 rounded-lg border border-gray-200 dark:border-gray-700 p-4">
         <h3 class="text-lg font-semibold mb-3">Kalkulacje i koszty</h3>
         <div class="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-4 mb-4">
             <div class="text-center p-3 bg-blue-50 dark:bg-blue-900/20 rounded">
                 <p class="text-sm text-gray-600 dark:text-gray-400">Koszt całkowity</p>
-                <p class="text-xl font-bold text-blue-600 dark:text-blue-400">{{ number_format($snapshot->total_cost_snapshot, 2) }} PLN</p>
+                <p class="text-xl font-bold text-blue-600 dark:text-blue-400">{{ number_format((float) $snapshot->total_cost_snapshot, 2, ',', ' ') }} PLN</p>
+            </div>
+            <div class="text-center p-3 bg-amber-50 dark:bg-amber-900/20 rounded">
+                <p class="text-sm text-gray-600 dark:text-gray-400">Cena za osobę</p>
+                <p class="text-xl font-bold text-amber-700 dark:text-amber-300">
+                    @if($pricePerPerson !== null)
+                        {{ number_format($pricePerPerson, 2, ',', ' ') }} PLN
+                    @else
+                        —
+                    @endif
+                </p>
+            </div>
+            <div class="text-center p-3 bg-cyan-50 dark:bg-cyan-900/20 rounded">
+                <p class="text-sm text-gray-600 dark:text-gray-400">Transport</p>
+                <p class="text-xl font-bold text-cyan-700 dark:text-cyan-300">{{ number_format($transportCost, 2, ',', ' ') }} PLN</p>
+            </div>
+            <div class="text-center p-3 bg-slate-50 dark:bg-slate-800/40 rounded">
+                <p class="text-sm text-gray-600 dark:text-gray-400">Koszt programu</p>
+                <p class="text-xl font-bold text-slate-700 dark:text-slate-200">{{ number_format($totalProgramCost, 2, ',', ' ') }} PLN</p>
             </div>
             <div class="text-center p-3 bg-green-50 dark:bg-green-900/20 rounded">
                 <p class="text-sm text-gray-600 dark:text-gray-400">Punkty programu</p>
@@ -96,6 +128,32 @@
             </div>
         </div>
 
+        @if($currentVariant)
+            <p class="mb-4 text-sm text-gray-600 dark:text-gray-400">
+                Wariant z kalkulacji:
+                <span class="font-medium text-gray-900 dark:text-gray-100">
+                    {{ (int) ($currentVariant['qty'] ?? 0) }} uczestników
+                    + {{ (int) ($currentVariant['gratis'] ?? 0) }} opiek./dod.
+                    / {{ (int) ($currentVariant['staff'] ?? 0) }} obsługa
+                    / {{ (int) ($currentVariant['driver'] ?? 0) }} kierowca
+                </span>
+            </p>
+        @endif
+
+        @if(! empty($detailedCalculations))
+            <div class="mt-4 space-y-4">
+                <h4 class="font-medium mb-2">Szczegółowa kalkulacja (zamrożona)</h4>
+                @foreach($detailedCalculations as $qty => $currencies)
+                    @include('partials.event-detailed-calculation-variant', [
+                        'qty' => $qty,
+                        'currencies' => $currencies,
+                        'variant' => $qtyVariants[(int) $qty] ?? ['qty' => (int) $qty, 'gratis' => 0, 'staff' => 0, 'driver' => 0],
+                        'isCurrentVariant' => true,
+                    ])
+                @endforeach
+            </div>
+        @endif
+
         @if(isset($calculations['cost_breakdown_by_day']) && count($calculations['cost_breakdown_by_day']) > 0)
             <div class="mt-4">
                 <h4 class="font-medium mb-2">Podział kosztów według dni:</h4>
@@ -104,9 +162,9 @@
                         <div class="bg-gray-50 dark:bg-gray-800 p-3 rounded">
                             <div class="flex justify-between items-center">
                                 <span class="font-medium">Dzień {{ $day }}</span>
-                                <span class="font-bold">{{ number_format($dayData['day_total'], 2) }} PLN</span>
+                                <span class="font-bold">{{ number_format((float) ($dayData['day_total'] ?? 0), 2, ',', ' ') }} PLN</span>
                             </div>
-                            <p class="text-sm text-gray-600 dark:text-gray-400">{{ $dayData['points_count'] }} punktów</p>
+                            <p class="text-sm text-gray-600 dark:text-gray-400">{{ $dayData['points_count'] ?? 0 }} punktów</p>
                         </div>
                     @endforeach
                 </div>

@@ -4,6 +4,7 @@ namespace App\Livewire;
 
 use App\Actions\Events\UpsertEventParticipantAction;
 use App\Data\UpsertEventParticipantData;
+use App\Filament\Concerns\InteractsWithClientInvoiceRequestActions;
 use App\Filament\Resources\EventResource;
 use App\Models\Event;
 use App\Models\EventMessageLog;
@@ -13,7 +14,6 @@ use App\Services\EventParticipantImporter;
 use App\Services\EventParticipantPropagationService;
 use App\Services\EventParticipantVerificationService;
 use App\Services\ParentParticipantAccessService;
-use App\Filament\Concerns\InteractsWithClientInvoiceRequestActions;
 use App\Support\EventParticipantConsents;
 use Filament\Actions\Concerns\InteractsWithActions;
 use Filament\Actions\Contracts\HasActions;
@@ -55,6 +55,8 @@ class EventParticipantListEditor extends Component implements HasActions, HasFor
     public string $formFirstName = '';
 
     public string $formLastName = '';
+
+    public string $formGender = '';
 
     public ?string $formBirthDate = null;
 
@@ -102,6 +104,8 @@ class EventParticipantListEditor extends Component implements HasActions, HasFor
                 'first_name' => $participant->first_name,
                 'last_name' => $participant->last_name,
                 'full_name' => $participant->fullName(),
+                'gender' => $participant->gender,
+                'gender_label' => $participant->genderLabel(),
                 'birth_date' => $participant->birth_date?->format('d.m.Y'),
                 'pesel' => $participant->pesel,
                 'email' => $participant->email,
@@ -270,6 +274,7 @@ class EventParticipantListEditor extends Component implements HasActions, HasFor
         $this->editParticipantId = (string) $participant->id;
         $this->formFirstName = (string) ($participant->first_name ?? '');
         $this->formLastName = (string) ($participant->last_name ?? '');
+        $this->formGender = (string) ($participant->gender ?? '');
         $this->formBirthDate = $participant->birth_date?->format('Y-m-d');
         $this->formPesel = (string) ($participant->pesel ?? '');
         $this->formEmail = (string) ($participant->email ?? '');
@@ -331,6 +336,7 @@ class EventParticipantListEditor extends Component implements HasActions, HasFor
         $this->validate([
             'formFirstName' => ['required_without:formLastName', 'nullable', 'string', 'max:120'],
             'formLastName' => ['nullable', 'string', 'max:120'],
+            'formGender' => ['nullable', 'string', 'in:'.implode(',', array_keys(EventParticipant::$genders))],
             'formBirthDate' => ['nullable', 'date'],
             'formPesel' => ['nullable', 'string', 'max:11'],
             'formEmail' => ['nullable', 'email', 'max:255'],
@@ -353,6 +359,7 @@ class EventParticipantListEditor extends Component implements HasActions, HasFor
             participant: $existing,
             firstName: $this->formFirstName,
             lastName: $this->formLastName,
+            gender: $this->formGender !== '' ? $this->formGender : null,
             birthDate: $this->formBirthDate,
             pesel: $this->formPesel,
             email: $this->formEmail,
@@ -405,6 +412,7 @@ class EventParticipantListEditor extends Component implements HasActions, HasFor
         $this->editParticipantId = null;
         $this->formFirstName = '';
         $this->formLastName = '';
+        $this->formGender = '';
         $this->formBirthDate = null;
         $this->formPesel = '';
         $this->formEmail = '';

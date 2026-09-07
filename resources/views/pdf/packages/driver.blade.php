@@ -27,6 +27,9 @@
 
     <hr class="divider">
 
+    @include('pdf.packages._package_overrides_intro')
+
+
     <div class="doc-pilot">
         <strong>Pilot:</strong> {{ $event->assignedUser?->name ?: '—' }}@if(filled($event->assignedUser?->phone)) · tel. {{ $event->assignedUser->phone }}@endif
         @if($company['phone'] ?? false)
@@ -147,6 +150,8 @@
             </div>
         </div>
     </div>
+
+        @include('pdf.packages._package_overrides_extra')
 
     @include('pdf.packages._attachments')
     @include('pdf.packages._footer')

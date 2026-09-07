@@ -3,8 +3,10 @@
 namespace Tests\Feature;
 
 use App\Livewire\EventProgramPlanner;
+use App\Models\Currency;
 use App\Models\Event;
 use App\Models\EventProgramPoint;
+use App\Models\EventSettlement;
 use App\Models\EventTemplate;
 use App\Models\User;
 use App\Services\EventProgramPointOrderService;
@@ -170,7 +172,11 @@ class EventProgramPlannerTest extends TestCase
             ->call('confirmRemovePoint')
             ->assertSet('showDeleteModal', false);
 
-        $this->assertFalse((bool) $point->fresh()->include_in_program);
+        $this->assertTrue($point->fresh()->trashed());
+        $this->assertNull(
+            EventProgramPoint::query()->whereKey($point->id)->first(),
+            'Soft-deleted punkt nie powinien być widoczny w domyślnym query (jak na Liście).'
+        );
     }
 
     public function test_planner_uses_template_duration_when_event_duration_is_stale(): void
@@ -251,6 +257,115 @@ class EventProgramPlannerTest extends TestCase
         );
         $this->assertSame('07:00', substr((string) $programList[0]->start_time, 0, 5));
         $this->assertLessThan((int) $breakfast->order, (int) $museum->order);
+        $this->assertSame('08:00', substr((string) $breakfast->start_time, 0, 5));
+        $this->assertSame('09:00', substr((string) $breakfast->end_time, 0, 5));
+    }
+
+    public function test_planner_cascades_following_points_like_list(): void
+    {
+        $user = User::factory()->create();
+        $this->actingAs($user);
+
+        $event = Event::factory()->create([
+            'duration_days' => 1,
+            'start_date' => '2026-09-10',
+        ]);
+
+        $first = EventProgramPoint::create([
+            'event_id' => $event->id,
+            'name' => 'Zbiórka',
+            'day' => 1,
+            'order' => 1,
+            'start_time' => '08:00',
+            'end_time' => '09:00',
+            'include_in_program' => true,
+            'include_in_calculation' => false,
+            'active' => true,
+            'event_template_program_point_id' => null,
+        ]);
+
+        $second = EventProgramPoint::create([
+            'event_id' => $event->id,
+            'name' => 'Zwiedzanie',
+            'day' => 1,
+            'order' => 2,
+            'start_time' => '09:00',
+            'end_time' => '11:00',
+            'include_in_program' => true,
+            'include_in_calculation' => false,
+            'active' => true,
+            'event_template_program_point_id' => null,
+        ]);
+
+        Livewire::test(EventProgramPlanner::class, ['eventId' => $event->id])
+            ->call('updatePointSchedule', $first->id, '2026-09-10T08:00:00', '2026-09-10T10:00:00')
+            ->assertHasNoErrors();
+
+        $first->refresh();
+        $second->refresh();
+
+        $this->assertSame('08:00', substr((string) $first->start_time, 0, 5));
+        $this->assertSame('10:00', substr((string) $first->end_time, 0, 5));
+        $this->assertSame('10:00', substr((string) $second->start_time, 0, 5), 'Planer jak Lista — kolejne punkty dnia przesuwają się za kotwicą.');
+        $this->assertSame('12:00', substr((string) $second->end_time, 0, 5));
+
+        $programList = app(EventProgramPointOrderService::class)
+            ->sortedForDisplay($event)
+            ->whereNull('parent_id')
+            ->values();
+
+        $this->assertSame('10:00', substr((string) $programList[1]->start_time, 0, 5));
+        $this->assertSame('12:00', substr((string) $programList[1]->end_time, 0, 5));
+    }
+
+    public function test_list_cascade_is_visible_in_planner(): void
+    {
+        $user = User::factory()->create();
+        $this->actingAs($user);
+
+        $event = Event::factory()->create([
+            'duration_days' => 1,
+            'start_date' => '2026-09-10',
+        ]);
+
+        $first = EventProgramPoint::create([
+            'event_id' => $event->id,
+            'name' => 'Zbiórka',
+            'day' => 1,
+            'order' => 1,
+            'start_time' => '08:00',
+            'end_time' => '09:00',
+            'include_in_program' => true,
+            'include_in_calculation' => false,
+            'active' => true,
+            'event_template_program_point_id' => null,
+        ]);
+
+        $second = EventProgramPoint::create([
+            'event_id' => $event->id,
+            'name' => 'Zwiedzanie',
+            'day' => 1,
+            'order' => 2,
+            'start_time' => '09:00',
+            'end_time' => '11:00',
+            'include_in_program' => true,
+            'include_in_calculation' => false,
+            'active' => true,
+            'event_template_program_point_id' => null,
+        ]);
+
+        app(EventProgramScheduleService::class)->applyManualTimeChange($first, '08:00', '10:00');
+
+        $component = Livewire::test(EventProgramPlanner::class, ['eventId' => $event->id]);
+        $events = collect($component->instance()->render()->getData()['plannerData']['events']);
+
+        $secondEvent = $events->first(
+            fn (array $row): bool => (string) ($row['id'] ?? '') === (string) $second->id
+        );
+
+        $this->assertNotNull($secondEvent);
+        $this->assertStringContainsString('T10:00', $secondEvent['start'] ?? '');
+        $this->assertStringContainsString('T12:00', $secondEvent['end'] ?? '');
     }
 
     public function test_planner_day_move_is_visible_on_the_target_program_day(): void
@@ -319,5 +434,132 @@ class EventProgramPlannerTest extends TestCase
         $this->assertStringContainsString('Obiad', $events[0]['title'] ?? '');
         $this->assertStringContainsString('T18:00', $events[0]['start'] ?? '');
         $this->assertStringContainsString('T19:30', $events[0]['end'] ?? '');
+    }
+
+    public function test_planner_calendar_includes_unpaid_advance_due_date_before_trip(): void
+    {
+        $user = User::factory()->create();
+        $this->actingAs($user);
+
+        $pln = Currency::factory()->pln()->create();
+        $event = Event::factory()->create([
+            'duration_days' => 2,
+            'start_date' => '2026-09-01',
+        ]);
+
+        $point = EventProgramPoint::create([
+            'event_id' => $event->id,
+            'name' => 'Bilety Bałtów',
+            'day' => 1,
+            'order' => 1,
+            'start_time' => '10:00',
+            'end_time' => '11:00',
+            'include_in_program' => true,
+            'include_in_calculation' => true,
+            'active' => true,
+            'planned_price' => 2400,
+            'currency_id' => $pln->id,
+            'convert_to_pln' => true,
+            'event_template_program_point_id' => null,
+        ]);
+
+        $settlement = EventSettlement::findOrCreateActiveForEvent($event);
+        $settlement->upsertCostFromProgramPoint($point->fresh(['templatePoint', 'currency', 'event']));
+        $plan = $settlement->costs()->where('source_type', 'program_point')->firstOrFail();
+        $plan->forceFill([
+            'advance_amount' => 2400,
+            'advance_due_date' => '2026-08-24',
+            'payment_status' => 'planned',
+            'paid_by' => 'office',
+        ])->saveQuietly();
+
+        $component = Livewire::test(EventProgramPlanner::class, ['eventId' => $event->id]);
+        $plannerData = $component->instance()->render()->getData()['plannerData'];
+        $events = $plannerData['events'];
+
+        $this->assertSame('2026-08-24', $plannerData['rangeStart']);
+        $this->assertTrue(collect($events)->contains(
+            fn (array $row): bool => ($row['id'] ?? null) === 'payment-due-cost-'.$plan->id
+        ));
+        $this->assertTrue(collect($events)->contains(
+            fn (array $row): bool => str_contains((string) ($row['title'] ?? ''), 'Bilety Bałtów')
+                && str_starts_with((string) ($row['start'] ?? ''), '2026-08-24')
+        ));
+    }
+
+    public function test_planner_refresh_event_rebuilds_calendar_after_finance_change(): void
+    {
+        $user = User::factory()->create();
+        $this->actingAs($user);
+
+        $event = Event::factory()->create([
+            'duration_days' => 1,
+            'start_date' => '2026-09-01',
+        ]);
+
+        EventProgramPoint::create([
+            'event_id' => $event->id,
+            'name' => 'Muzeum',
+            'day' => 1,
+            'order' => 1,
+            'start_time' => '10:00',
+            'end_time' => '11:00',
+            'include_in_program' => true,
+            'include_in_calculation' => false,
+            'active' => true,
+            'event_template_program_point_id' => null,
+        ]);
+
+        Livewire::test(EventProgramPlanner::class, ['eventId' => $event->id])
+            ->call('refreshCalendarFromFinanceChange')
+            ->assertOk();
+    }
+
+    public function test_planner_can_collapse_set_children(): void
+    {
+        $user = User::factory()->create();
+        $this->actingAs($user);
+
+        $event = Event::factory()->create([
+            'duration_days' => 1,
+            'start_date' => now()->format('Y-m-d'),
+        ]);
+
+        $parent = EventProgramPoint::create([
+            'event_id' => $event->id,
+            'name' => 'Set szkolny',
+            'day' => 1,
+            'order' => 1,
+            'start_time' => '10:00',
+            'end_time' => '12:00',
+            'include_in_program' => true,
+            'include_in_calculation' => false,
+            'active' => true,
+        ]);
+
+        $child = EventProgramPoint::create([
+            'event_id' => $event->id,
+            'parent_id' => $parent->id,
+            'name' => 'Bilety',
+            'day' => 1,
+            'order' => 2,
+            'start_time' => '10:15',
+            'end_time' => '11:00',
+            'include_in_program' => true,
+            'include_in_calculation' => false,
+            'active' => true,
+        ]);
+
+        $component = Livewire::test(EventProgramPlanner::class, ['eventId' => $event->id]);
+        $events = collect($component->viewData('plannerData')['events'] ?? []);
+
+        $this->assertTrue($events->contains(fn (array $event): bool => (string) ($event['id'] ?? '') === (string) $child->id));
+
+        $component->call('toggleSetChildrenCollapsed');
+        $eventsCollapsed = collect($component->viewData('plannerData')['events'] ?? []);
+
+        $this->assertTrue($component->get('setChildrenCollapsed'));
+        $this->assertFalse($eventsCollapsed->contains(fn (array $event): bool => (string) ($event['id'] ?? '') === (string) $child->id));
+        $this->assertTrue($eventsCollapsed->contains(fn (array $event): bool => (string) ($event['id'] ?? '') === (string) $parent->id));
     }
 }

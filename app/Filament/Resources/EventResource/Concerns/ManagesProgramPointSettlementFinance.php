@@ -10,7 +10,6 @@ use App\Models\Event;
 use App\Models\EventProgramPoint;
 use App\Models\EventSettlement;
 use App\Models\EventSettlementCost;
-use App\Services\ProgramPointPricingCalculator;
 use App\Services\ProgramPointSettlementDocumentSync;
 use App\Services\SettlementFinanceFormSupport;
 use App\Support\CurrencyAmountDisplay;
@@ -45,10 +44,13 @@ trait ManagesProgramPointSettlementFinance
     {
         $paidBy = in_array($paidBy, ['office', 'pilot'], true) ? $paidBy : 'office';
 
-        $settlement = EventSettlement::findOrCreateActiveForEvent($this->settlementOwnerEvent());
-        $cost = $settlement->upsertCostFromProgramPoint(
-            $record->loadMissing('templatePoint', 'currency', 'event', 'reservations'),
-        );
+        $event = $this->settlementOwnerEvent();
+        $settlement = EventSettlement::findOrCreateActiveForEvent($event);
+        $cost = $this->resolveSettlementPlanCostForProgramPoint($record, $settlement, ensureHotel: true);
+
+        if (! $cost instanceof EventSettlementCost) {
+            return;
+        }
 
         // Tylko plan — historyczne wpłaty zachowują swojego płatnika (zaliczka biura ≠ dopłata pilota).
         app(\App\Actions\Finance\ChangeSettlementCostPayerAction::class)(
@@ -56,6 +58,33 @@ trait ManagesProgramPointSettlementFinance
         );
 
         app(\App\Services\PilotSettlementService::class)->refreshCashFromCosts($settlement->fresh() ?? $settlement);
+    }
+
+    /**
+     * Nocleg (is_hotel) → accommodation_hotel; pozostałe → program_point.
+     */
+    protected function resolveSettlementPlanCostForProgramPoint(
+        EventProgramPoint $record,
+        ?EventSettlement $settlement = null,
+        bool $ensureHotel = false,
+    ): ?EventSettlementCost {
+        $event = $this->settlementOwnerEvent();
+        $record->loadMissing('templatePoint', 'currency', 'event', 'reservations', 'hotelStays');
+
+        if ((bool) ($record->is_hotel ?? false)) {
+            $hotelSync = app(\App\Services\HotelStaySettlementSync::class);
+            $hotelCost = $ensureHotel
+                ? $hotelSync->ensureForProgramPoint($event, $record)
+                : $hotelSync->findForProgramPoint($event, $record);
+
+            if ($hotelCost instanceof EventSettlementCost) {
+                return $hotelCost;
+            }
+        }
+
+        $settlement ??= EventSettlement::findOrCreateActiveForEvent($event);
+
+        return $settlement->upsertCostFromProgramPoint($record);
     }
 
     /**
@@ -69,17 +98,25 @@ trait ManagesProgramPointSettlementFinance
 
         return [
             Tables\Actions\Action::make('open_finance')
-                ->label('Płatności')
+                ->label('Płat.')
+                ->tooltip('Płatności / rezerwacje')
                 ->icon('heroicon-o-banknotes')
                 ->color('primary')
                 ->button()
                 ->extraAttributes(['class' => 'epp-finance-action'])
                 ->action(function (EventProgramPoint $record): void {
                     $event = $this->settlementOwnerEvent();
-                    $settlement = EventSettlement::findOrCreateActiveForEvent($event);
-                    $cost = $settlement->upsertCostFromProgramPoint(
-                        $record->loadMissing('templatePoint', 'currency', 'event', 'reservations'),
-                    );
+                    $cost = $this->resolveSettlementPlanCostForProgramPoint($record, ensureHotel: true);
+
+                    if (! $cost instanceof EventSettlementCost) {
+                        \Filament\Notifications\Notification::make()
+                            ->title('Brak kosztów hotelu w rozliczeniu')
+                            ->body('Uzupełnij plan noclegów z cenami pokoi — zbiorczy koszt utworzy się automatycznie.')
+                            ->warning()
+                            ->send();
+
+                        return;
+                    }
 
                     \App\Services\EventFinanceOverviewService::forgetOverviewCacheForEvent((int) $event->id);
                     unset($this->selectedRow);

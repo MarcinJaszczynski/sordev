@@ -36,6 +36,13 @@
       0 => 'Barryvdh\\DomPDF\\ServiceProvider',
     ),
   ),
+  'barryvdh/laravel-ide-helper' => 
+  array (
+    'providers' => 
+    array (
+      0 => 'Barryvdh\\LaravelIdeHelper\\IdeHelperServiceProvider',
+    ),
+  ),
   'bezhansalleh/filament-shield' => 
   array (
     'aliases' => 
@@ -59,6 +66,28 @@
     'providers' => 
     array (
       0 => 'BladeUI\\Icons\\BladeIconsServiceProvider',
+    ),
+  ),
+  'blaspsoft/doxswap' => 
+  array (
+    'aliases' => 
+    array (
+      'Doxswap' => 'Blaspsoft\\Doxswap\\Facades\\Doxswap',
+    ),
+    'providers' => 
+    array (
+      0 => 'Blaspsoft\\Doxswap\\DoxswapServiceProvider',
+    ),
+  ),
+  'blaspsoft/onym' => 
+  array (
+    'aliases' => 
+    array (
+      'Onym' => 'Blaspsoft\\Onym\\Facades\\Onym',
+    ),
+    'providers' => 
+    array (
+      0 => 'Blaspsoft\\Onym\\OnymServiceProvider',
     ),
   ),
   'filament/actions' => 

@@ -58,6 +58,12 @@ class Currency extends Model
             }
         });
 
+        static::saving(function (self $currency): void {
+            if (filled($currency->symbol)) {
+                $currency->symbol = strtoupper(trim((string) $currency->symbol));
+            }
+        });
+
         static::saved(fn () => static::clearPlnIdsCache());
         static::deleted(fn () => static::clearPlnIdsCache());
     }

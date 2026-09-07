@@ -112,5 +112,9 @@ class SubtasksRelationManagerTest extends TestCase
         $subtaskItem = $taskItems->first(fn (array $row): bool => ($row['title'] ?? '') === 'Nowe podzadanie topbar');
         $this->assertStringContainsString('editTask='.$subtask->id, (string) ($subtaskItem['url'] ?? ''));
         $this->assertStringContainsString('Podzadanie → Zadanie nadrzędne', (string) ($subtaskItem['meta'] ?? ''));
+        $this->assertStringContainsString(
+            'Od '.$author->name.' dla '.$assignee->name,
+            (string) ($subtaskItem['meta'] ?? ''),
+        );
     }
 }

@@ -5,7 +5,7 @@ declare(strict_types=1);
 namespace App\Filament\Resources\EventResource\Pages;
 
 use App\Actions\Finance\ChangeSettlementCostPayerAction;
-use App\Data\ChangeSettlementCostPayerData;
+use App\Filament\Actions\CreateEventSnapshotAction;
 use App\Filament\Actions\HelpArticleAction;
 use App\Filament\Resources\EventResource;
 use App\Filament\Resources\EventResource\Concerns\HasEventFinanceSubNavigation;
@@ -16,10 +16,12 @@ use App\Models\EventSettlement;
 use App\Models\EventSettlementCost;
 use App\Services\EventFinanceOverviewService;
 use App\Services\EventSettlementCostGroupService;
+use App\Services\EventWorkflowFinanceSummaryService;
 use App\Services\SettlementPaymentHealthService;
 use Filament\Actions;
 use Filament\Notifications\Notification;
 use Filament\Resources\Pages\Page;
+use Illuminate\Support\Facades\Schema;
 use Livewire\Attributes\Computed;
 use Livewire\Attributes\Url;
 use Livewire\WithFileUploads;
@@ -48,7 +50,7 @@ class EventFinance extends Page
     #[Url]
     public string $groupFilter = 'all';
 
-    /** Domyślnie ukrywa pozycje z zerową kalkulacją, planem i zapłaconym. */
+    /** Domyślnie ukrywa pozycje z zerowym szablonem, planowanymi i zapłaconym. */
     #[Url]
     public bool $hideZero = true;
 
@@ -124,7 +126,18 @@ class EventFinance extends Page
 
     protected function invalidateSettlementCostCaches(): void
     {
-        unset($this->financeOverview, $this->selectedRow);
+        EventFinanceOverviewService::forgetOverviewCacheForEvent((int) $this->getRecord()->id);
+        $this->forgetFinanceComputed();
+        $this->dispatchSettlementFinanceChanged();
+    }
+
+    protected function forgetFinanceComputed(bool $withSelectedRow = false): void
+    {
+        unset($this->financeOverview, $this->financeSummaryBar);
+
+        if ($withSelectedRow) {
+            unset($this->selectedRow);
+        }
     }
 
     /**
@@ -147,7 +160,7 @@ class EventFinance extends Page
     {
         $this->ensureSettlement();
         $this->getRecord()->refreshActiveSettlementCosts();
-        unset($this->financeOverview, $this->selectedRow);
+        $this->forgetFinanceComputed(withSelectedRow: true);
 
         Notification::make()
             ->title('Utworzono rozliczenie')
@@ -176,9 +189,20 @@ class EventFinance extends Page
         );
     }
 
+    /**
+     * Jedna belka: narzut/podatki + rozliczenie dostawców + klientów.
+     *
+     * @return array<string, mixed>|null
+     */
+    #[Computed]
+    public function financeSummaryBar(): ?array
+    {
+        return app(EventWorkflowFinanceSummaryService::class)->forEvent($this->getRecord());
+    }
+
     public function updatedSearch(): void
     {
-        unset($this->financeOverview);
+        $this->forgetFinanceComputed();
     }
 
     public function setSort(string $column): void
@@ -194,25 +218,25 @@ class EventFinance extends Page
             $this->sortDir = 'asc';
         }
 
-        unset($this->financeOverview);
+        $this->forgetFinanceComputed();
     }
 
     public function setFilter(string $filter): void
     {
         $this->filter = $filter;
-        unset($this->financeOverview);
+        $this->forgetFinanceComputed();
     }
 
     public function setGroupFilter(string $groupFilter): void
     {
         $this->groupFilter = $groupFilter;
-        unset($this->financeOverview);
+        $this->forgetFinanceComputed();
     }
 
     public function toggleHideZero(): void
     {
         $this->hideZero = ! $this->hideZero;
-        unset($this->financeOverview);
+        $this->forgetFinanceComputed();
     }
 
     public function toggleGroup(int $groupId): void
@@ -231,7 +255,7 @@ class EventFinance extends Page
             $groupId && $groupId > 0 ? $groupId : null,
         );
 
-        unset($this->financeOverview, $this->selectedRow);
+        $this->forgetFinanceComputed(withSelectedRow: true);
     }
 
     public function createGroup(): void
@@ -246,7 +270,7 @@ class EventFinance extends Page
         $settlement = $this->ensureSettlement();
         app(\App\Services\EventSettlementCostGroupService::class)->createGroup($settlement, $name);
         $this->newGroupName = '';
-        unset($this->financeOverview);
+        $this->forgetFinanceComputed();
         Notification::make()->title('Dodano grupę')->success()->send();
     }
 
@@ -274,7 +298,7 @@ class EventFinance extends Page
         app(\App\Services\EventSettlementCostGroupService::class)->renameGroup($group, $name);
         $this->renamingGroupId = null;
         $this->renameGroupName = '';
-        unset($this->financeOverview);
+        $this->forgetFinanceComputed();
         Notification::make()->title('Zmieniono nazwę grupy')->success()->send();
     }
 
@@ -292,7 +316,7 @@ class EventFinance extends Page
             return;
         }
 
-        unset($this->financeOverview);
+        $this->forgetFinanceComputed();
         Notification::make()->title('Usunięto grupę')->success()->send();
     }
 
@@ -330,7 +354,7 @@ class EventFinance extends Page
         }
 
         $this->clearSelection();
-        unset($this->financeOverview, $this->selectedRow);
+        $this->forgetFinanceComputed(withSelectedRow: true);
 
         if ($replaced > 0) {
             Notification::make()
@@ -404,7 +428,7 @@ class EventFinance extends Page
         }
 
         $this->clearSelection();
-        unset($this->financeOverview, $this->selectedRow);
+        $this->forgetFinanceComputed(withSelectedRow: true);
 
         $label = EventSettlementCost::$paidByOptions[$paidBy] ?? $paidBy;
         Notification::make()
@@ -444,7 +468,7 @@ class EventFinance extends Page
         }
 
         $this->clearSelection();
-        unset($this->financeOverview, $this->selectedRow);
+        $this->forgetFinanceComputed(withSelectedRow: true);
         Notification::make()->title("Przeniesiono {$moved} pozycji")->success()->send();
     }
 
@@ -464,6 +488,8 @@ class EventFinance extends Page
                 ->color('gray')
                 ->action('startAddCost')
                 ->visible(fn (): bool => EventSettlement::findActiveForEvent($this->getRecord()) !== null),
+            CreateEventSnapshotAction::make()
+                ->visible(fn (): bool => Schema::hasTable('event_snapshots')),
             Actions\Action::make('full_calculation')
                 ->label('Pełna kalkulacja')
                 ->icon('heroicon-o-calculator')

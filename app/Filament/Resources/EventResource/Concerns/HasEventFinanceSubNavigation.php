@@ -10,6 +10,7 @@ use App\Filament\Resources\EventResource\Pages\EventFinance;
 use App\Filament\Resources\EventResource\Pages\EventFinanceParticipantPayments;
 use App\Filament\Resources\EventResource\Pages\EventFinancePilotCash;
 use App\Filament\Resources\EventResource\Pages\EventFinanceSettlementDocuments;
+use App\Filament\Resources\EventResource\Pages\EventFinanceSnapshots;
 use App\Filament\Resources\EventResource\Pages\ManageEventSettlementCosts;
 use App\Filament\Resources\EventResource\Pages\ManageEventSettlementCurrencyExchanges;
 use App\Filament\Resources\EventResource\Pages\ManageEventSettlementDocuments;
@@ -35,6 +36,7 @@ trait HasEventFinanceSubNavigation
             EventFinance::class => 'finance',
             EventFinanceParticipantPayments::class => 'participant-payments',
             EventCalculation::class => 'calculation',
+            EventFinanceSnapshots::class => 'snapshots',
             EventFinancePilotCash::class,
             ManageEventSettlementPilotCash::class,
             ManageEventSettlementCurrencyExchanges::class => 'pilot-cash',
@@ -78,6 +80,20 @@ trait HasEventFinanceSubNavigation
                 'url' => EventResource::getUrl('calculation', ['record' => $recordId]),
                 'badge' => null,
             ],
+        ];
+
+        if (Schema::hasTable('event_snapshots')) {
+            $tabs[] = [
+                'key' => 'snapshots',
+                'label' => 'Migawki',
+                'description' => null,
+                'icon' => 'heroicon-o-camera',
+                'url' => EventResource::getUrl('finance-snapshots', ['record' => $recordId]),
+                'badge' => null,
+            ];
+        }
+
+        $tabs = array_merge($tabs, [
             [
                 'key' => 'pilot-cash',
                 'label' => 'Gotówka pilota',
@@ -94,7 +110,7 @@ trait HasEventFinanceSubNavigation
                 'url' => EventResource::getUrl('finance-settlement-documents', ['record' => $recordId]),
                 'badge' => null,
             ],
-        ];
+        ]);
 
         return WorkflowModuleNavigation::markActive($tabs, static::financeSubNavigationActiveTab());
     }
@@ -148,7 +164,7 @@ trait HasEventFinanceSubNavigation
      */
     public static function financeRouteNames(): array
     {
-        return [
+        $routes = [
             EventFinance::getRouteName(),
             EventFinanceParticipantPayments::getRouteName(),
             EventCalculation::getRouteName(),
@@ -160,6 +176,12 @@ trait HasEventFinanceSubNavigation
             ManageEventSettlementCurrencyExchanges::getRouteName(),
             ManageEventSettlementDocuments::getRouteName(),
         ];
+
+        if (Schema::hasTable('event_snapshots')) {
+            $routes[] = EventFinanceSnapshots::getRouteName();
+        }
+
+        return $routes;
     }
 
     /**

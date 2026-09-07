@@ -9,9 +9,9 @@ use App\Actions\Finance\RecordParticipantPaymentAction;
 use App\Actions\Finance\UpsertEventPaymentInstallmentTemplateAction;
 use App\Data\RecordParticipantPaymentData;
 use App\Data\UpsertEventParticipantData;
+use App\Filament\Forms\CurrencyConversionFields;
 use App\Filament\Forms\EventParticipantFormFields;
 use App\Filament\Forms\EventPaymentInstallmentTemplateFields;
-use App\Filament\Forms\CurrencyConversionFields;
 use App\Models\Event;
 use App\Models\EventSettlement;
 use App\Models\EventSettlementParticipantPayment;
@@ -161,6 +161,7 @@ class ParticipantPaymentsLedger extends Component implements HasActions, HasForm
                     event: $event,
                     firstName: $data['first_name'] ?? null,
                     lastName: $data['last_name'] ?? null,
+                    gender: $data['gender'] ?? null,
                     birthDate: $data['birth_date'] ?? null,
                     pesel: $data['pesel'] ?? null,
                     email: $data['email'] ?? null,
@@ -321,6 +322,7 @@ class ParticipantPaymentsLedger extends Component implements HasActions, HasForm
                     'paid_at' => now(),
                     'currency_id' => $plnId,
                     'rate' => 1,
+                    'convert_to_pln' => false,
                     'payment_kind' => EventSettlementParticipantPaymentEntry::KIND_REGULAR,
                     'payment_method' => 'transfer',
                     'payer_name' => $payerName,
@@ -337,6 +339,7 @@ class ParticipantPaymentsLedger extends Component implements HasActions, HasForm
                         if (! CurrencyConversionFields::isForeignCurrency($state)) {
                             $set('rate', 1);
                             $set('amount', null);
+                            $set('convert_to_pln', false);
 
                             return;
                         }
@@ -344,7 +347,15 @@ class ParticipantPaymentsLedger extends Component implements HasActions, HasForm
                         $currency = \App\Models\Currency::query()->find($state);
                         $rate = (float) ($currency?->exchange_rate ?: 0);
                         $set('rate', $rate > 0 ? $rate : null);
+                        $set('convert_to_pln', false);
                     }),
+                Forms\Components\Toggle::make('convert_to_pln')
+                    ->label('Przelicz na PLN')
+                    ->helperText('Wyłączone: wpłata zostaje w walucie (np. zbiórka w autokarze). Włącz, by doliczyć ekwiwalent do salda PLN.')
+                    ->default(false)
+                    ->inline(false)
+                    ->live()
+                    ->visible(fn (Forms\Get $get): bool => CurrencyConversionFields::isForeignCurrency($get('currency_id'))),
                 Forms\Components\TextInput::make('amount')
                     ->label('Kwota w walucie')
                     ->numeric()
@@ -352,6 +363,11 @@ class ParticipantPaymentsLedger extends Component implements HasActions, HasForm
                     ->live(onBlur: true)
                     ->afterStateUpdated(function ($state, Forms\Set $set, Forms\Get $get): void {
                         if (! CurrencyConversionFields::isForeignCurrency($get('currency_id'))) {
+                            return;
+                        }
+                        if (! (bool) ($get('convert_to_pln') ?? false)) {
+                            $set('amount_pln', null);
+
                             return;
                         }
                         $amount = (float) ($state ?: 0);
@@ -369,20 +385,28 @@ class ParticipantPaymentsLedger extends Component implements HasActions, HasForm
                         if (! CurrencyConversionFields::isForeignCurrency($get('currency_id'))) {
                             return;
                         }
+                        if (! (bool) ($get('convert_to_pln') ?? false)) {
+                            return;
+                        }
                         $amount = (float) ($get('amount') ?: 0);
                         $rate = (float) ($state ?: 0);
                         $set('amount_pln', ($amount > 0 && $rate > 0) ? round($amount * $rate, 2) : null);
                     })
-                    ->visible(fn (Forms\Get $get): bool => CurrencyConversionFields::isForeignCurrency($get('currency_id')))
-                    ->required(fn (Forms\Get $get): bool => CurrencyConversionFields::isForeignCurrency($get('currency_id'))),
+                    ->visible(fn (Forms\Get $get): bool => CurrencyConversionFields::isForeignCurrency($get('currency_id'))
+                        && (bool) ($get('convert_to_pln') ?? false))
+                    ->required(fn (Forms\Get $get): bool => CurrencyConversionFields::isForeignCurrency($get('currency_id'))
+                        && (bool) ($get('convert_to_pln') ?? false)),
                 Forms\Components\TextInput::make('amount_pln')
                     ->label(fn (Forms\Get $get): string => CurrencyConversionFields::isForeignCurrency($get('currency_id'))
                         ? 'Kwota PLN (po kursie)'
                         : 'Kwota (PLN)')
                     ->numeric()
-                    ->required()
+                    ->required(fn (Forms\Get $get): bool => ! CurrencyConversionFields::isForeignCurrency($get('currency_id'))
+                        || (bool) ($get('convert_to_pln') ?? false))
                     ->minValue(0.01)
                     ->suffix('PLN')
+                    ->visible(fn (Forms\Get $get): bool => ! CurrencyConversionFields::isForeignCurrency($get('currency_id'))
+                        || (bool) ($get('convert_to_pln') ?? false))
                     ->readOnly(fn (Forms\Get $get): bool => CurrencyConversionFields::isForeignCurrency($get('currency_id'))),
                 Forms\Components\TextInput::make('payer_name')
                     ->label('Płatnik')
@@ -413,6 +437,7 @@ class ParticipantPaymentsLedger extends Component implements HasActions, HasForm
                             $set('currency_id', $eur->id);
                             $rate = (float) ($eur->exchange_rate ?: 0);
                             $set('rate', $rate > 0 ? $rate : null);
+                            $set('convert_to_pln', false);
                         }
                     }),
                 Forms\Components\Select::make('payment_method')
@@ -439,14 +464,17 @@ class ParticipantPaymentsLedger extends Component implements HasActions, HasForm
                 $payment = $this->findPayment((int) ($arguments['paymentId'] ?? 0));
                 $currencyId = filled($data['currency_id'] ?? null) ? (int) $data['currency_id'] : null;
                 $isForeign = CurrencyConversionFields::isForeignCurrency($currencyId);
+                $convertToPln = $isForeign ? (bool) ($data['convert_to_pln'] ?? false) : true;
 
                 $amountForeign = $isForeign ? (float) ($data['amount'] ?? 0) : null;
-                $rate = $isForeign ? (float) ($data['rate'] ?? 0) : null;
+                $rate = ($isForeign && $convertToPln) ? (float) ($data['rate'] ?? 0) : ($isForeign ? (float) ($data['rate'] ?? 0) ?: null : null);
                 $amountPln = $isForeign
-                    ? round(((float) ($data['amount'] ?? 0)) * ((float) ($data['rate'] ?? 0)), 2)
+                    ? ($convertToPln
+                        ? round(((float) ($data['amount'] ?? 0)) * ((float) ($data['rate'] ?? 0)), 2)
+                        : 0.0)
                     : (float) ($data['amount_pln'] ?? 0);
 
-                if ($amountPln <= 0) {
+                if ($amountPln <= 0 && ($amountForeign === null || $amountForeign <= 0)) {
                     Notification::make()->title('Kwota wpłaty musi być większa od zera.')->danger()->send();
 
                     return;

@@ -1,56 +1,49 @@
 <?php
 
+declare(strict_types=1);
+
 namespace App\Services;
 
-use App\Models\Contract;
+use App\Enums\EventAnalyticsPhase;
+use App\Enums\ProfitRecognitionMode;
 use App\Models\Event;
 use App\Models\EventSettlement;
-use App\Models\VendorInvoice;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Support\Collection;
-use Illuminate\Support\Facades\Schema;
 
 class ExecutiveProfitLossService
 {
+    public function __construct(
+        private readonly EventProfitRecognitionService $recognition,
+    ) {}
+
     /**
      * @param  array{
      *     date_from?: ?string,
      *     date_to?: ?string,
+     *     date_axis?: ?string,
+     *     phase?: ?string,
+     *     event_status?: ?string,
      *     status?: ?string,
+     *     template_id?: int|string|null,
+     *     client?: ?string,
+     *     recognition_mode?: ?string,
      *     search?: ?string
      * }  $filters
      * @return Collection<int, array<string, mixed>>
      */
     public function eventRows(array $filters = []): Collection
     {
-        $query = EventSettlement::query()
-            ->with(['event'])
-            ->whereHas('event');
+        $mode = ProfitRecognitionMode::tryFrom((string) ($filters['recognition_mode'] ?? 'auto'))
+            ?? ProfitRecognitionMode::Auto;
 
-        if (! empty($filters['status'])) {
-            $query->where('status', $filters['status']);
-        }
-
-        if (! empty($filters['date_from'])) {
-            $query->whereHas('event', fn (Builder $event) => $event->whereDate('start_date', '>=', $filters['date_from']));
-        }
-
-        if (! empty($filters['date_to'])) {
-            $query->whereHas('event', fn (Builder $event) => $event->whereDate('start_date', '<=', $filters['date_to']));
-        }
-
-        if (! empty($filters['search'])) {
-            $term = '%'.$filters['search'].'%';
-            $query->whereHas('event', fn (Builder $event) => $event
-                ->where('name', 'like', $term)
-                ->orWhere('code', 'like', $term));
-        }
-
-        return $query
+        return $this->filteredEventsQuery($filters)
+            ->with(['latestSettlement.costs', 'eventTemplate'])
+            ->orderByDesc('start_date')
             ->orderByDesc('id')
             ->limit(500)
             ->get()
-            ->map(fn (EventSettlement $settlement): array => $this->mapSettlementRow($settlement))
+            ->map(fn (Event $event): array => $this->recognition->forEvent($event, $mode)->toArray())
             ->sortByDesc('net_result_pln')
             ->values();
     }
@@ -61,90 +54,118 @@ class ExecutiveProfitLossService
      */
     public function summarize(Collection $rows): array
     {
+        $revenue = round((float) $rows->sum('revenue_pln'), 2);
+        $costs = round((float) $rows->sum('costs_pln'), 2);
+        $paidRevenue = round((float) $rows->sum('revenue_paid_pln'), 2);
+        $paidCosts = round((float) $rows->sum('cost_paid_pln'), 2);
+
         return [
             'events' => $rows->count(),
-            'revenue_pln' => round($rows->sum('revenue_pln'), 2),
-            'costs_pln' => round($rows->sum('costs_pln'), 2),
-            'net_result_pln' => round($rows->sum('net_result_pln'), 2),
-            'receivables_pln' => round($rows->sum('receivables_pln'), 2),
-            'payables_pln' => round($rows->sum('payables_pln'), 2),
-            'cash_balance_pln' => round($rows->sum('revenue_pln') - $rows->sum('costs_pln') - $rows->sum('payables_pln'), 2),
-        ];
-    }
-
-    /**
-     * @return array<string, mixed>
-     */
-    public function mapSettlementRow(EventSettlement $settlement): array
-    {
-        $event = $settlement->event;
-        $revenue = $this->resolveRevenuePln($settlement);
-        $costs = (float) $settlement->actual_cost_pln;
-        $receivables = max(0, (float) $settlement->participant_due_pln - (float) $settlement->participant_paid_pln);
-        $payables = $this->resolvePayablesPln($event);
-
-        $plannedMargin = null;
-        $plannedMarginPercent = null;
-
-        if ($event) {
-            try {
-                $presenter = EventCalculationPresenter::for($event);
-                $plannedMargin = $presenter->marginDeltaPln();
-                $plannedMarginPercent = $presenter->marginDeltaPercent();
-            } catch (\Throwable) {
-            }
-        }
-
-        return [
-            'settlement_id' => $settlement->id,
-            'event_id' => $event?->id,
-            'event_code' => $event?->code,
-            'event_name' => $event?->name,
-            'event_date' => $event?->start_date?->format('Y-m-d'),
-            'status' => $settlement->status,
-            'status_label' => EventSettlement::$statuses[$settlement->status] ?? $settlement->status,
-            'revenue_pln' => round($revenue, 2),
-            'costs_pln' => round($costs, 2),
+            'revenue_pln' => $revenue,
+            'costs_pln' => $costs,
             'net_result_pln' => round($revenue - $costs, 2),
-            'receivables_pln' => round($receivables, 2),
-            'payables_pln' => round($payables, 2),
-            'planned_margin_pln' => $plannedMargin !== null ? round($plannedMargin, 2) : null,
-            'planned_margin_percent' => $plannedMarginPercent,
+            'revenue_paid_pln' => $paidRevenue,
+            'cost_paid_pln' => $paidCosts,
+            'cost_planned_pln' => round((float) $rows->sum('cost_planned_pln'), 2),
+            'cost_outstanding_pln' => round((float) $rows->sum('cost_outstanding_pln'), 2),
+            'revenue_due_pln' => round((float) $rows->sum('revenue_due_pln'), 2),
+            'receivables_pln' => round((float) $rows->sum('receivables_pln'), 2),
+            'payables_pln' => round((float) $rows->sum('payables_pln'), 2),
+            'cash_balance_pln' => round($paidRevenue - $paidCosts, 2),
+            'avg_margin_percent' => $revenue > 0
+                ? round((($revenue - $costs) / $revenue) * 100, 1)
+                : null,
         ];
     }
 
-    protected function resolveRevenuePln(EventSettlement $settlement): float
+    /**
+     * @param  Collection<int, array<string, mixed>>  $rows
+     * @return array<int, array<string, mixed>>
+     */
+    public function aggregateByTemplate(Collection $rows): array
     {
-        $fromParticipants = (float) $settlement->participant_paid_pln;
-        $fromContracts = 0.0;
+        return $rows
+            ->groupBy(fn (array $row): string => (string) ($row['template_id'] ?? 'none'))
+            ->map(function (Collection $group): array {
+                $revenue = round((float) $group->sum('revenue_pln'), 2);
+                $costs = round((float) $group->sum('costs_pln'), 2);
+                $net = round($revenue - $costs, 2);
 
-        if ($settlement->event_id && Schema::hasTable('contracts')) {
-            $fromContracts = (float) Contract::query()
-                ->where('event_id', $settlement->event_id)
-                ->whereNotIn('status', ['cancelled', 'template'])
-                ->sum('amount_paid');
-        }
-
-        return $fromParticipants + $fromContracts;
-    }
-
-    protected function resolvePayablesPln(?Event $event): float
-    {
-        if (! $event || ! Schema::hasTable('vendor_invoices')) {
-            return 0.0;
-        }
-
-        return (float) VendorInvoice::query()
-            ->where('event_id', $event->id)
-            ->where('payment_status', 'due')
-            ->where('approval_status', 'approved')
-            ->sum('gross_amount');
+                return [
+                    'key' => $group->first()['template_id'] ?? null,
+                    'label' => $group->first()['template_name'] ?? 'Bez szablonu',
+                    'events' => $group->count(),
+                    'revenue_pln' => $revenue,
+                    'costs_pln' => $costs,
+                    'net_result_pln' => $net,
+                    'margin_percent' => $revenue > 0 ? round(($net / $revenue) * 100, 1) : null,
+                ];
+            })
+            ->sortByDesc('net_result_pln')
+            ->values()
+            ->all();
     }
 
     /**
-     * @return array<int, array{month: string, revenue: float, costs: float, net: float}>
+     * @param  Collection<int, array<string, mixed>>  $rows
+     * @return array<int, array<string, mixed>>
      */
-    public function monthlyTrend(int $months = 12): array
+    public function aggregateByClient(Collection $rows): array
+    {
+        return $rows
+            ->groupBy(fn (array $row): string => mb_strtolower(trim((string) ($row['client_name'] ?? ''))) ?: 'none')
+            ->map(function (Collection $group): array {
+                $revenue = round((float) $group->sum('revenue_pln'), 2);
+                $costs = round((float) $group->sum('costs_pln'), 2);
+                $net = round($revenue - $costs, 2);
+
+                return [
+                    'label' => $group->first()['client_name'] ?? 'Bez klienta',
+                    'events' => $group->count(),
+                    'revenue_pln' => $revenue,
+                    'costs_pln' => $costs,
+                    'net_result_pln' => $net,
+                    'margin_percent' => $revenue > 0 ? round(($net / $revenue) * 100, 1) : null,
+                ];
+            })
+            ->sortByDesc('net_result_pln')
+            ->values()
+            ->all();
+    }
+
+    /**
+     * @param  Collection<int, array<string, mixed>>  $rows
+     * @return array<int, array<string, mixed>>
+     */
+    public function aggregateByPhase(Collection $rows): array
+    {
+        return collect(EventAnalyticsPhase::cases())
+            ->map(function (EventAnalyticsPhase $phase) use ($rows): array {
+                $group = $rows->where('phase', $phase->value);
+                $revenue = round((float) $group->sum('revenue_pln'), 2);
+                $costs = round((float) $group->sum('costs_pln'), 2);
+                $net = round($revenue - $costs, 2);
+
+                return [
+                    'phase' => $phase->value,
+                    'label' => $phase->label(),
+                    'events' => $group->count(),
+                    'revenue_pln' => $revenue,
+                    'costs_pln' => $costs,
+                    'net_result_pln' => $net,
+                    'margin_percent' => $revenue > 0 ? round(($net / $revenue) * 100, 1) : null,
+                ];
+            })
+            ->filter(fn (array $row): bool => $row['events'] > 0)
+            ->values()
+            ->all();
+    }
+
+    /**
+     * @param  array<string, mixed>  $filters
+     * @return array<int, array{month: string, label: string, revenue: float, costs: float, net: float, events: int}>
+     */
+    public function monthlyTrend(array $filters = [], int $months = 12): array
     {
         $start = now()->subMonths($months - 1)->startOfMonth();
         $buckets = [];
@@ -162,21 +183,22 @@ class ExecutiveProfitLossService
             ];
         }
 
-        $settlements = EventSettlement::query()
-            ->with('event')
-            ->whereHas('event', fn (Builder $query) => $query->whereDate('start_date', '>=', $start))
-            ->get();
+        $trendFilters = $filters;
+        if (empty($trendFilters['date_from'])) {
+            $trendFilters['date_from'] = $start->toDateString();
+        }
 
-        foreach ($settlements as $settlement) {
-            $monthKey = $settlement->event?->start_date?->format('Y-m');
+        foreach ($this->eventRows($trendFilters) as $row) {
+            $monthKey = isset($row['event_date'])
+                ? substr((string) $row['event_date'], 0, 7)
+                : null;
             if (! $monthKey || ! isset($buckets[$monthKey])) {
                 continue;
             }
 
-            $row = $this->mapSettlementRow($settlement);
-            $buckets[$monthKey]['revenue'] += $row['revenue_pln'];
-            $buckets[$monthKey]['costs'] += $row['costs_pln'];
-            $buckets[$monthKey]['net'] += $row['net_result_pln'];
+            $buckets[$monthKey]['revenue'] += (float) $row['revenue_pln'];
+            $buckets[$monthKey]['costs'] += (float) $row['costs_pln'];
+            $buckets[$monthKey]['net'] += (float) $row['net_result_pln'];
             $buckets[$monthKey]['events']++;
         }
 
@@ -187,5 +209,153 @@ class ExecutiveProfitLossService
         }
 
         return array_values($buckets);
+    }
+
+    /**
+     * @deprecated Używane tylko przez starsze testy — preferuj eventRows()+recognition.
+     *
+     * @return array<string, mixed>
+     */
+    public function mapSettlementRow(EventSettlement $settlement): array
+    {
+        $event = $settlement->event;
+        if (! $event) {
+            return [
+                'settlement_id' => $settlement->id,
+                'event_id' => null,
+                'revenue_pln' => 0.0,
+                'costs_pln' => 0.0,
+                'net_result_pln' => 0.0,
+                'receivables_pln' => 0.0,
+                'payables_pln' => 0.0,
+            ];
+        }
+
+        $event->setRelation('latestSettlement', $settlement);
+
+        return $this->recognition->forEvent($event)->toArray();
+    }
+
+    /**
+     * @param  array<string, mixed>  $filters
+     */
+    protected function filteredEventsQuery(array $filters): Builder
+    {
+        $dateAxis = (string) ($filters['date_axis'] ?? 'start_date');
+        if (! in_array($dateAxis, ['start_date', 'end_date'], true)) {
+            $dateAxis = 'start_date';
+        }
+
+        $query = Event::query();
+
+        if (! empty($filters['date_from'])) {
+            $query->whereDate($dateAxis, '>=', $filters['date_from']);
+        }
+
+        if (! empty($filters['date_to'])) {
+            $query->whereDate($dateAxis, '<=', $filters['date_to']);
+        }
+
+        if (! empty($filters['event_statuses']) && is_array($filters['event_statuses'])) {
+            $query->whereIn('status', $filters['event_statuses']);
+        } elseif (! empty($filters['event_status'])) {
+            $query->where('status', $filters['event_status']);
+        }
+
+        if (! empty($filters['template_id'])) {
+            if ($filters['template_id'] === 'none') {
+                $query->whereNull('event_template_id');
+            } else {
+                $query->where('event_template_id', (int) $filters['template_id']);
+            }
+        }
+
+        if (! empty($filters['client'])) {
+            if ($filters['client'] === '__none__') {
+                $query->where(function (Builder $inner): void {
+                    $inner->whereNull('client_name')
+                        ->orWhere('client_name', '')
+                        ->orWhere('client_name', '—');
+                });
+            } else {
+                $term = '%'.$filters['client'].'%';
+                $query->where('client_name', 'like', $term);
+            }
+        }
+
+        if (! empty($filters['status'])) {
+            $query->whereHas('latestSettlement', fn (Builder $settlement) => $settlement->where('status', $filters['status']));
+        }
+
+        if (! empty($filters['search'])) {
+            $term = '%'.$filters['search'].'%';
+            $query->where(function (Builder $inner) use ($term): void {
+                $inner->where('name', 'like', $term)
+                    ->orWhere('code', 'like', $term)
+                    ->orWhere('client_name', 'like', $term);
+            });
+        }
+
+        if (! empty($filters['phase'])) {
+            $phase = EventAnalyticsPhase::tryFrom((string) $filters['phase']);
+            if ($phase) {
+                $this->applyPhaseConstraint($query, $phase);
+            }
+        }
+
+        return $query;
+    }
+
+    protected function applyPhaseConstraint(Builder $query, EventAnalyticsPhase $phase): void
+    {
+        $today = now()->toDateString();
+
+        match ($phase) {
+            EventAnalyticsPhase::Cancelled => $query->whereIn('status', [
+                Event::STATUS_CANCELLED,
+                Event::STATUS_PENDING_CANCELLATION,
+            ]),
+            EventAnalyticsPhase::Future => $query
+                ->whereNotIn('status', [Event::STATUS_CANCELLED, Event::STATUS_PENDING_CANCELLATION])
+                ->where(function (Builder $q) use ($today): void {
+                    $q->where(function (Builder $inner) use ($today): void {
+                        $inner->whereNotNull('end_date')
+                            ->whereDate('end_date', '>=', $today)
+                            ->whereDate('start_date', '>', $today);
+                    })->orWhere(function (Builder $inner) use ($today): void {
+                        $inner->whereNull('end_date')
+                            ->where(function (Builder $dates) use ($today): void {
+                                $dates->whereNull('start_date')
+                                    ->orWhereDate('start_date', '>', $today);
+                            });
+                    });
+                }),
+            EventAnalyticsPhase::Completed => $query
+                ->whereNotIn('status', [Event::STATUS_CANCELLED, Event::STATUS_PENDING_CANCELLATION])
+                ->where(function (Builder $q) use ($today): void {
+                    $q->where(function (Builder $inner) use ($today): void {
+                        $inner->whereNotNull('end_date')->whereDate('end_date', '<', $today);
+                    })->orWhere(function (Builder $inner) use ($today): void {
+                        $inner->whereNull('end_date')
+                            ->whereNotNull('start_date')
+                            ->whereDate('start_date', '<', $today);
+                    });
+                }),
+            EventAnalyticsPhase::InProgress => $query
+                ->whereNotIn('status', [Event::STATUS_CANCELLED, Event::STATUS_PENDING_CANCELLATION])
+                ->where(function (Builder $q) use ($today): void {
+                    $q->where(function (Builder $inner) use ($today): void {
+                        $inner->whereNotNull('end_date')
+                            ->whereDate('end_date', '>=', $today)
+                            ->where(function (Builder $start) use ($today): void {
+                                $start->whereNull('start_date')
+                                    ->orWhereDate('start_date', '<=', $today);
+                            });
+                    })->orWhere(function (Builder $inner) use ($today): void {
+                        $inner->whereNull('end_date')
+                            ->whereDate('start_date', '=', $today);
+                    });
+                }),
+        };
     }
 }

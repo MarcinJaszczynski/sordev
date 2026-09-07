@@ -37,6 +37,12 @@ class EventParticipantCountChangeService
             return;
         }
 
+        // Powiadomienie tylko dla imprez potwierdzonych (Potwierdzona + Odprawa OK).
+        // Na ofercie/zapytaniu liczba uczestników zmienia się często — bez generowania szumu w zadaniach.
+        if (! $event->isConfirmedLike()) {
+            return;
+        }
+
         if ($this->wasRecentlyNotified($event, $oldCount, $newCount)) {
             return;
         }
@@ -51,7 +57,6 @@ class EventParticipantCountChangeService
             title: $title,
             description: $description,
             priority: TaskPriority::Urgent,
-            dueDate: now()->addDay(),
             eventForAssignee: $event,
             url: AdminPanelUrls::eventReservations($event),
         );

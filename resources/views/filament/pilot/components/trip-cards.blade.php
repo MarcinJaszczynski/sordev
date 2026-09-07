@@ -9,7 +9,15 @@
 
 @if($trips->isEmpty())
     <div class="client-portal-section">
-        <p class="text-sm text-slate-600">Nie masz jeszcze przypisanych wycieczek.</p>
+        @if(\App\Http\Middleware\PilotPreviewMiddleware::isActive()
+            && ! \App\Http\Middleware\PilotPreviewMiddleware::previewUserId())
+            <p class="text-sm text-[#5F5E5A]">
+                Podgląd bez wybranego pilota — nie ma tu listy wszystkich imprez biura.
+                Wejdź przez <strong>„Podgląd jako ten pilot”</strong> z karty imprezy w panelu admina.
+            </p>
+        @else
+            <p class="text-sm text-[#5F5E5A]">Nie masz jeszcze przypisanych wycieczek.</p>
+        @endif
     </div>
 @else
     <div class="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
@@ -40,11 +48,11 @@
                     </div>
                     <div class="mt-auto flex flex-wrap items-center gap-2 pt-1">
                         @if($archived)
-                            <span class="rounded-full bg-slate-100 px-2.5 py-0.5 text-[11px] font-semibold text-slate-600">Archiwum</span>
+                            <span class="portal-status-pill" style="background:#F1EFE8;color:#5F5E5A;">Archiwum</span>
                         @elseif(filled($trip->status))
-                            <span class="rounded-full bg-blue-50 px-2.5 py-0.5 text-[11px] font-semibold text-blue-800">{{ $trip->status }}</span>
+                            <span class="portal-status-pill">{{ $trip->status }}</span>
                         @endif
-                        <span class="ml-auto text-sm font-semibold text-[#0663fc]">Otwórz →</span>
+                        <span class="ml-auto text-sm font-semibold" style="color:#0C447C;">Otwórz →</span>
                     </div>
                 </div>
             </a>

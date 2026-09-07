@@ -15,6 +15,8 @@ readonly class RecalculateEventTotalsData
         public Event $event,
         public ?int $participantCount = null,
         public ?int $gratisCount = null,
+        public ?int $staffCount = null,
+        public ?int $driverCount = null,
         public ?int $startPlaceId = null,
         public bool $persist = false,
     ) {}

@@ -50,7 +50,7 @@ class CalendarEventLinksTest extends TestCase
         $this->assertNotNull($entry);
         $this->assertCount(2, $entry['links']);
         $this->assertSame('Zadanie', $entry['links'][0]['label']);
-        $this->assertSame('Kontrahent', $entry['links'][1]['label']);
+        $this->assertSame('Kontrahent: Hotel Test', $entry['links'][1]['label']);
     }
 
     public function test_task_linked_to_program_point_exposes_event_and_program_links(): void
@@ -75,8 +75,8 @@ class CalendarEventLinksTest extends TestCase
         $contextLinks = TaskContextRegistry::linksForTask($task);
 
         $this->assertCount(2, $contextLinks);
-        $this->assertSame('Impreza', $contextLinks[0]['label']);
-        $this->assertSame('Program imprezy', $contextLinks[1]['label']);
+        $this->assertSame('Punkt programu: Przejazd autokarem', $contextLinks[0]['label']);
+        $this->assertSame('Impreza: '.$event->name, $contextLinks[1]['label']);
 
         $items = app(CalendarEventAggregator::class)->events([
             'from' => now()->subDay()->toDateString(),
@@ -89,7 +89,7 @@ class CalendarEventLinksTest extends TestCase
         $this->assertNotNull($entry);
         $this->assertCount(3, $entry['links']);
         $this->assertSame('Zadanie', $entry['links'][0]['label']);
-        $this->assertSame('Impreza', $entry['links'][1]['label']);
-        $this->assertSame('Program imprezy', $entry['links'][2]['label']);
+        $this->assertSame('Punkt programu: Przejazd autokarem', $entry['links'][1]['label']);
+        $this->assertSame('Impreza: '.$event->name, $entry['links'][2]['label']);
     }
 }

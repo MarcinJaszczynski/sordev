@@ -4,6 +4,8 @@ namespace App\Models;
 
 use App\Models\Concerns\HasStickyNotes;
 use App\Models\Concerns\HasTasks;
+use App\Services\EventCostCalculator;
+use App\Services\EventPriceCalculator;
 use App\Services\ProgramPointContractorSync;
 use App\Services\ProgramPointPricingCalculator;
 use App\Support\CurrencyAmountDisplay;
@@ -93,6 +95,7 @@ class EventProgramPoint extends Model
         'calculated_price' => 'decimal:2',
         'planned_price' => 'decimal:2',
         'paid_price' => 'decimal:2',
+        'currency_id' => 'integer',
         'include_in_program' => 'boolean',
         'include_in_calculation' => 'boolean',
         'include_gratis_in_cost' => 'boolean',
@@ -135,6 +138,22 @@ class EventProgramPoint extends Model
     public function children()
     {
         return $this->hasMany(self::class, 'parent_id')->orderBy('order');
+    }
+
+    /**
+     * Set nadrzędny = ma podpunkty. Kontrahent na secie to miejsce/kontekst, nie dostawca płatności.
+     */
+    public function isSetParent(): bool
+    {
+        if ($this->relationLoaded('children')) {
+            return $this->children->isNotEmpty();
+        }
+
+        if (array_key_exists('children_count', $this->getAttributes())) {
+            return (int) $this->children_count > 0;
+        }
+
+        return $this->children()->exists();
     }
 
     protected static function booted()
@@ -209,6 +228,7 @@ class EventProgramPoint extends Model
             $event->calculateTotalCost();
             $event->refreshActiveSettlementCosts();
             $event->syncTransportFromProgramPoints();
+            self::recalculateEventPrices($event);
         });
 
         static::created(function ($point) {
@@ -233,26 +253,23 @@ class EventProgramPoint extends Model
             $event->calculateTotalCost();
             $event->refreshActiveSettlementCosts();
             $event->syncTransportFromProgramPoints();
+            self::recalculateEventPrices($event);
+        });
+
+        static::forceDeleting(function ($point) {
+            self::retainFinancesForRemovedPoint($point);
+
+            Reservation::query()
+                ->where('program_point_id', $point->id)
+                ->update(['program_point_id' => null]);
         });
 
         static::deleted(function ($point) {
-            $pointIds = self::query()
-                ->withTrashed()
-                ->where('event_id', $point->event_id)
-                ->where(function ($query) use ($point): void {
-                    $query->where('id', $point->id)
-                        ->orWhere('parent_id', $point->id);
-                })
-                ->pluck('id')
-                ->map(fn ($id): int => (int) $id)
-                ->unique()
-                ->values()
-                ->all();
+            if ($point->isForceDeleting()) {
+                return;
+            }
 
-            EventSettlementCost::query()
-                ->whereIn('source_type', ['program_point', 'program_point_payment'])
-                ->whereIn('source_id', $pointIds)
-                ->delete();
+            self::retainFinancesForRemovedPoint($point);
 
             $event = $point->event;
             if (! $event) {
@@ -271,7 +288,61 @@ class EventProgramPoint extends Model
             $event->calculateTotalCost();
             $event->refreshActiveSettlementCosts();
             $event->syncTransportFromProgramPoints();
+            self::recalculateEventPrices($event);
         });
+    }
+
+    /**
+     * Wpłaty i zaliczki zostają w rozliczeniu; puste pozycje planu można sprzątnąć.
+     */
+    private static function retainFinancesForRemovedPoint(EventProgramPoint $point): void
+    {
+        $pointIds = self::query()
+            ->withTrashed()
+            ->where('event_id', $point->event_id)
+            ->where(function ($query) use ($point): void {
+                $query->where('id', $point->id)
+                    ->orWhere('parent_id', $point->id);
+            })
+            ->pluck('id')
+            ->map(fn ($id): int => (int) $id)
+            ->unique()
+            ->values()
+            ->all();
+
+        if ($pointIds === []) {
+            $pointIds = [(int) $point->id];
+        }
+
+        $costs = EventSettlementCost::query()
+            ->whereIn('source_type', ['program_point', 'program_point_payment'])
+            ->whereIn('source_id', $pointIds)
+            ->orderByRaw("CASE WHEN source_type = 'program_point' THEN 0 ELSE 1 END")
+            ->get();
+
+        foreach ($costs as $cost) {
+            $cost->discardIfNotPreserved('odłączony od programu');
+        }
+    }
+
+    private static function recalculateEventPrices(Event $event): void
+    {
+        try {
+            EventCostCalculator::clearRequestCache();
+            (new EventPriceCalculator)->calculateForEvent($event->fresh([
+                'bus',
+                'markup',
+                'eventTemplate.markup',
+                'eventTemplate.taxes',
+                'qtyVariants',
+                'programPoints.templatePoint',
+                'programPoints.currency',
+                'dayInsurances.insurance',
+                'hotelStays.roomLines.currency',
+            ]) ?? $event);
+        } catch (\Throwable $e) {
+            report($e);
+        }
     }
 
     /**
@@ -393,6 +464,14 @@ class EventProgramPoint extends Model
             return $fromStay;
         }
 
+        if (
+            $this->relationLoaded('reservations')
+            && $this->relationLoaded('hotelStays')
+            && ($this->relationLoaded('sharedReservation') || ! filled($this->reservation_id))
+        ) {
+            return null;
+        }
+
         return app(\App\Services\ProgramPointReservationSync::class)->findForPoint($this);
     }
 
@@ -457,25 +536,35 @@ class EventProgramPoint extends Model
         );
     }
 
+    /**
+     * Opis do wyświetlenia: własne pole ma pierwszeństwo.
+     * null = dziedzicz z szablonu; pusty string = celowo bez opisu (nie dziedzicz).
+     */
     public function resolvedDescription(): ?string
     {
-        return filled($this->description)
-            ? $this->description
-            : ($this->templatePoint?->description ?: null);
+        return $this->resolveOwnOrTemplateText($this->description, $this->templatePoint?->description);
     }
 
     public function resolvedPilotNotes(): ?string
     {
-        return filled($this->pilot_notes)
-            ? $this->pilot_notes
-            : ($this->templatePoint?->pilot_notes ?: null);
+        return $this->resolveOwnOrTemplateText($this->pilot_notes, $this->templatePoint?->pilot_notes);
     }
 
     public function resolvedOfficeNotes(): ?string
     {
-        return filled($this->office_notes)
-            ? $this->office_notes
-            : ($this->templatePoint?->office_notes ?: null);
+        return $this->resolveOwnOrTemplateText($this->office_notes, $this->templatePoint?->office_notes);
+    }
+
+    /**
+     * null = dziedzicz z szablonu; '' / whitespace-only HTML = brak treści (bez dziedziczenia).
+     */
+    private function resolveOwnOrTemplateText(?string $own, ?string $fromTemplate): ?string
+    {
+        if ($own !== null) {
+            return filled(trim(strip_tags($own))) ? $own : null;
+        }
+
+        return filled($fromTemplate) ? $fromTemplate : null;
     }
 
     public function hasResolvedPilotNotes(): bool
@@ -491,6 +580,27 @@ class EventProgramPoint extends Model
     public function hasPilotPortalDetails(): bool
     {
         return filled($this->resolvedDescription()) || filled($this->resolvedPilotNotes());
+    }
+
+    /**
+     * Godzina do wyświetlenia w programie (null gdy hide_times).
+     */
+    public function displayStartTime(int $length = 5): ?string
+    {
+        if ($this->hide_times || blank($this->start_time)) {
+            return null;
+        }
+
+        return substr((string) $this->start_time, 0, $length);
+    }
+
+    public function displayEndTime(int $length = 5): ?string
+    {
+        if ($this->hide_times || blank($this->end_time)) {
+            return null;
+        }
+
+        return substr((string) $this->end_time, 0, $length);
     }
 
     /**
@@ -567,8 +677,16 @@ class EventProgramPoint extends Model
 
     private static function resolvePointName(self $point): string
     {
-        return $point->name
-            ?? $point->templatePoint?->name
-            ?? 'Bez nazwy';
+        return $point->resolvedName();
+    }
+
+    /**
+     * Nazwa do wyświetlenia: własne pole imprezy ma pierwszeństwo przed szablonem.
+     */
+    public function resolvedName(): string
+    {
+        return filled($this->name)
+            ? (string) $this->name
+            : (string) ($this->templatePoint?->name ?? ('Punkt #'.$this->id));
     }
 }

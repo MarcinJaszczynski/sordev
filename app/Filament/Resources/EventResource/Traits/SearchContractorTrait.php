@@ -3,6 +3,7 @@
 namespace App\Filament\Resources\EventResource\Traits;
 
 use App\Models\Contractor;
+use App\Support\PhoneValidation;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\Schema;
 
@@ -46,7 +47,7 @@ trait SearchContractorTrait
             $query->where('name', 'like', '%'.$criteria['name'].'%');
         }
 
-        // Wyszukaj po telefonie (w relacji contacts)
+        // Wyszukaj po telefonie (kontrahent + kontakty), ignorując separatory
         if (! empty($criteria['phone'])) {
             $phone = $criteria['phone'];
 
@@ -54,17 +55,17 @@ trait SearchContractorTrait
                 $hasPhoneColumn = Schema::hasColumn('contractors', 'phone');
 
                 if ($hasPhoneColumn) {
-                    $q->where('phone', 'like', '%'.$phone.'%');
+                    PhoneValidation::constrainDigitsLike($q, 'phone', $phone);
                 }
 
                 if (Contractor::hasContactPivotTable()) {
                     if ($hasPhoneColumn) {
                         $q->orWhereHas('contacts', function ($contactQuery) use ($phone) {
-                            $contactQuery->where('phone', 'like', '%'.$phone.'%');
+                            PhoneValidation::constrainDigitsLike($contactQuery, 'phone', $phone);
                         });
                     } else {
                         $q->whereHas('contacts', function ($contactQuery) use ($phone) {
-                            $contactQuery->where('phone', 'like', '%'.$phone.'%');
+                            PhoneValidation::constrainDigitsLike($contactQuery, 'phone', $phone);
                         });
                     }
                 }
@@ -113,12 +114,13 @@ trait SearchContractorTrait
         if (! empty($searchQuery)) {
             $query->where(function ($q) use ($searchQuery) {
                 $q->where('name', 'like', "%{$searchQuery}%")
-                    ->orWhere('phone', 'like', "%{$searchQuery}%")
                     ->orWhere('email', 'like', "%{$searchQuery}%")
                     ->orWhere('nip', 'like', "%{$searchQuery}%")
                     ->orWhere('street', 'like', "%{$searchQuery}%")
                     ->orWhere('city', 'like', "%{$searchQuery}%")
                     ->orWhere('postal_code', 'like', "%{$searchQuery}%");
+
+                PhoneValidation::orWhereDigitsLike($q, 'phone', $searchQuery);
             });
         }
 

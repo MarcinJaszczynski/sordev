@@ -10,6 +10,7 @@ use App\Filament\Resources\EventResource;
 use App\Filament\Resources\EventResource\Concerns\HasEventWorkflowContext;
 use App\Filament\Resources\EventResource\Concerns\InteractsWithEventOrderingPartyLookups;
 use App\Models\Event;
+use App\Services\EventHotelPlanService;
 use App\Services\EventManualPricePerPersonService;
 use App\Services\EventParticipantCountChangeService;
 use App\Services\NotificationService;
@@ -49,6 +50,10 @@ class EditEvent extends EditRecord
 
     protected int $pendingGratisCount = 0;
 
+    protected int $pendingStaffCount = 0;
+
+    protected int $pendingDriverCount = 0;
+
     /** @var array{use: bool, lines: array<int, array{amount?: mixed, currency_id?: mixed}>}|null */
     protected ?array $pendingManualPriceSync = null;
 
@@ -60,6 +65,13 @@ class EditEvent extends EditRecord
     protected ?string $previousStatus = null;
 
     protected ?string $pendingStatusChange = null;
+
+    /**
+     * null = auto (przebuduj gdy brak struktury do ochrony),
+     * true = przebuduj ze szablonu,
+     * false = zapisz liczbę bez przebudowy pokoi.
+     */
+    protected ?bool $refreshRoomStructureOnSave = null;
 
     protected function getHeaderActions(): array
     {
@@ -130,6 +142,8 @@ class EditEvent extends EditRecord
         }
 
         $data['gratis_count'] = $gratisCount;
+        $data['staff_count'] = $this->record->resolveStaffCountForParticipantCount($participantCount);
+        $data['driver_count'] = $this->record->resolveDriverCountForParticipantCount($participantCount);
 
         $data['ordering_parties'] = app(\App\Services\EventOrderingPartyService::class)
             ->partiesToFormState($this->record);
@@ -157,13 +171,17 @@ class EditEvent extends EditRecord
 
         $participantCount = max(1, (int) ($data['participant_count'] ?? 1));
         $gratisCount = max(0, (int) ($data['gratis_count'] ?? 0));
+        $staffCount = max(0, (int) ($data['staff_count'] ?? 0));
+        $driverCount = max(0, (int) ($data['driver_count'] ?? 0));
         $startPlaceId = array_key_exists('start_place_id', $data)
             ? ($data['start_place_id'] !== null && $data['start_place_id'] !== '' ? (int) $data['start_place_id'] : null)
             : ($this->record->start_place_id ? (int) $this->record->start_place_id : null);
 
         $this->pendingGratisCount = $gratisCount;
+        $this->pendingStaffCount = $staffCount;
+        $this->pendingDriverCount = $driverCount;
         $this->pendingOrderingParties = $this->resolvedOrderingParties();
-        unset($data['gratis_count'], $data['ordering_parties']);
+        unset($data['gratis_count'], $data['staff_count'], $data['driver_count'], $data['ordering_parties']);
 
         // Przygotuj dane dla synchronizacji ceny ręcznej
         $useManual = (bool) ($data['use_manual_price_per_person'] ?? false);
@@ -184,6 +202,8 @@ class EditEvent extends EditRecord
                 event: $this->record,
                 participantCount: $participantCount,
                 gratisCount: $gratisCount,
+                staffCount: $staffCount,
+                driverCount: $driverCount,
                 startPlaceId: $startPlaceId,
             ));
         } catch (\Throwable $e) {
@@ -191,6 +211,62 @@ class EditEvent extends EditRecord
         }
 
         return $data;
+    }
+
+    protected function beforeSave(): void
+    {
+        if ($this->refreshRoomStructureOnSave !== null) {
+            return;
+        }
+
+        $newCount = max(1, (int) data_get($this->data, 'participant_count', 1));
+        $oldCount = max(1, (int) ($this->record->participant_count ?? 1));
+
+        if ($newCount === $oldCount) {
+            return;
+        }
+
+        if (! app(EventHotelPlanService::class)->eventHasRoomStructureWorthProtecting($this->record)) {
+            return;
+        }
+
+        $this->mountAction('confirmParticipantCountRoomRefresh', [
+            'oldCount' => $oldCount,
+            'newCount' => $newCount,
+        ]);
+
+        $this->halt();
+    }
+
+    public function confirmParticipantCountRoomRefreshAction(): Actions\Action
+    {
+        return Actions\Action::make('confirmParticipantCountRoomRefresh')
+            ->label('Struktura pokoi')
+            ->modalHeading('Zmiana liczby uczestników a struktura pokoi')
+            ->modalDescription(function (array $arguments): string {
+                $oldCount = (int) ($arguments['oldCount'] ?? 0);
+                $newCount = (int) ($arguments['newCount'] ?? 0);
+
+                return "Zmieniasz liczbę uczestników z {$oldCount} na {$newCount}. "
+                    .'Przebudowa struktury pokoi ze szablonu usunie ręczne poprawki pokoi i obsadę. '
+                    .'Przy małej zmianie możesz zapisać liczbę bez przebudowy i skorygować plan hotelowy ręcznie.';
+            })
+            ->modalSubmitActionLabel('Zapisz i przebuduj pokoje')
+            ->modalCancelActionLabel('Anuluj')
+            ->color('warning')
+            ->extraModalFooterActions([
+                Actions\Action::make('saveWithoutRoomRefresh')
+                    ->label('Zapisz bez przebudowy')
+                    ->color('gray')
+                    ->action(function (): void {
+                        $this->refreshRoomStructureOnSave = false;
+                        $this->save();
+                    }),
+            ])
+            ->action(function (): void {
+                $this->refreshRoomStructureOnSave = true;
+                $this->save();
+            });
     }
 
     /**
@@ -235,22 +311,37 @@ class EditEvent extends EditRecord
      */
     protected function normalizeScheduleData(array $data): array
     {
-        if (! empty($data['start_date']) && empty($data['end_date'])) {
-            $start = \Carbon\Carbon::parse($data['start_date']);
-            $durationDays = max(1, (int) ($data['duration_days'] ?? $this->record->duration_days ?? 1));
-            $data['end_date'] = $start->copy()->addDays($durationDays - 1)->toDateString();
+        if (empty($data['start_date'])) {
+            return $data;
         }
 
-        if (! empty($data['start_date']) && ! empty($data['end_date'])) {
-            $start = \Carbon\Carbon::parse($data['start_date']);
-            $end = \Carbon\Carbon::parse($data['end_date']);
+        $start = \Carbon\Carbon::parse($data['start_date']);
+        $durationDays = max(1, (int) ($data['duration_days'] ?? $this->record->duration_days ?? 1));
+        $oldStart = $this->record->start_date?->toDateString();
+        $oldEnd = $this->record->end_date?->toDateString();
+        $newStart = $start->toDateString();
+        $newEnd = ! empty($data['end_date'])
+            ? \Carbon\Carbon::parse($data['end_date'])->toDateString()
+            : null;
 
-            if ($end->lt($start)) {
-                $data['end_date'] = $start->toDateString();
-                $data['duration_days'] = 1;
-            } else {
-                $data['duration_days'] = max(1, $start->diffInDays($end) + 1);
-            }
+        // Start zmieniony, a koniec stary/pusty → przesuń koniec wg liczby dni (nie skracaj wyjazdu).
+        $startChanged = $oldStart !== null && $oldStart !== $newStart;
+        $endUnchanged = $newEnd === null || ($oldEnd !== null && $oldEnd === $newEnd);
+
+        if (($startChanged && $endUnchanged) || $newEnd === null) {
+            $data['end_date'] = $start->copy()->addDays($durationDays - 1)->toDateString();
+            $data['duration_days'] = $durationDays;
+
+            return $data;
+        }
+
+        $end = \Carbon\Carbon::parse($data['end_date']);
+
+        if ($end->lt($start)) {
+            $data['end_date'] = $start->toDateString();
+            $data['duration_days'] = 1;
+        } else {
+            $data['duration_days'] = max(1, $start->diffInDays($end) + 1);
         }
 
         return $data;
@@ -311,19 +402,23 @@ class EditEvent extends EditRecord
         try {
             $this->record->syncQtyVariantForGroup(
                 max(1, (int) ($this->record->participant_count ?? 1)),
-                $this->pendingGratisCount
+                $this->pendingGratisCount,
+                $this->pendingStaffCount,
+                $this->pendingDriverCount,
             );
         } catch (\Throwable $e) {
             // ignore qty sync failures after save
         }
 
-        if ($participantCountChanged) {
+        if ($participantCountChanged && $this->refreshRoomStructureOnSave !== false) {
             try {
-                app(\App\Services\EventHotelPlanService::class)->refreshRoomStructureFromTemplate($this->record->fresh());
+                app(EventHotelPlanService::class)->refreshRoomStructureFromTemplate($this->record->fresh());
             } catch (\Throwable $e) {
                 // ignore hotel structure refresh failures
             }
         }
+
+        $this->refreshRoomStructureOnSave = null;
 
         // Zawsze przelicz ilości w punktach programu po zapisie
         try {

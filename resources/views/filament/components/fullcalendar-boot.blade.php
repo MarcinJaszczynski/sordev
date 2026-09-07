@@ -69,9 +69,11 @@
             };
 
             const eventDidMountHandler = function(info) {
+                const ownership = info.event.extendedProps?.ownershipPreview;
                 const description = info.event.extendedProps?.descriptionPreview;
                 const comment = info.event.extendedProps?.commentPreview;
                 const parts = [info.event.title];
+                if (ownership) parts.push(ownership);
                 if (description) parts.push('Opis: ' + description);
                 if (comment) parts.push('Komentarz: ' + comment);
                 if (description || comment) {

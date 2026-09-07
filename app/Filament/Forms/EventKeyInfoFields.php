@@ -86,23 +86,8 @@ class EventKeyInfoFields
                                     return;
                                 }
 
+                                // Zachowaj długość wyjazdu — przesuń end_date razem ze startem.
                                 $start = \Carbon\Carbon::parse($state);
-                                $endDate = $get('end_date');
-
-                                if (! empty($endDate)) {
-                                    $end = \Carbon\Carbon::parse($endDate);
-                                    if ($end->lt($start)) {
-                                        $set('end_date', $start->toDateString());
-                                        $set('duration_days', 1);
-
-                                        return;
-                                    }
-
-                                    $set('duration_days', max(1, $start->diffInDays($end) + 1));
-
-                                    return;
-                                }
-
                                 $duration = max(1, (int) ($get('duration_days') ?? 1));
                                 $set('end_date', $start->copy()->addDays($duration - 1)->toDateString());
                             }),
@@ -164,7 +149,7 @@ class EventKeyInfoFields
                 ->live(onBlur: true)
                 ->afterStateUpdated(function (callable $get, callable $set, $livewire) use ($refresh): void {
                     if (isset($livewire->record) && $livewire->record instanceof Event) {
-                        \App\Filament\Resources\EventResource::syncGratisCountFromQtyVariant($set, $get, $livewire->record);
+                        \App\Filament\Resources\EventResource::syncQtyHeadcountsFromQtyVariant($set, $get, $livewire->record);
                     }
 
                     $refresh($get, $set);
@@ -187,12 +172,42 @@ class EventKeyInfoFields
                         $livewire->dispatch('event-price-table-refresh');
                     }
                 })
-                ->helperText('Osoby jadące w grupie bez opłaty za siebie. Uwzględniane w kalkulacji kosztów i zapisywane w wariancie ilościowym grupy.'),
+                ->helperText('Osoby jadące w grupie bez opłaty za siebie. Uwzględniane w kosztach i zapisywane w wariancie ilościowym grupy.'),
+
+            Forms\Components\TextInput::make('staff_count')
+                ->label('Obsługa')
+                ->numeric()
+                ->minValue(0)
+                ->default(1)
+                ->dehydrated()
+                ->live(onBlur: true)
+                ->afterStateUpdated(function (callable $get, callable $set, $livewire) use ($refresh): void {
+                    $refresh($get, $set);
+                    if (is_object($livewire) && method_exists($livewire, 'dispatch')) {
+                        $livewire->dispatch('event-price-table-refresh');
+                    }
+                })
+                ->helperText('Pilot / kadra w kalkulacji i hotelu. 0 = bez obsługi.'),
+
+            Forms\Components\TextInput::make('driver_count')
+                ->label('Kierowcy')
+                ->numeric()
+                ->minValue(0)
+                ->default(1)
+                ->dehydrated()
+                ->live(onBlur: true)
+                ->afterStateUpdated(function (callable $get, callable $set, $livewire) use ($refresh): void {
+                    $refresh($get, $set);
+                    if (is_object($livewire) && method_exists($livewire, 'dispatch')) {
+                        $livewire->dispatch('event-price-table-refresh');
+                    }
+                })
+                ->helperText('Liczba kierowców w kalkulacji i hotelu. 0 = wycieczka bez kierowcy.'),
 
             Forms\Components\Placeholder::make('bus_seat_capacity_warning')
                 ->hiddenLabel()
-                ->visible(fn (callable $get, ?Event $record): bool => EventBusSeatCapacity::resolveMessage($get, $record) !== null)
-                ->content(fn (callable $get, ?Event $record) => EventBusSeatCapacity::warningHtml($get, $record) ?? '')
+                ->visible(fn (callable $get, ?Event $record): bool => EventBusSeatCapacity::resolveFleetMessage($get, $record) !== null)
+                ->content(fn (callable $get, ?Event $record) => EventBusSeatCapacity::fleetWarningHtml($get, $record) ?? '')
                 ->columnSpanFull(),
         ];
     }
@@ -333,7 +348,7 @@ class EventKeyInfoFields
                                 ->openUrlInNewTab()
                                 ->visible(fn (string $operation, $state): bool => $operation === 'edit' && filled($state))
                         )
-                        ->helperText(fn (string $operation): ?string => $operation === 'create' ? 'Szablon programu i kalkulacji.' : 'Brak możliwości zmiany szablonu po utworzeniu imprezy.')
+                        ->helperText(fn (string $operation): ?string => $operation === 'create' ? 'Szablon programu i kosztów.' : 'Brak możliwości zmiany szablonu po utworzeniu imprezy.')
                         ->columnSpanFull(),
 
                     Forms\Components\Group::make([
@@ -345,7 +360,7 @@ class EventKeyInfoFields
 
                         ...self::participantFields(),
                     ])
-                        ->columns(['default' => 1, 'md' => 2, 'xl' => 3])
+                        ->columns(['default' => 1, 'md' => 2, 'xl' => 4])
                         ->columnSpanFull(),
 
                     EventNotesFields::dietInfo(),
@@ -360,7 +375,7 @@ class EventKeyInfoFields
 
                     Forms\Components\Section::make('Zamawiający')
                         ->icon('heroicon-o-user-circle')
-                        ->description('Ten sam układ co przy zakładaniu imprezy — karta wybranego klienta.')
+                        ->description('Wyszukaj w bazie albo „Dodaj nowego klienta” → „Zapisz klienta i wybierz go”.')
                         ->columnSpanFull()
                         ->schema(EventOrderingPartyFields::clientLookupFields()),
 
@@ -434,6 +449,35 @@ class EventKeyInfoFields
                 ->rules(PilotIdentityValidation::optionalPeselRules())
                 ->visible(fn (Get $get): bool => filled($get('pilot_contractor_id')))
                 ->helperText('Opcjonalnie — zapis w karcie kontrahenta.'),
+
+            Forms\Components\Select::make('pilot_settlement_form')
+                ->label('Forma rozliczenia')
+                ->options(\App\Enums\ContractorSettlementForm::options())
+                ->nullable()
+                ->native(false)
+                ->placeholder(function (Get $get): string {
+                    $contractorId = (int) ($get('pilot_contractor_id') ?? 0);
+                    if ($contractorId <= 0) {
+                        return 'Wybierz pilota';
+                    }
+
+                    $contractor = Contractor::query()->find($contractorId);
+                    $inherited = $contractor?->settlement_form;
+
+                    if ($inherited instanceof \App\Enums\ContractorSettlementForm) {
+                        return 'Jak na karcie: '.$inherited->label();
+                    }
+
+                    $parsed = \App\Enums\ContractorSettlementForm::tryFromMixed($inherited);
+
+                    return $parsed
+                        ? 'Jak na karcie: '.$parsed->label()
+                        : 'Jak na karcie kontrahenta (brak)';
+                })
+                ->helperText('Puste = dziedziczy z karty kontrahenta. Nadpisanie dotyczy tylko tej imprezy.')
+                ->visible(fn (Get $get): bool => Schema::hasColumn('events', 'pilot_settlement_form')
+                    && filled($get('pilot_contractor_id')))
+                ->columnSpanFull(),
 
             Forms\Components\Placeholder::make('pilot_portal_account')
                 ->label('Konto panelu pilota')

@@ -240,7 +240,7 @@ class Reservation extends Model
 
     public function programPoint(): BelongsTo
     {
-        return $this->belongsTo(EventProgramPoint::class, 'program_point_id');
+        return $this->belongsTo(EventProgramPoint::class, 'program_point_id')->withTrashed();
     }
 
     public function creator(): BelongsTo

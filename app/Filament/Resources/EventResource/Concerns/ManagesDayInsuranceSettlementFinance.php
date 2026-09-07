@@ -13,6 +13,7 @@ use App\Services\SettlementPaymentHealthService;
 use App\Support\MoneyFormatter;
 use Filament\Notifications\Notification;
 use Filament\Tables;
+use Filament\Tables\Columns\ViewColumn;
 
 /**
  * Kolumny finansowe + otwarcie wspólnego drawera kosztu dla ubezpieczeń dnia.
@@ -110,7 +111,7 @@ trait ManagesDayInsuranceSettlementFinance
                 ->alignEnd(),
 
             Tables\Columns\TextColumn::make('finance_paid')
-                ->label('Zapłacone')
+                ->label('Zapłacono')
                 ->state(function (EventDayInsurance $record): string {
                     $snap = $this->dayInsuranceFinanceSnapshot($record);
                     if (! $snap['plan']) {
@@ -122,18 +123,37 @@ trait ManagesDayInsuranceSettlementFinance
                 ->alignEnd(),
 
             Tables\Columns\TextColumn::make('finance_status')
-                ->label('Status')
+                ->label('Płatność')
                 ->badge()
                 ->state(function (EventDayInsurance $record): string {
                     $snap = $this->dayInsuranceFinanceSnapshot($record);
                     $status = $snap['status'] ?? null;
+                    $plan = $snap['plan'];
+
+                    if (
+                        $status === 'partially_paid'
+                        && $plan
+                        && ($plan->approval_status ?? null) === 'pending'
+                    ) {
+                        return 'Do sprawdzenia (nadpłata)';
+                    }
 
                     return $status
                         ? (EventSettlementCost::$paymentStatuses[$status] ?? $status)
-                        : 'Brak w kosztorysie';
+                        : 'Brak w rozliczeniu';
                 })
                 ->color(function (EventDayInsurance $record): string {
-                    $status = $this->dayInsuranceFinanceSnapshot($record)['status'] ?? null;
+                    $snap = $this->dayInsuranceFinanceSnapshot($record);
+                    $status = $snap['status'] ?? null;
+                    $plan = $snap['plan'];
+
+                    if (
+                        $status === 'partially_paid'
+                        && $plan
+                        && ($plan->approval_status ?? null) === 'pending'
+                    ) {
+                        return 'danger';
+                    }
 
                     return match ($status) {
                         'paid' => 'success',
@@ -143,12 +163,27 @@ trait ManagesDayInsuranceSettlementFinance
                     };
                 }),
 
-            Tables\Columns\TextColumn::make('finance_docs')
+            ViewColumn::make('finance_docs')
                 ->label('Dok.')
-                ->state(function (EventDayInsurance $record): string {
-                    $count = $this->dayInsuranceFinanceSnapshot($record)['docs'];
+                ->view('filament.components.day-insurance-docs-cell')
+                ->tooltip(function (EventDayInsurance $record): ?string {
+                    $policy = $record->policy;
+                    $hasPolicy = filled(Event::normalizeInsuranceDocumentPath($policy?->document_path));
+                    $hasList = filled(Event::normalizeInsuranceDocumentPath($policy?->insured_list_path));
 
-                    return $count > 0 ? (string) $count : '—';
+                    if (! $hasPolicy && ! $hasList) {
+                        return 'Brak pliku polisy i listy ubezpieczonych';
+                    }
+
+                    $parts = [];
+                    if ($hasPolicy) {
+                        $parts[] = 'Polisa';
+                    }
+                    if ($hasList) {
+                        $parts[] = 'Lista';
+                    }
+
+                    return 'Pliki polisy: '.implode(' + ', $parts);
                 })
                 ->alignCenter(),
         ];
@@ -168,7 +203,7 @@ trait ManagesDayInsuranceSettlementFinance
                     $plan = $this->ensureDayInsurancePlanCost($record);
                     if (! $plan) {
                         Notification::make()
-                            ->title('Brak pozycji w kosztorysie')
+                            ->title('Brak pozycji w rozliczeniu')
                             ->body('Ubezpieczenie nie wygenerowało kosztu (sprawdź produkt i cenę).')
                             ->warning()
                             ->send();

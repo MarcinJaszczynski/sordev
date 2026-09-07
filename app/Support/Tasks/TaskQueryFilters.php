@@ -2,6 +2,7 @@
 
 namespace App\Support\Tasks;
 
+use App\Enums\TaskPriority;
 use App\Enums\TaskSource;
 use App\Models\Task;
 use App\Models\TaskStatus;
@@ -12,6 +13,15 @@ use Illuminate\Support\Facades\Auth;
 class TaskQueryFilters
 {
     public const FINISHED_STATUS_NAMES = ['Zakończone', 'Anulowane', 'Zaakceptowane'];
+
+    /** @var list<string> */
+    public const OWNERSHIP_SCOPES = ['assigned', 'mine', 'for_me', 'authored', 'all'];
+
+    /** @var list<string> */
+    public const DUE_FILTERS = ['overdue', 'today', 'this_week', 'has_due_date', 'no_due_date'];
+
+    /** @var list<string> */
+    public const SOURCE_FILTERS = ['office', 'system', 'all'];
 
     public const ARCHIVED_STATUS_NAMES = ['Zarchiwizowane'];
 
@@ -116,44 +126,130 @@ class TaskQueryFilters
             return $query;
         }
 
-        return $query->where('author_id', $userId);
+        // Systemowe kopie per user mają author_id = assignee (technicznie) —
+        // to nie są zadania „zlecone przeze mnie”.
+        return $query
+            ->where('author_id', $userId)
+            ->where(function (Builder $inner): void {
+                $inner->whereNull('source')
+                    ->orWhere('source', '!=', TaskSource::System->value);
+            });
     }
 
     public static function applyOwnershipScope(Builder $query, string $scope, ?int $userId = null): Builder
     {
         return match ($scope) {
-            'assigned' => self::assignedToIncludingSharedSystem($query, $userId),
+            // „Moje” — jak topbar: autor ∪ assignee (systemowe mają osobną kopię per user).
+            'assigned', 'mine' => self::inboxFor($query, $userId),
+            // „Dla mnie” — tylko assignee.
+            'for_me' => self::assignedTo($query, $userId),
             'authored' => self::authoredBy($query, $userId),
             default => $query,
         };
     }
 
-    /**
-     * Skrzynka „Przypisane do mnie”: moje + wspólne systemowe (allowlista), jak topbar.
-     * Dzięki temu auto-taski z imprezy nie znikają tylko dlatego, że assignee to opiekun imprezy.
-     */
-    public static function assignedToIncludingSharedSystem(Builder $query, ?int $userId = null): Builder
+    public static function applyUrgentOnly(Builder $query, bool $only): Builder
     {
-        $userId ??= Auth::id();
+        if (! $only) {
+            return $query;
+        }
+
+        return $query->where('priority', TaskPriority::Urgent->value);
+    }
+
+    public static function applyDueFilter(Builder $query, string $filter): Builder
+    {
+        return match ($filter) {
+            'overdue' => $query->whereNotNull('due_date')->where('due_date', '<', now()),
+            'today' => $query->whereNotNull('due_date')->whereDate('due_date', now()->toDateString()),
+            'this_week' => $query
+                ->whereNotNull('due_date')
+                ->whereBetween('due_date', [
+                    now()->startOfWeek(Carbon::MONDAY)->startOfDay(),
+                    now()->endOfWeek(Carbon::SUNDAY)->endOfDay(),
+                ]),
+            'has_due_date' => $query->whereNotNull('due_date'),
+            'no_due_date' => $query->whereNull('due_date'),
+            default => $query,
+        };
+    }
+
+    public static function applySourceFilter(Builder $query, string $source): Builder
+    {
+        if ($source === TaskSource::Office->value || $source === TaskSource::System->value) {
+            return $query->where('source', $source);
+        }
+
+        return $query;
+    }
+
+    /**
+     * Wspólny zestaw szybkich filtrów (lista / kanban / impreza / kalendarz).
+     */
+    public static function applyQuickFilters(
+        Builder $query,
+        string $scope,
+        bool $onlyUrgent = false,
+        string $dueFilter = '',
+        string $sourceFilter = 'all',
+        bool $showFinished = true,
+        ?int $userId = null,
+    ): Builder {
+        self::applyOwnershipScope($query, $scope, $userId);
+        self::applyUrgentOnly($query, $onlyUrgent);
+        self::applyDueFilter($query, $dueFilter);
+        self::applySourceFilter($query, $sourceFilter);
+
+        if (! $showFinished) {
+            self::excludeFinished($query);
+        }
+
+        return $query;
+    }
+
+    /**
+     * Skrzynka jak topbar: autor ∪ assignee.
+     * Zadania systemowe są per użytkownik — w skrzynce widać tylko własną kopię.
+     *
+     * @param  \App\Models\User|int|null  $user
+     */
+    public static function inboxFor(Builder $query, mixed $user = null): Builder
+    {
+        $resolved = self::resolveUserForOwnership($user);
+        $userId = $resolved['id'];
 
         if (! $userId) {
             return $query;
         }
 
-        $user = Auth::user();
-        $shareSystem = $user && method_exists($user, 'hasRole')
-            && $user->hasRole(['super_admin', 'admin', 'biuro']);
+        return self::mine($query, $userId);
+    }
 
-        return $query->where(function (Builder $inner) use ($userId, $shareSystem): void {
-            $inner->where('assignee_id', $userId);
+    /**
+     * @param  \App\Models\User|int|null  $user
+     * @return array{id: int|null, model: \App\Models\User|null}
+     */
+    private static function resolveUserForOwnership(mixed $user): array
+    {
+        if ($user instanceof \App\Models\User) {
+            return ['id' => (int) $user->id, 'model' => $user];
+        }
 
-            if ($shareSystem) {
-                $inner->orWhere(function (Builder $system): void {
-                    $system->where('source', TaskSource::System->value);
-                    SystemTaskPolicy::constrainAllowedSystem($system);
-                });
-            }
-        });
+        if (is_int($user) || (is_string($user) && ctype_digit($user))) {
+            $userId = (int) $user;
+            $model = Auth::id() === $userId
+                ? Auth::user()
+                : \App\Models\User::query()->find($userId);
+
+            return ['id' => $userId, 'model' => $model instanceof \App\Models\User ? $model : null];
+        }
+
+        $userId = Auth::id() ? (int) Auth::id() : null;
+
+        return [
+            'id' => $userId,
+            'model' => Auth::user() instanceof \App\Models\User ? Auth::user() : null,
+        ];
     }
 
     public static function topLevelOnly(Builder $query): Builder
@@ -287,6 +383,17 @@ class TaskQueryFilters
         }
 
         return $query->whereNotIn('status_id', $finishedStatusIds);
+    }
+
+    public static function onlyFinished(Builder $query): Builder
+    {
+        $finishedStatusIds = self::finishedStatusIds();
+
+        if ($finishedStatusIds === []) {
+            return $query->whereRaw('1 = 0');
+        }
+
+        return $query->whereIn('status_id', $finishedStatusIds);
     }
 
     public static function excludeArchived(Builder $query): Builder

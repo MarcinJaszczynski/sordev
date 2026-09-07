@@ -234,6 +234,7 @@ class TemplateProgramPointCopier
             $context['parent_child_links'],
             $context['child_pivots'],
             $context['template_points'],
+            depth: 0,
         );
     }
 
@@ -258,6 +259,12 @@ class TemplateProgramPointCopier
      * @param  Collection<int, object>  $childPivots
      * @param  Collection<int, EventTemplateProgramPoint>  $templatePoints
      */
+    /**
+     * @param  Collection<int, \Illuminate\Support\Collection<int, object>>  $parentChildLinks
+     * @param  Collection<int, object>  $childPivots
+     * @param  Collection<int, EventTemplateProgramPoint>  $templatePoints
+     * @param  int  $depth  0 = root z pivota szablonu, 1 = bezpośrednie dziecko (jak kalkulacja UI), ≥2 = wnuk
+     */
     protected function copyPointRecursive(
         Event $event,
         EventTemplateProgramPoint $templatePoint,
@@ -268,6 +275,7 @@ class TemplateProgramPointCopier
         Collection $parentChildLinks,
         Collection $childPivots,
         Collection $templatePoints,
+        int $depth = 0,
     ): EventProgramPoint {
         $childPivot = $childPivots->get($templatePoint->id);
 
@@ -278,6 +286,11 @@ class TemplateProgramPointCopier
         $rootPivot = $eventParentId === null && $templatePoint->relationLoaded('pivot')
             ? $templatePoint->pivot
             : null;
+
+        // Kalkulacja szablonu bierze root + bezpośrednie dzieci. Wnuki z globalnego drzewa
+        // parent→child bez jawnego child_pivot nie wchodzą do ceny — domyślnie wyłącz z kalkulacji.
+        $defaultIncludeInCalc = $depth < 2;
+        $defaultActive = true;
 
         $eventPoint = new EventProgramPoint([
             'event_id' => $event->id,
@@ -304,17 +317,17 @@ class TemplateProgramPointCopier
                 ? null
                 : ($rootPivot->notes ?? null),
             'include_in_program' => $childPivot?->include_in_program ?? $rootPivot?->include_in_program ?? true,
-            'include_in_calculation' => $childPivot?->include_in_calculation ?? $rootPivot?->include_in_calculation ?? true,
+            'include_in_calculation' => $childPivot?->include_in_calculation ?? $rootPivot?->include_in_calculation ?? $defaultIncludeInCalc,
             'include_gratis_in_cost' => (bool) ($templatePoint->include_gratis_in_cost ?? false),
             'include_pilot_in_cost' => (bool) ($templatePoint->include_pilot_in_cost ?? false),
             'include_driver_in_cost' => (bool) ($templatePoint->include_driver_in_cost ?? false),
-            'active' => $childPivot?->active ?? $rootPivot?->active ?? true,
+            'active' => $childPivot?->active ?? $rootPivot?->active ?? $defaultActive,
             'show_title_style' => $childPivot?->show_title_style ?? $rootPivot?->show_title_style ?? true,
             'show_description' => $childPivot?->show_description ?? $rootPivot?->show_description ?? true,
             'group_size' => $templatePoint->group_size,
             'currency_id' => $templatePoint->currency_id,
             'convert_to_pln' => (bool) ($templatePoint->convert_to_pln ?? false),
-            'is_hotel' => Event::templatePointLooksLikeHotel($templatePoint),
+            ...$this->resolveTypeFlags($templatePoint),
         ]);
         $eventPoint->setRelation('event', $event);
         $eventPoint->save();
@@ -338,9 +351,36 @@ class TemplateProgramPointCopier
                 $parentChildLinks,
                 $childPivots,
                 $templatePoints,
+                depth: $depth + 1,
             );
         }
 
         return $eventPoint;
+    }
+
+    /**
+     * Flagi typu z katalogu; hotel z nazwy tylko gdy katalog nie ustawił hotel/usługi.
+     *
+     * @return array{is_hotel: bool, is_transport: bool, is_hotel_service: bool}
+     */
+    private function resolveTypeFlags(EventTemplateProgramPoint $templatePoint): array
+    {
+        $isHotel = (bool) ($templatePoint->is_hotel ?? false);
+        $isTransport = (bool) ($templatePoint->is_transport ?? false);
+        $isHotelService = (bool) ($templatePoint->is_hotel_service ?? false);
+
+        if (! $isHotel && ! $isHotelService && Event::templatePointLooksLikeHotel($templatePoint)) {
+            $isHotel = true;
+        }
+
+        if ($isHotelService) {
+            $isHotel = false;
+        }
+
+        return [
+            'is_hotel' => $isHotel,
+            'is_transport' => $isTransport,
+            'is_hotel_service' => $isHotelService,
+        ];
     }
 }

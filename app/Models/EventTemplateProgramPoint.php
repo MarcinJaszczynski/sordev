@@ -28,6 +28,9 @@ use Illuminate\Support\Facades\Log;
  * @property int|null $group_size
  * @property int|null $currency_id
  * @property bool $convert_to_pln
+ * @property bool $is_hotel
+ * @property bool $is_transport
+ * @property bool $is_hotel_service
  * @property \Illuminate\Support\Carbon $created_at
  * @property \Illuminate\Support\Carbon $updated_at
  */
@@ -125,6 +128,9 @@ class EventTemplateProgramPoint extends Model
         'include_gratis_in_cost',
         'include_pilot_in_cost',
         'include_driver_in_cost',
+        'is_hotel',
+        'is_transport',
+        'is_hotel_service',
     ];
 
     /**
@@ -139,6 +145,9 @@ class EventTemplateProgramPoint extends Model
         'include_gratis_in_cost' => 'boolean',
         'include_pilot_in_cost' => 'boolean',
         'include_driver_in_cost' => 'boolean',
+        'is_hotel' => 'boolean',
+        'is_transport' => 'boolean',
+        'is_hotel_service' => 'boolean',
     ];
 
     /**
@@ -148,6 +157,9 @@ class EventTemplateProgramPoint extends Model
         'include_gratis_in_cost' => false,
         'include_pilot_in_cost' => false,
         'include_driver_in_cost' => false,
+        'is_hotel' => false,
+        'is_transport' => false,
+        'is_hotel_service' => false,
     ];
 
     /**

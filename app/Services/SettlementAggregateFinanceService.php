@@ -19,9 +19,30 @@ final class SettlementAggregateFinanceService
         return $baseSourceType.'_payment';
     }
 
+    public function paymentSourceTypeForPlan(EventSettlementCost $plan): string
+    {
+        return $this->paymentSourceType((string) $plan->source_type);
+    }
+
+    public function paymentRowsQuery(EventSettlement $settlement, EventSettlementCost $plan)
+    {
+        return $settlement->costs()
+            ->where('source_type', $this->paymentSourceTypeForPlan($plan))
+            ->when(
+                $plan->source_id !== null,
+                fn ($query) => $query->where('source_id', (int) $plan->source_id),
+                fn ($query) => $query->whereNull('source_id'),
+            );
+    }
+
     public function ensureBaseCost(Event $event, string $baseSourceType): ?EventSettlementCost
     {
         EventSettlement::findOrCreateActiveForEvent($event);
+
+        if ($baseSourceType === 'transport' || $baseSourceType === TransportContractorSettlementSync::SOURCE_CONTRACTOR) {
+            return app(TransportContractorSettlementSync::class)->ensurePrimaryCost($event);
+        }
+
         $event->refreshActiveSettlementCosts();
 
         return $event->activeSettlement?->costs()
@@ -48,7 +69,6 @@ final class SettlementAggregateFinanceService
      */
     public function buildFormData(Event $event, string $baseSourceType): array
     {
-        $paymentSourceType = $this->paymentSourceType($baseSourceType);
         $documentSync = app(ProgramPointSettlementDocumentSync::class);
         $referenceTotalPln = $this->resolveReferenceTotalPln($event, $baseSourceType);
 
@@ -68,12 +88,12 @@ final class SettlementAggregateFinanceService
         }
 
         $settlement = $event->activeSettlement;
-        $paymentRowsCollection = $settlement?->costs()
-            ->where('source_type', $paymentSourceType)
-            ->whereNull('source_id')
-            ->orderBy('paid_at')
-            ->orderBy('id')
-            ->get() ?? collect();
+        $paymentRowsCollection = ($settlement && $existingCost)
+            ? $this->paymentRowsQuery($settlement, $existingCost)
+                ->orderBy('paid_at')
+                ->orderBy('id')
+                ->get()
+            : collect();
 
         $advanceRow = $paymentRowsCollection
             ->first(fn (EventSettlementCost $payment): bool => in_array((string) $payment->advance_type, ['advance', 'deposit'], true) || (float) ($payment->advance_amount ?? 0) > 0);
@@ -173,7 +193,6 @@ final class SettlementAggregateFinanceService
      */
     public function persist(Event $event, string $baseSourceType, array $data, bool $syncPaymentEntries): array
     {
-        $paymentSourceType = $this->paymentSourceType($baseSourceType);
         $settlement = EventSettlement::findOrCreateActiveForEvent($event);
         $event->refreshActiveSettlementCosts();
         $cost = $this->ensureBaseCost($event, $baseSourceType);
@@ -191,6 +210,8 @@ final class SettlementAggregateFinanceService
             ];
         }
 
+        $paymentSourceType = $this->paymentSourceTypeForPlan($cost);
+        $paymentSourceId = $cost->source_id !== null ? (int) $cost->source_id : null;
         $documentSync = app(ProgramPointSettlementDocumentSync::class);
 
         $plannedRate = (float) ($data['settlement_planned_rate'] ?? $cost->planned_rate ?? 1);
@@ -239,9 +260,7 @@ final class SettlementAggregateFinanceService
             ]);
         }
 
-        $existingAdvanceRow = $settlement->costs()
-            ->where('source_type', $paymentSourceType)
-            ->whereNull('source_id')
+        $existingAdvanceRow = $this->paymentRowsQuery($settlement, $cost)
             ->where(function (Builder $query): void {
                 $query->whereIn('advance_type', ['advance', 'deposit'])
                     ->orWhere('advance_amount', '>', 0);
@@ -275,7 +294,7 @@ final class SettlementAggregateFinanceService
 
             $advancePayload = [
                 'source_type' => $paymentSourceType,
-                'source_id' => null,
+                'source_id' => $paymentSourceId,
                 'name' => ($cost->name ?: 'Koszt').' • zaliczka',
                 'planned_amount' => 0,
                 'planned_currency_id' => $plannedCurrencyId,
@@ -325,9 +344,7 @@ final class SettlementAggregateFinanceService
                 })
                 ->values();
 
-            $settlement->costs()
-                ->where('source_type', $paymentSourceType)
-                ->whereNull('source_id')
+            $this->paymentRowsQuery($settlement, $cost)
                 ->where(function (Builder $query): void {
                     $query->whereNotIn('advance_type', ['advance', 'deposit'])
                         ->orWhereNull('advance_type');
@@ -350,7 +367,7 @@ final class SettlementAggregateFinanceService
 
                 $paymentCost = $settlement->costs()->create([
                     'source_type' => $paymentSourceType,
-                    'source_id' => null,
+                    'source_id' => $paymentSourceId,
                     'name' => $baseName.' • wpłata #'.($index + 1),
                     'planned_amount' => 0,
                     'planned_currency_id' => $plannedCurrencyId,
@@ -380,10 +397,7 @@ final class SettlementAggregateFinanceService
             }
         }
 
-        $paymentRows = $settlement->costs()
-            ->where('source_type', $paymentSourceType)
-            ->whereNull('source_id')
-            ->get();
+        $paymentRows = $this->paymentRowsQuery($settlement, $cost)->get();
 
         $paidPln = (float) $paymentRows
             ->where('payment_status', '!=', 'cancelled')
@@ -444,7 +458,6 @@ final class SettlementAggregateFinanceService
     public function summary(Event $event, string $baseSourceType): array
     {
         $cost = $this->ensureBaseCost($event, $baseSourceType);
-        $paymentSourceType = $this->paymentSourceType($baseSourceType);
 
         if (! $cost) {
             return [
@@ -455,10 +468,10 @@ final class SettlementAggregateFinanceService
             ];
         }
 
-        $paymentRows = $event->activeSettlement?->costs()
-            ->where('source_type', $paymentSourceType)
-            ->whereNull('source_id')
-            ->get() ?? collect();
+        $settlement = $event->activeSettlement;
+        $paymentRows = $settlement
+            ? $this->paymentRowsQuery($settlement, $cost)->get()
+            : collect();
 
         $paidPln = (float) $paymentRows
             ->filter(fn (EventSettlementCost $row): bool => SettlementPaymentHealthService::isBookedPaymentStatus($row->payment_status))

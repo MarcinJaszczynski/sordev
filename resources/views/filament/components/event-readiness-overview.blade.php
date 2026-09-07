@@ -2,7 +2,7 @@
     $items = $items ?? \App\Support\EventReadinessIndicators::forEventOverview($event);
 @endphp
 
-{{-- Pięć kart obok siebie — ten sam wygląd, jeden rząd (na wąskim ekranie kolumna). --}}
+{{-- Karty gotowości obok siebie — ten sam wygląd, elastyczny układ (na wąskim ekranie kolumna). --}}
 <div class="event-readiness-overview">
     @foreach ($items as $item)
         @php

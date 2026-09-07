@@ -110,9 +110,13 @@ class EventHotelPdfViewTest extends TestCase
                 'return_place' => 'Warszawa',
             ],
             'hotelNotes' => '',
+            'dietInfoLines' => ['1 x dieta bezglutenowa'],
             'hotelProgramPoints' => collect(),
             'programByDay' => collect([1 => collect()]),
+            'programDayRoutes' => ['1' => 'Warszawa → Kraków'],
             'hotelPlan' => collect(),
+            'pilotExpenseRows' => [],
+            'pilotContactPlaces' => [],
             'agreements' => collect(),
             'individualAgreementRows' => [],
             'agreementsSummary' => ['total' => 0, 'payment_progress_label' => '0/0', 'amount_paid' => 0, 'amount_remaining' => 0],
@@ -123,5 +127,8 @@ class EventHotelPdfViewTest extends TestCase
 
         $this->assertStringContainsString('Program imprezy', $html);
         $this->assertStringContainsString('Pakiet dla pilota', $html);
+        $this->assertStringContainsString('Diety', $html);
+        $this->assertStringContainsString('1 x dieta bezglutenowa', $html);
+        $this->assertStringContainsString('Warszawa → Kraków', $html);
     }
 }

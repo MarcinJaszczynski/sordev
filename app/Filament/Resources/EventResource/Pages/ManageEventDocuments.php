@@ -9,12 +9,16 @@ use App\Filament\Resources\EventResource\Concerns\HasEventWorkflowContext;
 use App\Filament\Resources\EventResource\RelationManagers\DocumentsRelationManager;
 use App\Models\EventDocument;
 use App\Models\EventPackageDocument;
+use App\Models\EventSettlementCost;
+use App\Models\EventSettlementDocument;
 use App\Services\EventPackageDocumentService;
 use Filament\Actions;
 use Filament\Forms;
 use Filament\Navigation\NavigationItem;
 use Filament\Notifications\Notification;
+use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\Schema;
+use Illuminate\Support\Facades\Storage;
 
 class ManageEventDocuments extends SingleRelationManagerPage
 {
@@ -33,6 +37,28 @@ class ManageEventDocuments extends SingleRelationManagerPage
     protected static ?string $navigationIcon = 'heroicon-o-folder';
 
     public ?string $packageActionAudience = null;
+
+    public string $offersSort = 'created_at';
+
+    public string $offersSortDirection = 'desc';
+
+    public ?string $offersCreatedFrom = null;
+
+    public ?string $offersCreatedUntil = null;
+
+    public string $settlementSort = 'created_at';
+
+    public string $settlementSortDirection = 'desc';
+
+    public ?string $settlementCreatedFrom = null;
+
+    public ?string $settlementCreatedUntil = null;
+
+    /** @var list<string> */
+    private const OFFER_SORT_COLUMNS = ['created_at', 'updated_at', 'offer_sent_at'];
+
+    /** @var list<string> */
+    private const SETTLEMENT_SORT_COLUMNS = ['created_at', 'updated_at'];
 
     protected static function relationManager(): string
     {
@@ -95,23 +121,198 @@ class ManageEventDocuments extends SingleRelationManagerPage
      */
     public function getOfferDocuments()
     {
-        return $this->record->documents()
-            ->where('is_offer', true)
-            ->orderByDesc('created_at')
+        $query = $this->record->documents()->where('is_offer', true);
+
+        $this->applyCreatedAtDateFilter(
+            $query,
+            $this->offersCreatedFrom,
+            $this->offersCreatedUntil,
+        );
+
+        $sort = in_array($this->offersSort, self::OFFER_SORT_COLUMNS, true)
+            ? $this->offersSort
+            : 'created_at';
+        $direction = $this->offersSortDirection === 'asc' ? 'asc' : 'desc';
+
+        return $query
+            ->orderBy($sort, $direction)
+            ->orderByDesc('id')
             ->get();
+    }
+
+    public function hasOfferDocuments(): bool
+    {
+        return $this->record->documents()->where('is_offer', true)->exists();
+    }
+
+    public function sortOffersBy(string $column): void
+    {
+        if (! in_array($column, self::OFFER_SORT_COLUMNS, true)) {
+            return;
+        }
+
+        if ($this->offersSort === $column) {
+            $this->offersSortDirection = $this->offersSortDirection === 'asc' ? 'desc' : 'asc';
+
+            return;
+        }
+
+        $this->offersSort = $column;
+        $this->offersSortDirection = 'desc';
+    }
+
+    public function resetOffersDateFilter(): void
+    {
+        $this->offersCreatedFrom = null;
+        $this->offersCreatedUntil = null;
+    }
+
+    /**
+     * Dokumenty rozliczenia (faktury z programu / hoteli / transportu) — osobna tabela od event_documents.
+     *
+     * @return Collection<int, array<string, mixed>>
+     */
+    public function getSettlementDocumentRows(): Collection
+    {
+        if (! Schema::hasTable('event_settlement_documents')) {
+            return collect();
+        }
+
+        $settlement = $this->record->relationLoaded('activeSettlement')
+            ? $this->record->activeSettlement
+            : $this->record->activeSettlement()->first();
+
+        if (! $settlement) {
+            return collect();
+        }
+
+        $query = $settlement->documents();
+
+        $this->applyCreatedAtDateFilter(
+            $query,
+            $this->settlementCreatedFrom,
+            $this->settlementCreatedUntil,
+        );
+
+        $sort = in_array($this->settlementSort, self::SETTLEMENT_SORT_COLUMNS, true)
+            ? $this->settlementSort
+            : 'created_at';
+        $direction = $this->settlementSortDirection === 'asc' ? 'asc' : 'desc';
+
+        $documents = $query
+            ->orderBy($sort, $direction)
+            ->orderByDesc('id')
+            ->get();
+
+        if ($documents->isEmpty()) {
+            return collect();
+        }
+
+        $costIds = $documents
+            ->flatMap(fn (EventSettlementDocument $doc) => collect($doc->linked_cost_ids ?? [])->map(fn ($id) => (int) $id))
+            ->unique()
+            ->values()
+            ->all();
+
+        $costsById = $costIds === []
+            ? collect()
+            : EventSettlementCost::query()
+                ->whereIn('id', $costIds)
+                ->get(['id', 'name', 'source_type', 'source_id'])
+                ->keyBy('id');
+
+        return $documents->map(function (EventSettlementDocument $doc) use ($costsById): array {
+            $linkedNames = collect($doc->linked_cost_ids ?? [])
+                ->map(fn ($id) => $costsById->get((int) $id)?->name)
+                ->filter()
+                ->unique()
+                ->values()
+                ->all();
+
+            $files = collect($doc->files ?? [])
+                ->filter(fn ($path) => is_string($path) && $path !== '')
+                ->values()
+                ->map(fn (string $path): array => [
+                    'path' => $path,
+                    'name' => basename($path),
+                    'url' => Storage::disk('public')->url($path),
+                ])
+                ->all();
+
+            $typeKey = (string) ($doc->document_type ?: 'other');
+
+            return [
+                'id' => (int) $doc->id,
+                'type_label' => EventSettlementDocument::$documentTypes[$typeKey]
+                    ?? EventSettlementDocument::$documentTypeBadges[$typeKey]
+                    ?? 'Dokument',
+                'badge_label' => EventSettlementDocument::$documentTypeBadges[$typeKey] ?? 'Plik',
+                'number' => $doc->document_number,
+                'vendor' => $doc->vendor_name,
+                'linked_labels' => $linkedNames,
+                'files' => $files,
+                'created_at' => $doc->created_at?->format('d.m.Y H:i'),
+                'updated_at' => $doc->updated_at?->format('d.m.Y H:i'),
+            ];
+        });
+    }
+
+    public function hasSettlementDocuments(): bool
+    {
+        if (! Schema::hasTable('event_settlement_documents')) {
+            return false;
+        }
+
+        $settlement = $this->record->relationLoaded('activeSettlement')
+            ? $this->record->activeSettlement
+            : $this->record->activeSettlement()->first();
+
+        return $settlement
+            ? $settlement->documents()->exists()
+            : false;
+    }
+
+    public function sortSettlementDocumentsBy(string $column): void
+    {
+        if (! in_array($column, self::SETTLEMENT_SORT_COLUMNS, true)) {
+            return;
+        }
+
+        if ($this->settlementSort === $column) {
+            $this->settlementSortDirection = $this->settlementSortDirection === 'asc' ? 'desc' : 'asc';
+
+            return;
+        }
+
+        $this->settlementSort = $column;
+        $this->settlementSortDirection = 'desc';
+    }
+
+    public function resetSettlementDateFilter(): void
+    {
+        $this->settlementCreatedFrom = null;
+        $this->settlementCreatedUntil = null;
+    }
+
+    /**
+     * @param  \Illuminate\Database\Eloquent\Builder|\Illuminate\Database\Eloquent\Relations\Relation  $query
+     */
+    private function applyCreatedAtDateFilter($query, ?string $from, ?string $until): void
+    {
+        if (filled($from)) {
+            $query->whereDate('created_at', '>=', $from);
+        }
+
+        if (filled($until)) {
+            $query->whereDate('created_at', '<=', $until);
+        }
     }
 
     protected function getHeaderActions(): array
     {
-        return [
-            Actions\Action::make('invoices_pdf')
-                ->label('Wszystkie faktury (PDF)')
-                ->icon('heroicon-o-document-duplicate')
-                ->color('gray')
-                ->tooltip('Scala faktury KSeF, dokumenty rozliczenia i pliki oznaczone jako faktura.')
-                ->url(fn () => route('admin.events.invoices.pdf', ['event' => $this->record->id]))
-                ->openUrlInNewTab(),
-        ];
+        // Header Filament jest ukryty (pusty getHeading w HasEventDocumentsSubNavigation).
+        // Linki operacyjne są w manage-event-documents.blade.php.
+        return [];
     }
 
     public function openEditPackage(string $audience): void
@@ -171,6 +372,44 @@ class ManageEventDocuments extends SingleRelationManagerPage
         ]);
 
         Notification::make()->title('Oferta oznaczona jako wysłana')->success()->send();
+    }
+
+    public function deleteOfferDocument(int $documentId): void
+    {
+        $document = EventDocument::query()
+            ->where('event_id', $this->record->id)
+            ->whereKey($documentId)
+            ->where('is_offer', true)
+            ->firstOrFail();
+
+        // EventDocument::deleting usuwa też plik ze storage.
+        $document->delete();
+
+        Notification::make()
+            ->title('Usunięto ofertę')
+            ->success()
+            ->send();
+    }
+
+    public function deleteSettlementDocument(int $documentId): void
+    {
+        abort_unless(Schema::hasTable('event_settlement_documents'), 404);
+
+        $settlement = $this->record->activeSettlement()->first();
+        abort_unless($settlement, 404);
+
+        $document = EventSettlementDocument::query()
+            ->where('settlement_id', $settlement->id)
+            ->whereKey($documentId)
+            ->firstOrFail();
+
+        // EventSettlementDocument::deleting usuwa pliki ze storage.
+        $document->delete();
+
+        Notification::make()
+            ->title('Usunięto dokument rozliczenia')
+            ->success()
+            ->send();
     }
 
     protected function makeEditPackageAction(): Actions\Action
@@ -285,11 +524,8 @@ class ManageEventDocuments extends SingleRelationManagerPage
 
     public static function shouldRegisterNavigation(array $parameters = []): bool
     {
-        // Primary „Dokumenty” rejestruje ManageEventContracts gdy są umowy;
-        // ta strona jest landingiem tylko gdy brak umów.
-        return Schema::hasTable('event_documents')
-            && ! Schema::hasTable('contracts')
-            && ! Schema::hasTable('event_agreements');
+        // Primary „Dokumenty” = Pliki (oferty, pakiety PDF, załączniki).
+        return Schema::hasTable('event_documents');
     }
 
     /**

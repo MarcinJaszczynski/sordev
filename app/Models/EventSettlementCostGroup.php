@@ -55,8 +55,8 @@ class EventSettlementCostGroup extends Model
     public static function defaultKeyForSourceType(?string $sourceType): string
     {
         return match ($sourceType) {
-            'transport' => self::KEY_TRANSPORT,
-            'accommodation' => self::KEY_ACCOMMODATION,
+            'transport', 'transport_contractor' => self::KEY_TRANSPORT,
+            'accommodation', 'accommodation_hotel', 'accommodation_hotel_stay' => self::KEY_ACCOMMODATION,
             'insurance_day' => self::KEY_INSURANCE,
             'program_point' => self::KEY_PROGRAM,
             default => self::KEY_OTHER,

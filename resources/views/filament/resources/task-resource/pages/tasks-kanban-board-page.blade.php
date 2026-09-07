@@ -1,9 +1,17 @@
 <x-filament-panels::page class="min-h-screen">
     {{-- Enhanced Kanban Board inspired by filament-kanban --}}
 
-    @include('filament.tasks.ownership-quick-filters', ['tasksScope' => $this->tasksScope])
-
-    <div class="mb-4"></div>
+    <div class="mb-3 rounded-xl border border-gray-200 bg-white px-3 py-2 dark:border-gray-700 dark:bg-gray-900">
+        @include('filament.tasks.ownership-quick-filters', [
+            'tasksScope' => $this->tasksScope,
+            'dueFilter' => $this->dueFilter,
+            'tasksOnlyUrgent' => $this->tasksOnlyUrgent,
+            'showFinishedTasks' => $this->showFinishedTasks,
+            'sourceFilter' => $this->sourceFilter,
+            'showSource' => true,
+            'showFinishedToggle' => true,
+        ])
+    </div>
     
     {{-- Advanced Filters & Controls (Compact) --}}
 <div class="mb-4 flex flex-col md:flex-row items-center justify-between gap-4">
@@ -23,10 +31,10 @@
     {{-- Actions / Filters --}}
     <div class="flex items-center gap-2 w-full md:w-auto justify-end">
         {{-- Reset --}}
-        @if($searchTerm || $tasksScope !== 'assigned' || $priorityFilter || $contextFilter || $dueFilter || $sourceFilter !== 'office' || $showFinishedTasks)
+        @if($searchTerm || $this->hasActiveTaskQuickFilters() || $priorityFilter || $contextFilter)
         <button wire:click="refreshBoard" class="text-xs font-medium text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200 flex items-center gap-1 transition mr-2">
             <x-heroicon-m-x-mark class="w-4 h-4" />
-            Wyczyść filtry
+            Wyczyść wszystko
         </button>
         @endif
 
@@ -34,23 +42,15 @@
         <div class="relative" x-data="{ open: false }">
             <button @click="open = !open" type="button" class="relative flex items-center justify-center gap-2 bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 rounded-lg px-3 py-2 text-sm font-medium text-gray-700 dark:text-gray-200 shadow-sm hover:bg-gray-50 dark:hover:bg-gray-700 transition focus:outline-none focus:ring-2 focus:ring-primary-500">
                 <x-heroicon-m-funnel class="w-4 h-4 text-gray-400 dark:text-gray-500" />
-                Filtry
-                @if($tasksScope !== 'assigned' || $priorityFilter || $contextFilter || $dueFilter || $sourceFilter !== 'office' || $showFinishedTasks)
+                Więcej
+                @if($priorityFilter || $contextFilter)
                     <span class="absolute top-0 right-0 -mt-1 -mr-1 flex h-3 w-3 items-center justify-center rounded-full bg-primary-600 ring-2 ring-white dark:ring-gray-900"></span>
                 @endif
             </button>
             
             <div x-show="open" @click.away="open = false" x-transition class="absolute right-0 top-full mt-2 w-72 rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 shadow-xl p-4 z-50 flex flex-col gap-4" style="display: none;">
                 <div>
-                    <label class="block text-xs font-semibold text-gray-700 dark:text-gray-300 mb-1">Źródło</label>
-                    <select wire:model.live="sourceFilter" class="block w-full border-gray-300 dark:border-gray-600 dark:bg-gray-800 dark:text-gray-200 rounded-md shadow-sm focus:ring-primary-500 focus:border-primary-500 sm:text-sm">
-                        <option value="office">Biuro</option>
-                        <option value="system">Systemowe</option>
-                        <option value="">Wszystkie</option>
-                    </select>
-                </div>
-                <div>
-                    <label class="block text-xs font-semibold text-gray-700 dark:text-gray-300 mb-1">Priorytet</label>
+                    <label class="block text-xs font-semibold text-gray-700 dark:text-gray-300 mb-1">Priorytet (doprecyzuj)</label>
                     <select wire:model.live="priorityFilter" class="block w-full border-gray-300 dark:border-gray-600 dark:bg-gray-800 dark:text-gray-200 rounded-md shadow-sm focus:ring-primary-500 focus:border-primary-500 sm:text-sm">
                         <option value="">Wszystkie priorytety</option>
                         <option value="urgent">Pilne</option>
@@ -58,7 +58,7 @@
                     </select>
                 </div>
                 <div>
-                    <label class="block text-xs font-semibold text-gray-700 dark:text-gray-300 mb-1">Kontekst</label>
+                    <label class="block text-xs font-semibold text-gray-700 dark:text-gray-300 mb-1">Dotyczy</label>
                     <select wire:model.live="contextFilter" class="block w-full border-gray-300 dark:border-gray-600 dark:bg-gray-800 dark:text-gray-200 rounded-md shadow-sm focus:ring-primary-500 focus:border-primary-500 sm:text-sm">
                         <option value="">Wszystkie konteksty</option>
                         <option value="__unassigned">Wolne / nieprzypisane</option>
@@ -66,20 +66,6 @@
                             <option value="{{ $type }}">{{ $label }}</option>
                         @endforeach
                     </select>
-                </div>
-                <div>
-                    <label class="block text-xs font-semibold text-gray-700 dark:text-gray-300 mb-1">Termin</label>
-                    <select wire:model.live="dueFilter" class="block w-full border-gray-300 dark:border-gray-600 dark:bg-gray-800 dark:text-gray-200 rounded-md shadow-sm focus:ring-primary-500 focus:border-primary-500 sm:text-sm">
-                        <option value="">Wszystkie terminy</option>
-                        <option value="has_due_date">Tylko z terminem</option>
-                        <option value="overdue">Tylko po terminie</option>
-                    </select>
-                </div>
-                <div>
-                    <label class="flex items-center gap-2 text-xs font-semibold text-gray-700 dark:text-gray-300">
-                        <input type="checkbox" wire:model.live="showFinishedTasks" class="rounded border-gray-300 dark:border-gray-600 text-primary-600 focus:ring-primary-500" />
-                        Pokaż zakończone i anulowane
-                    </label>
                 </div>
             </div>
         </div>
@@ -274,13 +260,15 @@
                                     $descriptionFull = \App\Support\Tasks\TaskListColumn::sanitizeTaskText($task->description, 5000);
                                     $descriptionPreview = \App\Support\Tasks\TaskListColumn::sanitizeTaskText($task->description, 180);
 
-                                    $contextLabel = $task->task_context_label;
-                                    $contextPreview = \Illuminate\Support\Str::limit($contextLabel, 72);
+                                    $contextType = $task->taskable_type_label ?: 'Wolne / nieprzypisane';
+                                    $contextRecord = $task->taskable_label;
+                                    $contextRecordPreview = \Illuminate\Support\Str::limit($contextRecord, 72);
 
                                     $latestComment = $taskComments->last();
                                     $latestCommentPreview = $latestComment
                                         ? \App\Support\Tasks\TaskListColumn::sanitizeTaskText($latestComment->content, 140)
                                         : '';
+                                    $ownershipLine = \App\Support\Tasks\TaskListColumn::ownershipLine($task);
                                 @endphp
 
                                 <div class="flex items-start gap-2 mb-2">
@@ -346,7 +334,12 @@
                                     >
                                         <div class="flex items-start gap-1.5 text-[11px] text-sky-700 dark:text-sky-300">
                                             <x-heroicon-m-link class="mt-0.5 h-3.5 w-3.5 flex-shrink-0 text-sky-500" />
-                                            <span class="line-clamp-2 leading-snug">{{ $contextPreview }}</span>
+                                            <div class="min-w-0">
+                                                <div class="text-[10px] font-semibold uppercase tracking-wide text-sky-600/80 dark:text-sky-400/80">
+                                                    {{ $contextType }}
+                                                </div>
+                                                <span class="line-clamp-2 leading-snug">{{ $contextRecordPreview }}</span>
+                                            </div>
                                         </div>
                                         <div
                                             x-show="open"
@@ -355,8 +348,8 @@
                                             class="kanban-card-tooltip absolute left-0 bottom-full z-[80] mb-1.5 w-72 max-w-[18rem] rounded-md border border-gray-200 bg-white p-2.5 text-xs leading-snug text-gray-800 shadow-lg dark:border-gray-600 dark:bg-gray-900 dark:text-gray-100"
                                             wire:click.stop
                                         >
-                                            <div class="mb-1 text-[10px] font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400">Kontekst</div>
-                                            <div class="whitespace-pre-wrap">{{ $contextLabel }}</div>
+                                            <div class="mb-1 text-[10px] font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400">{{ $contextType }}</div>
+                                            <div class="whitespace-pre-wrap">{{ $contextRecord }}</div>
                                         </div>
                                     </div>
                                 @endif
@@ -377,7 +370,9 @@
                                     </div>
                                     <div class="flex items-center gap-1.5">
                                         <x-heroicon-m-user class="w-3.5 h-3.5 flex-shrink-0 text-gray-400" />
-                                        <span class="truncate">{{ $task->assignee?->name ?? 'Nie przypisano' }}</span>
+                                        <span class="truncate" title="{{ $ownershipLine }}">
+                                            {{ $ownershipLine }}
+                                        </span>
                                     </div>
                                 </div>
 
@@ -550,7 +545,7 @@
 
             <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div>
-                    <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Kontekst zadania</label>
+                    <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Powiązane z</label>
                     <select 
                         wire:model.live="quickTaskableType"
                         class="block w-full border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-gray-200 rounded-md shadow-sm focus:ring-primary-500 focus:border-primary-500 sm:text-sm"

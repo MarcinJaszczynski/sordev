@@ -38,7 +38,7 @@ final class SettlementPaymentHealthService
     ];
 
     public static array $statusLabels = [
-        self::STATUS_OK => 'Zapłacone',
+        self::STATUS_OK => 'Zapłacono',
         self::STATUS_NA => 'Brak kwoty',
         self::STATUS_SHORTFALL => 'Do zapłaty',
         self::STATUS_DUE => 'Do zapłaty',
@@ -149,6 +149,24 @@ final class SettlementPaymentHealthService
     }
 
     /**
+     * Zaksięgowana wpłata 0 = świadome domknięcie (np. pokryte na innej pozycji tego samego kontrahenta).
+     * Nie mylić z walutą obcą bez przeliczenia na PLN (actual_amount > 0, actual_amount_pln = 0).
+     *
+     * @param  Collection<int, EventSettlementCost>  $paymentRows
+     */
+    public static function hasBookedZeroClosure(Collection $paymentRows): bool
+    {
+        return $paymentRows
+            ->filter(fn (EventSettlementCost $row): bool => self::isBookedPaymentStatus($row->payment_status))
+            ->contains(function (EventSettlementCost $row): bool {
+                $amount = (float) ($row->actual_amount ?? 0);
+                $amountPln = (float) ($row->actual_amount_pln ?? 0);
+
+                return $amount <= self::TOLERANCE && $amountPln <= self::TOLERANCE;
+            });
+    }
+
+    /**
      * @return array{
      *     coverage_status: string,
      *     coverage_label: string,
@@ -181,12 +199,14 @@ final class SettlementPaymentHealthService
             : 0.0;
         $overpaymentPln = self::overpaymentPln($paidPln, $statusPln);
         $nextDue = $this->nextDueDate($planCost, $allCosts);
+        $zeroClosure = self::hasBookedZeroClosure($paymentRows);
         $coverageStatus = $this->resolveStatus(
             $paidPln,
             $statusPln,
             $nextDue,
             $invoiceSettled,
             $overpaymentApproved,
+            $zeroClosure,
         );
 
         return [
@@ -252,7 +272,15 @@ final class SettlementPaymentHealthService
             return ! EventSettlementCost::isManualPaymentRow($cost);
         }
 
-        return in_array($cost->source_type, ['program_point', 'transport', 'accommodation', 'insurance_day'], true);
+        return in_array($cost->source_type, [
+            'program_point',
+            'transport',
+            'transport_contractor',
+            'accommodation',
+            'accommodation_hotel',
+            'accommodation_hotel_stay',
+            'insurance_day',
+        ], true);
     }
 
     public function paidPlnForPlanCost(EventSettlementCost $planCost, Collection $allCosts): float
@@ -330,6 +358,19 @@ final class SettlementPaymentHealthService
             )->values();
         }
 
+        if (in_array($planCost->source_type, [
+            'accommodation_hotel',
+            'accommodation_hotel_stay',
+            'transport_contractor',
+        ], true)) {
+            $paymentType = $planCost->source_type.'_payment';
+
+            return $allCosts->filter(
+                fn (EventSettlementCost $row): bool => $row->source_type === $paymentType
+                    && (int) $row->source_id === (int) $planCost->source_id,
+            )->values();
+        }
+
         if ($planCost->source_type === 'manual') {
             $linked = $allCosts->filter(
                 fn (EventSettlementCost $row): bool => $row->source_type === 'manual_payment'
@@ -360,7 +401,13 @@ final class SettlementPaymentHealthService
         ?Carbon $nextDue,
         bool $invoiceSettled = false,
         bool $overpaymentApproved = false,
+        bool $zeroClosure = false,
     ): string {
+        // Świadome domknięcie wpłatą 0 (pokryte gdzie indziej).
+        if ($zeroClosure) {
+            return self::STATUS_OK;
+        }
+
         // Brak planu ≠ opłacone — osobny stan UI.
         if ($plannedPln <= self::TOLERANCE) {
             return self::STATUS_NA;
@@ -400,7 +447,12 @@ final class SettlementPaymentHealthService
         float $plannedPln,
         bool $invoiceSettled = false,
         bool $overpaymentApproved = false,
+        bool $zeroClosure = false,
     ): string {
+        if ($zeroClosure) {
+            return 'paid';
+        }
+
         if ($plannedPln <= self::TOLERANCE) {
             return 'planned';
         }
@@ -464,6 +516,7 @@ final class SettlementPaymentHealthService
         $payments = $this->paymentRowsForPlanCost($plan, $allCosts);
         $invoiceSettled = self::hasInvoiceSettlingPayment($payments);
         $overpaymentApproved = self::isOverpaymentApproved($plan);
+        $zeroClosure = self::hasBookedZeroClosure($payments);
 
         $payload = [
             'payment_status' => $this->planPaymentStatusFromAmounts(
@@ -471,6 +524,7 @@ final class SettlementPaymentHealthService
                 $planned,
                 $invoiceSettled,
                 $overpaymentApproved,
+                $zeroClosure,
             ),
         ];
 
@@ -483,6 +537,34 @@ final class SettlementPaymentHealthService
         }
 
         $plan->update($payload);
+    }
+
+    /**
+     * Sync statusu po zapisie wpłaty; opcjonalnie od razu zatwierdza nadpłatę.
+     *
+     * @param  Collection<int, EventSettlementCost>  $allCosts
+     */
+    public function syncPlanPaymentStatusAfterPayment(
+        EventSettlementCost $plan,
+        Collection $allCosts,
+        bool $approveOverpayment = false,
+        ?int $reviewedBy = null,
+    ): void {
+        $this->syncPlanPaymentStatus($plan, $allCosts);
+
+        if (! $approveOverpayment) {
+            return;
+        }
+
+        $plan = $plan->fresh() ?? $plan;
+        $paid = $this->paidPlnForPlanCost($plan, $allCosts);
+        $planned = $this->indicativePlannedPlnForCost($plan);
+        if (! self::isOverpaid($paid, $planned)) {
+            return;
+        }
+
+        $this->approveOverpayment($plan, $reviewedBy);
+        $this->syncPlanPaymentStatus($plan->fresh() ?? $plan, $allCosts);
     }
 
     /**

@@ -3,6 +3,7 @@
 namespace App\Filament\Pages;
 
 use App\Models\Reservation;
+use App\Support\ExecutiveAccess;
 use App\Support\FilamentNavigation;
 use Filament\Forms;
 use Filament\Pages\Page;
@@ -35,6 +36,11 @@ class ReservationsAnalytics extends Page implements HasTable
     protected static ?string $navigationGroup = FilamentNavigation::GROUP_OPERATIONS;
 
     protected static ?int $navigationSort = 7;
+
+    public static function canAccess(): bool
+    {
+        return ExecutiveAccess::canAccessSensitiveAnalytics();
+    }
 
     public ?string $selectedDateFrom = null;
 

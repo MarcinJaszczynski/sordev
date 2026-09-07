@@ -28,10 +28,24 @@ class EventParticipant extends Model
         self::STATUS_RESIGNED => 'Rezygnacja',
     ];
 
+    public const GENDER_MALE = 'male';
+
+    public const GENDER_FEMALE = 'female';
+
+    public const GENDER_OTHER = 'other';
+
+    /** @var array<string, string> */
+    public static array $genders = [
+        self::GENDER_MALE => 'Męska',
+        self::GENDER_FEMALE => 'Żeńska',
+        self::GENDER_OTHER => 'Inna',
+    ];
+
     protected $fillable = [
         'event_id',
         'first_name',
         'last_name',
+        'gender',
         'birth_date',
         'pesel',
         'email',
@@ -109,6 +123,38 @@ class EventParticipant extends Model
         $total = count(\App\Support\EventParticipantConsents::allKeys());
 
         return "{$done}/{$total}";
+    }
+
+    public function genderLabel(): ?string
+    {
+        if ($this->gender === null || $this->gender === '') {
+            return null;
+        }
+
+        return self::$genders[$this->gender] ?? $this->gender;
+    }
+
+    /**
+     * Normalizuje wartość z UI / CSV do male|female|other albo null.
+     */
+    public static function normalizeGender(?string $raw): ?string
+    {
+        $value = mb_strtolower(trim((string) $raw));
+        if ($value === '') {
+            return null;
+        }
+
+        $ascii = strtr($value, [
+            'ą' => 'a', 'ć' => 'c', 'ę' => 'e', 'ł' => 'l', 'ń' => 'n',
+            'ó' => 'o', 'ś' => 's', 'ź' => 'z', 'ż' => 'z',
+        ]);
+
+        return match ($ascii) {
+            'male', 'm', 'meska', 'mezczyzna', 'chlopiec' => self::GENDER_MALE,
+            'female', 'f', 'z', 'zenska', 'kobieta', 'dziewczynka' => self::GENDER_FEMALE,
+            'other', 'o', 'i', 'inna', 'inne', 'inny' => self::GENDER_OTHER,
+            default => null,
+        };
     }
 
     public function fullName(): string

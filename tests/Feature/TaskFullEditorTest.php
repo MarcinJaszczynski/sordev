@@ -6,6 +6,7 @@ use App\Livewire\TaskFullEditor;
 use App\Models\Contractor;
 use App\Models\Task;
 use App\Models\User;
+use App\Support\Tasks\TaskDueDates;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Livewire\Livewire;
 use Tests\TestCase;
@@ -40,6 +41,7 @@ class TaskFullEditorTest extends TestCase
             ->test(TaskFullEditor::class, ['taskId' => $task->id])
             ->assertSet('data.title', 'Pełne zadanie')
             ->assertSee('Kontrahent')
+            ->assertSee('Hotel Test')
             ->assertSee('Otwórz powiązany ekran w nowej karcie:');
 
         $this->assertSame(
@@ -57,6 +59,7 @@ class TaskFullEditorTest extends TestCase
 
         Livewire::actingAs($user)
             ->test(TaskFullEditor::class)
+            ->assertSet('data.due_date', TaskDueDates::defaultForNew()->format('Y-m-d H:i:s'))
             ->set('data.title', 'Nowe z pełnego modala')
             ->set('data.status_id', Task::getDefaultStatusId())
             ->set('data.priority', 'normal')
@@ -66,6 +69,7 @@ class TaskFullEditorTest extends TestCase
         $this->assertDatabaseHas('tasks', [
             'title' => 'Nowe z pełnego modala',
             'author_id' => $user->id,
+            'due_date' => TaskDueDates::defaultForNew()->format('Y-m-d H:i:s'),
         ]);
     }
 

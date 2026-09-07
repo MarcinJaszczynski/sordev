@@ -70,6 +70,7 @@ return [
 
         'pages' => [
             'Dashboard',
+            'EventTemplatePriceComparisonPage',
         ],
 
         'widgets' => [

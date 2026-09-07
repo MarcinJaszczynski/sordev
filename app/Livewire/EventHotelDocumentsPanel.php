@@ -56,14 +56,19 @@ class EventHotelDocumentsPanel extends Component
         }
 
         $eventDocuments = Schema::hasTable('event_documents')
-            ? $event->documents()->orderByDesc('updated_at')->limit(10)->get()
+            ? $event->documents()->orderByDesc('updated_at')->limit(20)->get()
             : collect();
+
+        $hotelPackageDocuments = $eventDocuments->filter(
+            fn ($doc) => (bool) ($doc->attach_to_hotel_pdf ?? false)
+        )->values();
 
         return view('livewire.event-hotel-documents-panel', [
             'event' => $event,
             'contractors' => $event->hotelStays->pluck('contractor')->filter()->unique('id')->values(),
             'invoices' => $invoices,
             'eventDocuments' => $eventDocuments,
+            'hotelPackageDocuments' => $hotelPackageDocuments,
             'documentsUrl' => $documentsUrl,
         ]);
     }

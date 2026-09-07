@@ -19,6 +19,13 @@
 @endif
 @extends('front.layout.master')
 
+@section('head')
+    @include('front.partials.seo', [
+        'pageTitle' => 'Kontakt | Biuro Podróży RAFA',
+        'pageDescription' => 'Skontaktuj się z Biurem Podróży RAFA. Organizujemy wycieczki szkolne i wyjazdy firmowe z całej Polski. Telefon, e-mail, formularz kontaktowy i adres biura.',
+    ])
+@endsection
+
 @section('main_content')
 
     <div class="page-top">

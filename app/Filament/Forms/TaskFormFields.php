@@ -4,6 +4,7 @@ namespace App\Filament\Forms;
 
 use App\Enums\TaskPriority;
 use App\Models\Task;
+use App\Support\Tasks\TaskDueDates;
 use Filament\Forms;
 use Filament\Forms\Get;
 use Filament\Forms\Set;
@@ -32,7 +33,8 @@ class TaskFormFields
             ->columnSpanFull();
 
         $dueDate = Forms\Components\DateTimePicker::make('due_date')
-            ->label('Termin');
+            ->label('Termin')
+            ->default(fn () => TaskDueDates::defaultForNew());
 
         $status = Forms\Components\Select::make('status_id')
             ->label('Status')
@@ -61,7 +63,7 @@ class TaskFormFields
             ->preload();
 
         $taskableType = Forms\Components\Select::make('taskable_type')
-            ->label('Kontekst zadania')
+            ->label('Powiązane z')
             ->options(Task::getTaskableTypeOptions())
             ->default(fn () => request()->query('taskable_type'))
             ->native(false)
@@ -75,7 +77,7 @@ class TaskFormFields
         }
 
         $taskableId = Forms\Components\Select::make('taskable_id')
-            ->label('Powiązany rekord')
+            ->label(fn (Get $get): string => Task::getTaskableTypeOptions()[$get('taskable_type')] ?? 'Rekord')
             ->options(fn (Get $get): array => Task::getTaskableRecordOptions($get('taskable_type')))
             ->default(fn () => request()->query('taskable_id'))
             ->searchable()
@@ -90,9 +92,12 @@ class TaskFormFields
         $attachments = Forms\Components\FileUpload::make('pending_attachments')
             ->label($compact ? 'Załączniki' : 'Pliki')
             ->disk('public')
+            ->visibility('public')
             ->multiple()
             ->directory('task-attachments')
             ->preserveFilenames()
+            ->openable()
+            ->downloadable()
             ->helperText($compact
                 ? 'Możesz dodać pliki już przy tworzeniu. Po zapisie dostępne są też komentarze, podzadania i kolejne załączniki.'
                 : 'Możesz dodać pliki już przy tworzeniu zadania.')
@@ -134,7 +139,7 @@ class TaskFormFields
                             $priority,
                         ])
                         ->columns(['default' => 1, 'md' => 2]),
-                    Forms\Components\Section::make('Przypisanie i kontekst')
+                    Forms\Components\Section::make('Przypisanie')
                         ->schema([
                             $assignee,
                             $parent,

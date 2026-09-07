@@ -16,7 +16,7 @@ class CollapseSystemTaskDuplicatesCommand extends Command
 {
     protected $signature = 'tasks:collapse-system-duplicates {--dry-run : Pokaż zmiany bez zapisu}';
 
-    protected $description = 'Scala zduplikowane otwarte zadania systemowe (1 kopia na fingerprint)';
+    protected $description = 'Scala zduplikowane otwarte zadania systemowe tej samej osoby (1 kopia na fingerprint + assignee)';
 
     public function handle(): int
     {
@@ -36,7 +36,12 @@ class CollapseSystemTaskDuplicatesCommand extends Command
         $groups = $query
             ->orderBy('id')
             ->get()
-            ->groupBy(fn (Task $task): string => $this->extractFingerprint((string) $task->description) ?? 'task:'.$task->id)
+            ->groupBy(function (Task $task): string {
+                $fingerprint = $this->extractFingerprint((string) $task->description) ?? 'task:'.$task->id;
+                $assignee = $task->assignee_id ? (string) $task->assignee_id : 'none';
+
+                return $fingerprint.'|'.$assignee;
+            })
             ->filter(fn (Collection $group, string $key): bool => ! str_starts_with($key, 'task:') && $group->count() > 1);
 
         if ($groups->isEmpty()) {

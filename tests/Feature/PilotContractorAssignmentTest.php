@@ -111,4 +111,76 @@ class PilotContractorAssignmentTest extends TestCase
 
         $this->assertSame($contractor->getKey(), $resolved);
     }
+
+    public function test_persist_pilot_demographics_writes_contractor_then_user(): void
+    {
+        Role::findOrCreate('pilot');
+
+        $pilotType = ContractorType::query()->firstOrCreate(['name' => 'pilot']);
+        ContractorType::clearIdsForNamesCache();
+
+        $user = User::factory()->create([
+            'email' => 'pesel.pilot@example.test',
+            'name' => 'Pesel Pilot',
+            'birth_date' => null,
+            'pesel' => null,
+        ]);
+        $user->assignRole('pilot');
+
+        $contractor = Contractor::create([
+            'name' => 'Pesel Pilot',
+            'email' => 'pesel.pilot@example.test',
+            'status' => 'active',
+            'birth_date' => null,
+            'pesel' => null,
+        ]);
+        $contractor->types()->sync([$pilotType->getKey()]);
+
+        app(PilotContractorAssignmentService::class)->persistPilotDemographicsFromPortalUser(
+            $user,
+            '1990-05-10',
+            '90051012345',
+            '+48111222333',
+        );
+
+        $contractor->refresh();
+        $user->refresh();
+
+        $this->assertSame('90051012345', $contractor->pesel);
+        $this->assertSame('1990-05-10', $contractor->birth_date?->format('Y-m-d'));
+        $this->assertSame('90051012345', $user->pesel);
+        $this->assertSame('1990-05-10', $user->birth_date?->format('Y-m-d'));
+    }
+
+    public function test_contractor_edit_syncs_demographics_to_portal_user(): void
+    {
+        Role::findOrCreate('pilot');
+
+        $pilotType = ContractorType::query()->firstOrCreate(['name' => 'pilot']);
+        ContractorType::clearIdsForNamesCache();
+
+        $user = User::factory()->create([
+            'email' => 'sync.pilot@example.test',
+            'pesel' => null,
+            'birth_date' => null,
+        ]);
+        $user->assignRole('pilot');
+
+        $contractor = Contractor::create([
+            'name' => 'Sync Pilot',
+            'email' => 'sync.pilot@example.test',
+            'status' => 'active',
+            'birth_date' => '1988-01-02',
+            'pesel' => '88010212345',
+        ]);
+        $contractor->types()->sync([$pilotType->getKey()]);
+
+        app(PilotContractorAssignmentService::class)
+            ->syncPortalUserDemographicsFromContractorRecord($contractor->fresh());
+
+        $user->refresh();
+
+        $this->assertSame('88010212345', $user->pesel);
+        $this->assertSame('1988-01-02', $user->birth_date?->format('Y-m-d'));
+    }
 }

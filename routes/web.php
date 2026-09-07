@@ -10,6 +10,8 @@ use App\Http\Controllers\Admin\EventOfferWordController;
 use App\Http\Controllers\Admin\EventParticipantInsuranceExportController;
 use App\Http\Controllers\Admin\EventParticipantListTemplateController;
 use App\Http\Controllers\Admin\EventPrintPdfController;
+use App\Http\Controllers\Admin\EventTemplatePriceComparisonExportController;
+use App\Http\Controllers\Admin\EventTemplatePriceExportController;
 use App\Http\Controllers\Admin\NotificationController;
 use App\Http\Controllers\Client\ClientContractPdfController;
 use App\Http\Controllers\EventCsvController;
@@ -19,6 +21,8 @@ use App\Http\Controllers\Front\FrontController;
 use App\Http\Controllers\Front\ParentPortalController;
 use App\Http\Controllers\InstallController;
 use App\Http\Controllers\InstallmentPaymentLinkController;
+use App\Http\Controllers\Internal\EventTemplatePriceRecalculateController;
+use App\Http\Controllers\Internal\EventTemplatePriceSnapshotController;
 use App\Http\Controllers\OnlinePaymentController;
 use App\Http\Controllers\Pilot\PilotEventPdfController;
 use App\Http\Middleware\EnsureApplicationNotInstalled;
@@ -48,6 +52,15 @@ Route::middleware(['web', EnsureApplicationNotInstalled::class])
     });
 
 Route::middleware('web')->get('/install/complete', [InstallController::class, 'complete'])->name('install.complete');
+
+// Snapshot cen szablonów — porównywanie między środowiskami (token PRICE_COMPARE_TOKEN)
+Route::get('/internal/event-template-prices', EventTemplatePriceSnapshotController::class)
+    ->middleware('throttle:30,1')
+    ->name('internal.event-template-prices');
+
+Route::post('/internal/event-template-prices/recalculate', EventTemplatePriceRecalculateController::class)
+    ->middleware('throttle:10,1')
+    ->name('internal.event-template-prices.recalculate');
 
 // Redirect old root to canonical region root using cookie (handled by middleware later)
 Route::get('/', function () {
@@ -105,22 +118,14 @@ Route::get('/sitemap.xml', function () {
 
 // Global blog routes (no region slug) for canonical blog URLs
 Route::get('/o-nas', [FrontController::class, 'about'])->name('about.global');
-Route::get('/llms.txt', function () {
-    $base = rtrim((string) (config('app.public_url') ?: config('app.url')), '/');
+Route::get('/llms.txt', function (\Illuminate\Http\Request $request) {
+    $fresh = app()->isLocal() && $request->boolean('refresh');
+    $body = app(\App\Support\Seo\LlmsTxtBuilder::class)->toString($fresh);
 
-    $lines = [
-        '# Biuro Podróży RAFA',
-        '# Specjalizacja: wycieczki szkolne, zielone szkoły, wyjazdy firmowe',
-        '',
-        $base.'/o-nas',
-        $base.'/blog',
-        $base.'/poradnik',
-        $base.route('faq', ['regionSlug' => 'warszawa'], false),
-        $base.route('packages', ['regionSlug' => 'warszawa'], false),
-        $base.route('contact', ['regionSlug' => 'warszawa'], false),
-    ];
-
-    return response(implode("\n", $lines), 200, ['Content-Type' => 'text/plain; charset=UTF-8']);
+    return response($body, 200, [
+        'Content-Type' => 'text/plain; charset=UTF-8',
+        'Cache-Control' => $fresh ? 'no-store' : 'public, max-age=3600',
+    ]);
 })->name('llms.txt');
 Route::get('/poradnik', [FrontController::class, 'guide'])->name('guide.global');
 Route::get('/blog', [FrontController::class, 'blog'])->name('blog.global');
@@ -362,6 +367,10 @@ Route::middleware(['auth', 'web', 'office'])->prefix('admin')->group(function ()
         ->name('admin.events.offer.word');
     Route::get('/task-attachments/{attachment}/download', \App\Http\Controllers\Admin\TaskAttachmentDownloadController::class)
         ->name('admin.task-attachments.download');
+    Route::get('/tools/export-template-prices', EventTemplatePriceExportController::class)
+        ->name('admin.event-template-prices.export');
+    Route::get('/tools/export-template-price-comparison', EventTemplatePriceComparisonExportController::class)
+        ->name('admin.event-template-prices.export-comparison');
     Route::get('/backups/{filename}/download', [BackupDownloadController::class, 'download'])
         ->name('admin.backups.download');
     Route::get('/tfg-feed-logs/{feedLog}/download', \App\Http\Controllers\Admin\TfgFeedLogDownloadController::class)

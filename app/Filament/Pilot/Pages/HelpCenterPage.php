@@ -5,7 +5,7 @@ declare(strict_types=1);
 namespace App\Filament\Pilot\Pages;
 
 use App\Filament\Concerns\InteractsWithHelpCenter;
-use App\Http\Middleware\PilotPreviewMiddleware;
+use App\Services\PilotAccessService;
 use App\Support\Help\HelpCatalog;
 use Filament\Pages\Page;
 use Illuminate\Support\Facades\Auth;
@@ -49,7 +49,7 @@ class HelpCenterPage extends Page
             return true;
         }
 
-        return $user->hasRole(['admin', 'super_admin', 'biuro']) && PilotPreviewMiddleware::isActive();
+        return app(PilotAccessService::class)->canStaffPreviewPortal($user);
     }
 
     protected function helpPanel(): string
