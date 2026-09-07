@@ -84,3 +84,26 @@ test('template start place options can include legacy selected place outside ava
     expect($options)->toHaveKey($kalisz->id)
         ->and($options)->toHaveKey($legacy->id);
 });
+
+test('search select options finds places by name without requiring full preload', function () {
+    Place::query()->create(['name' => 'Wilno Stare Miasto', 'starting_place' => false]);
+    Place::query()->create(['name' => 'Kalisz', 'starting_place' => true]);
+    $target = Place::query()->create(['name' => 'Kraków Rynek', 'starting_place' => false]);
+
+    $options = Place::searchSelectOptions('Krak', 50);
+
+    expect($options)->toHaveKey($target->id)
+        ->and($options)->not->toHaveKey(
+            Place::query()->where('name', 'Kalisz')->value('id')
+        );
+});
+
+test('search select options keeps currently selected place even if outside result set', function () {
+    $selected = Place::query()->create(['name' => 'Zakopane', 'starting_place' => false]);
+    Place::query()->create(['name' => 'Gdańsk', 'starting_place' => false]);
+
+    $options = Place::searchSelectOptions('Gdań', 50, $selected->id);
+
+    expect($options)->toHaveKey($selected->id)
+        ->and($options[$selected->id])->toBe('Zakopane');
+});

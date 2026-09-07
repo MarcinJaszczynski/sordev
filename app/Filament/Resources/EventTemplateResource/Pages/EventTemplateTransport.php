@@ -3,6 +3,7 @@
 namespace App\Filament\Resources\EventTemplateResource\Pages;
 
 use App\Filament\Concerns\AuthorizesEventTemplatePages;
+use App\Filament\Concerns\ConfirmsEventTemplateEditing;
 use App\Filament\Resources\EventTemplateResource;
 use App\Filament\Resources\EventTemplateResource\Concerns\HasEventTemplateWorkflowContext;
 use App\Filament\Resources\EventTemplateResource\Concerns\HasGenerateEventAction;
@@ -22,6 +23,7 @@ use Illuminate\Support\Facades\Log;
 class EventTemplateTransport extends Page implements HasForms
 {
     use AuthorizesEventTemplatePages;
+    use ConfirmsEventTemplateEditing;
     use HasEventTemplateWorkflowContext;
     use HasGenerateEventAction;
     use InteractsWithForms;
@@ -31,6 +33,8 @@ class EventTemplateTransport extends Page implements HasForms
 
     public function toggleAvailability($eventTemplateId, $startPlaceId, $endPlaceId, $available)
     {
+        $this->ensureTemplateEditingAllowed();
+
         if (! $startPlaceId || ! $endPlaceId) {
             return;
         }
@@ -74,6 +78,8 @@ class EventTemplateTransport extends Page implements HasForms
 
     public function updateAvailabilityNote($eventTemplateId, $startPlaceId, $endPlaceId, $note)
     {
+        $this->ensureTemplateEditingAllowed();
+
         if (! $startPlaceId || ! $endPlaceId) {
             return;
         }
@@ -247,6 +253,7 @@ class EventTemplateTransport extends Page implements HasForms
     public function mount(int|string $record): void
     {
         $this->record = $this->resolveRecord($record);
+        $this->bootTemplateEditingGate();
 
         // Sprawdź czy są przeliczone ceny, jeśli nie - przelicz je
         $pricesCount = \App\Models\EventTemplatePricePerPerson::where('event_template_id', $this->record->id)->count();
@@ -268,27 +275,32 @@ class EventTemplateTransport extends Page implements HasForms
     protected function getHeaderActions(): array
     {
         return [
+            ...$this->templateEditingHeaderActions(),
             $this->makePreviewOfferAction(),
             $this->makeGenerateEventAction(),
             Actions\Action::make('calculate-distances')
                 ->label('Przelicz odległości')
                 ->icon('heroicon-o-arrow-path')
+                ->visible(fn (): bool => $this->canMutateEventTemplateNow())
                 ->action('calculateDistances')
                 ->color('warning'),
             Actions\Action::make('recalculate-prices')
                 ->label('Przelicz ceny (ten szablon)')
                 ->icon('heroicon-o-calculator')
+                ->visible(fn (): bool => $this->canMutateEventTemplateNow())
                 ->requiresConfirmation()
                 ->action('recalculatePricesForThisTemplate')
                 ->color('success'),
             Actions\Action::make('force-recalculate-prices')
                 ->label('WYMUSZ przeliczenie cen')
                 ->icon('heroicon-o-calculator')
+                ->visible(fn (): bool => $this->canMutateEventTemplateNow())
                 ->action('forceRecalculatePrices')
                 ->color('danger'),
             Actions\Action::make('clean-duplicate-currencies')
                 ->label('Pokaż duplikaty walut')
                 ->icon('heroicon-o-exclamation-triangle')
+                ->visible(fn (): bool => $this->canMutateEventTemplateNow())
                 ->action('showDuplicateCurrencies')
                 ->color('warning'),
         ];
@@ -311,8 +323,8 @@ class EventTemplateTransport extends Page implements HasForms
             // Zainicjuj progress i zleć job
             \App\Services\PriceRecalcProgress::start($userId, 1);
             // powiadom widgety na stronie
-            $this->emit('priceRecalcStarted');
-            \App\Jobs\RecalculateSelectedEventTemplatePricesJob::dispatch([(int) $this->record->id], $userId)->afterResponse();
+            $this->dispatch('priceRecalcStarted');
+            \App\Jobs\RecalculateSelectedEventTemplatePricesJob::dispatch([(int) $this->record->id], $userId);
 
             \Filament\Notifications\Notification::make()
                 ->title('Przeliczanie cen zlecone')
@@ -532,14 +544,11 @@ class EventTemplateTransport extends Page implements HasForms
     public function forceRecalculatePrices()
     {
         try {
-            // Usuń wszystkie istniejące ceny dla tego szablonu
-            \App\Models\EventTemplatePricePerPerson::where('event_template_id', $this->record->id)->delete();
-            \Illuminate\Support\Facades\Log::info("Deleted all existing prices for template {$this->record->id}");
+            // Nie kasuj PPP przed kalkulacją — qtyVariants() bierze się z cen;
+            // delete-first zostawiał pusty cennik i oferta znikała z WWW.
+            // deleteExisting=true czyści per start_place dopiero po udanej kalkulacji z PLN > 0.
+            (new \App\Services\UnifiedPriceCalculator)->recalculateForTemplate($this->record, true);
 
-            // Przelicz ponownie
-            (new \App\Services\UnifiedPriceCalculator)->recalculateForTemplate($this->record);
-
-            // Sprawdź rezultaty
             $totalPrices = \App\Models\EventTemplatePricePerPerson::where('event_template_id', $this->record->id)->count();
             $pricesWithTransport = \App\Models\EventTemplatePricePerPerson::where('event_template_id', $this->record->id)
                 ->whereNotNull('transport_cost')
@@ -548,7 +557,7 @@ class EventTemplateTransport extends Page implements HasForms
 
             \Filament\Notifications\Notification::make()
                 ->title('Ceny zostały wymuszone!')
-                ->body("Usunięto stare ceny i przeliczono od nowa. Łącznie: {$totalPrices} cen, z transportem: {$pricesWithTransport}")
+                ->body("Przeliczono od nowa. Łącznie: {$totalPrices} cen, z transportem: {$pricesWithTransport}")
                 ->success()
                 ->send();
         } catch (\Exception $e) {
@@ -659,33 +668,51 @@ class EventTemplateTransport extends Page implements HasForms
                     ->schema([
                         Select::make('bus_id')
                             ->label('Autobus')
-                            ->options(Bus::all()->pluck('name', 'id'))
+                            ->options(fn () => Bus::query()->orderBy('name')->pluck('name', 'id'))
                             ->searchable()
                             ->nullable()
-                            ->placeholder('Wybierz autobus'),
+                            ->placeholder('Wybierz autobus')
+                            ->disabled(fn (): bool => ! $this->canMutateEventTemplateNow()),
 
                         TextInput::make('program_km')
                             ->label('Program (km)')
                             ->numeric()
                             ->default(0)
-                            ->placeholder('Ilość kilometrów w realizacji programu'),
+                            ->placeholder('Ilość kilometrów w realizacji programu')
+                            ->disabled(fn (): bool => ! $this->canMutateEventTemplateNow()),
 
                         Select::make('start_place_id')
-                            ->label('Miejsce początkowe')
-                            ->options(fn () => \App\Models\Place::orderBy('name')->pluck('name', 'id')->toArray())
+                            ->label('Miejsce początkowe (start programu)')
                             ->searchable()
                             ->nullable()
-                            ->placeholder('Wybierz miejsce początkowe'),
+                            ->placeholder('Wpisz nazwę miejsca…')
+                            ->getSearchResultsUsing(fn (string $search): array => \App\Models\Place::searchSelectOptions(
+                                $search,
+                                50,
+                                (int) ($this->data['start_place_id'] ?? $this->record->start_place_id ?? 0) ?: null,
+                            ))
+                            ->getOptionLabelUsing(fn ($value): ?string => \App\Models\Place::optionLabel(
+                                filled($value) ? (int) $value : null
+                            ))
+                            ->disabled(fn (): bool => ! $this->canMutateEventTemplateNow()),
 
                         Select::make('end_place_id')
-                            ->label('Miejsce końcowe')
-                            ->options(fn () => \App\Models\Place::orderBy('name')->pluck('name', 'id')->toArray())
+                            ->label('Miejsce końcowe (koniec programu)')
                             ->searchable()
                             ->nullable()
-                            ->placeholder('Wybierz miejsce końcowe'),
+                            ->placeholder('Wpisz nazwę miejsca…')
+                            ->getSearchResultsUsing(fn (string $search): array => \App\Models\Place::searchSelectOptions(
+                                $search,
+                                50,
+                                (int) ($this->data['end_place_id'] ?? $this->record->end_place_id ?? 0) ?: null,
+                            ))
+                            ->getOptionLabelUsing(fn ($value): ?string => \App\Models\Place::optionLabel(
+                                filled($value) ? (int) $value : null
+                            ))
+                            ->disabled(fn (): bool => ! $this->canMutateEventTemplateNow()),
 
                         \FilamentTiptapEditor\TiptapEditor::make('transport_notes')
-
+                            ->disabled(fn (): bool => ! $this->canMutateEventTemplateNow())
                             ->columnSpanFull(),
                     ])
                     ->columns(['default' => 1, 'md' => 2]),
@@ -695,6 +722,8 @@ class EventTemplateTransport extends Page implements HasForms
 
     public function save(): void
     {
+        $this->ensureTemplateEditingAllowed();
+
         $data = $this->form->getState();
         $this->record->update([
             'bus_id' => $data['bus_id'],

@@ -1,20 +1,34 @@
 <x-filament-panels::page>
+    @unless ($this->canMutateEventTemplateNow())
+        <div class="mb-4 rounded-lg border border-amber-300 bg-amber-50 px-4 py-3 text-sm text-amber-900 dark:border-amber-700 dark:bg-amber-950/40 dark:text-amber-100">
+            Podgląd transportu szablonu. Żeby zapisać miejsca i odległości, kliknij <strong>Edytuj szablon</strong> i potwierdź.
+        </div>
+    @endunless
+
     <form wire:submit="save">
         {{ $this->form }}
 
-        <div class="flex justify-end mt-6">
-            <x-filament::button
-                type="submit"
-                size="lg"
-            >
-                Zapisz zmiany
-            </x-filament::button>
-        </div>
+        @if ($this->canMutateEventTemplateNow())
+            <div class="flex justify-end mt-6">
+                <x-filament::button
+                    type="submit"
+                    size="lg"
+                >
+                    Zapisz zmiany
+                </x-filament::button>
+            </div>
+        @endif
     </form>
 
 
     <div class="mt-10">
         <h2 class="text-lg font-bold mb-4">Lista par odległości</h2>
+        @if (! $record->start_place_id || ! $record->end_place_id)
+            <div class="mb-4 rounded-lg border border-sky-300 bg-sky-50 px-4 py-3 text-sm text-sky-950">
+                Ustaw i zapisz <strong>miejsce początkowe</strong> oraz <strong>końcowe</strong> programu powyżej —
+                wtedy w tabeli pojawią się dystanse do miejsc startowych (podstawienia) i przycisk „Przelicz odległości”.
+            </div>
+        @endif
         <table class="min-w-full bg-white border border-gray-200">
             <thead>
                 <tr>
@@ -143,7 +157,10 @@
                 @endfor
                 @if($maxRows == 0)
                     <tr>
-                        <td colspan="12" class="px-4 py-2 border text-center text-gray-500">Brak danych do wyświetlenia</td>
+                        <td colspan="12" class="px-4 py-2 border text-center text-gray-500">
+                            Brak miejsc startowych (podstawienia) w słowniku — oznacz miejsca flagą „miejsce startowe”,
+                            albo ustaw start/koniec programu powyżej.
+                        </td>
                     </tr>
                 @endif
             </tbody>

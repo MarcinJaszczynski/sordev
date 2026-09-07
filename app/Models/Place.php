@@ -45,6 +45,53 @@ class Place extends Model
     }
 
     /**
+     * Wyszukiwanie miejsc do selectów Filament (server-side, bez preloadu całej tabeli).
+     *
+     * @return array<int|string, string>
+     */
+    public static function searchSelectOptions(string $search, int $limit = 50, ?int $includePlaceId = null): array
+    {
+        $term = trim($search);
+        $limit = max(1, min(100, $limit));
+
+        $query = static::query()->orderBy('name');
+
+        if ($term !== '') {
+            $like = '%'.$term.'%';
+            $query->where(function (Builder $inner) use ($like): void {
+                $inner->where('name', 'like', $like);
+
+                if (Schema::hasColumn((new static)->getTable(), 'description')) {
+                    $inner->orWhere('description', 'like', $like);
+                }
+            });
+        }
+
+        $options = $query
+            ->limit($limit)
+            ->pluck('name', 'id')
+            ->all();
+
+        if ($includePlaceId && ! array_key_exists($includePlaceId, $options)) {
+            $label = static::query()->whereKey($includePlaceId)->value('name');
+            if ($label !== null) {
+                $options = [$includePlaceId => $label] + $options;
+            }
+        }
+
+        return $options;
+    }
+
+    public static function optionLabel(?int $placeId): ?string
+    {
+        if (! $placeId) {
+            return null;
+        }
+
+        return static::query()->whereKey($placeId)->value('name');
+    }
+
+    /**
      * Opcje selecta dla miejsc podstawienia autokaru (punkty startowe imprez).
      *
      * @param  int|null  $includePlaceId  Zachowaj bieżącą wartość przy edycji (np. legacy).
