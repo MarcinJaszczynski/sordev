@@ -113,6 +113,8 @@ class EventOfferWordContentTest extends TestCase
             $contact = Contact::create([
                 'first_name' => 'Anna',
                 'last_name' => 'Nowak',
+                'phone' => '500600700',
+                'email' => 'anna@example.com',
             ]);
             app(EventOrderingPartyService::class)->syncForEvent($event, [[
                 'contact_id' => $contact->id,
@@ -159,8 +161,105 @@ class EventOfferWordContentTest extends TestCase
         $this->assertStringContainsString('PLN + 40 EUR za osobę dla grupy 40–45 uczestników', $xml);
         $this->assertStringContainsString('Zwiedzanie rynku', $xml);
 
+        if (Schema::hasTable('event_contractor') && Schema::hasTable('contacts')) {
+            $this->assertStringContainsString('Szkoła Podstawowa nr 7', $xml);
+            $this->assertStringContainsString('Anna Nowak', $xml);
+            $this->assertStringContainsString('tel. 500600700', $xml);
+            $this->assertStringContainsString('anna@example.com', $xml);
+        }
+
         // Jednodniowa — bez sekcji zakwaterowania.
         $this->assertStringNotContainsString('ZAKWATEROWANIE', $xml);
+    }
+
+    public function test_program_set_keeps_parent_then_children_order_like_on_page(): void
+    {
+        Role::firstOrCreate(['name' => 'admin', 'guard_name' => 'web']);
+        $user = User::factory()->create();
+        $user->assignRole('admin');
+        $this->actingAs($user);
+
+        $event = Event::factory()->create([
+            'name' => 'Oferta z setem',
+            'duration_days' => 1,
+            'start_date' => now()->addDays(5)->toDateString(),
+            'end_date' => now()->addDays(5)->toDateString(),
+            'created_by' => $user->id,
+            'assigned_to' => $user->id,
+        ]);
+
+        // Flat order po samym `order` dałoby: Dziecko A, Zbiórka, Dziecko B, Set Muzeum
+        EventProgramPoint::query()->create([
+            'event_id' => $event->id,
+            'name' => 'Zbiórka',
+            'day' => 1,
+            'order' => 2,
+            'include_in_program' => true,
+            'active' => true,
+            'show_title_style' => true,
+            'show_description' => false,
+        ]);
+
+        $set = EventProgramPoint::query()->create([
+            'event_id' => $event->id,
+            'name' => 'Set Muzeum',
+            'day' => 1,
+            'order' => 4,
+            'include_in_program' => true,
+            'active' => true,
+            'show_title_style' => true,
+            'show_description' => false,
+        ]);
+
+        EventProgramPoint::query()->create([
+            'event_id' => $event->id,
+            'name' => 'Dziecko B',
+            'day' => 1,
+            'order' => 3,
+            'parent_id' => $set->id,
+            'include_in_program' => true,
+            'active' => true,
+            'show_title_style' => true,
+            'show_description' => false,
+        ]);
+
+        EventProgramPoint::query()->create([
+            'event_id' => $event->id,
+            'name' => 'Dziecko A',
+            'day' => 1,
+            'order' => 1,
+            'parent_id' => $set->id,
+            'include_in_program' => true,
+            'active' => true,
+            'show_title_style' => true,
+            'show_description' => false,
+        ]);
+
+        $response = $this->get(route('admin.events.offer.word', $event));
+        $response->assertOk();
+
+        $document = EventDocument::query()
+            ->where('event_id', $event->id)
+            ->where('is_offer', true)
+            ->latest('id')
+            ->first();
+
+        $xml = $this->docxDocumentXml(storage_path('app/public/'.$document->file_path));
+
+        $posGather = strpos($xml, 'Zbiórka');
+        $posSet = strpos($xml, 'Set Muzeum');
+        $posChildA = strpos($xml, 'Dziecko A');
+        $posChildB = strpos($xml, 'Dziecko B');
+
+        $this->assertNotFalse($posGather);
+        $this->assertNotFalse($posSet);
+        $this->assertNotFalse($posChildA);
+        $this->assertNotFalse($posChildB);
+
+        // Jak na stronie: Zbiórka → Set → dzieci w kolejności order wewnątrz setu
+        $this->assertTrue($posGather < $posSet);
+        $this->assertTrue($posSet < $posChildA);
+        $this->assertTrue($posChildA < $posChildB);
     }
 
     public function test_multi_day_offer_shows_accommodation_hotels_list(): void

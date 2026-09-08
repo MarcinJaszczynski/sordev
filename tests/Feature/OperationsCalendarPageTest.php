@@ -120,6 +120,7 @@ class OperationsCalendarPageTest extends TestCase
 
         $event = \App\Models\Event::factory()->create([
             'assigned_to' => $user->id,
+            'status' => \App\Models\Event::STATUS_CONFIRMED,
             'start_date' => now()->addDays(10)->toDateString(),
             'end_date' => now()->addDays(12)->toDateString(),
             'code' => 'UBZ-1',
@@ -244,6 +245,7 @@ class OperationsCalendarPageTest extends TestCase
 
         $event = \App\Models\Event::factory()->create([
             'assigned_to' => $user->id,
+            'status' => \App\Models\Event::STATUS_CONFIRMED,
             'start_date' => now()->subMonths(2)->toDateString(),
             'end_date' => now()->subMonths(2)->addDays(2)->toDateString(),
         ]);
@@ -268,12 +270,14 @@ class OperationsCalendarPageTest extends TestCase
 
         $inRange = \App\Models\Event::factory()->create([
             'assigned_to' => $user->id,
+            'status' => \App\Models\Event::STATUS_CONFIRMED,
             'start_date' => '2025-01-15',
             'end_date' => '2025-01-17',
         ]);
 
         $outOfRange = \App\Models\Event::factory()->create([
             'assigned_to' => $user->id,
+            'status' => \App\Models\Event::STATUS_CONFIRMED,
             'start_date' => '2025-06-15',
             'end_date' => '2025-06-17',
         ]);
@@ -432,6 +436,7 @@ class OperationsCalendarPageTest extends TestCase
 
         $event = \App\Models\Event::factory()->create([
             'assigned_to' => $user->id,
+            'status' => \App\Models\Event::STATUS_CONFIRMED,
             'start_date' => now()->addDays(3)->toDateString(),
             'end_date' => now()->addDays(5)->toDateString(),
         ]);
@@ -440,5 +445,214 @@ class OperationsCalendarPageTest extends TestCase
             ->test(OperationsCalendarPage::class)
             ->call('openCalendarEntry', 'event-'.$event->id)
             ->assertSet('mountedActions', ['calendarEntryContext']);
+    }
+
+    public function test_calendar_defaults_to_confirmed_like_event_statuses(): void
+    {
+        $user = User::factory()->create();
+        $user->assignRole('admin');
+
+        $confirmed = \App\Models\Event::factory()->create([
+            'assigned_to' => $user->id,
+            'status' => \App\Models\Event::STATUS_CONFIRMED,
+            'start_date' => now()->addDays(2)->toDateString(),
+            'end_date' => now()->addDays(4)->toDateString(),
+        ]);
+
+        $odprawaOk = \App\Models\Event::factory()->create([
+            'assigned_to' => $user->id,
+            'status' => \App\Models\Event::STATUS_ODPRAWA_OK,
+            'start_date' => now()->addDays(5)->toDateString(),
+            'end_date' => now()->addDays(7)->toDateString(),
+        ]);
+
+        $cancelled = \App\Models\Event::factory()->create([
+            'assigned_to' => $user->id,
+            'status' => \App\Models\Event::STATUS_CANCELLED,
+            'start_date' => now()->addDays(3)->toDateString(),
+            'end_date' => now()->addDays(6)->toDateString(),
+        ]);
+
+        $inquiry = \App\Models\Event::factory()->create([
+            'assigned_to' => $user->id,
+            'status' => \App\Models\Event::STATUS_INQUIRY,
+            'start_date' => now()->addDays(1)->toDateString(),
+            'end_date' => now()->addDays(2)->toDateString(),
+        ]);
+
+        $component = Livewire::actingAs($user)
+            ->test(OperationsCalendarPage::class)
+            ->assertSet('eventStatuses', \App\Models\Event::getConfirmedLikeStatuses());
+
+        $ids = collect($component->instance()->calendarEvents)->pluck('id')->all();
+
+        $this->assertContains('event-'.$confirmed->id, $ids);
+        $this->assertContains('event-'.$odprawaOk->id, $ids);
+        $this->assertNotContains('event-'.$cancelled->id, $ids);
+        $this->assertNotContains('event-'.$inquiry->id, $ids);
+    }
+
+    public function test_calendar_event_status_filter_can_include_cancelled(): void
+    {
+        $user = User::factory()->create();
+        $user->assignRole('admin');
+
+        $cancelled = \App\Models\Event::factory()->create([
+            'assigned_to' => $user->id,
+            'status' => \App\Models\Event::STATUS_CANCELLED,
+            'start_date' => now()->addDays(3)->toDateString(),
+            'end_date' => now()->addDays(5)->toDateString(),
+        ]);
+
+        $component = Livewire::actingAs($user)
+            ->test(OperationsCalendarPage::class)
+            ->call('toggleEventStatus', \App\Models\Event::STATUS_CANCELLED);
+
+        $ids = collect($component->instance()->calendarEvents)->pluck('id')->all();
+
+        $this->assertContains('event-'.$cancelled->id, $ids);
+        $this->assertContains(\App\Models\Event::STATUS_CANCELLED, $component->get('eventStatuses'));
+    }
+
+    public function test_resource_timeline_respects_event_status_filter(): void
+    {
+        $user = User::factory()->create();
+        $user->assignRole('admin');
+
+        $confirmed = \App\Models\Event::factory()->create([
+            'assigned_to' => $user->id,
+            'status' => \App\Models\Event::STATUS_CONFIRMED,
+            'start_date' => now()->addDays(2)->toDateString(),
+            'end_date' => now()->addDays(4)->toDateString(),
+        ]);
+
+        $cancelled = \App\Models\Event::factory()->create([
+            'assigned_to' => $user->id,
+            'status' => \App\Models\Event::STATUS_CANCELLED,
+            'start_date' => now()->addDays(3)->toDateString(),
+            'end_date' => now()->addDays(5)->toDateString(),
+        ]);
+
+        $component = Livewire::actingAs($user)
+            ->test(OperationsCalendarPage::class)
+            ->call('setLayoutMode', 'resources');
+
+        $titles = collect($component->instance()->resourceTimeline['events'] ?? [])
+            ->pluck('title')
+            ->implode(' ');
+
+        $this->assertStringContainsString($confirmed->name, $titles);
+        $this->assertStringNotContainsString($cancelled->name, $titles);
+    }
+
+    public function test_calendar_persists_event_statuses_in_session(): void
+    {
+        $user = User::factory()->create();
+        $user->assignRole('admin');
+
+        Livewire::actingAs($user)
+            ->test(OperationsCalendarPage::class)
+            ->call('toggleEventStatus', \App\Models\Event::STATUS_OFFER);
+
+        $second = Livewire::actingAs($user)
+            ->test(OperationsCalendarPage::class);
+
+        $statuses = $second->get('eventStatuses');
+        $this->assertContains(\App\Models\Event::STATUS_OFFER, $statuses);
+        $this->assertContains(\App\Models\Event::STATUS_CONFIRMED, $statuses);
+    }
+
+    public function test_calendar_hides_tasks_linked_to_filtered_out_events_by_default(): void
+    {
+        $user = User::factory()->create();
+        $user->assignRole('admin');
+
+        $cancelled = \App\Models\Event::factory()->create([
+            'assigned_to' => $user->id,
+            'status' => \App\Models\Event::STATUS_CANCELLED,
+            'start_date' => now()->addDays(3)->toDateString(),
+            'end_date' => now()->addDays(5)->toDateString(),
+        ]);
+
+        $confirmed = \App\Models\Event::factory()->create([
+            'assigned_to' => $user->id,
+            'status' => \App\Models\Event::STATUS_CONFIRMED,
+            'start_date' => now()->addDays(4)->toDateString(),
+            'end_date' => now()->addDays(6)->toDateString(),
+        ]);
+
+        $hiddenTask = Task::create([
+            'title' => 'Zadanie anulowanej imprezy',
+            'due_date' => now()->addDay(),
+            'status_id' => Task::getDefaultStatusId(),
+            'priority' => 'normal',
+            'author_id' => $user->id,
+            'assignee_id' => $user->id,
+            'taskable_type' => \App\Models\Event::class,
+            'taskable_id' => $cancelled->id,
+        ]);
+
+        $visibleTask = Task::create([
+            'title' => 'Zadanie potwierdzonej imprezy',
+            'due_date' => now()->addDay(),
+            'status_id' => Task::getDefaultStatusId(),
+            'priority' => 'normal',
+            'author_id' => $user->id,
+            'assignee_id' => $user->id,
+            'taskable_type' => \App\Models\Event::class,
+            'taskable_id' => $confirmed->id,
+        ]);
+
+        $freeTask = Task::create([
+            'title' => 'Zadanie bez kontekstu',
+            'due_date' => now()->addDay(),
+            'status_id' => Task::getDefaultStatusId(),
+            'priority' => 'normal',
+            'author_id' => $user->id,
+            'assignee_id' => $user->id,
+        ]);
+
+        $component = Livewire::actingAs($user)
+            ->test(OperationsCalendarPage::class)
+            ->assertSet('hideLinkedToFilteredEvents', true);
+
+        $ids = collect($component->instance()->calendarEvents)->pluck('id')->all();
+
+        $this->assertNotContains('task-'.$hiddenTask->id, $ids);
+        $this->assertContains('task-'.$visibleTask->id, $ids);
+        $this->assertContains('task-'.$freeTask->id, $ids);
+    }
+
+    public function test_calendar_can_show_tasks_linked_to_hidden_events(): void
+    {
+        $user = User::factory()->create();
+        $user->assignRole('admin');
+
+        $cancelled = \App\Models\Event::factory()->create([
+            'assigned_to' => $user->id,
+            'status' => \App\Models\Event::STATUS_CANCELLED,
+            'start_date' => now()->addDays(3)->toDateString(),
+            'end_date' => now()->addDays(5)->toDateString(),
+        ]);
+
+        $task = Task::create([
+            'title' => 'Zadanie anulowanej imprezy',
+            'due_date' => now()->addDay(),
+            'status_id' => Task::getDefaultStatusId(),
+            'priority' => 'normal',
+            'author_id' => $user->id,
+            'assignee_id' => $user->id,
+            'taskable_type' => \App\Models\Event::class,
+            'taskable_id' => $cancelled->id,
+        ]);
+
+        $component = Livewire::actingAs($user)
+            ->test(OperationsCalendarPage::class)
+            ->call('toggleHideLinkedToFilteredEvents')
+            ->assertSet('hideLinkedToFilteredEvents', false);
+
+        $ids = collect($component->instance()->calendarEvents)->pluck('id')->all();
+
+        $this->assertContains('task-'.$task->id, $ids);
     }
 }

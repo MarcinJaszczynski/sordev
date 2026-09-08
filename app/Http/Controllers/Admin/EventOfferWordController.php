@@ -5,8 +5,11 @@ namespace App\Http\Controllers\Admin;
 use App\Http\Controllers\Controller;
 use App\Models\Event;
 use App\Models\EventDocument;
+use App\Models\EventProgramPoint;
 use App\Services\Documents\WordOfferContent;
 use App\Services\EventOrderingPartyService;
+use App\Services\EventProgramPointOrderService;
+use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\Gate;
 use Illuminate\Support\Facades\Storage;
 use PhpOffice\PhpWord\Element\Cell;
@@ -23,6 +26,7 @@ class EventOfferWordController extends Controller
     public function __construct(
         private readonly WordOfferContent $content,
         private readonly EventOrderingPartyService $orderingParties,
+        private readonly EventProgramPointOrderService $programOrder,
     ) {}
 
     public function __invoke(Event $event)
@@ -34,7 +38,7 @@ class EventOfferWordController extends Controller
             'eventTemplate.eventPriceDescription',
             'eventTemplate.eventTypes',
             'qtyVariants',
-            'programPoints' => fn ($query) => $query->orderBy('day')->orderBy('order'),
+            'programPoints' => fn ($query) => $query->orderBy('day')->orderBy('order')->orderBy('id'),
             'pricePerPerson.eventTemplateQty',
             'pricePerPerson.currency',
             'orderingContractors',
@@ -160,11 +164,12 @@ class EventOfferWordController extends Controller
         $justified = $this->justifiedParagraphStyle();
         $listStyle = ['listType' => \PhpOffice\PhpWord\Style\ListItem::TYPE_BULLET_FILLED];
 
-        $programPoints = $event->programPoints
-            ->where('include_in_program', true)
-            ->where('active', true)
-            ->sortBy([['day', 'asc'], ['order', 'asc'], ['id', 'asc']])
-            ->values();
+        // Ta sama kolejność co na stronie / w portalu: dzień → rodzice (czas/order) → dzieci pod setem.
+        $programPoints = $this->programOrder->visibleProgramPoints(
+            $event,
+            requireActive: true,
+            preloaded: $event->programPoints,
+        );
 
         if ($programPoints->isEmpty()) {
             $normalSection->addText(
@@ -173,28 +178,39 @@ class EventOfferWordController extends Controller
                 $justified
             );
         } else {
-            $byDay = $programPoints->groupBy(fn ($point) => (int) ($point->day ?? 1))->sortKeys();
-            foreach ($byDay as $day => $points) {
+            $byDay = $programPoints
+                ->groupBy(fn (EventProgramPoint $point) => (int) ($point->day ?? 1))
+                ->sortKeys();
+
+            foreach ($byDay as $day => $dayPoints) {
                 $dayLabel = $event->isFacultativeProgramDay((int) $day)
                     ? 'Fakultatywnie proponujemy:'
                     : 'Dzień '.$day;
                 $normalSection->addText($dayLabel, ['bold' => true, 'color' => '0070C0']);
 
-                foreach ($points as $point) {
-                    $title = trim((string) $point->name);
-                    $descAllowed = (bool) ($point->show_description ?? true);
-                    $desc = $descAllowed ? trim((string) ($point->description ?? '')) : '';
-                    $boldTitle = (bool) ($point->show_title_style ?? true);
+                $parents = $dayPoints->whereNull('parent_id')->values();
+                $childrenByParent = $dayPoints
+                    ->whereNotNull('parent_id')
+                    ->groupBy('parent_id');
+                $orphanChildren = $dayPoints
+                    ->whereNotNull('parent_id')
+                    ->filter(fn (EventProgramPoint $child) => ! $parents->contains('id', $child->parent_id))
+                    ->values();
 
-                    $listRun = $normalSection->addListItemRun(0, $listStyle, $justified);
-                    $listRun->addText(
-                        $this->escapeText($title),
-                        $boldTitle ? ['bold' => true] : null
-                    );
-                    if ($desc !== '') {
-                        $listRun->addText(' – '.$this->stripHtmlToSentence($desc));
+                foreach ($parents as $point) {
+                    $this->addProgramPointListItem($normalSection, $point, 0, $listStyle, $justified);
+
+                    /** @var Collection<int, EventProgramPoint> $children */
+                    $children = $childrenByParent->get($point->id, collect());
+                    foreach ($children as $child) {
+                        $this->addProgramPointListItem($normalSection, $child, 1, $listStyle, $justified);
                     }
                 }
+
+                foreach ($orphanChildren as $child) {
+                    $this->addProgramPointListItem($normalSection, $child, 0, $listStyle, $justified);
+                }
+
                 $normalSection->addTextBreak(1);
             }
         }
@@ -336,18 +352,46 @@ class EventOfferWordController extends Controller
                 $cell->addText('', $valueStyle, $para);
             }
 
-            $institution = trim((string) ($party['institution'] ?? ''));
-            $person = trim((string) ($party['person'] ?? ''));
+            $lines = array_values(array_filter([
+                trim((string) ($party['institution'] ?? '')),
+                trim((string) ($party['department'] ?? '')),
+                trim((string) ($party['person'] ?? '')),
+                trim((string) ($party['phone'] ?? '')),
+                trim((string) ($party['email'] ?? '')),
+            ], fn (string $line): bool => $line !== ''));
 
-            if ($institution !== '') {
-                $cell->addText($this->escapeText($institution), $valueStyle, $para);
-            }
-            if ($person !== '') {
-                $cell->addText($this->escapeText($person), $valueStyle, $para);
-            }
-            if ($institution === '' && $person === '') {
+            if ($lines === []) {
                 $cell->addText('—', $valueStyle, $para);
+
+                continue;
             }
+
+            foreach ($lines as $line) {
+                $cell->addText($this->escapeText($line), $valueStyle, $para);
+            }
+        }
+    }
+
+    /**
+     * @param  \PhpOffice\PhpWord\Element\Section  $section
+     * @param  array<string, mixed>  $listStyle
+     * @param  array<string, mixed>  $para
+     */
+    protected function addProgramPointListItem($section, EventProgramPoint $point, int $depth, array $listStyle, array $para): void
+    {
+        $title = trim($point->resolvedName());
+        $descAllowed = (bool) ($point->show_description ?? true);
+        $rawDesc = $descAllowed ? (string) ($point->resolvedDescription() ?? '') : '';
+        $desc = $descAllowed ? trim($rawDesc) : '';
+        $boldTitle = (bool) ($point->show_title_style ?? true);
+
+        $listRun = $section->addListItemRun($depth, $listStyle, $para);
+        $listRun->addText(
+            $this->escapeText($title),
+            $boldTitle ? ['bold' => true] : null
+        );
+        if ($desc !== '') {
+            $listRun->addText(' – '.$this->stripHtmlToSentence($desc));
         }
     }
 

@@ -390,18 +390,14 @@ class EventOrderingPartyService
 
     /**
      * Linie zamawiającego pod ofertę Word — wyłącznie główny (sort_order / pierwszy).
-     * Instytucja + osoba (osobne wiersze), bez prefiksu „Główny”.
+     * Instytucja, dział, osoba, telefon, e-mail (osobne wiersze), bez prefiksu „Główny”.
      *
-     * @return list<array{institution: string, person: string}>
+     * @return list<array{institution: string, department: string, person: string, phone: string, email: string}>
      */
     public function partiesForWordDocument(Event $event): array
     {
         if (! Schema::hasTable('event_contractor')) {
-            $fallback = trim((string) ($event->client_name ?? ''));
-
-            return $fallback !== ''
-                ? [['institution' => $fallback, 'person' => '']]
-                : [];
+            return $this->fallbackWordPartyFromEventClient($event);
         }
 
         $event->loadMissing('orderingContractors');
@@ -409,34 +405,105 @@ class EventOrderingPartyService
         $primary = $event->orderingContractors->values()->first();
 
         if ($primary === null) {
-            $fallback = trim((string) ($event->client_name ?? ''));
-
-            return $fallback !== ''
-                ? [['institution' => $fallback, 'person' => '']]
-                : [];
+            return $this->fallbackWordPartyFromEventClient($event);
         }
 
         $hasContactPivot = Schema::hasColumn('event_contractor', 'contact_id');
         $contactId = $hasContactPivot ? (int) ($primary->pivot->contact_id ?? 0) : 0;
-        $person = '';
-
-        if ($contactId > 0) {
-            $contact = Contact::query()->find($contactId);
-            if ($contact) {
-                $person = trim($contact->displayName());
-            }
-        }
+        $contact = $contactId > 0 ? Contact::query()->find($contactId) : null;
 
         $institution = trim((string) ($primary->name ?? ''));
+        $department = '';
+        if (Schema::hasColumn('event_contractor', 'department_label')) {
+            $department = trim((string) ($primary->pivot->department_label ?? ''));
+        }
 
-        if ($institution === '' && $person === '') {
+        $person = $contact ? trim($contact->displayName()) : '';
+        $phone = '';
+        $email = '';
+
+        if ($contact) {
+            $phone = filled($contact->phone) ? 'tel. '.trim((string) $contact->phone) : '';
+            $email = filled($contact->email) ? trim((string) $contact->email) : '';
+        }
+
+        if ($phone === '' && filled($primary->phone)) {
+            $phone = 'tel. '.trim((string) $primary->phone);
+        }
+        if ($email === '' && filled($primary->email)) {
+            $email = trim((string) $primary->email);
+        }
+
+        // Legacy: osoba tylko w client_name („Anna Nowak · Firma”), bez contact_id na pivocie.
+        if ($person === '' && filled($event->client_name)) {
+            $person = $this->personFromClientName((string) $event->client_name, $institution);
+        }
+
+        if ($phone === '' && filled($event->client_phone)) {
+            $phone = 'tel. '.trim((string) $event->client_phone);
+        }
+        if ($email === '' && filled($event->client_email)) {
+            $email = trim((string) $event->client_email);
+        }
+
+        if ($institution === '' && $person === '' && $department === '') {
             return [];
         }
 
         return [[
             'institution' => $institution,
+            'department' => $department,
             'person' => $person,
+            'phone' => $phone,
+            'email' => $email,
         ]];
+    }
+
+    /**
+     * @return list<array{institution: string, department: string, person: string, phone: string, email: string}>
+     */
+    private function fallbackWordPartyFromEventClient(Event $event): array
+    {
+        $fallback = trim((string) ($event->client_name ?? ''));
+        if ($fallback === '') {
+            return [];
+        }
+
+        $phone = filled($event->client_phone) ? 'tel. '.trim((string) $event->client_phone) : '';
+        $email = filled($event->client_email) ? trim((string) $event->client_email) : '';
+
+        return [[
+            'institution' => $fallback,
+            'department' => '',
+            'person' => '',
+            'phone' => $phone,
+            'email' => $email,
+        ]];
+    }
+
+    private function personFromClientName(string $clientName, string $institution): string
+    {
+        $clientName = trim($clientName);
+        if ($clientName === '' || ! str_contains($clientName, ' · ')) {
+            return '';
+        }
+
+        [$maybePerson, $maybeCompany] = array_map('trim', explode(' · ', $clientName, 2));
+
+        if ($institution !== '' && strcasecmp($maybeCompany, $institution) === 0 && $maybePerson !== '') {
+            return $maybePerson;
+        }
+
+        if ($institution !== '' && strcasecmp($maybePerson, $institution) === 0) {
+            return '';
+        }
+
+        // Typowy format sync: „Osoba · Firma”
+        if ($maybePerson !== '' && $maybeCompany !== '') {
+            return $maybePerson;
+        }
+
+        return '';
     }
 
     /**

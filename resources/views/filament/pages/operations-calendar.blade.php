@@ -59,6 +59,72 @@
             </div>
         </div>
 
+        <div class="rounded-xl border border-blue-200 bg-blue-50/60 p-3 dark:border-blue-800 dark:bg-blue-950/30">
+            <div class="mb-2 flex flex-wrap items-center justify-between gap-2">
+                <div class="flex items-center gap-2">
+                    <span class="text-xs font-semibold uppercase tracking-wide text-blue-900 dark:text-blue-200">Status imprezy</span>
+                    <span class="text-xs text-blue-700/80 dark:text-blue-300/80">domyślnie potwierdzone i odprawa OK · dotyczy kalendarza i widoku zasobów</span>
+                </div>
+
+                @if($this->hasActiveEventStatusFilters())
+                    <button
+                        type="button"
+                        wire:click="resetEventStatuses"
+                        class="rounded-full border border-blue-400 bg-white px-3 py-1 text-xs font-semibold text-blue-800 hover:bg-blue-100 dark:border-blue-600 dark:bg-gray-900 dark:text-blue-200 dark:hover:bg-blue-900/40"
+                        title="Przywróć domyślne statusy (Potwierdzona + Odprawa OK)."
+                    >
+                        Przywróć domyślne
+                    </button>
+                @endif
+            </div>
+
+            <div class="flex flex-wrap items-center gap-2">
+                @foreach(\App\Models\Event::getStatusOptions() as $status => $label)
+                    @php
+                        $isEnabled = in_array($status, $eventStatuses, true);
+                        $color = match ($status) {
+                            'inquiry' => '#6b7280',
+                            'offer', 'provisional_reservation' => '#2563eb',
+                            'confirmed', 'odprawa_ok', 'settled' => '#16a34a',
+                            'to_settle' => '#d97706',
+                            'pending_cancellation', 'cancelled' => '#dc2626',
+                            default => '#64748b',
+                        };
+                    @endphp
+                    <button
+                        type="button"
+                        wire:click="toggleEventStatus('{{ $status }}')"
+                        title="{{ $isEnabled ? 'Ukryj status: '.$label : 'Pokaż status: '.$label }}"
+                        class="rounded-full px-3 py-1 text-sm font-medium border transition {{ $isEnabled ? '' : 'opacity-45' }}"
+                        style="border-color: {{ $color }}; {{ $isEnabled ? 'background:'.$color.';color:#fff;' : 'background:#fff;color:'.$color.';' }}"
+                        @if($isEnabled) aria-pressed="true" @else aria-pressed="false" @endif
+                    >
+                        {{ $label }}
+                    </button>
+                @endforeach
+            </div>
+
+            <div class="mt-3 flex flex-wrap items-center gap-2 border-t border-blue-200/80 pt-3 dark:border-blue-800/80">
+                <button
+                    type="button"
+                    wire:click="toggleHideLinkedToFilteredEvents"
+                    title="{{ $hideLinkedToFilteredEvents
+                        ? 'Włączone: zadania, rezerwacje, ubezpieczenia itd. powiązane z ukrytymi imprezami też są ukryte. Kliknij, aby pokazać.'
+                        : 'Wyłączone: aktywności powiązane z ukrytymi imprezami (np. anulowanymi) nadal widać. Kliknij, aby ukryć.' }}"
+                    class="rounded-full px-3 py-1 text-sm font-medium border transition {{ $hideLinkedToFilteredEvents ? '' : 'opacity-60' }}"
+                    style="border-color: #1d4ed8; {{ $hideLinkedToFilteredEvents
+                        ? 'background:#1d4ed8;color:#fff;'
+                        : 'background:#fff;color:#1d4ed8;' }}"
+                    @if($hideLinkedToFilteredEvents) aria-pressed="true" @else aria-pressed="false" @endif
+                >
+                    Ukryj aktywności ukrytych imprez
+                </button>
+                <span class="text-xs text-blue-700/80 dark:text-blue-300/80">
+                    zadania, ubezpieczenia, rezerwacje, transport, hotele, płatności…
+                </span>
+            </div>
+        </div>
+
         <div class="rounded-xl border border-violet-200 bg-violet-50/60 p-3 dark:border-violet-800 dark:bg-violet-950/30">
             <div class="mb-2 flex flex-wrap items-center justify-between gap-2">
                 <div class="flex items-center gap-2">
@@ -142,7 +208,7 @@
     @else
         @if(count($this->calendarEvents) === 0)
             <div class="mb-3 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-900 dark:border-amber-800 dark:bg-amber-950/40 dark:text-amber-100">
-                Brak wpisów dla wybranych filtrów w załadowanym okresie. Zmień typy / filtry zadań albo przejdź do innego miesiąca strzałkami kalendarza.
+                Brak wpisów dla wybranych filtrów w załadowanym okresie. Zmień typy / statusy imprez / filtry zadań albo przejdź do innego miesiąca strzałkami kalendarza.
             </div>
         @endif
 
@@ -151,6 +217,8 @@
             id="operations-calendar-events"
             wire:key="operations-calendar-events-{{ md5(json_encode([
                 $enabledTypes,
+                $eventStatuses,
+                $hideLinkedToFilteredEvents,
                 $this->tasksScope,
                 $this->tasksOnlyUrgent,
                 $this->showFinishedTasks,

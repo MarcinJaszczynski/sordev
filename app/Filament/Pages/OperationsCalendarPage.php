@@ -4,6 +4,7 @@ namespace App\Filament\Pages;
 
 use App\Filament\Concerns\InteractsWithTaskEditModal;
 use App\Filament\Concerns\InteractsWithTaskOwnershipScope;
+use App\Models\Event;
 use App\Models\Task;
 use App\Services\CalendarEventAggregator;
 use App\Support\FilamentNavigation;
@@ -59,6 +60,12 @@ class OperationsCalendarPage extends Page
 
     public array $enabledTypes = self::DEFAULT_ENABLED_TYPES;
 
+    /** @var list<string> */
+    public array $eventStatuses = [];
+
+    /** Ukrywaj aktywności powiązane z imprezami spoza filtra statusów. */
+    public bool $hideLinkedToFilteredEvents = true;
+
     public string $viewMode = 'dayGridMonth';
 
     public string $layoutMode = 'calendar';
@@ -81,9 +88,16 @@ class OperationsCalendarPage extends Page
 
     public function mount(): void
     {
-        // Kalendarz operacyjny: domyślnie pełny obraz biura; sesja nadpisuje ostatni układ filtrów.
+        // Kalendarz operacyjny: domyślnie imprezy confirmed-like; sesja nadpisuje ostatni układ filtrów.
+        $this->eventStatuses = Event::getConfirmedLikeStatuses();
         $this->tasksScope = $this->defaultTasksScope();
         $this->restoreFiltersFromSession();
+    }
+
+    /** @return list<string> */
+    public static function defaultEventStatuses(): array
+    {
+        return Event::getConfirmedLikeStatuses();
     }
 
     protected function defaultTasksScope(): string
@@ -228,6 +242,8 @@ class OperationsCalendarPage extends Page
                 'types' => $this->enabledTypes,
                 'from' => $this->resolveRangeFrom()->toDateString(),
                 'to' => $this->resolveRangeTo()->toDateString(),
+                'event_statuses' => $this->eventStatuses,
+                'hide_linked_to_filtered_events' => $this->hideLinkedToFilteredEvents,
                 'show_finished_tasks' => $this->showFinishedTasks,
                 'tasks_scope' => $this->tasksScope,
                 'tasks_only_urgent' => $this->tasksOnlyUrgent,
@@ -243,6 +259,7 @@ class OperationsCalendarPage extends Page
         return app(CalendarEventAggregator::class)->resourceTimeline([
             'from' => $this->resolveRangeFrom()->toDateString(),
             'to' => $this->resolveRangeTo()->toDateString(),
+            'event_statuses' => $this->eventStatuses,
         ]);
     }
 
@@ -298,6 +315,49 @@ class OperationsCalendarPage extends Page
             $this->enabledTypes[] = $type;
         }
 
+        $this->persistFilters();
+        $this->invalidateCalendarEvents();
+    }
+
+    public function toggleEventStatus(string $status): void
+    {
+        $allowed = array_keys(Event::getStatusOptions());
+
+        if (! in_array($status, $allowed, true)) {
+            return;
+        }
+
+        if (in_array($status, $this->eventStatuses, true)) {
+            $this->eventStatuses = array_values(array_filter(
+                $this->eventStatuses,
+                fn (string $item): bool => $item !== $status
+            ));
+        } else {
+            $this->eventStatuses[] = $status;
+        }
+
+        $this->persistFilters();
+        $this->invalidateCalendarEvents();
+    }
+
+    public function resetEventStatuses(): void
+    {
+        $this->eventStatuses = self::defaultEventStatuses();
+        $this->hideLinkedToFilteredEvents = true;
+        $this->persistFilters();
+        $this->invalidateCalendarEvents();
+    }
+
+    public function hasActiveEventStatusFilters(): bool
+    {
+        return collect($this->eventStatuses)->sort()->values()->all()
+            !== collect(self::defaultEventStatuses())->sort()->values()->all()
+            || ! $this->hideLinkedToFilteredEvents;
+    }
+
+    public function toggleHideLinkedToFilteredEvents(): void
+    {
+        $this->hideLinkedToFilteredEvents = ! $this->hideLinkedToFilteredEvents;
         $this->persistFilters();
         $this->invalidateCalendarEvents();
     }
@@ -362,6 +422,18 @@ class OperationsCalendarPage extends Page
             }
         }
 
+        if (array_key_exists('eventStatuses', $saved) && is_array($saved['eventStatuses'])) {
+            $allowedStatuses = array_keys(Event::getStatusOptions());
+            $this->eventStatuses = array_values(array_filter(
+                $saved['eventStatuses'],
+                fn (mixed $status): bool => is_string($status) && in_array($status, $allowedStatuses, true),
+            ));
+        }
+
+        if (array_key_exists('hideLinkedToFilteredEvents', $saved)) {
+            $this->hideLinkedToFilteredEvents = (bool) $saved['hideLinkedToFilteredEvents'];
+        }
+
         $this->applyRestoredTaskQuickFilters($saved);
 
         if (isset($saved['layoutMode']) && in_array($saved['layoutMode'], ['calendar', 'resources'], true)) {
@@ -373,6 +445,8 @@ class OperationsCalendarPage extends Page
     {
         $payload = [
             'enabledTypes' => array_values($this->enabledTypes),
+            'eventStatuses' => array_values($this->eventStatuses),
+            'hideLinkedToFilteredEvents' => $this->hideLinkedToFilteredEvents,
             ...$this->taskQuickFiltersState(),
             'layoutMode' => $this->layoutMode,
         ];
