@@ -164,8 +164,8 @@ class EventOfferWordContentTest extends TestCase
         if (Schema::hasTable('event_contractor') && Schema::hasTable('contacts')) {
             $this->assertStringContainsString('Szkoła Podstawowa nr 7', $xml);
             $this->assertStringContainsString('Anna Nowak', $xml);
-            $this->assertStringContainsString('tel. 500600700', $xml);
-            $this->assertStringContainsString('anna@example.com', $xml);
+            $this->assertStringNotContainsString('tel. 500600700', $xml);
+            $this->assertStringNotContainsString('anna@example.com', $xml);
         }
 
         // Jednodniowa — bez sekcji zakwaterowania.
@@ -260,6 +260,87 @@ class EventOfferWordContentTest extends TestCase
         $this->assertTrue($posGather < $posSet);
         $this->assertTrue($posSet < $posChildA);
         $this->assertTrue($posChildA < $posChildB);
+    }
+
+    public function test_facultative_section_printed_only_once_even_with_split_days(): void
+    {
+        Role::firstOrCreate(['name' => 'admin', 'guard_name' => 'web']);
+        $user = User::factory()->create();
+        $user->assignRole('admin');
+        $this->actingAs($user);
+
+        $event = Event::factory()->create([
+            'name' => 'Oferta z fakultatywem',
+            'duration_days' => 1,
+            'start_date' => now()->addDays(5)->toDateString(),
+            'end_date' => now()->addDays(5)->toDateString(),
+            'created_by' => $user->id,
+            'assigned_to' => $user->id,
+        ]);
+
+        EventProgramPoint::query()->create([
+            'event_id' => $event->id,
+            'name' => 'Program dnia',
+            'day' => 1,
+            'order' => 1,
+            'include_in_program' => true,
+            'active' => true,
+            'show_title_style' => true,
+            'show_description' => false,
+        ]);
+
+        $set = EventProgramPoint::query()->create([
+            'event_id' => $event->id,
+            'name' => 'Set fakultatywny',
+            'day' => 2,
+            'order' => 1,
+            'include_in_program' => true,
+            'active' => true,
+            'show_title_style' => true,
+            'show_description' => false,
+        ]);
+
+        // Dziecko na day=3 (> core) — wcześniej tworzyło drugi nagłówek fakultatywny.
+        EventProgramPoint::query()->create([
+            'event_id' => $event->id,
+            'name' => 'Opcja w secie',
+            'day' => 3,
+            'order' => 1,
+            'parent_id' => $set->id,
+            'include_in_program' => true,
+            'active' => true,
+            'show_title_style' => true,
+            'show_description' => false,
+        ]);
+
+        EventProgramPoint::query()->create([
+            'event_id' => $event->id,
+            'name' => 'Inna opcja fakultatywna',
+            'day' => 4,
+            'order' => 1,
+            'include_in_program' => true,
+            'active' => true,
+            'show_title_style' => true,
+            'show_description' => false,
+        ]);
+
+        $response = $this->get(route('admin.events.offer.word', $event));
+        $response->assertOk();
+
+        $document = EventDocument::query()
+            ->where('event_id', $event->id)
+            ->where('is_offer', true)
+            ->latest('id')
+            ->first();
+
+        $xml = $this->docxDocumentXml(storage_path('app/public/'.$document->file_path));
+
+        $this->assertSame(1, substr_count($xml, 'Fakultatywnie proponujemy:'));
+        $this->assertStringContainsString('Set fakultatywny', $xml);
+        $this->assertStringContainsString('Opcja w secie', $xml);
+        $this->assertStringContainsString('Inna opcja fakultatywna', $xml);
+        $this->assertStringNotContainsString('Dzień 2', $xml);
+        $this->assertStringNotContainsString('Dzień 3', $xml);
     }
 
     public function test_multi_day_offer_shows_accommodation_hotels_list(): void

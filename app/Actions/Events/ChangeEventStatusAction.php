@@ -24,21 +24,27 @@ final class ChangeEventStatusAction
             throw new InvalidArgumentException("Nieznany status imprezy: {$status}");
         }
 
-        return DB::transaction(function () use ($data, $status): Event {
+        /** @var array{0: Event, 1: string|null} $result */
+        $result = DB::transaction(function () use ($data, $status): array {
             $event = $data->event->fresh() ?? $data->event;
             $previous = (string) $event->status;
 
             if ($previous === $status) {
-                return $event;
+                return [$event, null];
             }
 
             $event->changeStatus($status, $data->reason);
 
-            $fresh = $event->fresh() ?? $event;
-
-            EventStatusChanged::dispatch($fresh, $previous, $status);
-
-            return $fresh;
+            return [$event->fresh() ?? $event, $previous];
         });
+
+        [$fresh, $previous] = $result;
+
+        // Powiadomienia / automatyki poza transakcją — błąd maila/SMS nie cofa statusu.
+        if ($previous !== null) {
+            EventStatusChanged::dispatch($fresh, $previous, $status);
+        }
+
+        return $fresh;
     }
 }

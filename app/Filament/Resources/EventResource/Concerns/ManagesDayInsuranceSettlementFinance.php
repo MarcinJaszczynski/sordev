@@ -185,16 +185,6 @@ trait ManagesDayInsuranceSettlementFinance
 
                     return 'Pliki polisy: '.implode(' + ', $parts);
                 })
-                ->tooltip(function (EventDayInsurance $record): ?string {
-                    $count = (int) ($this->dayInsuranceFinanceSnapshot($record)['docs'] ?? 0);
-
-                    return $count > 0
-                        ? 'Załącznik polisy wgrany ('.$count.')'
-                        : 'Brak wgranego pliku polisy';
-                })
-                ->color(fn (EventDayInsurance $record): string => ((int) ($this->dayInsuranceFinanceSnapshot($record)['docs'] ?? 0)) > 0
-                    ? 'success'
-                    : 'gray')
                 ->alignCenter(),
         ];
     }

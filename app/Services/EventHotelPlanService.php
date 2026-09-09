@@ -179,6 +179,13 @@ class EventHotelPlanService
     }
 
     /**
+     * Dobiera ilości pokoi wyłącznie spośród podanych typów ($roomIds).
+     * Kryterium (leksykograficznie):
+     * 1) minimalny koszt,
+     * 2) przy remisie — minimalna liczba pokoi,
+     * 3) przy remisie — minimalny nadmiar łóżek.
+     *
+     * @param  list<int|string>  $roomIds
      * @return array<int, array<string, mixed>>
      */
     public function allocateRoomLines(int $peopleCount, array $roomIds, string $role): array
@@ -187,72 +194,226 @@ class EventHotelPlanService
             return [];
         }
 
-        $rooms = HotelRoom::query()->whereIn('id', $roomIds)->get();
+        $allowedIds = collect($roomIds)
+            ->map(fn ($id) => (int) $id)
+            ->filter(fn (int $id) => $id > 0)
+            ->unique()
+            ->values()
+            ->all();
+
+        if ($allowedIds === []) {
+            return [];
+        }
+
+        $options = $this->catalogRoomOptions($allowedIds);
+
+        return $this->allocateRoomLinesFromOptions($peopleCount, $options, $role);
+    }
+
+    /**
+     * DP alokacji na podstawie jawnych opcji pokoi (pojemność + cena z imprezy / katalogu).
+     *
+     * @param  list<array{
+     *     key?: string,
+     *     hotel_room_id?: int|null,
+     *     label?: string|null,
+     *     people_count: int,
+     *     unit_price: float|int|string,
+     *     price_basis?: string|null,
+     *     currency_id?: int|null,
+     *     convert_to_pln?: bool
+     * }>  $options
+     * @return array<int, array<string, mixed>>
+     */
+    public function allocateRoomLinesFromOptions(int $peopleCount, array $options, string $role): array
+    {
+        if ($peopleCount <= 0 || $options === []) {
+            return [];
+        }
+
+        $normalized = [];
+        foreach ($options as $index => $option) {
+            $capacity = max(1, (int) ($option['people_count'] ?? 1));
+            $unitPrice = round((float) ($option['unit_price'] ?? 0), 4);
+            $basis = EventHotelRoomLine::normalizePriceBasis($option['price_basis'] ?? null);
+            $costPerRoom = $basis === EventHotelRoomLine::PRICE_BASIS_PER_PERSON
+                ? round($unitPrice * $capacity, 4)
+                : $unitPrice;
+
+            $key = (string) ($option['key'] ?? '');
+            if ($key === '') {
+                $hotelRoomId = (int) ($option['hotel_room_id'] ?? 0);
+                $key = $hotelRoomId > 0
+                    ? 'room:'.$hotelRoomId
+                    : 'custom:'.$index.':'.$capacity.':'.$unitPrice;
+            }
+
+            $normalized[$key] = [
+                'key' => $key,
+                'hotel_room_id' => isset($option['hotel_room_id']) ? (int) $option['hotel_room_id'] ?: null : null,
+                'label' => $option['label'] ?? null,
+                'people_count' => $capacity,
+                'unit_price' => round((float) ($option['unit_price'] ?? 0), 2),
+                'price_basis' => $basis,
+                'currency_id' => isset($option['currency_id']) ? (int) $option['currency_id'] ?: null : null,
+                'convert_to_pln' => (bool) ($option['convert_to_pln'] ?? true),
+                'cost_per_room' => $costPerRoom,
+            ];
+        }
+
+        $rooms = collect($normalized)
+            ->sortBy([
+                ['people_count', 'desc'],
+                ['key', 'asc'],
+            ])
+            ->values();
+
         if ($rooms->isEmpty()) {
             return [];
         }
 
-        $maxCapacity = $rooms->sum('people_count') * max(1, $peopleCount);
-        $dp = array_fill(0, $maxCapacity + 1, INF);
-        $dp[0] = 0;
+        $roomsByKey = $rooms->keyBy('key');
+        $maxCapacity = (int) $rooms->sum(fn (array $room) => (int) $room['people_count']) * max(1, $peopleCount);
+
+        $dpCost = array_fill(0, $maxCapacity + 1, INF);
+        $dpRooms = array_fill(0, $maxCapacity + 1, PHP_INT_MAX);
         $choice = array_fill(0, $maxCapacity + 1, null);
+        $dpCost[0] = 0.0;
+        $dpRooms[0] = 0;
 
         foreach ($rooms as $room) {
-            $capacity = max(1, (int) $room->people_count);
+            $capacity = (int) $room['people_count'];
+            $price = (float) $room['cost_per_room'];
+            $roomKey = (string) $room['key'];
+
             for ($i = $capacity; $i <= $maxCapacity; $i++) {
-                if ($dp[$i] > $dp[$i - $capacity] + (float) $room->price) {
-                    $dp[$i] = $dp[$i - $capacity] + (float) $room->price;
-                    $choice[$i] = $room->id;
+                if ($dpCost[$i - $capacity] === INF) {
+                    continue;
+                }
+
+                $newCost = round($dpCost[$i - $capacity] + $price, 4);
+                $newRooms = $dpRooms[$i - $capacity] + 1;
+
+                if (
+                    $newCost < $dpCost[$i]
+                    || ($newCost === $dpCost[$i] && $newRooms < $dpRooms[$i])
+                ) {
+                    $dpCost[$i] = $newCost;
+                    $dpRooms[$i] = $newRooms;
+                    $choice[$i] = $roomKey;
                 }
             }
         }
 
-        $minCost = INF;
         $bestI = null;
+        $bestCost = INF;
+        $bestRoomCount = PHP_INT_MAX;
+
         for ($i = $peopleCount; $i <= $maxCapacity; $i++) {
-            if ($dp[$i] < $minCost) {
-                $minCost = $dp[$i];
+            if ($dpCost[$i] === INF) {
+                continue;
+            }
+
+            $better = $dpCost[$i] < $bestCost
+                || ($dpCost[$i] === $bestCost && $dpRooms[$i] < $bestRoomCount)
+                || ($dpCost[$i] === $bestCost && $dpRooms[$i] === $bestRoomCount && ($bestI === null || $i < $bestI));
+
+            if ($better) {
+                $bestCost = $dpCost[$i];
+                $bestRoomCount = $dpRooms[$i];
                 $bestI = $i;
             }
         }
 
-        if ($minCost === INF || $bestI === null) {
+        if ($bestI === null) {
             return [];
         }
 
         $roomCounts = [];
         $i = $bestI;
         while ($i > 0 && $choice[$i] !== null) {
-            $roomId = $choice[$i];
-            $room = $rooms->firstWhere('id', $roomId);
+            $roomKey = (string) $choice[$i];
+            $room = $roomsByKey->get($roomKey);
             if (! $room) {
                 break;
             }
-            $roomCounts[$roomId] = ($roomCounts[$roomId] ?? 0) + 1;
-            $i -= max(1, (int) $room->people_count);
+            $roomCounts[$roomKey] = ($roomCounts[$roomKey] ?? 0) + 1;
+            $i -= (int) $room['people_count'];
         }
 
+        uksort($roomCounts, function (string $a, string $b) use ($roomsByKey): int {
+            $capA = max(1, (int) ($roomsByKey->get($a)['people_count'] ?? 1));
+            $capB = max(1, (int) ($roomsByKey->get($b)['people_count'] ?? 1));
+
+            return $capB <=> $capA ?: $a <=> $b;
+        });
+
         $lines = [];
-        foreach ($roomCounts as $roomId => $quantity) {
-            $room = $rooms->firstWhere('id', $roomId);
+        foreach ($roomCounts as $roomKey => $quantity) {
+            $room = $roomsByKey->get($roomKey);
             if (! $room) {
                 continue;
             }
-            $currencyId = Currency::query()->where('symbol', $room->currency)->value('id');
 
             $lines[] = [
-                'hotel_room_id' => $room->id,
-                'label' => null,
+                'hotel_room_id' => $room['hotel_room_id'],
+                'label' => $room['label'],
                 'role' => $role,
                 'quantity' => $quantity,
-                'unit_price' => (float) $room->price,
-                'price_basis' => EventHotelRoomLine::PRICE_BASIS_PER_ROOM,
-                'currency_id' => $currencyId,
-                'convert_to_pln' => (bool) ($room->convert_to_pln ?? true),
+                'people_count' => $room['people_count'],
+                'unit_price' => $room['unit_price'],
+                'price_basis' => $room['price_basis'],
+                'currency_id' => $room['currency_id'],
+                'convert_to_pln' => $room['convert_to_pln'],
             ];
         }
 
         return $lines;
+    }
+
+    /**
+     * Unikalne typy pokoi z linii noclegu imprezy (ceny/pojemność z planu, nie z katalogu).
+     *
+     * @param  Collection<int, EventHotelRoomLine>  $lines
+     * @return list<array<string, mixed>>
+     */
+    public function roomOptionsFromEventLines(Collection $lines): array
+    {
+        $options = [];
+
+        foreach ($lines as $line) {
+            if (! $line instanceof EventHotelRoomLine) {
+                continue;
+            }
+
+            $capacity = max(1, $line->effectivePeopleCount());
+            $hotelRoomId = $line->hotel_room_id ? (int) $line->hotel_room_id : null;
+            $unitPrice = round((float) $line->unit_price, 2);
+            $basis = $line->resolvedPriceBasis();
+            $label = $line->label ?: $line->displayLabel();
+
+            $key = $hotelRoomId
+                ? 'room:'.$hotelRoomId.':'.$basis.':'.$unitPrice.':'.$capacity
+                : 'custom:'.md5($label.'|'.$capacity.'|'.$unitPrice.'|'.$basis);
+
+            // Przy duplikacie typu bierzemy pierwszą (stabilną) cenę z planu.
+            if (isset($options[$key])) {
+                continue;
+            }
+
+            $options[$key] = [
+                'key' => $key,
+                'hotel_room_id' => $hotelRoomId,
+                'label' => $hotelRoomId ? null : $label,
+                'people_count' => $capacity,
+                'unit_price' => $unitPrice,
+                'price_basis' => $basis,
+                'currency_id' => $line->currency_id ? (int) $line->currency_id : null,
+                'convert_to_pln' => (bool) ($line->convert_to_pln ?? true),
+            ];
+        }
+
+        return array_values($options);
     }
 
     /**
@@ -692,6 +853,9 @@ class EventHotelPlanService
 
         for ($day = 1; $day <= $nights; $day++) {
             if (! in_array($day, $existingDays, true)) {
+                // Nowe noce dostają strukturę z szablonu w createStayFromDay.
+                // Nie uzupełniamy ponownie pustych nocy — użytkownik może świadomie zostawić
+                // noc bez pokoi (przejazd autokarowy / bez hotelu).
                 $this->createStayFromDay(
                     $event,
                     $day,
@@ -701,8 +865,6 @@ class EventHotelPlanService
                 );
             }
         }
-
-        $this->refreshRoomStructureFromTemplate($event, onlyEmptyStays: true);
     }
 
     /**
@@ -1177,6 +1339,7 @@ class EventHotelPlanService
 
     /**
      * Sumy noclegów per waluta (PLN + obce bez konwersji).
+     * Operacyjny plan imprezy (zapisane linie / flat przy participant_count).
      *
      * @return array<string, float>
      */
@@ -1217,6 +1380,391 @@ class EventHotelPlanService
     }
 
     /**
+     * What-if: koszt noclegu dla konkretnego wariantu qty (katalog Finanse → Kalkulacja).
+     * Przy zgodności z operacyjnym participant_count używa zapisanego planu; inaczej
+     * realokuje pokoje (jak szablon) / mnoży flat per_person bez zapisu do DB.
+     *
+     * @param  array{qty?: int, gratis?: int, staff?: int, driver?: int}  $groupCounts
+     * @return array<string, float>
+     */
+    public function totalsByCurrencyForVariant(Event $event, array $groupCounts): array
+    {
+        $normalized = $this->normalizeGroupCounts($groupCounts);
+
+        if ($this->groupCountsMatchOperational($event, $normalized)) {
+            return $this->totalsByCurrencyForEvent($event);
+        }
+
+        $peoplePerNight = $normalized['qty'] + $normalized['gratis'] + $normalized['staff'] + $normalized['driver'];
+        $currencies = Currency::query()->pluck('symbol', 'id');
+        $mode = $event->hotel_pricing_mode ?? 'lines';
+
+        if (EventHotelPlanFormatting::isEventFlatPricing($mode)) {
+            return EventHotelPlanFormatting::eventTotalsByCurrency(
+                [],
+                $mode,
+                $event->hotel_flat_stay_amount !== null ? (float) $event->hotel_flat_stay_amount : null,
+                $event->hotel_flat_stay_currency_id,
+                (bool) ($event->hotel_flat_stay_convert_to_pln ?? true),
+                $currencies,
+                $peoplePerNight,
+            );
+        }
+
+        return EventHotelPlanFormatting::eventTotalsByCurrency(
+            $this->buildVariantStaysPayload($event, $normalized),
+            'lines',
+            null,
+            null,
+            true,
+            $currencies,
+            $peoplePerNight,
+        );
+    }
+
+    /**
+     * @param  array{qty?: int, gratis?: int, staff?: int, driver?: int}  $groupCounts
+     * @return array{qty: int, gratis: int, staff: int, driver: int}
+     */
+    public function normalizeGroupCounts(array $groupCounts): array
+    {
+        return [
+            'qty' => max(0, (int) ($groupCounts['qty'] ?? 0)),
+            'gratis' => max(0, (int) ($groupCounts['gratis'] ?? 0)),
+            'staff' => max(0, (int) ($groupCounts['staff'] ?? 0)),
+            'driver' => max(0, (int) ($groupCounts['driver'] ?? 0)),
+        ];
+    }
+
+    /**
+     * @param  array{qty: int, gratis: int, staff: int, driver: int}  $groupCounts
+     */
+    public function groupCountsMatchOperational(Event $event, array $groupCounts): bool
+    {
+        $operational = $this->resolveGroupCounts($event);
+
+        return (int) $operational['qty'] === (int) $groupCounts['qty']
+            && (int) $operational['gratis'] === (int) $groupCounts['gratis']
+            && (int) $operational['staff'] === (int) $groupCounts['staff']
+            && (int) $operational['driver'] === (int) $groupCounts['driver'];
+    }
+
+    /**
+     * What-if: realokacja noclegu dla wariantu qty (DP), bez nadpisywania operacyjnego planu.
+     *
+     * Gdy impreza ma szablon z hotel_room_ids_* — używamy pełnej półki typów ze szablonu
+     * (jak kalkulacja szablonu), a nie tylko typów zamrożonych w snapshocie przy participant_count.
+     * Pusta półka roli = brak kosztu (bez fallbacku na inne role).
+     * Bez szablonu — dotychczasowe opcje z linii planu imprezy.
+     *
+     * @param  array{qty: int, gratis: int, staff: int, driver: int}  $groupCounts
+     * @return array<int, array<string, mixed>>
+     */
+    public function buildVariantStaysPayload(Event $event, array $groupCounts): array
+    {
+        $event->loadMissing(['hotelStays.roomLines.hotelRoom']);
+        $templateDays = $this->templateHotelDaysByDay($event);
+
+        return $event->hotelStays->map(function (EventHotelStay $stay) use ($groupCounts, $templateDays): array {
+            $stayMode = $stay->pricing_mode ?? 'lines';
+
+            if (EventHotelPlanFormatting::isStayFlatPricing($stayMode)) {
+                return [
+                    'pricing_mode' => $stayMode,
+                    'flat_amount' => $stay->flat_amount,
+                    'flat_currency_id' => $stay->flat_currency_id,
+                    'flat_convert_to_pln' => $stay->flat_convert_to_pln,
+                    'room_lines' => [],
+                ];
+            }
+
+            $stay->loadMissing(['roomLines.hotelRoom']);
+            $roomLines = [];
+            $hotelDay = $templateDays->get((int) $stay->day);
+
+            foreach (['qty', 'gratis', 'staff', 'driver'] as $role) {
+                $people = max(0, (int) ($groupCounts[$role] ?? 0));
+                if ($people <= 0) {
+                    continue;
+                }
+
+                if ($hotelDay) {
+                    $roomIds = $hotelDay->{"hotel_room_ids_{$role}"} ?? [];
+                    if (! is_array($roomIds) || $roomIds === []) {
+                        // Jak na szablonie: pusta półka = 0 kosztu (bez fallbacku na Sgl z innych ról).
+                        continue;
+                    }
+
+                    $options = $this->roomOptionsForAllowedRoomIds($stay, $roomIds, $role);
+                } else {
+                    $roleLines = $stay->roomLines->where('role', $role);
+                    // Preferuj typy z tej roli; gdy brak — cała „półka” pokoi tej nocy z planu imprezy.
+                    $sourceLines = $roleLines->isNotEmpty() ? $roleLines : $stay->roomLines;
+                    $options = $this->roomOptionsFromEventLines($sourceLines);
+                }
+
+                if ($options === []) {
+                    continue;
+                }
+
+                foreach ($this->allocateRoomLinesFromOptions($people, $options, $role) as $line) {
+                    $roomLines[] = [
+                        'role' => $role,
+                        'hotel_room_id' => $line['hotel_room_id'] ?? null,
+                        'label' => $line['label'] ?? null,
+                        'quantity' => $line['quantity'] ?? 1,
+                        'people_count' => $line['people_count'] ?? null,
+                        'unit_price' => $line['unit_price'] ?? 0,
+                        'price_basis' => $line['price_basis'] ?? EventHotelRoomLine::PRICE_BASIS_PER_ROOM,
+                        'currency_id' => $line['currency_id'] ?? null,
+                        'convert_to_pln' => $line['convert_to_pln'] ?? true,
+                    ];
+                }
+            }
+
+            if ($roomLines === []) {
+                $roomLines = $stay->roomLines->map(static fn (EventHotelRoomLine $line): array => [
+                    'hotel_room_id' => $line->hotel_room_id,
+                    'label' => $line->label,
+                    'quantity' => $line->quantity,
+                    'people_count' => $line->people_count,
+                    'unit_price' => $line->unit_price,
+                    'price_basis' => $line->price_basis,
+                    'currency_id' => $line->currency_id,
+                    'convert_to_pln' => $line->convert_to_pln,
+                ])->all();
+            }
+
+            return [
+                'pricing_mode' => 'lines',
+                'flat_amount' => null,
+                'flat_currency_id' => null,
+                'flat_convert_to_pln' => true,
+                'room_lines' => $roomLines,
+            ];
+        })->values()->all();
+    }
+
+    /**
+     * Opcje DP dla dozwolonych typów: ceny z planu imprezy gdy typ już jest na noclegu,
+     * w przeciwnym razie katalog HotelRoom (jak przy alokacji ze szablonu).
+     *
+     * @param  list<int|string>  $roomIds
+     * @return list<array<string, mixed>>
+     */
+    public function roomOptionsForAllowedRoomIds(EventHotelStay $stay, array $roomIds, string $role): array
+    {
+        $allowedIds = collect($roomIds)
+            ->map(fn ($id) => (int) $id)
+            ->filter(fn (int $id) => $id > 0)
+            ->unique()
+            ->values()
+            ->all();
+
+        if ($allowedIds === []) {
+            return [];
+        }
+
+        $stay->loadMissing(['roomLines.hotelRoom']);
+
+        /** @var array<int, EventHotelRoomLine> $linesByRoomId */
+        $linesByRoomId = [];
+        foreach ($stay->roomLines as $line) {
+            $hotelRoomId = $line->hotel_room_id ? (int) $line->hotel_room_id : 0;
+            if ($hotelRoomId <= 0 || ! in_array($hotelRoomId, $allowedIds, true)) {
+                continue;
+            }
+
+            if (! isset($linesByRoomId[$hotelRoomId]) || $line->role === $role) {
+                $linesByRoomId[$hotelRoomId] = $line;
+            }
+        }
+
+        $fromEvent = $this->roomOptionsFromEventLines(collect(array_values($linesByRoomId)));
+        $coveredIds = collect($fromEvent)
+            ->pluck('hotel_room_id')
+            ->map(fn ($id) => (int) $id)
+            ->filter(fn (int $id) => $id > 0)
+            ->all();
+
+        $missingIds = array_values(array_diff($allowedIds, $coveredIds));
+        if ($missingIds === []) {
+            return $fromEvent;
+        }
+
+        return array_merge($fromEvent, $this->catalogRoomOptions($missingIds));
+    }
+
+    /**
+     * @param  list<int>  $roomIds
+     * @return list<array<string, mixed>>
+     */
+    private function catalogRoomOptions(array $roomIds): array
+    {
+        if ($roomIds === []) {
+            return [];
+        }
+
+        $rooms = HotelRoom::query()
+            ->whereIn('id', $roomIds)
+            ->get();
+
+        if ($rooms->isEmpty()) {
+            return [];
+        }
+
+        $currencyIdsBySymbol = Currency::query()
+            ->whereIn('symbol', $rooms->pluck('currency')->filter()->unique()->all())
+            ->pluck('id', 'symbol');
+
+        return $rooms->map(function (HotelRoom $room) use ($currencyIdsBySymbol): array {
+            $symbol = (string) ($room->currency ?? 'PLN');
+
+            return [
+                'key' => 'catalog:'.$room->id,
+                'hotel_room_id' => (int) $room->id,
+                'label' => null,
+                'people_count' => max(1, (int) $room->people_count),
+                'unit_price' => (float) $room->price,
+                'price_basis' => EventHotelRoomLine::PRICE_BASIS_PER_ROOM,
+                'currency_id' => $currencyIdsBySymbol->get($symbol),
+                'convert_to_pln' => (bool) ($room->convert_to_pln ?? true),
+            ];
+        })->values()->all();
+    }
+
+    /**
+     * @param  array{qty?: int, gratis?: int, staff?: int, driver?: int}  $groupCounts
+     * @return Collection<int, array<string, mixed>>
+     */
+    public function buildHotelStructureForCalculationVariant(Event $event, array $groupCounts): Collection
+    {
+        $normalized = $this->normalizeGroupCounts($groupCounts);
+
+        if ($this->groupCountsMatchOperational($event, $normalized)) {
+            return $this->buildHotelStructureForCalculation($event);
+        }
+
+        $event->loadMissing(['hotelStays.roomLines.hotelRoom', 'hotelStays.roomLines.currency', 'hotelStays.contractor']);
+        if ($event->hotelStays->isEmpty()) {
+            return collect();
+        }
+
+        $peoplePerNight = $normalized['qty'] + $normalized['gratis'] + $normalized['staff'] + $normalized['driver'];
+        $mode = $event->hotel_pricing_mode ?? 'lines';
+        $currencies = Currency::query()->pluck('symbol', 'id');
+        $staysPayload = EventHotelPlanFormatting::isEventFlatPricing($mode)
+            ? []
+            : $this->buildVariantStaysPayload($event, $normalized);
+
+        $eventFlatTotals = EventHotelPlanFormatting::isEventFlatPricing($mode)
+            ? EventHotelPlanFormatting::eventTotalsByCurrency(
+                [],
+                $mode,
+                $event->hotel_flat_stay_amount !== null ? (float) $event->hotel_flat_stay_amount : null,
+                $event->hotel_flat_stay_currency_id,
+                (bool) ($event->hotel_flat_stay_convert_to_pln ?? true),
+                $currencies,
+                $peoplePerNight,
+            )
+            : [];
+
+        $roomIds = collect($staysPayload)
+            ->flatMap(fn (array $payload) => collect($payload['room_lines'] ?? [])->pluck('hotel_room_id'))
+            ->filter()
+            ->map(fn ($id) => (int) $id)
+            ->unique()
+            ->values()
+            ->all();
+        $roomsById = $roomIds === []
+            ? collect()
+            : HotelRoom::query()->whereIn('id', $roomIds)->get()->keyBy('id');
+
+        return $event->hotelStays->values()->map(function (EventHotelStay $stay, int $index) use (
+            $mode,
+            $staysPayload,
+            $eventFlatTotals,
+            $peoplePerNight,
+            $currencies,
+            $roomsById,
+        ) {
+            $payload = $staysPayload[$index] ?? null;
+            $dayTotal = ['PLN' => 0.0];
+
+            if (EventHotelPlanFormatting::isEventFlatPricing($mode)) {
+                // Cała stała kwota na pierwszej nocy — żeby w szczegółach był punkt > 0.
+                if ($index === 0 && $eventFlatTotals !== []) {
+                    $dayTotal = array_map(fn ($v) => round((float) $v, 2), $eventFlatTotals);
+                }
+            } elseif (is_array($payload)) {
+                $stayTotals = EventHotelPlanFormatting::eventTotalsByCurrency(
+                    [$payload],
+                    'lines',
+                    null,
+                    null,
+                    true,
+                    $currencies,
+                    $peoplePerNight,
+                );
+                $dayTotal = $stayTotals !== []
+                    ? array_map(fn ($v) => round((float) $v, 2), $stayTotals)
+                    : ['PLN' => 0.0];
+            }
+
+            $rooms = [];
+            $payloadLines = is_array($payload) ? ($payload['room_lines'] ?? []) : [];
+
+            // Tabela szczegółów musi pokazywać realokację wariantu, nie zamrożony plan operacyjny.
+            foreach ($payloadLines as $line) {
+                $hotelRoomId = isset($line['hotel_room_id']) ? (int) $line['hotel_room_id'] : 0;
+                $catalogRoom = $hotelRoomId > 0 ? $roomsById->get($hotelRoomId) : null;
+                $peopleCount = max(1, (int) ($line['people_count'] ?? $catalogRoom?->people_count ?? 1));
+                $roomQty = max(1, (int) ($line['quantity'] ?? 1));
+                $unitPrice = (float) ($line['unit_price'] ?? 0);
+                $role = (string) ($line['role'] ?? 'qty');
+                if (! array_key_exists($role, EventHotelRoomLine::ROLES)) {
+                    $role = 'qty';
+                }
+                $currencyId = isset($line['currency_id']) ? (int) $line['currency_id'] : null;
+                $currencySymbol = $currencyId
+                    ? (string) ($currencies[$currencyId] ?? $currencies->get($currencyId) ?? 'PLN')
+                    : (string) ($catalogRoom?->currency ?? 'PLN');
+                $label = (string) ($line['label'] ?? $catalogRoom?->name ?? 'Pokój');
+                $room = $catalogRoom ?: (object) [
+                    'name' => $label,
+                    'people_count' => $peopleCount,
+                ];
+
+                $rooms[] = [
+                    'room' => $room,
+                    'label' => $label,
+                    'alloc' => [$role => $roomQty],
+                    'total_people' => $roomQty * $peopleCount,
+                    'cost' => $unitPrice,
+                    'line_total' => EventHotelRoomLine::calculateLineTotal(
+                        $unitPrice,
+                        $roomQty,
+                        $peopleCount,
+                        $line['price_basis'] ?? EventHotelRoomLine::PRICE_BASIS_PER_ROOM,
+                    ),
+                    'currency' => $currencySymbol !== '' ? $currencySymbol : 'PLN',
+                    'group_type' => $role,
+                    'room_count' => $roomQty,
+                    'occupants' => [],
+                ];
+            }
+
+            return [
+                'day' => $stay->day,
+                'contractor' => $stay->contractor?->name,
+                'offer_notes' => $stay->offer_notes,
+                'rooms' => $rooms,
+                'day_total' => $dayTotal,
+            ];
+        });
+    }
+
+    /**
      * @return Collection<int, array<string, mixed>>
      */
     public function buildHotelStructureForCalculation(Event $event): Collection
@@ -1228,9 +1776,21 @@ class EventHotelPlanService
         }
 
         $peoplePerNight = (int) app(EventHotelOccupancyService::class)->forEvent($event)['required_beds_per_night'];
+        $eventMode = $event->hotel_pricing_mode ?? 'lines';
+        $currencies = Currency::query()->pluck('symbol', 'id');
+        $eventFlatTotals = EventHotelPlanFormatting::isEventFlatPricing($eventMode)
+            ? EventHotelPlanFormatting::eventTotalsByCurrency(
+                [],
+                $eventMode,
+                $event->hotel_flat_stay_amount !== null ? (float) $event->hotel_flat_stay_amount : null,
+                $event->hotel_flat_stay_currency_id,
+                (bool) ($event->hotel_flat_stay_convert_to_pln ?? true),
+                $currencies,
+                $peoplePerNight,
+            )
+            : [];
 
-        return $event->hotelStays->map(function (EventHotelStay $stay) use ($event, $peoplePerNight) {
-            $eventMode = $event->hotel_pricing_mode ?? 'lines';
+        return $event->hotelStays->values()->map(function (EventHotelStay $stay, int $index) use ($peoplePerNight, $eventMode, $currencies, $eventFlatTotals) {
             $dayForeignTotals = [];
             $rooms = [];
 
@@ -1264,9 +1824,10 @@ class EventHotelPlanService
                 ];
             }
 
-            $stayTotals = EventHotelPlanFormatting::isEventFlatPricing($eventMode)
-                ? []
-                : EventHotelPlanFormatting::eventTotalsByCurrency(
+            if (EventHotelPlanFormatting::isEventFlatPricing($eventMode)) {
+                $stayTotals = ($index === 0 && $eventFlatTotals !== []) ? $eventFlatTotals : [];
+            } else {
+                $stayTotals = EventHotelPlanFormatting::eventTotalsByCurrency(
                     [[
                         'pricing_mode' => $stay->pricing_mode ?? 'lines',
                         'flat_amount' => $stay->flat_amount,
@@ -1287,9 +1848,10 @@ class EventHotelPlanService
                     null,
                     null,
                     true,
-                    Currency::query()->pluck('symbol', 'id'),
+                    $currencies,
                     $peoplePerNight,
                 );
+            }
 
             // day_total zawiera PLN + wszystkie waluty obce (dla prawidłowego doliczania do sekcji walutowych)
             $dayTotal = $stayTotals !== []
@@ -1437,56 +1999,57 @@ class EventHotelPlanService
     }
 
     /**
+     * Dokleja strukturę/koszt hotelu do szczegółowych kalkulacji — osobno per qty wariantu.
+     *
      * @param  array<int|string, array<string, mixed>>  $detailedCalculations
+     * @param  array<int|string, array{qty?: int, gratis?: int, staff?: int, driver?: int}>  $qtyVariants
      */
-    public function applyEventHotelStructureToCalculations(array &$detailedCalculations, Event $event): void
-    {
-        $structure = $this->buildHotelStructureForCalculation($event);
-        if ($structure->isEmpty()) {
+    public function applyEventHotelStructureToCalculations(
+        array &$detailedCalculations,
+        Event $event,
+        array $qtyVariants = [],
+    ): void {
+        $event->loadMissing(['hotelStays.roomLines.hotelRoom', 'hotelStays.roomLines.currency', 'hotelStays.contractor']);
+        if ($event->hotelStays->isEmpty()) {
             return;
         }
 
-        // Zbierz sumy noclegów per waluta z pełnej struktury (PLN + waluty obce)
-        $hotelByCurrency = [];
-        foreach ($structure as $dayStruct) {
-            foreach ($dayStruct['day_total'] as $code => $val) {
-                if ($val > 0) {
-                    $hotelByCurrency[$code] = ($hotelByCurrency[$code] ?? 0.0) + $val;
-                }
-            }
-        }
-
-        // Dla trybu flat_stay / flat_stay_per_person, waluta może być na poziomie eventu (nie w strukturze dni)
-        if (EventHotelPlanFormatting::isEventFlatPricing($event->hotel_pricing_mode ?? 'lines') && empty($hotelByCurrency)) {
-            $flatAmount = EventHotelPlanFormatting::resolveFlatNativeAmount(
-                (float) ($event->hotel_flat_stay_amount ?? 0),
-                $event->hotel_pricing_mode ?? 'lines',
-                (int) app(EventHotelOccupancyService::class)->forEvent($event)['required_beds_per_night'],
-            );
-            if ($flatAmount > 0) {
-                $flatCurrency = $event->hotel_flat_stay_currency_id
-                    ? Currency::query()->find($event->hotel_flat_stay_currency_id)
-                    : null;
-                $flatCode = strtoupper($flatCurrency?->symbol ?? 'PLN');
-                if ($flatCode === 'PLN' || (bool) ($event->hotel_flat_stay_convert_to_pln ?? true)) {
-                    $hotelByCurrency['PLN'] = $this->totalPlnForEvent($event);
-                } else {
-                    $hotelByCurrency[$flatCode] = $flatAmount;
-                }
-            }
-        }
-
-        $eventHotelPln = $hotelByCurrency['PLN'] ?? 0.0;
-
         foreach ($detailedCalculations as $qty => &$currencies) {
-            // --- PLN bucket ---
+            $variant = $qtyVariants[$qty] ?? $qtyVariants[(string) $qty] ?? null;
+            $groupCounts = $this->normalizeGroupCounts([
+                'qty' => is_array($variant) ? (int) ($variant['qty'] ?? $qty) : (int) $qty,
+                'gratis' => is_array($variant) ? (int) ($variant['gratis'] ?? 0) : 0,
+                'staff' => is_array($variant) ? (int) ($variant['staff'] ?? 0) : 0,
+                'driver' => is_array($variant) ? (int) ($variant['driver'] ?? 0) : 0,
+            ]);
+
+            $structure = $this->buildHotelStructureForCalculationVariant($event, $groupCounts);
+            if ($structure->isEmpty()) {
+                continue;
+            }
+
+            $hotelByCurrency = $this->totalsByCurrencyForVariant($event, $groupCounts);
+
+            // Fallback gdy struktura dni ma zera (np. stary build przy flat), a totals mają kwotę.
+            if ($hotelByCurrency === []) {
+                foreach ($structure as $dayStruct) {
+                    foreach ($dayStruct['day_total'] as $code => $val) {
+                        if ($val > 0) {
+                            $hotelByCurrency[$code] = ($hotelByCurrency[$code] ?? 0.0) + $val;
+                        }
+                    }
+                }
+            }
+
+            $eventHotelPln = (float) ($hotelByCurrency['PLN'] ?? 0.0);
+
             $pln = $currencies['PLN'] ?? null;
             if (is_array($pln)) {
-                $oldHotelPln = 0;
+                $oldHotelPln = 0.0;
                 $points = collect($pln['points'] ?? []);
                 $filtered = $points->reject(function ($point) use (&$oldHotelPln) {
                     $name = (string) ($point['name'] ?? '');
-                    if (str_starts_with($name, 'Hotel - dzień') || str_starts_with($name, 'Noclegi - dzień')) {
+                    if ($this->isHotelCalculationPointName($name)) {
                         $oldHotelPln += (float) ($point['cost'] ?? 0);
 
                         return true;
@@ -1495,6 +2058,7 @@ class EventHotelPlanService
                     return false;
                 })->values()->all();
 
+                $addedHotelPoints = false;
                 if ($eventHotelPln > 0) {
                     foreach ($structure as $dayStruct) {
                         $dayPln = (float) ($dayStruct['day_total']['PLN'] ?? 0);
@@ -1509,6 +2073,21 @@ class EventHotelPlanService
                             'is_child' => false,
                             'currency_symbol' => 'PLN',
                         ];
+                        $addedHotelPoints = true;
+                    }
+
+                    // flat_stay*: day_total bywa 0 — wstrzyknij punkt, żeby pass transportu nie wyciął hotelu.
+                    if (! $addedHotelPoints) {
+                        $filtered[] = [
+                            'name' => EventHotelPlanFormatting::isEventFlatPricing($event->hotel_pricing_mode ?? 'lines')
+                                ? 'Nocleg (stała kwota)'
+                                : 'Nocleg (plan hotelowy)',
+                            'unit_price' => null,
+                            'group_size' => null,
+                            'cost' => $eventHotelPln,
+                            'is_child' => false,
+                            'currency_symbol' => 'PLN',
+                        ];
                     }
                 }
 
@@ -1517,23 +2096,20 @@ class EventHotelPlanService
                 $currencies['PLN'] = $pln;
             }
 
-            // --- Buckety walut obcych ---
             foreach ($hotelByCurrency as $curCode => $curTotal) {
                 if ($curCode === 'PLN' || $curTotal <= 0) {
                     continue;
                 }
 
-                // Upewnij się, że bucket istnieje
                 if (! isset($currencies[$curCode]) || ! is_array($currencies[$curCode])) {
                     $currencies[$curCode] = ['total' => 0.0, 'points' => []];
                 }
 
-                // Usuń stare wpisy hotelowe z tego bucketu (aktualizacja)
                 $oldForeignHotelCost = 0.0;
                 $foreignPoints = collect($currencies[$curCode]['points'] ?? []);
                 $filteredForeign = $foreignPoints->reject(function ($pt) use (&$oldForeignHotelCost) {
                     $name = (string) ($pt['name'] ?? '');
-                    if (str_starts_with($name, 'Hotel - dzień') || str_starts_with($name, 'Noclegi - dzień')) {
+                    if ($this->isHotelCalculationPointName($name)) {
                         $oldForeignHotelCost += (float) ($pt['cost'] ?? 0);
 
                         return true;
@@ -1542,7 +2118,7 @@ class EventHotelPlanService
                     return false;
                 })->values()->all();
 
-                // Dodaj nowe wpisy hotelowe dla tej waluty
+                $addedForeign = false;
                 foreach ($structure as $dayStruct) {
                     $dayCurAmount = (float) ($dayStruct['day_total'][$curCode] ?? 0);
                     if ($dayCurAmount <= 0) {
@@ -1553,6 +2129,18 @@ class EventHotelPlanService
                         'unit_price' => null,
                         'group_size' => null,
                         'cost' => $dayCurAmount,
+                        'is_child' => false,
+                        'currency_symbol' => $curCode,
+                    ];
+                    $addedForeign = true;
+                }
+
+                if (! $addedForeign) {
+                    $filteredForeign[] = [
+                        'name' => 'Nocleg (stała kwota)',
+                        'unit_price' => null,
+                        'group_size' => null,
+                        'cost' => $curTotal,
                         'is_child' => false,
                         'currency_symbol' => $curCode,
                     ];
@@ -1568,6 +2156,14 @@ class EventHotelPlanService
             $currencies['hotel_structure'] = $structure->values()->all();
         }
         unset($currencies);
+    }
+
+    private function isHotelCalculationPointName(string $name): bool
+    {
+        return str_starts_with($name, 'Hotel - dzień')
+            || str_starts_with($name, 'Noclegi - dzień')
+            || $name === 'Nocleg (stała kwota)'
+            || $name === 'Nocleg (plan hotelowy)';
     }
 
     public function linkStaysToProgramPoints(Event $event): void
@@ -1625,28 +2221,31 @@ class EventHotelPlanService
             }
 
             $point = $dayPoints->first();
+
+            // Plan hotelowy jest źródłem prawdy — nie przywracaj kontrahenta z punktu programu
+            // (inaczej clearHotelSelection / noc autokarowa nie da się utrzymać).
             $stay->update([
                 'event_program_point_id' => $point->id,
-                'contractor_id' => $stay->contractor_id ?: $point->contractor_id,
             ]);
 
-            if (Schema::hasColumn('event_hotel_stays', 'contractor_location_id')
-                && Schema::hasColumn('event_program_points', 'contractor_location_id')) {
-                $stay->update([
-                    'contractor_location_id' => $stay->contractor_location_id ?: $point->contractor_location_id,
-                ]);
-            }
+            $pointUpdate = ['is_hotel' => true];
 
             if ($stay->contractor_id) {
-                $pointUpdate = ['is_hotel' => true, 'contractor_id' => $stay->contractor_id];
+                $pointUpdate['contractor_id'] = $stay->contractor_id;
 
                 if (Schema::hasColumn('event_program_points', 'contractor_location_id')
                     && Schema::hasColumn('event_hotel_stays', 'contractor_location_id')) {
                     $pointUpdate['contractor_location_id'] = $stay->contractor_location_id;
                 }
+            } else {
+                $pointUpdate['contractor_id'] = null;
 
-                $point->update($pointUpdate);
+                if (Schema::hasColumn('event_program_points', 'contractor_location_id')) {
+                    $pointUpdate['contractor_location_id'] = null;
+                }
             }
+
+            $point->update($pointUpdate);
         }
     }
 }

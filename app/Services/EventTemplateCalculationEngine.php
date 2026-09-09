@@ -38,7 +38,11 @@ class EventTemplateCalculationEngine
             ->with(['currency', 'children.currency'])
             ->get();
 
-        // We'll rely on ProgramPointHelper to determine include_in_calculation for each point.
+        // Parent include: pivot na programPoints. Child include: osobny pivot
+        // event_template_program_point_child_pivot (jak w EventTemplateUiCalculationService).
+        // Bez tej mapy dzieci ładowane przez children() nie mają pivota szablonu i
+        // ProgramPointHelper domyślnie wlicza wyłączone podpunkty → zawyżone ceny WWW.
+        $childInclusionById = $this->buildChildInclusionMap($template);
 
         $isForeignTrip = method_exists($template, 'isForeignTrip') ? $template->isForeignTrip() : true;
 
@@ -126,11 +130,9 @@ class EventTemplateCalculationEngine
                     }
                 }
 
-                // Children: treat each child as an independent entity. Include only if the child's
-                // own pivot (event_template <-> program_point) requests it.
+                // Children: niezależne od rodzica — flaga z child_pivot (SSoT jak UI admina).
                 foreach ($point->children as $child) {
-                    // child's pivot row (if attached to this template)
-                    $childIncluded = \App\Services\ProgramPointHelper::filterIncluded(collect([$child]))->isNotEmpty();
+                    $childIncluded = $this->isChildIncludedInCalculation($child, $childInclusionById);
 
                     if (! $childIncluded) {
                         continue;
@@ -218,39 +220,13 @@ class EventTemplateCalculationEngine
 
                         continue;
                     }
-                    $rooms = \App\Models\HotelRoom::whereIn('id', $roomIds)->get();
+                    $allocatedLines = app(EventHotelPlanService::class)->allocateRoomLines(
+                        (int) $peopleCount,
+                        is_array($roomIds) ? $roomIds : [],
+                        $groupType,
+                    );
 
-                    $roomTypeCount = [];
-                    foreach ($rooms as $room) {
-                        $roomTypeCount[$room->id] = 0;
-                    }
-
-                    $maxPeople = $peopleCount;
-                    $maxCapacity = $rooms->sum('people_count') * ($peopleCount);
-                    $dp = array_fill(0, $maxCapacity + 1, INF);
-                    $dp[0] = 0;
-                    $choice = array_fill(0, $maxCapacity + 1, null);
-
-                    foreach ($rooms as $room) {
-                        for ($i = $room->people_count; $i <= $maxCapacity; $i++) {
-                            if ($dp[$i] > $dp[$i - $room->people_count] + $room->price) {
-                                $dp[$i] = $dp[$i - $room->people_count] + $room->price;
-                                $choice[$i] = $room->id;
-                            }
-                        }
-                    }
-
-                    // Szukaj najtańszego rozwiązania dla liczby miejsc >= liczba osób
-                    $minCost = INF;
-                    $bestI = null;
-                    for ($i = $peopleCount; $i <= $maxCapacity; $i++) {
-                        if ($dp[$i] < $minCost) {
-                            $minCost = $dp[$i];
-                            $bestI = $i;
-                        }
-                    }
-
-                    if ($minCost === INF) {
+                    if ($allocatedLines === []) {
                         $roomAlloc[] = [
                             'room' => null,
                             'alloc' => null,
@@ -262,25 +238,15 @@ class EventTemplateCalculationEngine
                             'warning' => 'Brak możliwej kombinacji pokoi dla tej grupy ('.$groupType.') w noclegu.',
                         ];
                     } else {
-                        // Odtwarzanie wyboru pokoi
-                        $allocRooms = [];
-                        $i = $bestI;
-                        while ($i > 0 && $choice[$i] !== null) {
-                            $room = $rooms->firstWhere('id', $choice[$i]);
-                            $allocRooms[] = $room;
-                            $i -= $room->people_count;
-                        }
-
-                        // Zlicz ile razy każdy pokój został użyty
-                        $roomCounts = [];
-                        foreach ($allocRooms as $room) {
-                            $roomCounts[$room->id] = ($roomCounts[$room->id] ?? 0) + 1;
-                        }
-
                         $peopleAssigned = 0;
-                        foreach ($roomCounts as $roomId => $count) {
-                            $room = $rooms->firstWhere('id', $roomId);
-                            for ($j = 0; $j < $count; $j++) {
+                        foreach ($allocatedLines as $line) {
+                            $room = \App\Models\HotelRoom::query()->find($line['hotel_room_id'] ?? null);
+                            if (! $room) {
+                                continue;
+                            }
+
+                            $quantity = max(1, (int) ($line['quantity'] ?? 1));
+                            for ($j = 0; $j < $quantity; $j++) {
                                 $alloc = [
                                     'qty' => 0,
                                     'gratis' => 0,
@@ -288,7 +254,7 @@ class EventTemplateCalculationEngine
                                     'driver' => 0,
                                 ];
 
-                                $toAssign = min($room->people_count, $peopleCount - $peopleAssigned);
+                                $toAssign = min((int) $room->people_count, $peopleCount - $peopleAssigned);
                                 $alloc[$groupType] = $toAssign;
 
                                 $roomAlloc[] = [
@@ -317,7 +283,6 @@ class EventTemplateCalculationEngine
                                 } else {
                                     $dayTotalForeign[$roomCurrency] = ($dayTotalForeign[$roomCurrency] ?? 0) + $room->price;
                                 }
-                                $roomTypeCount[$room->id]++;
                                 $peopleAssigned += $toAssign;
 
                                 if ($peopleAssigned >= $peopleCount) {
@@ -684,5 +649,44 @@ class EventTemplateCalculationEngine
         \Illuminate\Support\Facades\Log::info("[MARKUP] Using markup percent={$percent} for event_template_id={$template->id}");
 
         return $base * ($percent / 100);
+    }
+
+    /**
+     * Mapa program_point_child_id => include_in_calculation z child_pivot szablonu.
+     *
+     * @return array<int, bool>
+     */
+    private function buildChildInclusionMap(EventTemplate $template): array
+    {
+        $map = [];
+
+        try {
+            foreach ($template->programPointChildren()->get() as $childPoint) {
+                if (! isset($childPoint->pivot)) {
+                    continue;
+                }
+
+                $map[(int) $childPoint->id] = (bool) ($childPoint->pivot->include_in_calculation ?? true);
+            }
+        } catch (\Throwable) {
+            // Brak tabeli/relacji — zachowaj dotychczasowe domyślne wliczanie.
+        }
+
+        return $map;
+    }
+
+    /**
+     * @param  array<int, bool>  $childInclusionById
+     */
+    private function isChildIncludedInCalculation(mixed $child, array $childInclusionById): bool
+    {
+        $childId = (int) ($child->id ?? 0);
+
+        if ($childId > 0 && array_key_exists($childId, $childInclusionById)) {
+            return $childInclusionById[$childId];
+        }
+
+        // Brak wiersza w child_pivot: jak UI — wliczaj (dziecko niezależne od rodzica).
+        return true;
     }
 }

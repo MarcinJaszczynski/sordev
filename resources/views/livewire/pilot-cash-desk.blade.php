@@ -100,7 +100,7 @@
         @endif
 
         @if ($this->canRecordPayout)
-            @if (! $this->event->assigned_to)
+            @if (! app(\App\Services\PilotContractorAssignmentService::class)->eventHasAssignedPilot($this->event))
                 <p class="text-sm text-red-700">Najpierw przypisz pilota do imprezy.</p>
             @else
                 @if ($this->editingPayoutCurrencyId)

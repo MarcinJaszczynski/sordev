@@ -225,7 +225,10 @@ final class EventReadinessIndicators
      */
     protected static function pilotFundsItem(Event $event): array
     {
-        if (! Schema::hasColumn('events', 'pilot_funds_paid') || ! $event->assigned_to) {
+        $hasPilot = app(\App\Services\PilotContractorAssignmentService::class)
+            ->eventHasAssignedPilot($event);
+
+        if (! Schema::hasColumn('events', 'pilot_funds_paid') || ! $hasPilot) {
             return [
                 'key' => 'pilot_funds',
                 'label' => 'Zaliczka pilota',

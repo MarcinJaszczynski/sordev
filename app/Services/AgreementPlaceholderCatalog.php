@@ -23,6 +23,8 @@ final class AgreementPlaceholderCatalog
 
     public const GROUP_ORGANIZER = 'Organizator';
 
+    public const GROUP_PILOT = 'Pilot';
+
     public const GROUP_ANNEX = 'Aneks';
 
     /**
@@ -85,6 +87,17 @@ final class AgreementPlaceholderCatalog
             ['tag' => '[ORGANIZATOR_ADRES_2]', 'label' => 'Adres organizatora (linia 2)', 'group' => self::GROUP_ORGANIZER, 'payload_key' => 'organizer_address_line_2'],
             ['tag' => '[ORGANIZATOR_EMAIL]', 'label' => 'Email organizatora', 'group' => self::GROUP_ORGANIZER, 'payload_key' => 'organizer_email'],
             ['tag' => '[ORGANIZATOR_TELEFON]', 'label' => 'Telefon organizatora', 'group' => self::GROUP_ORGANIZER, 'payload_key' => 'organizer_phone'],
+
+            ['tag' => '[PILOT_IMIE_NAZWISKO]', 'label' => 'Pilot — imię i nazwisko', 'group' => self::GROUP_PILOT, 'payload_key' => 'pilot_name'],
+            ['tag' => '[PILOT_EMAIL]', 'label' => 'Pilot — e-mail', 'group' => self::GROUP_PILOT, 'payload_key' => 'pilot_email'],
+            ['tag' => '[PILOT_TELEFON]', 'label' => 'Pilot — telefon', 'group' => self::GROUP_PILOT, 'payload_key' => 'pilot_phone'],
+            ['tag' => '[PILOT_PESEL]', 'label' => 'Pilot — PESEL', 'group' => self::GROUP_PILOT, 'payload_key' => 'pilot_pesel'],
+            ['tag' => '[PILOT_DATA_URODZENIA]', 'label' => 'Pilot — data urodzenia', 'group' => self::GROUP_PILOT, 'payload_key' => 'pilot_birth_date'],
+            ['tag' => '[PILOT_NIP]', 'label' => 'Pilot — NIP', 'group' => self::GROUP_PILOT, 'payload_key' => 'pilot_nip'],
+            ['tag' => '[PILOT_KONTO_BANKOWE]', 'label' => 'Pilot — konto bankowe', 'group' => self::GROUP_PILOT, 'payload_key' => 'pilot_bank_account'],
+            ['tag' => '[PILOT_ADRES]', 'label' => 'Pilot — adres', 'group' => self::GROUP_PILOT, 'payload_key' => 'pilot_address'],
+            ['tag' => '[PILOT_FORMA_ROZLICZENIA]', 'label' => 'Pilot — forma rozliczenia', 'group' => self::GROUP_PILOT, 'payload_key' => 'pilot_settlement_form'],
+            ['tag' => '[PILOT_HONORARIUM]', 'label' => 'Pilot — honorarium', 'group' => self::GROUP_PILOT, 'payload_key' => 'pilot_fee'],
 
             ['tag' => '[UMOWA_BAZOWA]', 'label' => 'Numer umowy bazowej (aneks)', 'group' => self::GROUP_ANNEX, 'payload_key' => 'parent_agreement_number'],
             ['tag' => '[RODZAJE_ZMIAN_ANEKSU]', 'label' => 'Rodzaje zmian aneksu', 'group' => self::GROUP_ANNEX, 'payload_key' => 'annex_change_types'],

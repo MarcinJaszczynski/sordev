@@ -6,6 +6,7 @@ namespace App\Actions\Finance;
 
 use App\Models\EventSettlementCost;
 use App\Models\EventSettlementDocument;
+use App\Services\EventFinanceOverviewService;
 use App\Services\FileSecurityService;
 use App\Support\StoragePath;
 use Illuminate\Http\UploadedFile;
@@ -65,6 +66,7 @@ final class AttachSettlementCostDocumentAction
                     );
                 }
 
+                // TemporaryUploadedFile dziedziczy UploadedFile i poprawnie zapisuje z dysku Livewire.
                 $path = StoragePath::normalize($file->store('event-settlement-documents', 'public'));
                 if ($path) {
                     $stored[] = $path;
@@ -75,7 +77,7 @@ final class AttachSettlementCostDocumentAction
                 throw new InvalidArgumentException('Nie udało się zapisać plików.');
             }
 
-            return $settlement->documents()->create([
+            $document = $settlement->documents()->create([
                 'document_type' => $type,
                 'document_number' => $documentNumber,
                 'total_amount' => $planCost->planned_amount_pln ?? $planCost->planned_amount,
@@ -92,6 +94,12 @@ final class AttachSettlementCostDocumentAction
                 'approval_status' => 'pending',
                 'created_by' => Auth::id(),
             ])->fresh();
+
+            if ($settlement->event_id) {
+                EventFinanceOverviewService::forgetOverviewCacheForEvent((int) $settlement->event_id);
+            }
+
+            return $document;
         });
     }
 

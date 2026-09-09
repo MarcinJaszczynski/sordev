@@ -182,10 +182,9 @@ class EventTemplateHotelPlanningTest extends TestCase
 
         $qtyLines = collect($preview['roles']['qty']['lines']);
         $this->assertSame(20, $qtyLines->sum(fn (array $line) => $line['quantity'] * $line['people_count']));
-        $this->assertTrue($qtyLines->every(fn (array $line) => $line['quantity'] > 0));
-        $this->assertTrue(
-            $qtyLines->contains(fn (array $line) => in_array($line['room_id'], [$twin->id, $triple->id], true))
-        );
+        $this->assertSame(7, $qtyLines->sum(fn (array $line) => $line['quantity']));
+        $this->assertTrue($qtyLines->contains(fn (array $line) => $line['room_id'] === $triple->id && $line['quantity'] === 6));
+        $this->assertTrue($qtyLines->contains(fn (array $line) => $line['room_id'] === $twin->id && $line['quantity'] === 1));
 
         $component->assertSee('Automat struktury pokoi')
             ->assertSee('Triple Preview');

@@ -138,8 +138,25 @@ class EventHotelPlanEditor extends Component
             $this->stays = [];
         }
 
-        $this->copySourceDay = (int) ($this->stays[0]['day'] ?? 1);
-        $this->copyTargetDays = collect($this->stays)->pluck('day')->map(fn ($d) => (int) $d)->all();
+        $availableDays = collect($this->stays)->pluck('day')->map(fn ($d) => (int) $d)->values()->all();
+
+        // Nie resetuj wyboru kopiowania przy każdym save/loadPlan — inaczej
+        // „Wykonaj kopiowanie” zawsze idzie z nocy 1 na wszystkie.
+        if ($availableDays === []) {
+            $this->copySourceDay = 1;
+            $this->copyTargetDays = [];
+        } else {
+            if (! in_array((int) $this->copySourceDay, $availableDays, true)) {
+                $this->copySourceDay = $availableDays[0];
+            }
+
+            $keptTargets = array_values(array_intersect(
+                array_map('intval', $this->copyTargetDays),
+                $availableDays
+            ));
+            $this->copyTargetDays = $keptTargets !== [] ? $keptTargets : $availableDays;
+        }
+
         $this->syncHotelReservationFormFromActiveStay();
     }
 
@@ -761,12 +778,13 @@ class EventHotelPlanEditor extends Component
 
     public function copyToAllNights(): void
     {
+        $sourceDay = (int) ($this->stays[$this->activeStayIndex]['day'] ?? $this->copySourceDay);
+
         if (! $this->persistStaysBeforeCopy()) {
             return;
         }
 
         $event = Event::findOrFail($this->eventId);
-        $sourceDay = (int) ($this->stays[$this->activeStayIndex]['day'] ?? $this->copySourceDay);
         app(EventHotelPlanService::class)->copyStructureToAllStays($event, $sourceDay);
         $this->loadPlan();
         Notification::make()
@@ -778,27 +796,24 @@ class EventHotelPlanEditor extends Component
 
     public function copyToSelectedDays(): void
     {
+        // Przechwyć przed persist — loadPlan w save nie może zmienić intencji użytkownika.
+        $sourceDay = (int) $this->copySourceDay;
+        $targetDays = array_map('intval', $this->copyTargetDays);
+
         if (! $this->persistStaysBeforeCopy()) {
             return;
         }
 
         $event = Event::findOrFail($this->eventId);
-        $sourceDay = (int) $this->copySourceDay;
-        app(EventHotelPlanService::class)->copyStructureToDays($event, $sourceDay, $this->copyTargetDays);
+        app(EventHotelPlanService::class)->copyStructureToDays($event, $sourceDay, $targetDays);
+        $this->copySourceDay = $sourceDay;
+        $this->copyTargetDays = $targetDays;
         $this->loadPlan();
         Notification::make()
             ->title('Skopiowano strukturę pokoi na wybrane noce')
             ->body('Hotele, rezerwacje i zaliczki na tych nocach nie zostały nadpisane.')
             ->success()
             ->send();
-    }
-
-    /**
-     * Kopiowanie czyta z bazy — najpierw zapisz bieżący stan formularza (w tym pola z debounce/blur).
-     */
-    protected function persistStaysBeforeCopy(): bool
-    {
-        return $this->save(showNotification: false);
     }
 
     /**

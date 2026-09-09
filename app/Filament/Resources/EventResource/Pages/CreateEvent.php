@@ -34,6 +34,9 @@ class CreateEvent extends CreateRecord
 
     protected ?EventTemplate $template = null;
 
+    /** Snapshot checkboxa — po create stan formularza bywa niespójny przy dehydrated(false). */
+    protected bool $shouldNotifyOfficeAboutInquiry = false;
+
     public function getSubheading(): ?string
     {
         return 'Tylko dane startowe zapytania — resztę uzupełnisz na karcie imprezy';
@@ -202,9 +205,13 @@ class CreateEvent extends CreateRecord
 
                     Forms\Components\Checkbox::make('notify_office_about_inquiry')
                         ->label('Powiadom biuro o nowym zapytaniu')
-                        ->helperText('Utworzy zadanie dla ról admin, super_admin i biuro z linkiem do imprezy.')
+                        ->helperText('Utworzy zadanie dla ról admin, super_admin i biuro oraz pokaże zapytanie w belce powiadomień. Bez zaznaczenia biuro nie jest powiadamiane.')
                         ->default(false)
-                        ->dehydrated(false),
+                        ->dehydrated(false)
+                        ->live()
+                        ->afterStateUpdated(function (?bool $state): void {
+                            $this->shouldNotifyOfficeAboutInquiry = (bool) $state;
+                        }),
                 ]),
         ];
     }
@@ -248,6 +255,11 @@ class CreateEvent extends CreateRecord
 
     protected function mutateFormDataBeforeCreate(array $data): array
     {
+        $this->shouldNotifyOfficeAboutInquiry = (bool) (
+            $this->data['notify_office_about_inquiry']
+            ?? $this->shouldNotifyOfficeAboutInquiry
+        );
+
         $this->syncClientFieldsFromOrderingParties();
 
         if (blank($data['client_name'] ?? null)) {
@@ -328,7 +340,10 @@ class CreateEvent extends CreateRecord
         if ($this->record instanceof Event) {
             $this->record->syncPrimaryClientFromOrderingParties();
 
-            if ((bool) ($this->data['notify_office_about_inquiry'] ?? false)) {
+            $notify = $this->shouldNotifyOfficeAboutInquiry
+                || (bool) ($this->data['notify_office_about_inquiry'] ?? false);
+
+            if ($notify) {
                 app(EventInquiryNotificationService::class)->notifyOfficeAboutNewInquiry(
                     $this->record->fresh(),
                     Auth::user(),

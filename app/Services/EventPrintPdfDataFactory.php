@@ -4,11 +4,14 @@ declare(strict_types=1);
 
 namespace App\Services;
 
+use App\Models\AppSetting;
 use App\Models\Event;
 use App\Models\EventSettlementDocument;
 use App\Models\HotelRoom;
+use App\Services\Documents\EventPackageFileSignedUrlService;
 use App\Services\Documents\PilotPackageOperationalDataBuilder;
 use App\Support\EventParticipantGroupLabels;
+use App\Support\MoneyFormatter;
 use App\Support\StoragePath;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\File;
@@ -112,25 +115,46 @@ final class EventPrintPdfDataFactory
             ->filter(fn ($document) => ($document->approval_status ?? 'pending') !== 'rejected')
             ->values();
 
-        $attachedFiles = $selectedDocuments
-            ->flatMap(function ($document) {
-                $docLabel = $document->document_number ?: ('Dokument #'.$document->id);
+        $signedUrls = app(EventPackageFileSignedUrlService::class);
+        $linkExpiresAt = in_array($audience, EventPackageFileSignedUrlService::AUDIENCES, true)
+            ? $signedUrls->expiresAt($event)
+            : null;
 
-                return collect($document->files ?? [])->map(function ($relativePath) use ($docLabel, $document) {
+        $attachedFiles = $selectedDocuments
+            ->flatMap(function ($document) use ($event, $audience, $signedUrls, $linkExpiresAt) {
+                $docLabel = $document->document_number ?: ('Dokument #'.$document->id);
+                $files = array_values(array_filter(
+                    $document->files ?? [],
+                    static fn ($path): bool => is_string($path) && $path !== '',
+                ));
+
+                return collect($files)->map(function ($relativePath, $fileIndex) use ($docLabel, $document, $event, $audience, $signedUrls, $linkExpiresAt) {
                     $resolved = $this->resolveStoredFile((string) $relativePath);
 
                     if (! $resolved) {
                         return null;
                     }
 
+                    $downloadUrl = null;
+                    if ($linkExpiresAt && in_array($audience, EventPackageFileSignedUrlService::AUDIENCES, true)) {
+                        $downloadUrl = $signedUrls->make($event, $audience, [
+                            'kind' => EventPackageFileSignedUrlService::KIND_SETTLEMENT_DOCUMENT,
+                            'ref' => $document->id,
+                            'file_index' => (int) $fileIndex,
+                        ]);
+                    }
+
                     return [
                         'document_id' => $document->id,
                         'document_label' => $docLabel,
                         'document_type' => EventSettlementDocument::$documentTypes[$document->document_type] ?? $document->document_type,
+                        'description' => trim((string) ($document->notes ?? '')),
                         'relative_path' => $relativePath,
                         'absolute_path' => $resolved['absolute_path'],
                         'base_name' => $resolved['base_name'],
                         'zip_name' => $docLabel.'/'.$resolved['base_name'],
+                        'download_url' => $downloadUrl,
+                        'link_expires_at' => $linkExpiresAt,
                     ];
                 });
             })
@@ -140,20 +164,32 @@ final class EventPrintPdfDataFactory
         $eventDocumentsAttached = $event->documents
             ->filter(fn ($doc) => (bool) ($doc->{$attachmentFlag} ?? false) && $doc->file_path)
             ->filter(fn ($doc) => ($doc->approval_status ?? 'pending') !== 'rejected')
-            ->map(function ($doc) {
+            ->map(function ($doc) use ($event, $audience, $signedUrls, $linkExpiresAt) {
                 $resolved = $this->resolveStoredFile($doc->file_path);
                 if (! $resolved) {
                     return null;
+                }
+
+                $downloadUrl = null;
+                if ($linkExpiresAt && in_array($audience, EventPackageFileSignedUrlService::AUDIENCES, true)) {
+                    $downloadUrl = $signedUrls->make($event, $audience, [
+                        'kind' => EventPackageFileSignedUrlService::KIND_EVENT_DOCUMENT,
+                        'ref' => $doc->id,
+                        'file_index' => 0,
+                    ]);
                 }
 
                 return [
                     'document_id' => 'ev-'.$doc->id,
                     'document_label' => $doc->name,
                     'document_type' => 'Dokument imprezy',
+                    'description' => trim((string) ($doc->notes ?? '')),
                     'relative_path' => $doc->file_path,
                     'absolute_path' => $resolved['absolute_path'],
                     'base_name' => $resolved['base_name'],
                     'zip_name' => $doc->name.'/'.$resolved['base_name'],
+                    'download_url' => $downloadUrl,
+                    'link_expires_at' => $linkExpiresAt,
                 ];
             })
             ->filter()
@@ -164,22 +200,33 @@ final class EventPrintPdfDataFactory
         $insuranceAttached = collect();
         if (in_array($audience, ['pilot', 'folder'], true)) {
             $insuranceAttached = collect($event->insuranceFilesForPilot())
-                ->map(function (array $file) {
+                ->map(function (array $file) use ($event, $audience, $signedUrls, $linkExpiresAt) {
                     $resolved = $this->resolveStoredFile((string) $file['path']);
                     if (! $resolved) {
                         return null;
                     }
 
                     $label = (string) $file['label'];
+                    $downloadUrl = null;
+                    if ($linkExpiresAt) {
+                        $downloadUrl = $signedUrls->make($event, $audience, [
+                            'kind' => EventPackageFileSignedUrlService::KIND_INSURANCE,
+                            'ref' => (string) $file['key'],
+                            'file_index' => 0,
+                        ]);
+                    }
 
                     return [
                         'document_id' => 'insurance-'.$file['key'],
                         'document_label' => $label,
                         'document_type' => 'Ubezpieczenie',
+                        'description' => '',
                         'relative_path' => $file['path'],
                         'absolute_path' => $resolved['absolute_path'],
                         'base_name' => $resolved['base_name'],
                         'zip_name' => 'Ubezpieczenie/'.$label.'/'.$resolved['base_name'],
+                        'download_url' => $downloadUrl,
+                        'link_expires_at' => $linkExpiresAt,
                     ];
                 })
                 ->filter()
@@ -226,6 +273,20 @@ final class EventPrintPdfDataFactory
 
         $travelLegends = app(EventFolderPdfService::class)->buildTravelLegends($event);
         $programDayRoutes = $event->programDayRoutes();
+        $driverDayRoutes = $audience === 'driver'
+            ? $this->buildDriverDayRoutes($event, $programByDay, $travelLegends)
+            : [];
+
+        $settlementLedger = [];
+        $settlementTotalsByCurrency = [];
+        if ($audience === 'folder') {
+            [$settlementLedger, $settlementTotalsByCurrency] = $this->buildSettlementLedger($event);
+        }
+
+        $pilotDutyText = '';
+        if (in_array($audience, ['pilot', 'folder'], true)) {
+            $pilotDutyText = $this->resolvePilotDutyText();
+        }
 
         if (in_array($audience, ['pilot', 'folder'], true)) {
             $operational = app(PilotPackageOperationalDataBuilder::class);
@@ -300,6 +361,11 @@ final class EventPrintPdfDataFactory
             'attachedFiles' => $attachedFiles,
             'travelLegends' => $travelLegends,
             'programDayRoutes' => $programDayRoutes,
+            'driverDayRoutes' => $driverDayRoutes,
+            'settlementLedger' => $settlementLedger,
+            'settlementTotalsByCurrency' => $settlementTotalsByCurrency,
+            'pilotDutyText' => $pilotDutyText,
+            'packageFileLinksExpireAt' => $linkExpiresAt,
             'participantCompactLine' => sprintf(
                 '%d+%d',
                 max(0, $participantCount),
@@ -317,6 +383,126 @@ final class EventPrintPdfDataFactory
                     $driverCount
                 ),
         ];
+    }
+
+    /**
+     * Trasa dzień po dniu dla kierowcy — bez opisów atrakcji.
+     *
+     * @param  array<string, mixed>  $travelLegends
+     * @return list<array{day: int, date: string, time: string, from: string, to: string, route: string}>
+     */
+    public function buildDriverDayRoutes(Event $event, Collection $programByDay, array $travelLegends = []): array
+    {
+        $rows = [];
+        $dayKeys = $programByDay->keys()->map(fn ($d) => (int) $d)->sort()->values();
+
+        if ($dayKeys->isEmpty()) {
+            $core = max(1, (int) $event->resolveCoreProgramDaysCount());
+            $dayKeys = collect(range(1, $core));
+        }
+
+        foreach ($dayKeys as $day) {
+            $date = $event->dateForProgramDay((int) $day);
+            $route = (string) ($event->programDayRoute((int) $day) ?? '');
+            $time = $event->programDayStartTimeLabel((int) $day);
+
+            $from = '—';
+            $to = '—';
+
+            if ($route !== '' && str_contains($route, '→')) {
+                [$fromRaw, $toRaw] = array_map('trim', explode('→', $route, 2));
+                $from = $fromRaw !== '' ? $fromRaw : '—';
+                $to = $toRaw !== '' ? $toRaw : '—';
+            } elseif ($route !== '' && str_contains($route, '->')) {
+                [$fromRaw, $toRaw] = array_map('trim', explode('->', $route, 2));
+                $from = $fromRaw !== '' ? $fromRaw : '—';
+                $to = $toRaw !== '' ? $toRaw : '—';
+            } elseif ($route !== '') {
+                $from = $route;
+                $to = $route;
+            } else {
+                $points = collect($programByDay->get($day) ?? $programByDay->get((string) $day) ?? []);
+                $names = $points
+                    ->map(fn ($point) => trim((string) ($point->name ?: (optional($point->templatePoint)->name ?? ''))))
+                    ->filter()
+                    ->values();
+                if ($names->isNotEmpty()) {
+                    $from = (string) $names->first();
+                    $to = (string) $names->last();
+                } elseif ((int) $day === 1) {
+                    $from = trim(strip_tags((string) ($event->adress_transport_start ?: $event->pickup_place_details ?: $event->startPlace?->name ?: ''))) ?: '—';
+                    $to = trim((string) ($travelLegends['destination'] ?? '')) ?: '—';
+                    if (str_contains($to, "\n")) {
+                        $to = trim(explode("\n", $to)[0]);
+                    }
+                }
+            }
+
+            if ($time === '' && (int) $day === 1 && filled($event->departure_time)) {
+                $time = substr((string) $event->departure_time, 0, 5);
+            }
+
+            $rows[] = [
+                'day' => (int) $day,
+                'date' => $date?->format('d.m.Y') ?? '—',
+                'time' => $time !== '' ? $time : '—',
+                'from' => $from,
+                'to' => $to,
+                'route' => $route !== '' ? $route : trim($from.' → '.$to, ' →'),
+            ];
+        }
+
+        return $rows;
+    }
+
+    /**
+     * @return array{0: list<array<string, mixed>>, 1: list<array{currency: string, total_label: string}>}
+     */
+    public function buildSettlementLedger(Event $event): array
+    {
+        $documents = collect($event->activeSettlement?->documents ?? [])
+            ->filter(fn ($document) => ($document->approval_status ?? 'pending') !== 'rejected')
+            ->sortBy(fn ($document) => [(string) ($document->issue_date?->format('Y-m-d') ?? '9999'), (int) $document->id])
+            ->values();
+
+        $ledger = [];
+        $totals = [];
+
+        foreach ($documents as $document) {
+            $currency = MoneyFormatter::currencyCode($document->currency);
+            $amount = (float) ($document->total_amount ?? 0);
+            $totals[$currency] = ($totals[$currency] ?? 0) + $amount;
+
+            $ledger[] = [
+                'number' => $document->document_number ?: ('#'.$document->id),
+                'type' => EventSettlementDocument::$documentTypes[$document->document_type] ?? $document->document_type,
+                'vendor' => $document->vendor_name ?: '—',
+                'issue_date' => $document->issue_date?->format('d.m.Y') ?? '—',
+                'amount_label' => MoneyFormatter::format($amount, $currency),
+                'currency' => $currency,
+            ];
+        }
+
+        $totalsByCurrency = [];
+        foreach ($totals as $currency => $sum) {
+            $totalsByCurrency[] = [
+                'currency' => $currency,
+                'total_label' => MoneyFormatter::format($sum, $currency),
+            ];
+        }
+
+        return [$ledger, $totalsByCurrency];
+    }
+
+    public function resolvePilotDutyText(): string
+    {
+        $value = AppSetting::getValue('pilot_duty_text', '');
+
+        if (is_array($value)) {
+            $value = (string) ($value['content'] ?? $value['text'] ?? '');
+        }
+
+        return trim(strip_tags((string) $value));
     }
 
     public function buildProgramByDay(Event $event): Collection

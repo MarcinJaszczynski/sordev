@@ -22,6 +22,7 @@ class RecalcAllPricesNow extends Command
             return 0;
         } catch (\Throwable $e) {
             $this->error('Błąd: '.$e->getMessage());
+            $this->error('Plik: '.$e->getFile().':'.$e->getLine());
 
             return 1;
         }

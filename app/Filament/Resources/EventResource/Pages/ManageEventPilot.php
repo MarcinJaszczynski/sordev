@@ -709,6 +709,132 @@ class ManageEventPilot extends EditRecord
             ->send();
     }
 
+    /**
+     * @return array<string, mixed>
+     */
+    public function pilotAgreementSummary(): array
+    {
+        $service = app(\App\Services\PilotAgreementDocumentService::class);
+        $canGenerate = $service->canGenerate($this->record);
+        $agreement = $service->currentForEvent($this->record);
+
+        $hint = '';
+        if (! $canGenerate) {
+            $hint = app(PilotContractorAssignmentService::class)->eventHasAssignedPilot($this->record)
+                ? 'Pilot jest przypisany bez karty kontrahenta — uzupełnij kontrahenta typu „pilot”.'
+                : 'Przypisz kontrahenta-pilota, aby wygenerować umowę.';
+        }
+
+        return [
+            'can_generate' => $canGenerate,
+            'has_pdf' => (bool) $agreement?->hasPdf(),
+            'contract_number' => $agreement?->contract_number ?? '—',
+            'settlement_form_label' => $agreement?->settlementFormLabel()
+                ?? $this->record->resolvedPilotSettlementFormLabel()
+                ?? '—',
+            'generated_at' => $agreement?->generated_at?->format('d.m.Y H:i') ?? '—',
+            'sent_at' => $agreement?->sent_at?->format('d.m.Y H:i'),
+            'shared_in_portal' => (bool) ($agreement?->shared_in_portal ?? false),
+            'hint' => $hint,
+        ];
+    }
+
+    public function canGeneratePilotAgreement(): bool
+    {
+        return app(\App\Services\PilotAgreementDocumentService::class)->canGenerate($this->record);
+    }
+
+    public function pilotAgreementHasPdf(): bool
+    {
+        return (bool) app(\App\Services\PilotAgreementDocumentService::class)
+            ->currentForEvent($this->record)
+            ?->hasPdf();
+    }
+
+    public function pilotAgreementIsShared(): bool
+    {
+        return (bool) app(\App\Services\PilotAgreementDocumentService::class)
+            ->currentForEvent($this->record)
+            ?->shared_in_portal;
+    }
+
+    public function pilotAgreementPdfUrl(): ?string
+    {
+        if (! $this->pilotAgreementHasPdf()) {
+            return null;
+        }
+
+        return route('admin.events.pilot-agreement-pdf', ['event' => $this->record]);
+    }
+
+    public function generatePilotAgreement(?int $templateId = null): void
+    {
+        try {
+            $agreement = app(\App\Services\PilotAgreementDocumentService::class)
+                ->generate($this->record, $templateId);
+
+            Notification::make()
+                ->title('Wygenerowano umowę pilota')
+                ->body($agreement->contract_number)
+                ->success()
+                ->send();
+        } catch (\Throwable $e) {
+            Notification::make()
+                ->title('Nie udało się wygenerować umowy')
+                ->body($e->getMessage())
+                ->danger()
+                ->send();
+        }
+
+        $this->record->refresh();
+    }
+
+    public function sendPilotAgreementEmail(): void
+    {
+        try {
+            $agreement = app(\App\Services\PilotAgreementDocumentService::class)
+                ->sendEmail($this->record);
+
+            Notification::make()
+                ->title('Wysłano umowę e-mailem')
+                ->body($agreement->contractor?->email)
+                ->success()
+                ->send();
+        } catch (\Throwable $e) {
+            Notification::make()
+                ->title('Nie udało się wysłać umowy')
+                ->body($e->getMessage())
+                ->danger()
+                ->send();
+        }
+
+        $this->record->refresh();
+    }
+
+    public function togglePilotAgreementPortalShare(): void
+    {
+        $service = app(\App\Services\PilotAgreementDocumentService::class);
+        $current = $service->currentForEvent($this->record);
+        $share = ! (bool) ($current?->shared_in_portal);
+
+        try {
+            $service->shareInPortal($this->record, $share);
+
+            Notification::make()
+                ->title($share ? 'Umowa udostępniona w panelu pilota' : 'Ukryto umowę w panelu pilota')
+                ->success()
+                ->send();
+        } catch (\Throwable $e) {
+            Notification::make()
+                ->title('Nie udało się zmienić udostępnienia')
+                ->body($e->getMessage())
+                ->danger()
+                ->send();
+        }
+
+        $this->record->refresh();
+    }
+
     public function confirmPilotSettlementClose(): void
     {
         app(PilotSettlementService::class)->confirmOfficeClose($this->record);

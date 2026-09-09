@@ -2,6 +2,7 @@
 
 use App\Http\Controllers\Admin\AgreementPdfDownloadController;
 use App\Http\Controllers\Admin\BackupDownloadController;
+use App\Http\Controllers\Admin\EventAgreementWordController;
 use App\Http\Controllers\Admin\EventCalculationExportController;
 use App\Http\Controllers\Admin\EventHotelOccupantsTemplateController;
 use App\Http\Controllers\Admin\EventIndividualAgreementReportExportController;
@@ -9,6 +10,7 @@ use App\Http\Controllers\Admin\EventInvoicePdfController;
 use App\Http\Controllers\Admin\EventOfferWordController;
 use App\Http\Controllers\Admin\EventParticipantInsuranceExportController;
 use App\Http\Controllers\Admin\EventParticipantListTemplateController;
+use App\Http\Controllers\Admin\EventPilotAgreementPdfController;
 use App\Http\Controllers\Admin\EventPrintPdfController;
 use App\Http\Controllers\Admin\EventTemplatePriceComparisonExportController;
 use App\Http\Controllers\Admin\EventTemplatePriceExportController;
@@ -25,6 +27,7 @@ use App\Http\Controllers\Internal\EventTemplatePriceRecalculateController;
 use App\Http\Controllers\Internal\EventTemplatePriceSnapshotController;
 use App\Http\Controllers\OnlinePaymentController;
 use App\Http\Controllers\Pilot\PilotEventPdfController;
+use App\Http\Controllers\Shared\EventPackageFileDownloadController;
 use App\Http\Middleware\EnsureApplicationNotInstalled;
 use App\Livewire\PilotTripSettlementForm;
 use App\Models\Conversation;
@@ -75,6 +78,15 @@ Route::get('/payments/installment/{type}/{schedule}', InstallmentPaymentLinkCont
     ->whereIn('type', ['contract', 'agreement'])
     ->middleware('signed')
     ->name('payments.installment.show');
+
+// Pliki z pakietów PDF (pilot/hotel/kierowca/teczka) — tymczasowy signed link, TTL end_date+5d
+Route::get('/shared/events/{event}/package-files/{audience}/{kind}/{ref}/{fileIndex?}', EventPackageFileDownloadController::class)
+    ->whereIn('audience', ['pilot', 'hotel', 'driver', 'folder'])
+    ->whereIn('kind', ['event_document', 'settlement_document', 'insurance'])
+    ->where('ref', '[A-Za-z0-9_\-]+')
+    ->where('fileIndex', '[0-9]+')
+    ->middleware('signed')
+    ->name('shared.events.package-files.download');
 
 Route::get('/payments/installment/{type}/{schedule}/pay', [OnlinePaymentController::class, 'startFromInstallment'])
     ->whereIn('type', ['contract', 'agreement'])
@@ -336,6 +348,8 @@ Route::middleware(['auth', 'web', 'office'])->prefix('admin')->group(function ()
         ->name('admin.contracts.agreement-pdf');
     Route::get('/contracts/{contract}/agreement-pdf-package', [AgreementPdfDownloadController::class, 'package'])
         ->name('admin.contracts.agreement-pdf-package');
+    Route::get('/events/{event}/pilot-agreement-pdf', EventPilotAgreementPdfController::class)
+        ->name('admin.events.pilot-agreement-pdf');
     Route::get('/events/{event}/pdf/{audience}', [EventPrintPdfController::class, 'download'])
         ->where('audience', 'pilot|hotel|driver|folder|all|program_with_times|program_without_times|hotel_agenda|hotel_agendas')
         ->name('admin.events.pdf');
@@ -365,6 +379,8 @@ Route::middleware(['auth', 'web', 'office'])->prefix('admin')->group(function ()
         ->name('admin.events.individual-agreements.export');
     Route::get('/events/{event}/offer/word', EventOfferWordController::class)
         ->name('admin.events.offer.word');
+    Route::get('/events/{event}/agreement/word', EventAgreementWordController::class)
+        ->name('admin.events.agreement.word');
     Route::get('/task-attachments/{attachment}/download', \App\Http\Controllers\Admin\TaskAttachmentDownloadController::class)
         ->name('admin.task-attachments.download');
     Route::get('/tools/export-template-prices', EventTemplatePriceExportController::class)

@@ -84,7 +84,7 @@ class TaskFullEditorTest extends TestCase
             ->set('data.priority', 'normal')
             ->call('save')
             ->assertDispatched('task-full-editor-updated')
-            ->assertSee('Komentarze');
+            ->assertSee('Dyskusja');
 
         $task = Task::query()->where('title', 'Zadanie z sekcjami')->first();
 
@@ -134,7 +134,7 @@ class TaskFullEditorTest extends TestCase
 
         $component = Livewire::actingAs($user)
             ->test(TaskFullEditor::class, ['taskId' => $task->id])
-            ->assertSee('Komentarze')
+            ->assertSee('Dyskusja')
             ->assertDontSee('Szczegóły zadania');
 
         $this->assertSame([

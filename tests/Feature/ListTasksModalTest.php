@@ -23,7 +23,7 @@ class ListTasksModalTest extends TestCase
         Role::firstOrCreate(['name' => 'admin', 'guard_name' => 'web']);
     }
 
-    public function test_list_tasks_row_action_opens_edit_modal(): void
+    public function test_list_tasks_row_action_opens_side_editor(): void
     {
         $user = User::factory()->create();
         $user->assignRole('admin');
@@ -39,11 +39,13 @@ class ListTasksModalTest extends TestCase
         Livewire::actingAs($user)
             ->test(ListTasks::class)
             ->call('openEditTaskModal', $task->id)
-            ->assertSet('editingTaskId', $task->id)
-            ->assertSet('mountedActions', ['editTask']);
+            ->assertSet('selectedTaskId', $task->id)
+            ->assertSet('mountedActions', [])
+            ->assertSee('Zadanie z listy')
+            ->assertSee('Zapisz');
     }
 
-    public function test_edit_task_query_opens_modal_on_mount(): void
+    public function test_edit_task_query_opens_side_editor_on_mount(): void
     {
         $user = User::factory()->create();
         $user->assignRole('admin');
@@ -58,11 +60,13 @@ class ListTasksModalTest extends TestCase
         Livewire::actingAs($user)
             ->withQueryParams(['editTask' => $task->id])
             ->test(ListTasks::class)
-            ->assertSet('editingTaskId', $task->id)
-            ->assertSet('mountedActions', ['editTask']);
+            ->assertSet('selectedTaskId', $task->id)
+            ->assertSet('mountedActions', [])
+            ->assertSee('Deep link')
+            ->assertSee('Zapisz');
     }
 
-    public function test_edit_modal_with_subtasks_renders_without_nested_full_editor(): void
+    public function test_side_editor_with_subtasks_renders_inline_sections(): void
     {
         $user = User::factory()->create();
         $user->assignRole('admin');
@@ -75,7 +79,7 @@ class ListTasksModalTest extends TestCase
         ]);
 
         Task::create([
-            'title' => 'Podzadanie w modalu',
+            'title' => 'Podzadanie w panelu',
             'status_id' => Task::getDefaultStatusId(),
             'priority' => 'normal',
             'author_id' => $user->id,
@@ -85,7 +89,7 @@ class ListTasksModalTest extends TestCase
         Livewire::actingAs($user)
             ->test(ListTasks::class)
             ->call('openEditTaskModal', $parent->id)
-            ->assertSee('Podzadanie w modalu')
+            ->assertSee('Podzadanie w panelu')
             ->assertSee('Podzadania');
     }
 }

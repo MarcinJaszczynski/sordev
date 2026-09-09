@@ -54,7 +54,8 @@ class SorOverviewWidget extends StatsOverviewWidget
 
         $unpaidPilotFunds = Schema::hasColumn('events', 'pilot_funds_paid')
             ? Event::query()
-                ->whereNotNull('assigned_to')
+                ->tap(fn ($query) => app(\App\Services\PilotContractorAssignmentService::class)
+                    ->constrainEventsWithAssignedPilot($query))
                 ->where('pilot_funds_paid', false)
                 ->whereIn('status', [
                     ...Event::getConfirmedLikeStatuses(),

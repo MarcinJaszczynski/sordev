@@ -19,7 +19,7 @@
             <h3 class="text-sm font-semibold text-gray-900 dark:text-white">Plan noclegów szablonu</h3>
             <p class="mt-1 text-xs text-gray-500 dark:text-gray-400">
                 Wybierasz <strong>dozwolone typy pokoi</strong> per rola.
-                <strong>Ilości liczy automat</strong> (najtańsza kombinacja) osobno dla każdego wariantu liczby osób.
+                <strong>Ilości liczy automat</strong> (najtańsza kombinacja, przy remisie — jak najmniej pokoi) osobno dla każdego wariantu liczby osób.
                 Na imprezie powstanie gotowa struktura z ilościami.
             </p>
         </div>

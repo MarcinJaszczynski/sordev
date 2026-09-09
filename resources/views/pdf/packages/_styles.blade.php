@@ -79,13 +79,32 @@
         padding: 8px 10px;
         background: #f9fafb;
         border: 1px solid #e5e7eb;
+        page-break-inside: avoid;
     }
     .files-title {
         font-size: 9px; font-weight: 700; text-transform: uppercase;
         letter-spacing: .6px; color: #6b7280; margin-bottom: 6px;
     }
     .files-list { list-style: none; margin: 0; padding: 0; }
-    .files-list li { font-size: 11px; color: #111827; margin-bottom: 4px; word-break: break-all; }
+    .files-list li {
+        font-size: 11px; color: #111827; margin-bottom: 10px;
+        padding-bottom: 8px; border-bottom: 1px solid #e5e7eb;
+    }
+    .files-list li:last-child { border-bottom: none; margin-bottom: 0; padding-bottom: 0; }
+    .files-list .file-name { display: block; font-weight: 700; color: #111827; margin-bottom: 2px; }
+    .files-list .file-meta { display: block; font-size: 9px; color: #6b7280; margin-bottom: 2px; }
+    .files-list .file-desc { display: block; font-size: 10px; color: #4b5563; margin-bottom: 4px; }
+    .files-list .file-link {
+        display: inline-block;
+        color: #1d4ed8;
+        font-size: 11px;
+        font-weight: 700;
+        text-decoration: underline;
+        padding: 4px 0;
+        /* większy obszar kliknięcia na telefonie */
+        line-height: 1.5;
+        word-break: break-word;
+    }
     .files-empty { font-size: 11px; color: #6b7280; }
     .files-note { font-size: 9px; color: #6b7280; margin-top: 6px; }
     .program-day { margin: 0 0 12px 0; padding: 0; page-break-inside: avoid; }

@@ -56,15 +56,25 @@ class PilotPortalSettingsToolbar extends Component implements HasActions, HasFor
             ->modalHeading('Udostępnić imprezę pilotowi?')
             ->modalDescription('Pilot zobaczy wycieczkę w swoim panelu. E-mail wyślesz osobnym przyciskiem po udostępnieniu.')
             ->visible(fn (): bool => Schema::hasColumn('events', 'shared_with_pilot')
-                && filled($this->event()->assigned_to)
+                && app(PilotContractorAssignmentService::class)->eventHasPortalAccount($this->event())
                 && ! $this->event()->shared_with_pilot)
             ->action(function (): void {
                 $event = $this->event();
-                $event->update([
+                $assignment = app(PilotContractorAssignmentService::class);
+                $portalUserId = $assignment->resolvePortalUserIdForEvent($event);
+
+                $payload = [
                     'shared_with_pilot' => true,
                     'shared_with_pilot_at' => now(),
                     'shared_with_pilot_by' => Auth::id(),
-                ]);
+                ];
+
+                // scopeForPilot wymaga assigned_to — dociągnij z kontrahenta, jeśli brakuje.
+                if ($portalUserId && blank($event->assigned_to)) {
+                    $payload['assigned_to'] = $portalUserId;
+                }
+
+                $event->update($payload);
 
                 Notification::make()
                     ->title('Impreza udostępniona pilotowi')
@@ -90,10 +100,14 @@ class PilotPortalSettingsToolbar extends Component implements HasActions, HasFor
             ->modalDescription('Pilot otrzyma wiadomość z informacją o wycieczce i linkiem do panelu.')
             ->visible(fn (): bool => Schema::hasColumn('events', 'shared_with_pilot')
                 && (bool) $this->event()->shared_with_pilot
-                && filled($this->event()->assigned_to))
+                && app(PilotContractorAssignmentService::class)->eventHasPortalAccount($this->event()))
             ->action(function (): void {
                 $event = $this->event();
-                $pilot = $event->assignedUser;
+                $assignment = app(PilotContractorAssignmentService::class);
+                $portalUserId = $assignment->resolvePortalUserIdForEvent($event);
+                $pilot = $portalUserId
+                    ? \App\Models\User::query()->find($portalUserId)
+                    : $event->assignedUser;
 
                 if (! $pilot?->email) {
                     Notification::make()
@@ -252,7 +266,18 @@ class PilotPortalSettingsToolbar extends Component implements HasActions, HasFor
     public function assignPilotHintVisible(): bool
     {
         return Schema::hasColumn('events', 'shared_with_pilot')
-            && blank($this->event()->assigned_to);
+            && ! app(PilotContractorAssignmentService::class)->eventHasPortalAccount($this->event());
+    }
+
+    public function assignPilotHintMessage(): string
+    {
+        $assignment = app(PilotContractorAssignmentService::class);
+
+        if ($assignment->eventHasAssignedPilot($this->event())) {
+            return 'Pilot jest przypisany jako kontrahent, ale nie ma konta portalu (User z tym samym e-mailem). Zaliczka i gotowość działają; udostępnienie panelu wymaga konta.';
+        }
+
+        return 'Przypisz pilota, aby udostępnić wycieczkę i otworzyć podgląd jego panelu.';
     }
 
     public function canPreviewPortal(): bool
@@ -263,7 +288,19 @@ class PilotPortalSettingsToolbar extends Component implements HasActions, HasFor
     public function previewAsPilotVisible(): bool
     {
         return $this->canPreviewPortal()
-            && app(PilotContractorAssignmentService::class)->eventHasAssignedPilot($this->event());
+            && app(PilotContractorAssignmentService::class)->eventHasPortalAccount($this->event());
+    }
+
+    public function previewDisabledTitle(): string
+    {
+        $assignment = app(PilotContractorAssignmentService::class);
+
+        if ($assignment->eventHasAssignedPilot($this->event())
+            && ! $assignment->eventHasPortalAccount($this->event())) {
+            return 'Pilot bez konta portalu — podgląd panelu niedostępny';
+        }
+
+        return 'Najpierw przypisz pilota';
     }
 
     public function previewUrl(): string

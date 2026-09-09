@@ -106,6 +106,13 @@ trait HasEventWorkflowContext
         ];
 
         $links[] = [
+            'label' => 'Umowa Word',
+            'url' => route('admin.events.agreement.word', $event),
+            'icon' => 'heroicon-o-document-text',
+            'external' => true,
+        ];
+
+        $links[] = [
             'label' => 'Nowe zadanie',
             'wire_click' => 'openEventCreateTaskModal',
             'icon' => 'heroicon-o-plus-circle',

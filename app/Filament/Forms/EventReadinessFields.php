@@ -205,9 +205,114 @@ class EventReadinessFields
                     ->columns(['default' => 1, 'md' => 2])
                     ->visible(fn (): bool => Schema::hasTable('pilot_fee_lines'))
                     ->schema(self::pilotFeeFields()),
+
+                Forms\Components\Section::make('Umowa z pilotem')
+                    ->description('PDF umowy o dzieło na podstawie kontrahenta i honorarium. Wysyłka e-mail nie wymaga konta portalu.')
+                    ->icon('heroicon-o-document-text')
+                    ->compact()
+                    ->visible(fn (): bool => Schema::hasTable('event_pilot_agreements'))
+                    ->schema(self::pilotAgreementFields()),
             ])
                 ->extraAttributes(['class' => 'pilot-form-tab pilot-form-tab--settlement'])
                 ->columnSpanFull(),
+        ];
+    }
+
+    /**
+     * @return array<int, Forms\Components\Component>
+     */
+    protected static function pilotAgreementFields(): array
+    {
+        return [
+            Forms\Components\Placeholder::make('pilot_agreement_status')
+                ->hiddenLabel()
+                ->content(function ($livewire): \Illuminate\Support\HtmlString {
+                    if (! is_object($livewire) || ! method_exists($livewire, 'pilotAgreementSummary')) {
+                        return new \Illuminate\Support\HtmlString('');
+                    }
+
+                    /** @var array<string, mixed> $info */
+                    $info = $livewire->pilotAgreementSummary();
+
+                    return new \Illuminate\Support\HtmlString(
+                        view('filament.resources.event-resource.pages.partials.pilot-agreement-card', [
+                            'info' => $info,
+                        ])->render()
+                    );
+                })
+                ->columnSpanFull(),
+
+            Forms\Components\Select::make('pilot_agreement_template_id')
+                ->label('Szablon umowy')
+                ->options(fn (): array => \App\Models\ContractTemplate::optionsForPilotSelect())
+                ->helperText('Szablony z applies_to = „Pilot”. Puste = domyślny szablon systemu.')
+                ->searchable()
+                ->nullable()
+                ->dehydrated(false)
+                ->columnSpanFull(),
+
+            Forms\Components\Actions::make([
+                Forms\Components\Actions\Action::make('generate_pilot_agreement')
+                    ->label('Generuj PDF')
+                    ->icon('heroicon-o-document-plus')
+                    ->color('primary')
+                    ->action(function ($livewire, Forms\Get $get): void {
+                        if (! is_object($livewire) || ! method_exists($livewire, 'generatePilotAgreement')) {
+                            return;
+                        }
+                        $templateId = filled($get('pilot_agreement_template_id') ?? null)
+                            ? (int) $get('pilot_agreement_template_id')
+                            : null;
+                        $livewire->generatePilotAgreement($templateId);
+                    })
+                    ->visible(fn ($livewire): bool => is_object($livewire)
+                        && method_exists($livewire, 'canGeneratePilotAgreement')
+                        && $livewire->canGeneratePilotAgreement()),
+                Forms\Components\Actions\Action::make('download_pilot_agreement')
+                    ->label('Pobierz PDF')
+                    ->icon('heroicon-o-arrow-down-tray')
+                    ->color('gray')
+                    ->url(fn ($livewire): ?string => is_object($livewire) && method_exists($livewire, 'pilotAgreementPdfUrl')
+                        ? $livewire->pilotAgreementPdfUrl()
+                        : null)
+                    ->openUrlInNewTab()
+                    ->visible(fn ($livewire): bool => is_object($livewire)
+                        && method_exists($livewire, 'pilotAgreementHasPdf')
+                        && $livewire->pilotAgreementHasPdf()),
+                Forms\Components\Actions\Action::make('send_pilot_agreement_email')
+                    ->label('Wyślij e-mail')
+                    ->icon('heroicon-o-envelope')
+                    ->color('success')
+                    ->requiresConfirmation()
+                    ->modalHeading('Wysłać umowę na e-mail kontrahenta?')
+                    ->modalDescription('PDF trafi na adres e-mail z karty kontrahenta-pilota (bez wymogu konta portalu).')
+                    ->action(function ($livewire): void {
+                        if (! is_object($livewire) || ! method_exists($livewire, 'sendPilotAgreementEmail')) {
+                            return;
+                        }
+                        $livewire->sendPilotAgreementEmail();
+                    })
+                    ->visible(fn ($livewire): bool => is_object($livewire)
+                        && method_exists($livewire, 'canGeneratePilotAgreement')
+                        && $livewire->canGeneratePilotAgreement()),
+                Forms\Components\Actions\Action::make('share_pilot_agreement_portal')
+                    ->label(fn ($livewire): string => is_object($livewire)
+                        && method_exists($livewire, 'pilotAgreementIsShared')
+                        && $livewire->pilotAgreementIsShared()
+                        ? 'Ukryj w panelu'
+                        : 'Udostępnij w panelu')
+                    ->icon('heroicon-o-share')
+                    ->color('info')
+                    ->action(function ($livewire): void {
+                        if (! is_object($livewire) || ! method_exists($livewire, 'togglePilotAgreementPortalShare')) {
+                            return;
+                        }
+                        $livewire->togglePilotAgreementPortalShare();
+                    })
+                    ->visible(fn ($livewire): bool => is_object($livewire)
+                        && method_exists($livewire, 'pilotAgreementHasPdf')
+                        && $livewire->pilotAgreementHasPdf()),
+            ])->columnSpanFull(),
         ];
     }
 

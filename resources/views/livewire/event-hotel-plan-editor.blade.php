@@ -82,7 +82,7 @@
                             || $formatting::isEventFlatPricing($hotelPricingMode);
                         $costLabel = $formatting::isEventFlatPricing($hotelPricingMode)
                             ? $this->totalDisplay
-                            : $formatting::stayTotalDisplay($stay, $hotelPricingMode, $currencies, $peoplePerNight);
+                            : $formatting::stayTotalDisplay($stay, $hotelPricingMode, $currencies, $peoplePerNight, $hotelRoomsById);
                         $summary = $isFlatStayMode
                             ? null
                             : $formatting::staySummary($stay, $hotelRoomsById, $currencies);
@@ -181,8 +181,9 @@
                                                         type="button"
                                                         wire:click="clearHotelSelection"
                                                         class="inline-flex items-center rounded-md border border-gray-300 bg-white px-2.5 py-1 text-xs font-medium text-gray-700 hover:bg-gray-50 dark:border-gray-600 dark:bg-gray-800 dark:text-gray-200"
+                                                        title="Odpięcie hotelu z tej nocy (np. przejazd autokarowy / bez hotelu)"
                                                     >
-                                                        Zmień
+                                                        Usuń hotel
                                                     </button>
                                                     @if ($contractorEditUrl)
                                                         <a
@@ -449,7 +450,7 @@
                                             @if (($stay['pricing_mode'] ?? '') === 'flat_night_per_person')
                                                 <p class="mt-1 text-xs text-amber-700">
                                                     Stawka × {{ $peoplePerNight }} osób =
-                                                    {{ $formatting::stayTotalDisplay($stay, $hotelPricingMode, $currencies, $peoplePerNight) }}.
+                                                    {{ $formatting::stayTotalDisplay($stay, $hotelPricingMode, $currencies, $peoplePerNight, $hotelRoomsById) }}.
                                                     Ceny pokoi w tej nocy nie wchodzą do sumy.
                                                 </p>
                                             @else
@@ -567,7 +568,7 @@
                                                     @if ($formatting::isEventFlatPricing($hotelPricingMode))
                                                         —
                                                     @else
-                                                        {{ $formatting::stayTotalDisplay($stay, $hotelPricingMode, $currencies, $peoplePerNight) }}
+                                                        {{ $formatting::stayTotalDisplay($stay, $hotelPricingMode, $currencies, $peoplePerNight, $hotelRoomsById) }}
                                                     @endif
                                                 </td>
                                                 <td colspan="2"></td>

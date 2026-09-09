@@ -284,6 +284,7 @@
         @include('pdf.packages._package_overrides_extra')
 
     @include('pdf.packages._attachments')
+    @include('pdf.packages._pilot_duty')
     @include('pdf.packages._footer')
 </div>
 </body>

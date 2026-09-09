@@ -30,6 +30,10 @@ class TaskFormFields
 
         $description = \FilamentTiptapEditor\TiptapEditor::make('description')
             ->label($compact ? 'Treść' : 'Opis')
+            ->maxContentWidth('full')
+            // Jak uwagi imprezy: klasa na wrapperze + na content — CSS resize celuje w .tiptap-prosemirror-wrapper.
+            ->extraFieldWrapperAttributes(['class' => 'task-content-field'])
+            ->extraInputAttributes(['class' => 'task-content-editor'])
             ->columnSpanFull();
 
         $dueDate = Forms\Components\DateTimePicker::make('due_date')

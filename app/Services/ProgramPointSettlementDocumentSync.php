@@ -6,7 +6,9 @@ use App\Models\EventSettlement;
 use App\Models\EventSettlementCost;
 use App\Models\EventSettlementDocument;
 use App\Support\StoragePath;
+use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\Auth;
+use Livewire\Features\SupportFileUploads\TemporaryUploadedFile;
 
 class ProgramPointSettlementDocumentSync
 {
@@ -15,7 +17,7 @@ class ProgramPointSettlementDocumentSync
      *     document_id?: int|null,
      *     document_type?: string|null,
      *     document_number?: string|null,
-     *     document_files?: array<int, string>|null
+     *     document_files?: array<int, mixed>|null
      * }  $data
      */
     public function syncForCost(EventSettlement $settlement, EventSettlementCost $cost, array $data, string $prefix = ''): ?EventSettlementDocument
@@ -37,11 +39,7 @@ class ProgramPointSettlementDocumentSync
             return null;
         }
 
-        $normalizedFiles = collect(is_array($documentFiles) ? $documentFiles : [])
-            ->map(fn ($path) => StoragePath::normalize(is_string($path) ? $path : null))
-            ->filter()
-            ->values()
-            ->all();
+        $normalizedFiles = $this->normalizeDocumentFiles(is_array($documentFiles) ? $documentFiles : []);
 
         $payload = [
             'document_type' => $documentType ?: 'invoice',
@@ -68,7 +66,8 @@ class ProgramPointSettlementDocumentSync
 
             if ($document) {
                 $linkedIds = collect($document->linked_cost_ids ?? [])
-                    ->push($cost->id)
+                    ->map(fn ($id) => (int) $id)
+                    ->push((int) $cost->id)
                     ->unique()
                     ->values()
                     ->all();
@@ -86,16 +85,25 @@ class ProgramPointSettlementDocumentSync
             ]));
         }
 
+        if ($settlement->event_id) {
+            EventFinanceOverviewService::forgetOverviewCacheForEvent((int) $settlement->event_id);
+        }
+
         return $document->fresh();
     }
 
     public function loadDocumentDataForCost(EventSettlementCost $cost): array
     {
+        // Filtr w PHP: MySQL JSON_CONTAINS bywa wrażliwy na int vs string w linked_cost_ids.
         $document = EventSettlementDocument::query()
             ->where('settlement_id', $cost->settlement_id)
-            ->whereJsonContains('linked_cost_ids', $cost->id)
             ->latest('id')
-            ->first();
+            ->get()
+            ->first(function (EventSettlementDocument $doc) use ($cost): bool {
+                return collect($doc->linked_cost_ids ?? [])
+                    ->map(fn ($id) => (int) $id)
+                    ->contains((int) $cost->id);
+            });
 
         if (! $document) {
             return [
@@ -114,6 +122,25 @@ class ProgramPointSettlementDocumentSync
         ];
     }
 
+    /**
+     * @param  array<int, mixed>  $documentFiles
+     * @return list<string>
+     */
+    private function normalizeDocumentFiles(array $documentFiles): array
+    {
+        return collect($documentFiles)
+            ->map(function ($path) {
+                if ($path instanceof TemporaryUploadedFile || $path instanceof UploadedFile) {
+                    return StoragePath::normalize($path->store('event-settlement-documents', 'public'));
+                }
+
+                return StoragePath::normalize(is_string($path) ? $path : null);
+            })
+            ->filter()
+            ->values()
+            ->all();
+    }
+
     private function unlinkDocument(int $documentId, EventSettlementCost $cost): void
     {
         $document = EventSettlementDocument::query()->find($documentId);
@@ -123,7 +150,8 @@ class ProgramPointSettlementDocumentSync
         }
 
         $linkedIds = collect($document->linked_cost_ids ?? [])
-            ->reject(fn ($id) => (int) $id === (int) $cost->id)
+            ->map(fn ($id) => (int) $id)
+            ->reject(fn ($id) => $id === (int) $cost->id)
             ->values()
             ->all();
 

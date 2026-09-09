@@ -240,9 +240,45 @@ class PilotContractorAssignmentService
         return filled($name) ? trim((string) $name) : null;
     }
 
+    /**
+     * Czy impreza ma pilota operacyjnego (osoba na wyjeździe).
+     * Kanonicznie: kontrahent; legacy: samo assigned_to bez kontrahenta.
+     * Konto portalu NIE jest wymagane.
+     */
     public function eventHasAssignedPilot(Event $event): bool
     {
-        return $this->resolvePortalUserIdForEvent($event) !== null
-            || (Schema::hasColumn('events', 'pilot_contractor_id') && filled($event->pilot_contractor_id));
+        if (Schema::hasColumn('events', 'pilot_contractor_id') && filled($event->pilot_contractor_id)) {
+            return true;
+        }
+
+        return filled($event->assigned_to);
+    }
+
+    /**
+     * Czy da się otworzyć / udostępnić panel pilota (opcjonalne).
+     */
+    public function eventHasPortalAccount(Event $event): bool
+    {
+        return $this->resolvePortalUserIdForEvent($event) !== null;
+    }
+
+    /**
+     * Scope SQL: imprezy z przypisanym pilotem (kontrahent i/lub legacy User).
+     *
+     * @param  \Illuminate\Database\Eloquent\Builder<\App\Models\Event>|\Illuminate\Database\Query\Builder  $query
+     * @return \Illuminate\Database\Eloquent\Builder<\App\Models\Event>|\Illuminate\Database\Query\Builder
+     */
+    public function constrainEventsWithAssignedPilot($query)
+    {
+        return $query->where(function ($inner): void {
+            if (Schema::hasColumn('events', 'pilot_contractor_id')) {
+                $inner->whereNotNull('pilot_contractor_id')
+                    ->orWhereNotNull('assigned_to');
+
+                return;
+            }
+
+            $inner->whereNotNull('assigned_to');
+        });
     }
 }

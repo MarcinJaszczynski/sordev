@@ -137,4 +137,38 @@ class TaskQuickFiltersPersistTest extends TestCase
             ->assertSet('tasksScope', 'for_me')
             ->assertSet('dueFilter', 'this_week');
     }
+
+    public function test_list_and_event_persist_list_sort_preference(): void
+    {
+        $user = User::factory()->create();
+        $user->assignRole('admin');
+        $event = Event::factory()->create();
+
+        Livewire::actingAs($user)
+            ->test(ListTasks::class)
+            ->set('listSort', 'due_asc')
+            ->assertSet('listSort', 'due_asc');
+
+        Livewire::actingAs($user)
+            ->test(TasksRelationManager::class, [
+                'ownerRecord' => $event,
+                'pageClass' => ManageEventTasks::class,
+            ])
+            ->set('listSort', 'title_asc')
+            ->assertSet('listSort', 'title_asc');
+
+        $user->refresh();
+        session()->flush();
+
+        Livewire::actingAs($user)
+            ->test(ListTasks::class)
+            ->assertSet('listSort', 'due_asc');
+
+        Livewire::actingAs($user)
+            ->test(TasksRelationManager::class, [
+                'ownerRecord' => $event,
+                'pageClass' => ManageEventTasks::class,
+            ])
+            ->assertSet('listSort', 'title_asc');
+    }
 }

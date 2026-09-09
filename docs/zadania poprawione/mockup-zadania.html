@@ -1,0 +1,400 @@
+<!doctype html>
+<html lang="pl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Zadania — projekt</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --bg:#F5F6F8;
+    --surface:#FFFFFF;
+    --surface-alt:#FAFBFC;
+    --border:#E5E8EC;
+    --text:#1D2433;
+    --text-muted:#6B7280;
+    --text-faint:#98A2B3;
+    --accent:#1C4E80;
+    --accent-soft:#E8F0FA;
+    --status-todo:#B45309;      --status-todo-bg:#FDF3E2;
+    --status-progress:#2563EB;  --status-progress-bg:#EAF1FE;
+    --status-done:#15803D;      --status-done-bg:#E9F7EF;
+    --status-cancel:#B42318;    --status-cancel-bg:#FDECEA;
+    --radius-sm:6px;
+    --radius-md:10px;
+    --shadow-card:0 1px 2px rgba(16,24,40,.04);
+  }
+  *{box-sizing:border-box;}
+  body{
+    margin:0;
+    font-family:'Inter',-apple-system,BlinkMacSystemFont,sans-serif;
+    background:var(--bg);
+    color:var(--text);
+    font-size:14px;
+    line-height:1.5;
+  }
+  .app{display:flex;flex-direction:column;height:100vh;}
+
+  /* ---------- topbar ---------- */
+  .topbar{
+    display:flex;align-items:center;justify-content:space-between;
+    padding:0 24px;height:56px;background:var(--surface);
+    border-bottom:1px solid var(--border);flex-shrink:0;
+  }
+  .brand{display:flex;align-items:center;gap:8px;font-weight:700;font-size:15px;}
+  .brand .mark{width:22px;height:22px;border-radius:6px;background:var(--accent);
+    display:flex;align-items:center;justify-content:center;color:#fff;font-size:12px;}
+  .crumb{color:var(--text-faint);font-weight:500;margin-left:6px;}
+  .crumb b{color:var(--text);font-weight:600;}
+  .topbar-right{display:flex;align-items:center;gap:18px;font-size:13px;color:var(--text-muted);}
+
+  /* ---------- layout ---------- */
+  .layout{display:flex;flex:1;min-height:0;}
+
+  /* ---------- list pane ---------- */
+  .task-list{
+    width:360px;flex-shrink:0;background:var(--surface);
+    border-right:1px solid var(--border);
+    display:flex;flex-direction:column;min-height:0;
+  }
+  .list-header{padding:16px;border-bottom:1px solid var(--border);}
+  .search{
+    display:flex;align-items:center;gap:8px;
+    background:var(--surface-alt);border:1px solid var(--border);
+    border-radius:var(--radius-sm);padding:8px 10px;color:var(--text-faint);
+    margin-bottom:12px;
+  }
+  .search input{border:none;background:none;outline:none;font:inherit;width:100%;color:var(--text);}
+  .filters{display:flex;gap:6px;flex-wrap:wrap;}
+  .chip{
+    padding:5px 10px;border-radius:999px;font-size:12.5px;font-weight:500;
+    border:1px solid var(--border);color:var(--text-muted);cursor:pointer;
+  }
+  .chip.active{background:var(--accent);border-color:var(--accent);color:#fff;}
+
+  .tasks{list-style:none;margin:0;padding:6px;overflow-y:auto;flex:1;}
+  .task-item{
+    padding:12px 12px;border-radius:var(--radius-sm);cursor:pointer;
+    border:1px solid transparent;margin-bottom:2px;
+  }
+  .task-item:hover{background:var(--surface-alt);}
+  .task-item.active{background:var(--accent-soft);border-color:#CFE0F3;}
+  .task-item-top{display:flex;justify-content:space-between;gap:8px;margin-bottom:4px;}
+  .task-title{font-weight:600;font-size:13.5px;}
+  .task-due{font-size:12px;color:var(--text-faint);white-space:nowrap;}
+  .task-meta{font-size:12.5px;color:var(--text-muted);margin-bottom:8px;}
+  .task-bottom{display:flex;align-items:center;justify-content:space-between;}
+  .pill{
+    font-size:11.5px;font-weight:600;padding:2px 8px;border-radius:999px;
+  }
+  .pill-todo{background:var(--status-todo-bg);color:var(--status-todo);}
+  .pill-progress{background:var(--status-progress-bg);color:var(--status-progress);}
+  .pill-done{background:var(--status-done-bg);color:var(--status-done);}
+  .pill-cancel{background:var(--status-cancel-bg);color:var(--status-cancel);}
+  .avatar{
+    width:22px;height:22px;border-radius:50%;background:var(--accent);
+    color:#fff;font-size:10.5px;font-weight:700;display:flex;
+    align-items:center;justify-content:center;flex-shrink:0;
+  }
+
+  /* ---------- detail pane ---------- */
+  .task-detail{flex:1;display:flex;flex-direction:column;min-width:0;min-height:0;}
+  .detail-scroll{flex:1;overflow-y:auto;padding:28px 40px 0;}
+  .detail-header{margin-bottom:20px;}
+  .detail-header-top{display:flex;justify-content:space-between;align-items:flex-start;gap:16px;}
+  .detail-title{font-size:20px;font-weight:700;margin:0 0 6px;}
+  .detail-sub{color:var(--text-muted);font-size:13px;}
+  .detail-sub a{color:var(--accent);text-decoration:none;font-weight:500;}
+  .icon-actions{display:flex;gap:14px;font-size:13px;flex-shrink:0;padding-top:2px;}
+  .icon-actions a{color:var(--text-muted);text-decoration:none;font-weight:500;display:flex;align-items:center;gap:5px;}
+  .icon-actions a.danger{color:var(--status-cancel);}
+  .icon-actions a:hover{color:var(--accent);}
+
+  .status-row{display:flex;gap:8px;margin-top:14px;flex-wrap:wrap;}
+  .status-select{
+    padding:7px 12px;border-radius:var(--radius-sm);font-weight:600;font-size:12.5px;
+    border:1px solid transparent;
+  }
+
+  .meta-grid{
+    display:grid;grid-template-columns:repeat(2,1fr);gap:10px 28px;
+    background:var(--surface);border:1px solid var(--border);border-radius:var(--radius-md);
+    padding:16px 18px;margin-top:18px;box-shadow:var(--shadow-card);
+  }
+  .meta-item{font-size:13px;}
+  .meta-label{color:var(--text-faint);font-size:11.5px;font-weight:600;margin-bottom:2px;}
+  .meta-value{color:var(--text);}
+
+  .section{margin-top:26px;}
+  .section-title{font-size:13px;font-weight:700;margin-bottom:10px;color:var(--text);}
+  .description-box{
+    background:var(--surface);border:1px solid var(--border);border-radius:var(--radius-md);
+    padding:14px 16px;color:var(--text);box-shadow:var(--shadow-card);
+  }
+
+  /* ---------- discussion ---------- */
+  .discussion-head{display:flex;align-items:center;justify-content:space-between;margin-bottom:10px;}
+  .discussion-count{color:var(--text-faint);font-weight:500;font-size:12.5px;}
+
+  .expand-toggle{
+    display:flex;align-items:center;gap:6px;width:100%;
+    background:var(--surface-alt);border:1px dashed var(--border);
+    border-radius:var(--radius-sm);padding:9px 14px;margin-bottom:10px;
+    color:var(--text-muted);font:inherit;font-weight:500;font-size:12.5px;
+    cursor:pointer;text-align:left;
+  }
+  .expand-toggle:hover{background:#F0F2F5;color:var(--text);}
+  .expand-toggle svg{transition:transform .15s ease;flex-shrink:0;}
+  .expand-toggle.open svg{transform:rotate(90deg);}
+
+  .thread-earlier{
+    display:flex;flex-direction:column;gap:10px;margin-bottom:10px;
+    max-height:0;overflow:hidden;opacity:0;transition:max-height .2s ease,opacity .2s ease;
+  }
+  .thread-earlier.open{max-height:600px;opacity:1;}
+
+  .comment{
+    background:var(--surface);border:1px solid var(--border);border-radius:var(--radius-md);
+    padding:12px 14px;box-shadow:var(--shadow-card);
+  }
+  .comment.earlier{background:var(--surface-alt);}
+  .comment.latest{border-color:#CFE0F3;background:var(--accent-soft);}
+  .comment-head{display:flex;align-items:center;gap:8px;margin-bottom:6px;}
+  .comment-author{font-weight:600;font-size:13px;}
+  .comment-time{color:var(--text-faint);font-size:12px;}
+  .comment-body{color:var(--text);font-size:13.5px;}
+
+  .reply-box{
+    border-top:1px solid var(--border);background:var(--surface);
+    padding:14px 40px;flex-shrink:0;
+  }
+  .reply-inner{
+    border:1px solid var(--border);border-radius:var(--radius-md);
+    display:flex;flex-direction:column;background:var(--surface-alt);
+  }
+  .reply-inner textarea{
+    border:none;background:none;resize:none;padding:12px 14px;font:inherit;
+    outline:none;min-height:44px;color:var(--text);
+  }
+  .reply-actions{display:flex;justify-content:space-between;align-items:center;padding:8px 10px;border-top:1px solid var(--border);}
+  .btn{
+    border:none;border-radius:var(--radius-sm);padding:7px 14px;font:inherit;font-weight:600;
+    font-size:13px;cursor:pointer;
+  }
+  .btn-primary{background:var(--accent);color:#fff;}
+  .btn-ghost{background:none;color:var(--text-muted);}
+  .btn-ghost:hover{color:var(--accent);}
+</style>
+</head>
+<body>
+<div class="app">
+
+  <div class="topbar">
+    <div class="brand">
+      <span class="mark">B</span>
+      bprafa
+      <span class="crumb">/ <b>Zadania</b></span>
+    </div>
+    <div class="topbar-right">
+      <span>Imprezy 13</span>
+      <span>Faktury 5</span>
+      <span>Wiadomości 0</span>
+    </div>
+  </div>
+
+  <div class="layout">
+
+    <!-- LISTA ZADAŃ -->
+    <aside class="task-list">
+      <div class="list-header">
+        <div class="search">
+          🔍 <input placeholder="Szukaj zadania…">
+        </div>
+        <div class="filters">
+          <span class="chip active">Wszystkie 38</span>
+          <span class="chip">Do zrobienia</span>
+          <span class="chip">W trakcie</span>
+          <span class="chip">Zrobione</span>
+        </div>
+      </div>
+
+      <ul class="tasks">
+        <li class="task-item active">
+          <div class="task-item-top">
+            <span class="task-title">test 44</span>
+            <span class="task-due">30.07.2026</span>
+          </div>
+          <div class="task-meta">Jura Krakowsko-Częstochowska · #4</div>
+          <div class="task-bottom">
+            <span class="pill pill-todo">Do zrobienia</span>
+            <span class="avatar">MJ</span>
+          </div>
+        </li>
+
+        <li class="task-item">
+          <div class="task-item-top">
+            <span class="task-title">Podzadanie 1 — Voluptatem quae qua</span>
+            <span class="task-due">31.07.2026</span>
+          </div>
+          <div class="task-meta">Wolne / nieprzypisane</div>
+          <div class="task-bottom">
+            <span class="pill pill-progress">W trakcie</span>
+            <span class="avatar">MJ</span>
+          </div>
+        </li>
+
+        <li class="task-item">
+          <div class="task-item-top">
+            <span class="task-title">Potwierdzić termin z klientem</span>
+            <span class="task-due">24.07.2026</span>
+          </div>
+          <div class="task-meta">Kol Travel · Tomek Chruściel</div>
+          <div class="task-bottom">
+            <span class="pill pill-todo">Do zrobienia</span>
+            <span class="avatar">MJ</span>
+          </div>
+        </li>
+
+        <li class="task-item">
+          <div class="task-item-top">
+            <span class="task-title">Przygotować listę pilota</span>
+            <span class="task-due">19.03.2026</span>
+          </div>
+          <div class="task-meta">Jura Krakowsko-Częstochowska · #4</div>
+          <div class="task-bottom">
+            <span class="pill pill-done">Zrobione</span>
+            <span class="avatar">AK</span>
+          </div>
+        </li>
+
+        <li class="task-item">
+          <div class="task-item-top">
+            <span class="task-title">Anulowany transport</span>
+            <span class="task-due">12.06.2026</span>
+          </div>
+          <div class="task-meta">Wolne / nieprzypisane</div>
+          <div class="task-bottom">
+            <span class="pill pill-cancel">Anulowano</span>
+            <span class="avatar">MJ</span>
+          </div>
+        </li>
+      </ul>
+    </aside>
+
+    <!-- SZCZEGÓŁY ZADANIA -->
+    <main class="task-detail">
+      <div class="detail-scroll">
+
+        <div class="detail-header">
+          <div class="detail-header-top">
+            <div>
+              <h1 class="detail-title">test 44</h1>
+              <div class="detail-sub">
+                Impreza: <a href="#">Jura Krakowsko-Częstochowska (#4)</a> · 19.03.2026
+              </div>
+            </div>
+            <div class="icon-actions">
+              <a href="#">✎ Edytuj</a>
+              <a href="#" class="danger">🗑 Usuń</a>
+            </div>
+          </div>
+
+          <div class="status-row">
+            <span class="status-select pill-todo">Do zrobienia</span>
+            <span class="status-select" style="background:var(--surface-alt);color:var(--text-muted);">Zwykły priorytet</span>
+          </div>
+
+          <div class="meta-grid">
+            <div class="meta-item">
+              <div class="meta-label">Od / dla</div>
+              <div class="meta-value">Marcin Jaszczyński → Marcin Jaszczyński</div>
+            </div>
+            <div class="meta-item">
+              <div class="meta-label">Termin</div>
+              <div class="meta-value">30.07.2026, 13:51</div>
+            </div>
+            <div class="meta-item">
+              <div class="meta-label">Utworzono</div>
+              <div class="meta-value">27.07.2026</div>
+            </div>
+            <div class="meta-item">
+              <div class="meta-label">Zmieniono</div>
+              <div class="meta-value">27.07.2026</div>
+            </div>
+          </div>
+        </div>
+
+        <div class="section">
+          <div class="section-title">Opis</div>
+          <div class="description-box">jw</div>
+        </div>
+
+        <div class="section">
+          <div class="discussion-head">
+            <div class="section-title" style="margin:0;">Dyskusja</div>
+            <span class="discussion-count">3 wiadomości</span>
+          </div>
+
+          <button class="expand-toggle" id="toggleBtn" onclick="toggleThread()">
+            <svg width="10" height="10" viewBox="0 0 10 10"><path d="M2 1 L8 5 L2 9" stroke="currentColor" stroke-width="1.6" fill="none"/></svg>
+            Pokaż 2 wcześniejsze wiadomości
+          </button>
+
+          <div class="thread-earlier" id="thread">
+            <div class="comment earlier">
+              <div class="comment-head">
+                <span class="avatar" style="width:20px;height:20px;font-size:9.5px;">MJ</span>
+                <span class="comment-author">Marcin Jaszczyński</span>
+                <span class="comment-time">27.07.2026, 09:12</span>
+              </div>
+              <div class="comment-body">Sprawdziłem termin z klientem — potwierdzone na 24.07.</div>
+            </div>
+            <div class="comment earlier">
+              <div class="comment-head">
+                <span class="avatar" style="width:20px;height:20px;font-size:9.5px;">AK</span>
+                <span class="comment-author">Ania Kowalska</span>
+                <span class="comment-time">28.07.2026, 15:40</span>
+              </div>
+              <div class="comment-body">Wysłałam ofertę cenową do klienta, czekamy na odpowiedź.</div>
+            </div>
+          </div>
+
+          <div class="comment latest">
+            <div class="comment-head">
+              <span class="avatar" style="width:20px;height:20px;font-size:9.5px;">MJ</span>
+              <span class="comment-author">Marcin Jaszczyński</span>
+              <span class="comment-time">06.08.2026, 10:59</span>
+            </div>
+            <div class="comment-body">blabkl</div>
+          </div>
+        </div>
+
+      </div>
+
+      <div class="reply-box">
+        <div class="reply-inner">
+          <textarea placeholder="Napisz odpowiedź…"></textarea>
+          <div class="reply-actions">
+            <button class="btn btn-ghost">📎 Załącznik</button>
+            <button class="btn btn-primary">Odpowiedz</button>
+          </div>
+        </div>
+      </div>
+    </main>
+
+  </div>
+</div>
+
+<script>
+  function toggleThread(){
+    const thread = document.getElementById('thread');
+    const btn = document.getElementById('toggleBtn');
+    const opening = !thread.classList.contains('open');
+    thread.classList.toggle('open');
+    btn.classList.toggle('open');
+    btn.lastChild.textContent = opening ? ' Ukryj wcześniejsze wiadomości' : ' Pokaż 2 wcześniejsze wiadomości';
+  }
+</script>
+</body>
+</html>

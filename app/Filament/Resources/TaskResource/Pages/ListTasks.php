@@ -5,6 +5,7 @@ namespace App\Filament\Resources\TaskResource\Pages;
 use App\Filament\Concerns\InteractsWithTaskEditModal;
 use App\Filament\Concerns\InteractsWithTaskListQuickActions;
 use App\Filament\Concerns\InteractsWithTaskOwnershipScope;
+use App\Filament\Concerns\InteractsWithTaskSplitList;
 use App\Filament\Concerns\MarksTaskInboxAsSeen;
 use App\Filament\Resources\TaskResource;
 use App\Models\Task;
@@ -20,6 +21,11 @@ class ListTasks extends ListRecords
     use InteractsWithTaskEditModal;
     use InteractsWithTaskListQuickActions;
     use InteractsWithTaskOwnershipScope;
+    use InteractsWithTaskSplitList {
+        InteractsWithTaskSplitList::extraTaskQuickFiltersState insteadof InteractsWithTaskOwnershipScope;
+        InteractsWithTaskSplitList::applyRestoredExtraTaskQuickFilters insteadof InteractsWithTaskOwnershipScope;
+        InteractsWithTaskSplitList::openEditTaskModal insteadof InteractsWithTaskEditModal;
+    }
     use MarksTaskInboxAsSeen;
 
     protected static string $resource = TaskResource::class;
@@ -38,6 +44,14 @@ class ListTasks extends ListRecords
         }
 
         $this->restoreTaskQuickFiltersFromSession();
+
+        $deepLinkTaskId = (int) request()->query('editTask', 0);
+        if ($deepLinkTaskId > 0) {
+            $this->selectedTaskId = $deepLinkTaskId;
+            $this->selectedTaskActiveRelationManager = request()->has('activeRelationManager')
+                ? (int) request()->query('activeRelationManager')
+                : null;
+        }
     }
 
     protected function taskQuickFiltersSessionKey(): ?string
@@ -78,10 +92,16 @@ class ListTasks extends ListRecords
     {
         $table = parent::table($table);
 
-        $table = $table->modifyQueryUsing(function (Builder $query): Builder {
-            // Status zakończonych obsługują zakładki (Aktywne / Wszystkie statusy).
-            return $this->applyTaskQuickFiltersTo($query, applyFinished: false, applySource: true);
-        });
+        $table = $this->configureTaskSplitTable($table)
+            ->modifyQueryUsing(function (Builder $query): Builder {
+                $query = $this->applyTaskQuickFiltersTo($query, applyFinished: false, applySource: true);
+
+                if ($this->activeTab === 'manual') {
+                    return $this->pinSelectedTaskFirst($query);
+                }
+
+                return $this->applySplitListSort($query);
+            });
 
         if ($this->activeTab === 'manual') {
             return $table
@@ -95,8 +115,6 @@ class ListTasks extends ListRecords
     protected function getHeaderActions(): array
     {
         return [
-            // Musi być pełna akcja z modalem — stub z mountAction() nadpisywał
-            // cacheAction(createTask) z traita i modal przestawał się otwierać.
             $this->makeCreateTaskAction(
                 defaultDueDate: fn (): mixed => $this->createTaskDefaultDueDate(),
                 defaultFormData: fn (): array => array_merge(
@@ -115,11 +133,42 @@ class ListTasks extends ListRecords
 
     protected function afterTaskModalSaved(Task $task): void
     {
+        $this->selectedTaskId = $task->id;
         $this->resetTable();
+    }
+
+    protected function afterTaskListQuickActionSaved(): void
+    {
+        if (! method_exists($this, 'resetTable')) {
+            return;
+        }
+
+        if (app()->runningUnitTests()) {
+            $this->resetTable();
+
+            return;
+        }
+
+        $this->js('queueMicrotask(() => $wire.call("resetTable"))');
     }
 
     protected function afterTasksScopeChanged(): void
     {
         $this->resetTable();
+    }
+
+    protected function openDeepLinkedTaskIfPresent(): void
+    {
+        $taskId = (int) request()->query('editTask', 0);
+
+        if ($taskId <= 0) {
+            return;
+        }
+
+        $activeRelationManager = request()->has('activeRelationManager')
+            ? (int) request()->query('activeRelationManager')
+            : null;
+
+        $this->selectTask($taskId, $activeRelationManager);
     }
 }

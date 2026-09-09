@@ -126,8 +126,8 @@ class EventTasksRelationManagerTest extends TestCase
                 'ownerRecord' => $event,
                 'pageClass' => ManageEventTasks::class,
             ])
-            ->assertSet('editingTaskId', $task->id)
-            ->assertSet('mountedActions', ['editTask']);
+            ->assertSet('selectedTaskId', $task->id)
+            ->assertSet('mountedActions', []);
     }
 
     public function test_event_tasks_deep_link_mount_hook_is_idempotent(): void
@@ -155,8 +155,8 @@ class EventTasksRelationManagerTest extends TestCase
         $component->instance()->mountInteractsWithTaskEditModal();
 
         $component
-            ->assertSet('editingTaskId', $task->id)
-            ->assertSet('mountedActions', ['editTask']);
+            ->assertSet('selectedTaskId', $task->id)
+            ->assertSet('mountedActions', []);
     }
 
     public function test_manage_event_tasks_page_does_not_open_duplicate_modal_from_page_component(): void
@@ -236,10 +236,11 @@ class EventTasksRelationManagerTest extends TestCase
                 'ownerRecord' => $event,
                 'pageClass' => ManageEventTasks::class,
             ])
-            ->call('mountTableAction', 'edit', (string) $task->getKey())
-            ->assertSet('editingTaskId', $task->id)
-            ->assertSet('mountedActions', ['editTask'])
-            ->assertSee('Do edycji z przycisku');
+            ->call('openEditTaskModal', $task->id)
+            ->assertSet('selectedTaskId', $task->id)
+            ->assertSet('mountedActions', [])
+            ->assertSee('Do edycji z przycisku')
+            ->assertSee('Zapisz');
     }
 
     public function test_event_tasks_show_finished_by_default_and_ownership_filters(): void

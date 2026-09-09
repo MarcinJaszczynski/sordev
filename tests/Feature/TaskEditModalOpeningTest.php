@@ -50,9 +50,10 @@ class TaskEditModalOpeningTest extends TestCase
         Livewire::actingAs($this->user)
             ->test(ListTasks::class)
             ->call('openEditTaskModal', $this->task->id)
-            ->assertSet('editingTaskId', $this->task->id)
-            ->assertSet('mountedActions', ['editTask'])
-            ->assertSee('Modal regression task');
+            ->assertSet('selectedTaskId', $this->task->id)
+            ->assertSet('mountedActions', [])
+            ->assertSee('Modal regression task')
+            ->assertSee('Zapisz');
     }
 
     public function test_list_tasks_deep_link_opens_edit_modal(): void
@@ -60,8 +61,8 @@ class TaskEditModalOpeningTest extends TestCase
         Livewire::actingAs($this->user)
             ->withQueryParams(['editTask' => $this->task->id])
             ->test(ListTasks::class)
-            ->assertSet('editingTaskId', $this->task->id)
-            ->assertSet('mountedActions', ['editTask'])
+            ->assertSet('selectedTaskId', $this->task->id)
+            ->assertSet('mountedActions', [])
             ->assertSee('Modal regression task');
     }
 
@@ -74,26 +75,28 @@ class TaskEditModalOpeningTest extends TestCase
         $component->instance()->mountInteractsWithTaskEditModal();
 
         $component
-            ->assertSet('editingTaskId', $this->task->id)
-            ->assertSet('mountedActions', ['editTask']);
+            ->assertSet('selectedTaskId', $this->task->id)
+            ->assertSet('mountedActions', []);
     }
 
     public function test_list_tasks_title_cell_wires_open_edit_modal(): void
     {
         Livewire::actingAs($this->user)
             ->test(ListTasks::class)
-            ->assertSeeHtml('openEditTaskModal('.$this->task->id.')');
+            ->assertSeeHtml('selectTask('.$this->task->id.')')
+            ->call('selectTask', $this->task->id)
+            ->assertSet('selectedTaskId', $this->task->id)
+            ->assertSee('Modal regression task');
     }
 
     public function test_list_tasks_edit_table_action_opens_page_modal(): void
     {
-        // callTableAction() asertuje brak open-modal przy akcji bez modala tabeli;
-        // my odpalamy page modal editTask, więc wołamy mountTableAction bezpośrednio.
         Livewire::actingAs($this->user)
             ->test(ListTasks::class)
-            ->call('mountTableAction', 'edit', (string) $this->task->getKey())
-            ->assertSet('editingTaskId', $this->task->id)
-            ->assertSet('mountedActions', ['editTask'])
+            ->call('selectTask', $this->task->id)
+            ->call('openEditTaskModal', $this->task->id)
+            ->assertSet('selectedTaskId', $this->task->id)
+            ->assertSet('mountedActions', [])
             ->assertSee('Modal regression task');
     }
 
@@ -123,9 +126,10 @@ class TaskEditModalOpeningTest extends TestCase
                 'pageClass' => ManageEventTasks::class,
             ])
             ->call('openEditTaskModal', $task->id)
-            ->assertSet('editingTaskId', $task->id)
-            ->assertSet('mountedActions', ['editTask'])
-            ->assertSee('Event modal task');
+            ->assertSet('selectedTaskId', $task->id)
+            ->assertSet('mountedActions', [])
+            ->assertSee('Event modal task')
+            ->assertSee('Zapisz');
     }
 
     public function test_event_tasks_deep_link_opens_edit_modal(): void
@@ -146,8 +150,8 @@ class TaskEditModalOpeningTest extends TestCase
                 'ownerRecord' => $event,
                 'pageClass' => ManageEventTasks::class,
             ])
-            ->assertSet('editingTaskId', $task->id)
-            ->assertSet('mountedActions', ['editTask'])
+            ->assertSet('selectedTaskId', $task->id)
+            ->assertSet('mountedActions', [])
             ->assertSee('Event deep link task');
     }
 
@@ -168,10 +172,11 @@ class TaskEditModalOpeningTest extends TestCase
                 'ownerRecord' => $event,
                 'pageClass' => ManageEventTasks::class,
             ])
-            ->call('mountTableAction', 'edit', (string) $task->getKey())
-            ->assertSet('editingTaskId', $task->id)
-            ->assertSet('mountedActions', ['editTask'])
-            ->assertSee('Event edit button task');
+            ->call('selectTask', $task->id)
+            ->assertSet('selectedTaskId', $task->id)
+            ->assertSet('mountedActions', [])
+            ->assertSee('Event edit button task')
+            ->assertSee('Zapisz');
     }
 
     public function test_event_tasks_create_modal_opens(): void

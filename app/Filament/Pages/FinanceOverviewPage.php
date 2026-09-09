@@ -45,7 +45,8 @@ class FinanceOverviewPage extends Page
 
         $unpaidPilotFunds = Schema::hasColumn('events', 'pilot_funds_paid')
             ? Event::query()
-                ->whereNotNull('assigned_to')
+                ->tap(fn ($query) => app(\App\Services\PilotContractorAssignmentService::class)
+                    ->constrainEventsWithAssignedPilot($query))
                 ->where('pilot_funds_paid', false)
                 ->where(function ($query): void {
                     if (Schema::hasColumn('events', 'pilot_advance_planned_amount')) {
@@ -65,7 +66,8 @@ class FinanceOverviewPage extends Page
 
         $plannedPilotAdvances = Schema::hasColumn('events', 'pilot_advance_planned_amount')
             ? (float) Event::query()
-                ->whereNotNull('assigned_to')
+                ->tap(fn ($query) => app(\App\Services\PilotContractorAssignmentService::class)
+                    ->constrainEventsWithAssignedPilot($query))
                 ->where('pilot_funds_paid', false)
                 ->whereNotNull('pilot_advance_planned_amount')
                 ->sum('pilot_advance_planned_amount')

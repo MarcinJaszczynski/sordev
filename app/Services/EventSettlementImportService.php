@@ -292,62 +292,29 @@ final class EventSettlementImportService
                     continue;
                 }
 
-                $rooms = HotelRoom::whereIn('id', $roomIds)->get();
-                if ($rooms->isEmpty()) {
+                $lines = app(EventHotelPlanService::class)->allocateRoomLines($peopleCount, $roomIds, $groupType);
+                if ($lines === []) {
                     continue;
                 }
 
-                // DP: minimalny koszt kombinacji pokoi pokrywającej >= $peopleCount osób
-                $maxCapacity = $rooms->sum('people_count') * $peopleCount;
-                $dp = array_fill(0, $maxCapacity + 1, INF);
-                $choice = array_fill(0, $maxCapacity + 1, null);
-                $dp[0] = 0;
+                foreach ($lines as $line) {
+                    $qty = max(1, (int) ($line['quantity'] ?? 1));
+                    $unitPrice = (float) ($line['unit_price'] ?? 0);
+                    $room = HotelRoom::query()->find($line['hotel_room_id'] ?? null);
+                    $roomCurrency = (string) ($room?->currency ?? 'PLN');
+                    $convertFlag = (bool) ($room?->convert_to_pln ?? ($line['convert_to_pln'] ?? false));
 
-                foreach ($rooms as $room) {
-                    $cap = max(1, (int) $room->people_count);
-                    for ($i = $cap; $i <= $maxCapacity; $i++) {
-                        if ($dp[$i] > $dp[$i - $cap] + $room->price) {
-                            $dp[$i] = $dp[$i - $cap] + $room->price;
-                            $choice[$i] = $room->id;
-                        }
-                    }
-                }
-
-                // Najtańsze rozwiązanie pokrywające >= $peopleCount
-                $minCost = INF;
-                $bestI = null;
-                for ($i = $peopleCount; $i <= $maxCapacity; $i++) {
-                    if ($dp[$i] < $minCost) {
-                        $minCost = $dp[$i];
-                        $bestI = $i;
-                    }
-                }
-
-                if ($minCost === INF || $bestI === null) {
-                    continue;
-                }
-
-                // Odtwórz wybór pokoi i zsumuj koszt w PLN
-                $i = $bestI;
-                while ($i > 0 && $choice[$i] !== null) {
-                    $room = $rooms->firstWhere('id', $choice[$i]);
-                    $roomPrice = (float) ($room->price ?? 0);
-                    $roomCurrency = (string) ($room->currency ?? 'PLN');
-                    $convertFlag = (bool) ($room->convert_to_pln ?? false);
-
+                    $lineTotal = $unitPrice * $qty;
                     if ($roomCurrency === 'PLN' || $convertFlag) {
                         if ($roomCurrency !== 'PLN') {
                             $rate = Currency::where('symbol', $roomCurrency)->first()?->exchange_rate ?? 1;
-                            $roomPrice *= $rate;
+                            $lineTotal *= $rate;
                         }
-                        $dayTotalPln += $roomPrice;
+                        $dayTotalPln += $lineTotal;
                     } else {
                         // Waluta obca bez konwersji → traktuj jako PLN (brak kursu w settlement)
-                        $dayTotalPln += $roomPrice;
+                        $dayTotalPln += $lineTotal;
                     }
-
-                    $cap = max(1, (int) $room->people_count);
-                    $i -= $cap;
                 }
             }
 

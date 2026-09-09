@@ -118,6 +118,46 @@ class UserJourneyExtendedPathsTest extends TestCase
         );
     }
 
+    public function test_create_event_without_notify_office_creates_no_inquiry_tasks(): void
+    {
+        $biuro = User::factory()->create(['status' => 'active']);
+        $biuro->assignRole('biuro');
+
+        $place = Place::factory()->starting()->create();
+        $payload = app(ClientLookupService::class)->quickCreate([
+            'first_name' => 'Ania',
+            'last_name' => 'Kowalska',
+            'phone' => '502222333',
+        ]);
+
+        Livewire::test(CreateEvent::class)
+            ->call(
+                'applyClientLookup',
+                $payload['ordering_parties'],
+                $payload['client_name'],
+                $payload['client_email'],
+                $payload['client_phone'],
+            )
+            ->fillForm([
+                'event_template_id' => null,
+                'name' => 'Zapytanie bez powiadomienia',
+                'start_date' => '2026-12-02',
+                'duration_days' => 1,
+                'participant_count' => 10,
+                'start_place_id' => $place->id,
+                'notify_office_about_inquiry' => false,
+            ])
+            ->set('data.notify_office_about_inquiry', false)
+            ->call('create')
+            ->assertHasNoFormErrors();
+
+        $event = Event::query()->where('name', 'Zapytanie bez powiadomienia')->firstOrFail();
+        $this->assertSame(0, Task::query()
+            ->where('taskable_type', Event::class)
+            ->where('taskable_id', $event->id)
+            ->count());
+    }
+
     public function test_assign_pilot_and_share_flag(): void
     {
         $pilot = User::factory()->create(['status' => 'active']);

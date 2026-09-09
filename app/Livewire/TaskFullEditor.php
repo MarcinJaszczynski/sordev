@@ -42,6 +42,8 @@ class TaskFullEditor extends Component implements HasForms
 
     public string $newCommentContent = '';
 
+    public bool $showEarlierComments = false;
+
     public function mount(
         ?int $taskId = null,
         ?string $defaultDueDate = null,
@@ -125,7 +127,27 @@ class TaskFullEditor extends Component implements HasForms
             ->comments()
             ->with('author')
             ->orderBy('created_at')
+            ->orderBy('id')
             ->get();
+    }
+
+    #[Computed]
+    public function latestComment(): ?TaskComment
+    {
+        return $this->comments->last();
+    }
+
+    #[Computed]
+    public function earlierComments(): Collection
+    {
+        return $this->comments->count() > 1
+            ? $this->comments->slice(0, -1)->values()
+            : collect();
+    }
+
+    public function toggleEarlierComments(): void
+    {
+        $this->showEarlierComments = ! $this->showEarlierComments;
     }
 
     public function addComment(): void
@@ -147,8 +169,9 @@ class TaskFullEditor extends Component implements HasForms
         NotificationService::clearCacheForTaskCommentStakeholders($comment);
 
         $this->newCommentContent = '';
+        $this->showEarlierComments = false;
         $this->record->load(['comments.author']);
-        unset($this->comments);
+        unset($this->comments, $this->latestComment, $this->earlierComments);
 
         Notification::make()
             ->title('Komentarz dodany')

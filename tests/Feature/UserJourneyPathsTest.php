@@ -20,6 +20,7 @@ use App\Models\Task;
 use App\Models\User;
 use App\Services\ClientLookupService;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Facades\Mail;
 use InvalidArgumentException;
 use Livewire\Livewire;
 use Spatie\Permission\Models\Role;
@@ -279,7 +280,7 @@ class UserJourneyPathsTest extends TestCase
         ));
     }
 
-    public function test_status_change_to_offer_does_not_create_office_task(): void
+    public function test_status_change_to_offer_does_not_create_office_task_nor_send_mail(): void
     {
         $biuro = User::factory()->create(['status' => 'active']);
         $biuro->assignRole('biuro');
@@ -289,7 +290,10 @@ class UserJourneyPathsTest extends TestCase
             'created_by' => $this->admin->id,
             'name' => 'Oferta automatyzacja',
             'client_phone' => '511522533',
+            'client_email' => 'klient@example.com',
         ]);
+
+        Mail::fake();
 
         app(ChangeEventStatusAction::class)(new ChangeEventStatusData(
             event: $event,
@@ -298,6 +302,7 @@ class UserJourneyPathsTest extends TestCase
         ));
 
         $this->assertSame(Event::STATUS_OFFER, $event->fresh()->status);
+        Mail::assertNothingSent();
 
         $this->assertFalse(
             Task::query()
@@ -306,6 +311,27 @@ class UserJourneyPathsTest extends TestCase
                 ->where('description', 'like', '%event-status:'.$event->id.':offer%')
                 ->exists(),
         );
+    }
+
+    public function test_status_change_to_offer_does_not_auto_send_mail_even_with_mailto_email(): void
+    {
+        Mail::fake();
+
+        $event = Event::factory()->create([
+            'status' => Event::STATUS_INQUIRY,
+            'created_by' => $this->admin->id,
+            'name' => 'Oferta z mailto',
+            'client_email' => 'mailto:agula3000@wp.pl',
+        ]);
+
+        app(ChangeEventStatusAction::class)(new ChangeEventStatusData(
+            event: $event,
+            status: Event::STATUS_OFFER,
+            reason: 'Test mailto',
+        ));
+
+        $this->assertSame(Event::STATUS_OFFER, $event->fresh()->status);
+        Mail::assertNothingSent();
     }
 
     public function test_status_change_to_confirmed_creates_office_task(): void
@@ -320,6 +346,8 @@ class UserJourneyPathsTest extends TestCase
             'name' => 'Potwierdzenie automatyzacja',
         ]);
 
+        Mail::fake();
+
         app(ChangeEventStatusAction::class)(new ChangeEventStatusData(
             event: $event,
             status: Event::STATUS_CONFIRMED,
@@ -327,6 +355,7 @@ class UserJourneyPathsTest extends TestCase
         ));
 
         $this->assertSame(Event::STATUS_CONFIRMED, $event->fresh()->status);
+        Mail::assertNothingSent();
 
         $tasks = Task::query()
             ->where('taskable_type', Event::class)

@@ -5,7 +5,7 @@ namespace App\Filament\Resources\TaskResource\RelationManagers;
 use App\Filament\Concerns\InteractsWithTaskEditModal;
 use App\Filament\Concerns\InteractsWithTaskListQuickActions;
 use App\Filament\Concerns\InteractsWithTaskOwnershipScope;
-use App\Filament\Resources\TaskResource;
+use App\Filament\Concerns\InteractsWithTaskSplitList;
 use App\Models\Event;
 use App\Models\EventProgramPoint;
 use App\Models\Reservation;
@@ -22,10 +22,15 @@ class TasksRelationManager extends RelationManager
     use InteractsWithTaskEditModal;
     use InteractsWithTaskListQuickActions;
     use InteractsWithTaskOwnershipScope;
+    use InteractsWithTaskSplitList {
+        InteractsWithTaskSplitList::extraTaskQuickFiltersState insteadof InteractsWithTaskOwnershipScope;
+        InteractsWithTaskSplitList::applyRestoredExtraTaskQuickFilters insteadof InteractsWithTaskOwnershipScope;
+        InteractsWithTaskSplitList::openEditTaskModal insteadof InteractsWithTaskEditModal;
+    }
 
     /**
      * Lazy RM ładuje się przez /livewire/update bez query stringa — deep link ?editTask=
-     * wtedy nie otwiera modala. Eager mount zachowuje request()->query().
+     * wtedy nie otwiera panelu. Eager mount zachowuje request()->query().
      */
     protected static bool $isLazy = false;
 
@@ -35,6 +40,8 @@ class TasksRelationManager extends RelationManager
 
     protected static ?string $title = 'Zadania';
 
+    protected static string $view = 'filament.resources.task-resource.relation-managers.tasks-split';
+
     public function mount(): void
     {
         parent::mount();
@@ -42,6 +49,14 @@ class TasksRelationManager extends RelationManager
         $this->tasksScope = $this->defaultTasksScope();
         $this->showFinishedTasks = $this->defaultShowFinishedTasks();
         $this->restoreTaskQuickFiltersFromSession();
+
+        $deepLinkTaskId = (int) request()->query('editTask', 0);
+        if ($deepLinkTaskId > 0) {
+            $this->selectedTaskId = $deepLinkTaskId;
+            $this->selectedTaskActiveRelationManager = request()->has('activeRelationManager')
+                ? (int) request()->query('activeRelationManager')
+                : null;
+        }
     }
 
     protected function defaultTasksScope(): string
@@ -66,7 +81,7 @@ class TasksRelationManager extends RelationManager
 
     public function table(Table $table): Table
     {
-        return $table
+        return $this->configureTaskSplitTable($table)
             ->header(fn (): \Illuminate\Contracts\View\View => view('filament.tasks.ownership-quick-filters', [
                 'tasksScope' => $this->tasksScope,
                 'dueFilter' => $this->dueFilter,
@@ -82,21 +97,9 @@ class TasksRelationManager extends RelationManager
                 TaskQueryFilters::withLatestActivityAtColumn($query);
                 $this->applyTaskQuickFiltersTo($query, applyFinished: true, applySource: true);
 
-                return $query;
+                return $this->applySplitListSort($query);
             })
-            ->defaultSort(
-                fn (Builder $query, string $direction): Builder => TaskQueryFilters::orderByLatestActivity($query, $direction),
-                'desc',
-            )
-            ->columns(TaskResource::eventWorkspaceTableColumns())
             ->searchable()
-            ->recordUrl(null)
-            ->recordAction(null)
-            ->actionsColumnLabel('Akcje')
-            ->actions([
-                TaskResource::modalEditTableAction(),
-                Tables\Actions\DeleteAction::make(),
-            ])
             ->headerActions([
                 Tables\Actions\Action::make('createTask')
                     ->label('Nowe zadanie')
@@ -157,11 +160,38 @@ class TasksRelationManager extends RelationManager
 
     protected function afterTaskModalSaved(Task $task): void
     {
+        $this->selectedTaskId = $task->id;
         $this->resetTable();
+    }
+
+    protected function afterTaskListQuickActionSaved(): void
+    {
+        if (app()->runningUnitTests()) {
+            $this->resetTable();
+
+            return;
+        }
+
+        $this->js('queueMicrotask(() => $wire.call("resetTable"))');
     }
 
     protected function afterTasksScopeChanged(): void
     {
         $this->resetTable();
+    }
+
+    protected function openDeepLinkedTaskIfPresent(): void
+    {
+        $taskId = (int) request()->query('editTask', 0);
+
+        if ($taskId <= 0) {
+            return;
+        }
+
+        $activeRelationManager = request()->has('activeRelationManager')
+            ? (int) request()->query('activeRelationManager')
+            : null;
+
+        $this->selectTask($taskId, $activeRelationManager);
     }
 }

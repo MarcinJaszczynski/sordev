@@ -2,10 +2,14 @@
 
 namespace App\Filament\Resources;
 
+use App\Filament\Pages\OpenRouteServiceSettingsPage;
 use App\Filament\Resources\PlaceDistanceResource\Pages;
+use App\Jobs\RecalculatePlaceDistancesJob;
 use App\Models\Place;
 use App\Models\PlaceDistance;
+use App\Services\PlaceDistanceRouteService;
 use App\Support\FilamentNavigation;
+use App\Support\OpenRouteServiceSettings;
 use Filament\Forms\Components\Select;
 use Filament\Forms\Components\TextInput;
 use Filament\Forms\Form;
@@ -17,7 +21,6 @@ use Filament\Tables\Actions\BulkActionGroup;
 use Filament\Tables\Columns\TextColumn;
 use Filament\Tables\Table;
 use Illuminate\Database\Eloquent\Builder;
-// use Filament\Tables\Columns\NumberColumn; (not needed)
 use Illuminate\Support\Collection;
 
 class PlaceDistanceResource extends Resource
@@ -36,7 +39,7 @@ class PlaceDistanceResource extends Resource
 
     public static function shouldRegisterNavigation(): bool
     {
-        return false;
+        return true;
     }
 
     public static function form(Form $form): Form
@@ -61,8 +64,10 @@ class PlaceDistanceResource extends Resource
                     ->numeric()
                     ->minValue(0)
                     ->nullable(),
-                TextInput::make('api_source')
-                    ->label('Źródło API')
+                Select::make('api_source')
+                    ->label('Źródło')
+                    ->options(PlaceDistance::sourceLabels() + ['' => 'Brak źródła'])
+                    ->helperText('Przy zapisie ręcznym ustaw „Ręcznie”. Przeliczenie ORS nadpisze źródło automatycznie.')
                     ->nullable(),
             ])
             ->columns(['default' => 1, 'md' => 2]);
@@ -75,7 +80,16 @@ class PlaceDistanceResource extends Resource
                 TextColumn::make('fromPlace.name')->label('Od')->searchable()->sortable(),
                 TextColumn::make('toPlace.name')->label('Do')->searchable()->sortable(),
                 TextColumn::make('distance_km')->label('Odległość (km)')->sortable(),
-                TextColumn::make('api_source')->label('Źródło')->searchable()->sortable(),
+                TextColumn::make('api_source')
+                    ->label('Źródło')
+                    ->badge()
+                    ->formatStateUsing(fn (?string $state): string => PlaceDistance::sourceLabel($state))
+                    ->color(fn (?string $state): string => PlaceDistance::sourceColor($state))
+                    ->searchable()
+                    ->sortable()
+                    ->description(fn (PlaceDistance $record): ?string => $record->isFormulaEstimate()
+                        ? 'Szacunek Haversine — do wymiany na trasę ORS'
+                        : ($record->isOpenRoute() ? 'Rzeczywista trasa drogowa' : null)),
             ])
             ->filters([
                 Tables\Filters\SelectFilter::make('from_place_id')
@@ -87,8 +101,19 @@ class PlaceDistanceResource extends Resource
                     ->options(Place::orderBy('name')->pluck('name', 'id')->toArray()),
 
                 Tables\Filters\SelectFilter::make('api_source')
-                    ->label('Źródło API')
-                    ->options(PlaceDistance::query()->whereNotNull('api_source')->distinct()->pluck('api_source', 'api_source')->filter()->toArray()),
+                    ->label('Źródło')
+                    ->options(PlaceDistance::sourceLabels()),
+
+                Tables\Filters\Filter::make('formula_only')
+                    ->label('Tylko formuła (szacunki)')
+                    ->query(fn (Builder $query) => $query->whereIn('api_source', [
+                        PlaceDistanceRouteService::SOURCE_HAVERSINE,
+                        PlaceDistanceRouteService::SOURCE_SYMMETRIC,
+                    ])),
+
+                Tables\Filters\Filter::make('ors_only')
+                    ->label('Tylko OpenRouteService')
+                    ->query(fn (Builder $query) => $query->where('api_source', PlaceDistanceRouteService::SOURCE_ORS)),
 
                 Tables\Filters\Filter::make('has_distance')
                     ->label('Ma odległość')
@@ -108,7 +133,12 @@ class PlaceDistanceResource extends Resource
                         ->icon('heroicon-o-arrow-path')
                         ->requiresConfirmation()
                         ->action(function (Collection $records) {
-                            $updated = static::recalculateCollection($records, false);
+                            if (! OpenRouteServiceSettings::status()['has_api_key']) {
+                                Notification::make()->title('Brak klucza ORS — ustaw w System → OpenRouteService')->danger()->send();
+
+                                return;
+                            }
+                            $updated = app(PlaceDistanceRouteService::class)->recalculateCollection($records, false);
                             Notification::make()
                                 ->title("Zaktualizowano $updated odległości")
                                 ->success()
@@ -118,8 +148,23 @@ class PlaceDistanceResource extends Resource
                         ->label('Wymuś przeliczenie zaznaczonych')
                         ->icon('heroicon-o-arrow-path')
                         ->requiresConfirmation()
+                        ->modalDescription('Respektuje limity ORS z panelu. Przy dużej liczbie lepiej użyć kolejki.')
                         ->action(function (Collection $records) {
-                            $updated = static::recalculateCollection($records, true);
+                            if (! OpenRouteServiceSettings::status()['has_api_key']) {
+                                Notification::make()->title('Brak klucza ORS — ustaw w System → OpenRouteService')->danger()->send();
+
+                                return;
+                            }
+                            if ($records->count() > 40) {
+                                RecalculatePlaceDistancesJob::dispatch(force: true, estimatesOnly: false);
+                                Notification::make()
+                                    ->title('Zbyt dużo rekordów — uruchomiono kolejkę (brakujące/wszystkie wg joba)')
+                                    ->warning()
+                                    ->send();
+
+                                return;
+                            }
+                            $updated = app(PlaceDistanceRouteService::class)->recalculateCollection($records, true);
                             Notification::make()
                                 ->title("Przeliczono $updated odległości")
                                 ->success()
@@ -136,7 +181,8 @@ class PlaceDistanceResource extends Resource
                         ])
                         ->requiresConfirmation()
                         ->action(function (Collection $records, array $data) {
-                            $count = static::setManualDistance($records, (float) $data['distance_km']);
+                            $count = app(PlaceDistanceRouteService::class)
+                                ->setManualDistance($records, (float) $data['distance_km']);
                             Notification::make()
                                 ->title("Zapisano wartość dla $count rekordów")
                                 ->success()
@@ -144,7 +190,14 @@ class PlaceDistanceResource extends Resource
                         }),
                 ]),
             ])
-            ->defaultSort('distance_km');
+            ->defaultSort('distance_km')
+            ->headerActions([
+                Tables\Actions\Action::make('ors_settings')
+                    ->label('Ustawienia ORS')
+                    ->icon('heroicon-o-cog-6-tooth')
+                    ->url(OpenRouteServiceSettingsPage::getUrl())
+                    ->visible(fn (): bool => OpenRouteServiceSettingsPage::canAccess()),
+            ]);
     }
 
     public static function getPages(): array
@@ -154,88 +207,5 @@ class PlaceDistanceResource extends Resource
             'create' => Pages\CreatePlaceDistance::route('/create'),
             'edit' => Pages\EditPlaceDistance::route('/{record}/edit'),
         ];
-    }
-
-    protected static function recalculateCollection(Collection $records, bool $force = false): int
-    {
-        $apiKey = config('services.openrouteservice.key') ?: '5b3ce3597851110001cf62489885073b636a44e3ac9774af529a3c40';
-        $updated = 0;
-
-        foreach ($records as $record) {
-            if (! $record instanceof PlaceDistance) {
-                $record = PlaceDistance::find($record);
-            }
-
-            if (! $record) {
-                continue;
-            }
-
-            if (! $force && $record->distance_km) {
-                continue;
-            }
-
-            $record->loadMissing(['fromPlace', 'toPlace']);
-            $distance = static::fetchDistance($record->fromPlace, $record->toPlace, $apiKey);
-
-            if ($distance === null) {
-                continue;
-            }
-
-            $record->update([
-                'distance_km' => $distance,
-                'api_source' => 'openrouteservice',
-            ]);
-
-            $updated++;
-        }
-
-        return $updated;
-    }
-
-    protected static function setManualDistance(Collection $records, float $value): int
-    {
-        $count = 0;
-
-        foreach ($records as $record) {
-            if (! $record instanceof PlaceDistance) {
-                $record = PlaceDistance::find($record);
-            }
-
-            if (! $record) {
-                continue;
-            }
-
-            $record->update([
-                'distance_km' => $value,
-                'api_source' => 'manual',
-            ]);
-
-            $count++;
-        }
-
-        return $count;
-    }
-
-    public static function fetchDistance(?Place $from, ?Place $to, string $apiKey): ?float
-    {
-        if (! $from || ! $to || ! $from->latitude || ! $from->longitude || ! $to->latitude || ! $to->longitude) {
-            return null;
-        }
-
-        $url = 'https://api.openrouteservice.org/v2/directions/driving-car?api_key='.$apiKey
-            .'&start='.$from->longitude.','.$from->latitude
-            .'&end='.$to->longitude.','.$to->latitude;
-
-        try {
-            $response = file_get_contents($url);
-            $data = json_decode($response, true);
-            if (isset($data['features'][0]['properties']['segments'][0]['distance'])) {
-                return round($data['features'][0]['properties']['segments'][0]['distance'] / 1000, 2);
-            }
-        } catch (\Throwable $e) {
-            return null;
-        }
-
-        return null;
     }
 }

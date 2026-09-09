@@ -643,6 +643,44 @@ class EventHotelPlanTest extends TestCase
         $this->assertSame(1500.0, app(EventHotelPlanService::class)->totalPlnForEvent($event->fresh()));
     }
 
+    public function test_per_person_basis_resolves_people_count_from_catalog_room_when_line_null(): void
+    {
+        $event = Event::factory()->create(['duration_days' => 2]);
+        $room = HotelRoom::create([
+            'name' => 'Triple Catalog',
+            'people_count' => 3,
+            'price' => 210,
+            'currency' => 'PLN',
+            'convert_to_pln' => true,
+        ]);
+
+        $stay = EventHotelStay::create(['event_id' => $event->id, 'day' => 1]);
+        $stay->roomLines()->create([
+            'hotel_room_id' => $room->id,
+            'role' => 'qty',
+            'quantity' => 10,
+            'people_count' => null,
+            'unit_price' => 40,
+            'price_basis' => EventHotelRoomLine::PRICE_BASIS_PER_PERSON,
+            'convert_to_pln' => true,
+            'order' => 0,
+        ]);
+
+        // 10 pokoi × 40 zł/os. × 3 os. z katalogu = 1200 (bez fallbacku byłoby 400).
+        $this->assertEqualsWithDelta(
+            1200.0,
+            app(EventHotelPlanService::class)->totalPlnForEvent($event->fresh()),
+            0.01,
+        );
+
+        $payload = app(EventHotelPlanService::class)->staysToPayload($event->fresh())[0];
+        $this->assertEqualsWithDelta(
+            1200.0,
+            \App\Support\EventHotelPlanFormatting::stayTotalPln($payload, 'lines'),
+            0.01,
+        );
+    }
+
     public function test_per_room_price_basis_is_default_and_uses_quantity_only(): void
     {
         $event = Event::factory()->create(['duration_days' => 1]);
@@ -977,5 +1015,158 @@ class EventHotelPlanTest extends TestCase
             ->call('goToStep', 2)
             ->assertSee('Wróć do struktury pokoi')
             ->assertSee('Zapisz');
+    }
+
+    public function test_clearing_hotel_is_not_restored_from_program_point(): void
+    {
+        $user = User::factory()->create();
+        Role::firstOrCreate(['name' => 'admin', 'guard_name' => 'web']);
+        $user->assignRole('admin');
+        $this->actingAs($user);
+
+        $event = Event::factory()->create(['duration_days' => 2]);
+        $contractor = Contractor::create(['name' => 'Hotel Do Usunięcia', 'status' => 'active']);
+        $type = \App\Models\ContractorType::query()->firstOrCreate(['name' => 'hotel']);
+        $contractor->types()->sync([$type->id]);
+
+        $hotelPoint = \App\Models\EventProgramPoint::factory()->create([
+            'event_id' => $event->id,
+            'day' => 1,
+            'order' => 1,
+            'name' => 'Nocleg',
+            'is_hotel' => true,
+            'contractor_id' => $contractor->id,
+        ]);
+
+        $stay = EventHotelStay::create([
+            'event_id' => $event->id,
+            'day' => 1,
+            'contractor_id' => $contractor->id,
+            'event_program_point_id' => $hotelPoint->id,
+        ]);
+
+        Livewire::test(\App\Livewire\EventHotelPlanEditor::class, ['eventId' => $event->id])
+            ->call('clearHotelSelection')
+            ->assertHasNoErrors()
+            ->assertSee('Wyszukaj hotel po nazwie');
+
+        $stay->refresh();
+        $hotelPoint->refresh();
+
+        $this->assertNull($stay->contractor_id);
+        $this->assertNull($hotelPoint->contractor_id);
+        $this->assertSame($hotelPoint->id, (int) $stay->event_program_point_id);
+    }
+
+    public function test_copy_to_selected_days_uses_user_selection_not_day_one(): void
+    {
+        $user = User::factory()->create();
+        Role::firstOrCreate(['name' => 'admin', 'guard_name' => 'web']);
+        $user->assignRole('admin');
+        $this->actingAs($user);
+
+        $event = Event::factory()->create(['duration_days' => 4, 'participant_count' => 10]);
+
+        $roomA = HotelRoom::create([
+            'name' => 'Twin A',
+            'people_count' => 2,
+            'price' => 100,
+            'currency' => 'PLN',
+            'convert_to_pln' => true,
+        ]);
+        $roomB = HotelRoom::create([
+            'name' => 'Triple B',
+            'people_count' => 3,
+            'price' => 200,
+            'currency' => 'PLN',
+            'convert_to_pln' => true,
+        ]);
+
+        $stay1 = EventHotelStay::create(['event_id' => $event->id, 'day' => 1]);
+        $stay1->roomLines()->create([
+            'hotel_room_id' => $roomA->id,
+            'role' => 'qty',
+            'quantity' => 1,
+            'unit_price' => 100,
+            'convert_to_pln' => true,
+            'order' => 0,
+        ]);
+
+        $stay2 = EventHotelStay::create(['event_id' => $event->id, 'day' => 2]);
+        $stay2->roomLines()->create([
+            'hotel_room_id' => $roomB->id,
+            'role' => 'qty',
+            'quantity' => 4,
+            'unit_price' => 200,
+            'convert_to_pln' => true,
+            'order' => 0,
+        ]);
+
+        $stay3 = EventHotelStay::create(['event_id' => $event->id, 'day' => 3]);
+
+        Livewire::test(\App\Livewire\EventHotelPlanEditor::class, ['eventId' => $event->id])
+            ->set('copySourceDay', 2)
+            ->set('copyTargetDays', [3])
+            ->call('copyToSelectedDays')
+            ->assertHasNoErrors()
+            ->assertSet('copySourceDay', 2)
+            ->assertSet('copyTargetDays', [3]);
+
+        $stay3->refresh()->load('roomLines');
+        $this->assertCount(1, $stay3->roomLines);
+        $this->assertSame($roomB->id, (int) $stay3->roomLines->first()->hotel_room_id);
+        $this->assertSame(4, (int) $stay3->roomLines->first()->quantity);
+
+        $stay1->refresh()->load('roomLines');
+        $this->assertSame($roomA->id, (int) $stay1->roomLines->first()->hotel_room_id);
+        $this->assertSame(1, (int) $stay1->roomLines->first()->quantity);
+    }
+
+    public function test_ensure_stays_does_not_refill_intentionally_empty_night_from_template(): void
+    {
+        $place = Place::create(['name' => 'Kraków']);
+        $template = EventTemplate::factory()->create([
+            'name' => 'Szablon z hotelami',
+            'duration_days' => 3,
+            'start_place_id' => $place->id,
+        ]);
+
+        $catalogRoom = HotelRoom::create([
+            'name' => 'Katalogowy Twin',
+            'people_count' => 2,
+            'price' => 180,
+            'currency' => 'PLN',
+            'convert_to_pln' => true,
+        ]);
+
+        EventTemplateHotelDay::create([
+            'event_template_id' => $template->id,
+            'day' => 1,
+            'hotel_room_ids_qty' => [$catalogRoom->id],
+            'hotel_room_ids_gratis' => [],
+            'hotel_room_ids_staff' => [],
+            'hotel_room_ids_driver' => [],
+        ]);
+        EventTemplateHotelDay::create([
+            'event_template_id' => $template->id,
+            'day' => 2,
+            'hotel_room_ids_qty' => [$catalogRoom->id],
+            'hotel_room_ids_gratis' => [],
+            'hotel_room_ids_staff' => [],
+            'hotel_room_ids_driver' => [],
+        ]);
+
+        $event = Event::factory()->create([
+            'event_template_id' => $template->id,
+            'duration_days' => 3,
+            'participant_count' => 20,
+        ]);
+
+        EventHotelStay::create(['event_id' => $event->id, 'day' => 1]);
+        $emptyCoachNight = EventHotelStay::create(['event_id' => $event->id, 'day' => 2]);
+
+        app(EventHotelPlanService::class)->ensureStaysForEvent($event->fresh());
+
+        $this->assertSame(0, $emptyCoachNight->fresh()->roomLines()->count());
     }
 }

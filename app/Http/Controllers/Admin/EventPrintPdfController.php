@@ -190,7 +190,7 @@ class EventPrintPdfController extends Controller
             'creator',
             'contractor',
             'transportContractor',
-            'activeSettlement.documents',
+            'activeSettlement.documents.currency',
             'documents',
             'packageDocuments',
             'hotelProgramPoints.contractor',
@@ -199,6 +199,7 @@ class EventPrintPdfController extends Controller
             'programPoints' => fn ($query) => $query->with(['templatePoint', 'contractor', 'contractorLocation'])->orderBy('day')->orderBy('order'),
             'agreements',
             'qtyVariants',
+            'insurancePolicies',
         ]);
     }
 

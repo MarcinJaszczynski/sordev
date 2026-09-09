@@ -461,15 +461,21 @@ trait InteractsWithSettlementCostDrawer
         $cost = EventSettlementCost::query()->findOrFail($this->selectedCostId);
         $files = [];
         foreach ($this->documentFiles as $file) {
-            if ($file instanceof TemporaryUploadedFile) {
-                $files[] = new \Illuminate\Http\UploadedFile(
-                    $file->getRealPath(),
-                    $file->getClientOriginalName(),
-                    $file->getMimeType(),
-                    null,
-                    true,
-                );
+            // TemporaryUploadedFile extends UploadedFile — przekazuj bez owijania przez getRealPath()
+            // (na serwerze temp Livewire jest na dysku public i RealPath bywa zawodny).
+            if ($file instanceof TemporaryUploadedFile || $file instanceof \Illuminate\Http\UploadedFile) {
+                $files[] = $file;
             }
+        }
+
+        if ($files === []) {
+            Notification::make()
+                ->title('Nie udało się dodać dokumentu')
+                ->body('Nie odczytano wgranych plików. Wgraj je ponownie i zapisz.')
+                ->danger()
+                ->send();
+
+            return;
         }
 
         try {

@@ -89,6 +89,89 @@ class PilotContractorAssignmentTest extends TestCase
         $this->assertSame($pilotUser->getKey(), $event->assigned_to);
     }
 
+    public function test_assign_action_keeps_existing_assigned_to_when_contractor_has_no_portal_user(): void
+    {
+        Role::findOrCreate('pilot');
+
+        $existingUser = User::factory()->create([
+            'email' => 'existing.pilot@example.test',
+            'name' => 'Existing Pilot',
+        ]);
+        $existingUser->assignRole('pilot');
+
+        $pilotType = ContractorType::query()->firstOrCreate(['name' => 'pilot']);
+        ContractorType::clearIdsForNamesCache();
+
+        $contractor = Contractor::create([
+            'name' => 'Contractor Only',
+            'email' => 'contractor.only@example.test',
+            'status' => 'active',
+        ]);
+        $contractor->types()->sync([$pilotType->getKey()]);
+
+        $event = Event::factory()->create([
+            'assigned_to' => $existingUser->getKey(),
+            'pilot_contractor_id' => null,
+        ]);
+
+        app(AssignEventPilotAction::class)(new AssignEventPilotData(
+            event: $event,
+            assignedTo: null,
+            pilotContractorId: $contractor->getKey(),
+        ));
+
+        $event->refresh();
+
+        $this->assertSame($contractor->getKey(), $event->pilot_contractor_id);
+        $this->assertSame($existingUser->getKey(), $event->assigned_to);
+    }
+
+    public function test_contractor_only_pilot_counts_as_assigned_for_readiness_and_advance(): void
+    {
+        $pilotType = ContractorType::query()->firstOrCreate(['name' => 'pilot']);
+        ContractorType::clearIdsForNamesCache();
+
+        $contractor = Contractor::create([
+            'name' => 'Only Contractor',
+            'email' => 'only.contractor@example.test',
+            'status' => 'active',
+        ]);
+        $contractor->types()->sync([$pilotType->getKey()]);
+
+        $event = Event::factory()->create([
+            'assigned_to' => null,
+            'pilot_contractor_id' => $contractor->getKey(),
+            'pilot_funds_paid' => false,
+            'pilot_advance_planned_amount' => 500,
+        ]);
+
+        $assignment = app(PilotContractorAssignmentService::class);
+
+        $this->assertTrue($assignment->eventHasAssignedPilot($event));
+        $this->assertFalse($assignment->eventHasPortalAccount($event));
+
+        $item = collect(\App\Support\EventReadinessIndicators::forEvent($event->fresh()))
+            ->firstWhere('key', 'pilot_funds');
+
+        $this->assertNotNull($item);
+        $this->assertNotSame('Brak przypisanego pilota', $item['title']);
+        $this->assertSame('warn', $item['tone']);
+
+        $pln = \App\Models\Currency::query()->create([
+            'name' => 'PLN',
+            'code' => 'PLN',
+            'symbol' => 'PLN',
+            'exchange_rate' => 1,
+        ]);
+
+        $approved = app(\App\Services\PilotAdvanceService::class)->approvePayment(
+            $event,
+            paidLines: [['amount' => 500, 'currency_id' => $pln->id]],
+        );
+
+        $this->assertTrue((bool) $approved->pilot_funds_paid);
+    }
+
     public function test_resolve_contractor_id_from_legacy_assigned_user(): void
     {
         $pilotType = ContractorType::query()->firstOrCreate(['name' => 'pilot']);

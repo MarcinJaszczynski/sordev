@@ -132,9 +132,14 @@ class EventCostCalculator
             }
         }
 
-        // 2) Nocleg z planu hotelowego (PLN + waluty obce bez konwersji).
+        // 2) Nocleg z planu hotelowego (PLN + waluty obce bez konwersji) — per wariant qty.
         $hotelTotals = $hasHotelPlan
-            ? app(EventHotelPlanService::class)->totalsByCurrencyForEvent($this->event)
+            ? app(EventHotelPlanService::class)->totalsByCurrencyForVariant($this->event, [
+                'qty' => $payingCount,
+                'gratis' => $gratis,
+                'staff' => $staff,
+                'driver' => $driver,
+            ])
             : [];
         $hotelPlanTotal = round((float) ($hotelTotals['PLN'] ?? 0), 2);
         if ($hasHotelPlan && $hotelPlanTotal > 0) {

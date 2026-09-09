@@ -801,6 +801,11 @@ class Event extends Model
         return $this->belongsTo(Contractor::class, 'pilot_contractor_id');
     }
 
+    public function pilotAgreement(): HasOne
+    {
+        return $this->hasOne(EventPilotAgreement::class);
+    }
+
     /**
      * Forma rozliczenia pilota na imprezie — override albo domyślna z karty kontrahenta.
      */

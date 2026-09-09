@@ -400,8 +400,18 @@ class NotificationService
     {
         $orderColumn = $type === 'new_event' ? 'created_at' : 'updated_at';
 
-        return static::eventQueryForUser($user)
-            ->where('status', $status)
+        $query = static::eventQueryForUser($user)
+            ->where('status', $status);
+
+        // „Nowa impreza” tylko gdy przy create zaznaczono „Powiadom biuro” (task event-inquiry)
+        // albo zapytanie przyszło z WWW (też tworzy ten fingerprint).
+        if ($type === 'new_event' && $status === Event::STATUS_INQUIRY) {
+            $query->whereHas('tasks', function ($taskQuery) {
+                $taskQuery->where('description', 'like', '%event-inquiry:%');
+            });
+        }
+
+        return $query
             ->orderByDesc($orderColumn)
             ->limit($queryLimit)
             ->get()

@@ -49,7 +49,7 @@
                     </a>
                 @elseif ($this->canPreviewPortal())
                     <span class="inline-flex items-center gap-2 rounded-lg border border-dashed border-gray-300 px-3 py-2 text-sm text-gray-500 dark:border-gray-600 dark:text-gray-400"
-                          title="Najpierw przypisz pilota">
+                          title="{{ $this->previewDisabledTitle() }}">
                         Podgląd jako pilot
                     </span>
                 @endif
@@ -74,7 +74,7 @@
 
         @if ($this->assignPilotHintVisible())
             <p class="mt-2 text-xs text-amber-700 dark:text-amber-300">
-                Przypisz pilota, aby udostępnić wycieczkę i otworzyć podgląd jego panelu.
+                {{ $this->assignPilotHintMessage() }}
             </p>
         @endif
     @endif

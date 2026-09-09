@@ -110,10 +110,12 @@ final class EventFinanceOverviewService
         $sortBy = in_array($sortBy, self::$sortableColumns, true) ? $sortBy : self::SORT_NAME;
         $sortDir = $sortDir === 'desc' ? 'desc' : 'asc';
 
-        // Wersja cache: settlement + ostatnia zmiana kosztu (paid_by też bumpuje updated_at pozycji).
+        // Wersja cache: settlement + koszty + dokumenty (attach dokumentu nie bumpuje costs.updated_at).
         $costsStamp = $settlement->costs()->max('updated_at');
+        $documentsStamp = $settlement->documents()->max('updated_at');
+        $documentsMaxId = (int) ($settlement->documents()->max('id') ?? 0);
         $cacheKey = sprintf(
-            'event-finance-overview:%d:%s:%s:%d:%s:%s:%s:%s:%s',
+            'event-finance-overview:%d:%s:%s:%d:%s:%s:%s:%s:%s:%s:%d',
             (int) $event->id,
             $filter,
             is_scalar($groupFilter) ? (string) $groupFilter : 'null',
@@ -123,6 +125,8 @@ final class EventFinanceOverviewService
             $sortDir,
             (string) ($settlement->updated_at?->timestamp ?? $settlement->id),
             $costsStamp ? (string) strtotime((string) $costsStamp) : '0',
+            $documentsStamp ? (string) strtotime((string) $documentsStamp) : '0',
+            $documentsMaxId,
         );
 
         return \Illuminate\Support\Facades\Cache::remember($cacheKey, 45, function () use ($event, $settlement, $filter, $groupFilter, $hideZero, $searchKey, $sortBy, $sortDir): array {
@@ -134,13 +138,30 @@ final class EventFinanceOverviewService
     {
         // Klucz cache zawiera settlement.updated_at — MySQL DATETIME ma precyzję do sekundy,
         // więc zwykły touch() w tej samej sekundzie nie zmienia klucza (stale hit po usunięciu dok.).
-        $settlement = EventSettlement::query()->where('event_id', $eventId)->orderByDesc('id')->first();
-        if (! $settlement) {
+        // Bumpuj aktywne rozliczenie (draft/active/pilot_settled), nie „najnowsze po id”
+        // — zamknięte settlement z wyższym id nie może zostawić stale cache drawera.
+        $settlements = EventSettlement::query()
+            ->where('event_id', $eventId)
+            ->whereIn('status', ['draft', 'active', 'pilot_settled'])
+            ->orderByDesc('id')
+            ->get();
+
+        if ($settlements->isEmpty()) {
+            $settlements = EventSettlement::query()
+                ->where('event_id', $eventId)
+                ->orderByDesc('id')
+                ->limit(1)
+                ->get();
+        }
+
+        if ($settlements->isEmpty()) {
             return;
         }
 
         $bump = now()->addSecond();
-        $settlement->forceFill(['updated_at' => $bump])->saveQuietly();
+        foreach ($settlements as $settlement) {
+            $settlement->forceFill(['updated_at' => $bump])->saveQuietly();
+        }
     }
 
     /**

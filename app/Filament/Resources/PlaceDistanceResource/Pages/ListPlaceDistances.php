@@ -2,10 +2,14 @@
 
 namespace App\Filament\Resources\PlaceDistanceResource\Pages;
 
+use App\Filament\Pages\OpenRouteServiceSettingsPage;
 use App\Filament\Resources\PlaceDistanceResource;
+use App\Jobs\RecalculatePlaceDistancesJob;
 use App\Models\Place;
 use App\Models\PlaceDistance;
 use App\Services\PlaceDistanceGenerator;
+use App\Services\PlaceDistanceRouteService;
+use App\Support\OpenRouteServiceSettings;
 use Filament\Forms\Components\TextInput;
 use Filament\Notifications\Notification;
 use Filament\Resources\Pages\ListRecords;
@@ -21,10 +25,16 @@ class ListPlaceDistances extends ListRecords
     {
         return [
             \Filament\Actions\CreateAction::make(),
+            \Filament\Actions\Action::make('orsSettings')
+                ->label('OpenRouteService')
+                ->icon('heroicon-o-cog-6-tooth')
+                ->url(OpenRouteServiceSettingsPage::getUrl())
+                ->visible(fn (): bool => OpenRouteServiceSettingsPage::canAccess()),
             \Filament\Actions\Action::make('fillAllowedMissingDistances')
-                ->label('Uzupełnij brakujące (startowe)')
+                ->label('Uzupełnij brakujące (formuła)')
                 ->icon('heroicon-o-sparkles')
                 ->requiresConfirmation()
+                ->modalDescription('Dodaje brakujące pary jako szacunek Haversine (Formuła). Potem możesz je wymienić na ORS.')
                 ->action('fillAllowedMissingDistances'),
             \Filament\Actions\Action::make('pruneNonStartingPairs')
                 ->label('Usuń pary nie-start/nie-start')
@@ -32,11 +42,34 @@ class ListPlaceDistances extends ListRecords
                 ->color('danger')
                 ->requiresConfirmation()
                 ->action('pruneNonStartingPairs'),
-            \Filament\Actions\Action::make('updateDistances')
-                ->label('Aktualizuj odległości z API')
+            \Filament\Actions\Action::make('queueMissingOrs')
+                ->label('Kolejka: brakujące → ORS')
                 ->icon('heroicon-o-arrow-path')
-                ->action('updateDistances'),
+                ->requiresConfirmation()
+                ->modalHeading('Uzupełnij brakujące trasami drogowymi')
+                ->modalDescription('Job w kolejce respektuje limity z System → OpenRouteService.')
+                ->action('queueMissingOrs'),
+            \Filament\Actions\Action::make('queueEstimatesOrs')
+                ->label('Kolejka: formuła → ORS')
+                ->icon('heroicon-o-map')
+                ->color('warning')
+                ->requiresConfirmation()
+                ->modalHeading('Nadpisz szacunki Haversine trasami ORS')
+                ->modalDescription('Zmieni źródło z „Formuła” na „OpenRouteService (trasa)”. Respektuje limity dzienne/minutowe.')
+                ->action('queueEstimatesOrs'),
         ];
+    }
+
+    public function getSubheading(): ?string
+    {
+        $usage = app(PlaceDistanceRouteService::class)->usageSnapshot();
+        $formula = (int) PlaceDistance::query()->whereIn('api_source', [
+            PlaceDistanceRouteService::SOURCE_HAVERSINE,
+            PlaceDistanceRouteService::SOURCE_SYMMETRIC,
+        ])->count();
+        $ors = (int) PlaceDistance::query()->where('api_source', PlaceDistanceRouteService::SOURCE_ORS)->count();
+
+        return "Źródła: formuła {$formula} · ORS {$ors} · dziś API {$usage['daily_used']}/{$usage['daily_limit']}";
     }
 
     public function fillAllowedMissingDistances(): void
@@ -51,14 +84,14 @@ class ListPlaceDistances extends ListRecords
 
         $after = PlaceDistance::count();
         $added = max(0, $after - $before);
-        Notification::make()->title("Uzupełniono brakujące odległości (startowe). Dodano: {$added}.")->success()->send();
+        Notification::make()
+            ->title("Uzupełniono brakujące (formuła Haversine). Dodano: {$added}.")
+            ->success()
+            ->send();
     }
 
     public function pruneNonStartingPairs(): void
     {
-        // Delete distances where both endpoints are NOT starting places.
-        // NOTE: Avoid pluck()->whereIn() here - SQLite has a low bind parameter limit and will throw
-        // "too many SQL variables" for large datasets.
         $query = PlaceDistance::query()
             ->whereHas('fromPlace', fn ($q) => $q->where('starting_place', false))
             ->whereHas('toPlace', fn ($q) => $q->where('starting_place', false));
@@ -78,57 +111,35 @@ class ListPlaceDistances extends ListRecords
 
     protected function getTableBulkActions(): array
     {
+        $routes = app(PlaceDistanceRouteService::class);
+
         return [
             BulkActionGroup::make([
                 BulkAction::make('recalculateSelected')
                     ->label('Przelicz zaznaczone (brakujące)')
                     ->icon('heroicon-o-arrow-path')
                     ->requiresConfirmation()
-                    ->action(function (Collection $records) {
-                        $apiKey = config('services.openrouteservice.key') ?: '5b3ce3597851110001cf62489885073b636a44e3ac9774af529a3c40';
-                        $updated = 0;
-                        foreach ($records as $pd) {
-                            if (! $pd instanceof PlaceDistance) {
-                                $pd = PlaceDistance::find($pd);
-                            }
-                            if (! $pd || $pd->distance_km) {
-                                continue;
-                            }
-                            $distance = $this->fetchDistance($pd->fromPlace, $pd->toPlace, $apiKey);
-                            if ($distance !== null) {
-                                $pd->update([
-                                    'distance_km' => $distance,
-                                    'api_source' => 'openrouteservice',
-                                ]);
-                                $updated++;
-                            }
+                    ->action(function (Collection $records) use ($routes) {
+                        if (! OpenRouteServiceSettings::status()['has_api_key']) {
+                            Notification::make()->title('Brak klucza ORS')->danger()->send();
+
+                            return;
                         }
+                        $updated = $routes->recalculateCollection($records, false);
                         Notification::make()->title("Zaktualizowano $updated odległości.")->success()->send();
                     }),
 
                 BulkAction::make('forceRecalculateSelected')
                     ->label('Wymuś przeliczenie zaznaczonych')
-                    ->icon('heroicon-o-refresh')
+                    ->icon('heroicon-o-arrow-path')
                     ->requiresConfirmation()
-                    ->action(function (Collection $records) {
-                        $apiKey = config('services.openrouteservice.key') ?: '5b3ce3597851110001cf62489885073b636a44e3ac9774af529a3c40';
-                        $updated = 0;
-                        foreach ($records as $pd) {
-                            if (! $pd instanceof PlaceDistance) {
-                                $pd = PlaceDistance::find($pd);
-                            }
-                            if (! $pd) {
-                                continue;
-                            }
-                            $distance = $this->fetchDistance($pd->fromPlace, $pd->toPlace, $apiKey);
-                            if ($distance !== null) {
-                                $pd->update([
-                                    'distance_km' => $distance,
-                                    'api_source' => 'openrouteservice',
-                                ]);
-                                $updated++;
-                            }
+                    ->action(function (Collection $records) use ($routes) {
+                        if (! OpenRouteServiceSettings::status()['has_api_key']) {
+                            Notification::make()->title('Brak klucza ORS')->danger()->send();
+
+                            return;
                         }
+                        $updated = $routes->recalculateCollection($records, true);
                         Notification::make()->title("Przeliczono $updated odległości.")->success()->send();
                     }),
 
@@ -142,81 +153,43 @@ class ListPlaceDistances extends ListRecords
                             ->required(),
                     ])
                     ->requiresConfirmation()
-                    ->action(function (Collection $records, array $data) {
-                        $val = $data['distance_km'] ?? null;
-                        $count = 0;
-                        foreach ($records as $pd) {
-                            if (! $pd instanceof PlaceDistance) {
-                                $pd = PlaceDistance::find($pd);
-                            }
-                            if (! $pd) {
-                                continue;
-                            }
-                            $pd->update([
-                                'distance_km' => $val,
-                                'api_source' => 'manual',
-                            ]);
-                            $count++;
-                        }
+                    ->action(function (Collection $records, array $data) use ($routes) {
+                        $count = $routes->setManualDistance($records, (float) ($data['distance_km'] ?? 0));
                         Notification::make()->title("Zaktualizowano $count rekordów.")->success()->send();
                     }),
             ]),
         ];
     }
 
-    public function updateDistances()
+    public function queueMissingOrs(): void
     {
-        $apiKey = '5b3ce3597851110001cf62489885073b636a44e3ac9774af529a3c40';
-        $places = \App\Models\Place::all();
-        foreach ($places as $from) {
-            foreach ($places as $to) {
-                if ($from->id === $to->id) {
-                    continue;
-                }
+        if (! OpenRouteServiceSettings::status()['has_api_key']) {
+            Notification::make()
+                ->title('Brak klucza ORS')
+                ->body('Ustaw klucz w System → OpenRouteService')
+                ->danger()
+                ->send();
 
-                // NEW RULE: compute only for pairs where at least one side is a starting place
-                if (! $from->starting_place && ! $to->starting_place) {
-                    continue;
-                }
-
-                $existing = \App\Models\PlaceDistance::where('from_place_id', $from->id)->where('to_place_id', $to->id)->first();
-                if ($existing && $existing->distance_km) {
-                    continue;
-                }
-                $distance = $this->fetchDistance($from, $to, $apiKey);
-                if ($distance !== null) {
-                    \App\Models\PlaceDistance::updateOrCreate([
-                        'from_place_id' => $from->id,
-                        'to_place_id' => $to->id,
-                    ], [
-                        'distance_km' => $distance,
-                        'api_source' => 'openrouteservice',
-                    ]);
-                }
-            }
+            return;
         }
-        \Filament\Notifications\Notification::make()
-            ->title('Odległości zostały zaktualizowane z API.')
-            ->success()
-            ->send();
+
+        RecalculatePlaceDistancesJob::dispatch(force: false, estimatesOnly: false);
+        Notification::make()->title('Dodano job: brakujące → ORS')->success()->send();
     }
 
-    protected function fetchDistance($from, $to, $apiKey)
+    public function queueEstimatesOrs(): void
     {
-        if (! $from->latitude || ! $from->longitude || ! $to->latitude || ! $to->longitude) {
-            return null;
-        }
-        $url = 'https://api.openrouteservice.org/v2/directions/driving-car?api_key='.$apiKey.'&start='.$from->longitude.','.$from->latitude.'&end='.$to->longitude.','.$to->latitude;
-        try {
-            $response = file_get_contents($url);
-            $data = json_decode($response, true);
-            if (isset($data['features'][0]['properties']['segments'][0]['distance'])) {
-                return round($data['features'][0]['properties']['segments'][0]['distance'] / 1000, 2);
-            }
-        } catch (\Exception $e) {
-            return null;
+        if (! OpenRouteServiceSettings::status()['has_api_key']) {
+            Notification::make()
+                ->title('Brak klucza ORS')
+                ->body('Ustaw klucz w System → OpenRouteService')
+                ->danger()
+                ->send();
+
+            return;
         }
 
-        return null;
+        RecalculatePlaceDistancesJob::dispatch(force: true, estimatesOnly: true);
+        Notification::make()->title('Dodano job: formuła → ORS')->success()->send();
     }
 }

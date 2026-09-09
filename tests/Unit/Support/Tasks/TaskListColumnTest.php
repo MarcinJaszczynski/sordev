@@ -31,6 +31,17 @@ class TaskListColumnTest extends TestCase
         $this->assertSame("Pierwsza linia\nDruga linia", TaskListColumn::sanitizeTaskText($text, 512));
     }
 
+    public function test_description_html_for_tooltip_keeps_formatting_and_strips_unsafe_tags(): void
+    {
+        $html = '<p><strong>Pilne</strong> zadanie</p><script>alert(1)</script><p>[payment-reminder:x:1:y]</p>';
+
+        $clean = TaskListColumn::descriptionHtmlForTooltip($html);
+
+        $this->assertStringContainsString('<strong>Pilne</strong>', $clean);
+        $this->assertStringNotContainsString('<script>', $clean);
+        $this->assertStringNotContainsString('[payment-reminder:', $clean);
+    }
+
     public function test_author_label_returns_system_for_system_tasks(): void
     {
         $task = Task::factory()->create([

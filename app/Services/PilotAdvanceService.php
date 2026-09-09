@@ -81,7 +81,7 @@ class PilotAdvanceService
             return $event;
         }
 
-        if (! $event->assigned_to) {
+        if (! app(PilotContractorAssignmentService::class)->eventHasAssignedPilot($event)) {
             throw new \InvalidArgumentException('Przypisz pilota do imprezy przed wypłatą zaliczki.');
         }
 
@@ -190,7 +190,7 @@ class PilotAdvanceService
      */
     public function recordOfficeCashPayout(Event $event, array $data): Event
     {
-        if (! $event->assigned_to) {
+        if (! app(PilotContractorAssignmentService::class)->eventHasAssignedPilot($event)) {
             throw new \InvalidArgumentException('Przypisz pilota do imprezy przed wypłatą gotówki.');
         }
 

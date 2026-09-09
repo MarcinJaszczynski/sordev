@@ -48,4 +48,13 @@ return [
         'seller_tax_no' => env('FAKTUROWNIA_SELLER_TAX_NO', env('INVOICES_AGENCY_NIP')),
     ],
 
+    // OpenRouteService — geokodowanie i odległości drogowe między miejscami
+    // Klucz można też podać w panelu: System → OpenRouteService (ma pierwszeństwo).
+    'openrouteservice' => [
+        'key' => env('OPENROUTESERVICE_API_KEY'),
+        'requests_per_minute' => (int) env('OPENROUTESERVICE_REQUESTS_PER_MINUTE', 35),
+        'daily_limit' => (int) env('OPENROUTESERVICE_DAILY_LIMIT', 2000),
+        'min_interval_ms' => (int) env('OPENROUTESERVICE_MIN_INTERVAL_MS', 1700),
+    ],
+
 ];

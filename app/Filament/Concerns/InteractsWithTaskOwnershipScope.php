@@ -229,6 +229,18 @@ trait InteractsWithTaskOwnershipScope
             && in_array($saved['sourceFilter'], TaskQueryFilters::SOURCE_FILTERS, true)) {
             $this->sourceFilter = $saved['sourceFilter'];
         }
+
+        $this->applyRestoredExtraTaskQuickFilters($saved);
+    }
+
+    /**
+     * Hook na dodatkowe pola (np. listSort w split-view).
+     *
+     * @param  array<string, mixed>  $saved
+     */
+    protected function applyRestoredExtraTaskQuickFilters(array $saved): void
+    {
+        //
     }
 
     /**

@@ -1,0 +1,38 @@
+/* resources/css/filament/admin/theme.css
+   Tokeny wizualne strony "Zadania" — spójne z mockupem.
+   Podpiąć w panelu: ->viteTheme('resources/css/filament/admin/theme.css')
+*/
+
+@import '../../../../vendor/filament/filament/resources/css/theme.css';
+
+@config 'tailwind.config.js';
+
+:root {
+    --task-accent: #1C4E80;
+    --task-accent-soft: #E8F0FA;
+
+    --task-status-todo: #B45309;
+    --task-status-todo-bg: #FDF3E2;
+
+    --task-status-progress: #2563EB;
+    --task-status-progress-bg: #EAF1FE;
+
+    --task-status-done: #15803D;
+    --task-status-done-bg: #E9F7EF;
+
+    --task-status-cancel: #B42318;
+    --task-status-cancel-bg: #FDECEA;
+}
+
+/* Nadpisanie koloru primary Filamenta, żeby przyciski/linki
+   w panelu spójnie łączyły się z akcentem zadań. */
+.fi-btn-color-primary {
+    --c-400: var(--task-accent);
+    --c-500: var(--task-accent);
+    --c-600: var(--task-accent);
+}
+
+/* Delikatniejszy separator w widoku dyskusji, niż domyślny hairline Filamenta. */
+.task-thread-divider {
+    border-color: theme('colors.gray.200');
+}

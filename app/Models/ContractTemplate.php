@@ -38,6 +38,8 @@ class ContractTemplate extends Model
 
     public const APPLIES_CUSTOM = 'custom';
 
+    public const APPLIES_PILOT = 'pilot';
+
     /**
      * @var array<string, string>
      */
@@ -46,6 +48,7 @@ class ContractTemplate extends Model
         self::APPLIES_INDIVIDUAL => 'Indywidualna',
         self::APPLIES_ANNEX => 'Aneks',
         self::APPLIES_CUSTOM => 'Umowa własna (z szablonu)',
+        self::APPLIES_PILOT => 'Pilot (umowa o dzieło)',
     ];
 
     /**
@@ -177,6 +180,26 @@ class ContractTemplate extends Model
 
         return $query->get()
             ->filter(fn (self $template): bool => $template->appliesToType($agreementType, $isAnnex))
+            ->mapWithKeys(fn (self $template): array => [$template->id => $template->displayLabel()])
+            ->all();
+    }
+
+    /**
+     * Opcje selecta: wyłącznie szablony oznaczone applies_to = pilot.
+     *
+     * @return array<int, string>
+     */
+    public static function optionsForPilotSelect(bool $onlyActive = true): array
+    {
+        $query = static::query()->orderBy('name')->orderByDesc('version');
+
+        if ($onlyActive) {
+            $query->active();
+        }
+
+        return $query->get()
+            ->filter(fn (self $template): bool => is_array($template->applies_to)
+                && in_array(self::APPLIES_PILOT, $template->applies_to, true))
             ->mapWithKeys(fn (self $template): array => [$template->id => $template->displayLabel()])
             ->all();
     }

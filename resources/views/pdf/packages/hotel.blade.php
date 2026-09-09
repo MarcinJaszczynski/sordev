@@ -394,6 +394,23 @@
 
     @include('pdf.packages._package_overrides_intro')
 
+    {{-- Skrócony harmonogram przyjazdu / wyjazdu --}}
+    <div class="h-section">
+        <div class="h-section-title">Przyjazd / wyjazd</div>
+        <div class="h-section-body">
+            <table class="h-kv">
+                <tr>
+                    <td class="lbl">Przyjazd grupy</td>
+                    <td class="val">{{ $travelLegends['departure'] ?? '—' }}</td>
+                </tr>
+                <tr>
+                    <td class="lbl">Wyjazd grupy</td>
+                    <td class="val">{{ $travelLegends['return'] ?? '—' }}</td>
+                </tr>
+            </table>
+        </div>
+    </div>
+
     {{-- DANE GRUPY --}}
     <div class="h-section">
         <div class="h-section-title">Dane grupy</div>

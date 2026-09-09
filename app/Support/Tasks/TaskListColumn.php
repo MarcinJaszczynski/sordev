@@ -25,6 +25,26 @@ final class TaskListColumn
         return Str::limit($text, $limit);
     }
 
+    /**
+     * HTML opisu (TipTap) do dymka na liście — bez skryptów, z wyczyszczonymi fingerprintami systemowymi.
+     */
+    public static function descriptionHtmlForTooltip(mixed $value): string
+    {
+        if (! filled($value)) {
+            return '';
+        }
+
+        $html = trim((string) $value);
+        $html = preg_replace('/\[payment-reminder:[^\]]+\]/', '', $html) ?? $html;
+        $html = preg_replace('/\b(event-(?:status|inquiry|participant-count):[^\s<]+)/i', '', $html) ?? $html;
+        $html = preg_replace('/(?:^|\n|>)\s*Link:\s*https?:\/\/\S+/mi', '', $html) ?? $html;
+
+        // TipTap z panelu — zostaw typowe tagi formatowania, odetnij skrypty/iframe.
+        $allowed = '<p><br><strong><b><em><i><u><s><strike><ul><ol><li><a><h1><h2><h3><h4><blockquote><code><pre><mark><span><sub><sup>';
+
+        return trim(strip_tags($html, $allowed));
+    }
+
     public static function authorLabel(Task $record): string
     {
         $source = $record->source instanceof TaskSource

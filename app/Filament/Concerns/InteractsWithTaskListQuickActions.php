@@ -5,7 +5,7 @@ namespace App\Filament\Concerns;
 use App\Models\TaskComment;
 use App\Services\NotificationService;
 use App\Support\Tasks\TaskAttachmentStore;
-use App\Support\Tasks\TaskListColumn;
+use App\Support\Tasks\TaskCommentPresentation;
 use Filament\Actions\Action;
 use Filament\Forms;
 use Filament\Notifications\Notification;
@@ -21,7 +21,7 @@ trait InteractsWithTaskListQuickActions
 
     public ?int $expandedCommentsTaskId = null;
 
-    /** @var array<int, array<int, array{id: int, author: string, content: string, created_at: string}>> */
+    /** @var array<int, array<int, array{id: int, variant: string, author: string, content: string, created_at: string}>> */
     public array $expandedCommentsCache = [];
 
     public function bootInteractsWithTaskListQuickActions(): void
@@ -65,23 +65,21 @@ trait InteractsWithTaskListQuickActions
             return;
         }
 
+        $viewerId = Auth::id();
+
+        // Chronologicznie (jak wątek czatu): najstarszy u góry.
         $this->expandedCommentsCache[$taskId] = TaskComment::query()
             ->where('task_id', $taskId)
             ->with('author')
-            ->orderByDesc('created_at')
+            ->orderBy('created_at')
             ->get()
-            ->map(static fn (TaskComment $comment): array => [
-                'id' => (int) $comment->id,
-                'author' => $comment->author?->name ?? '—',
-                'content' => TaskListColumn::sanitizeTaskText($comment->content, 512),
-                'created_at' => $comment->created_at?->format('d.m.Y H:i') ?? '—',
-            ])
+            ->map(static fn (TaskComment $comment): array => TaskCommentPresentation::forListBubble($comment, $viewerId))
             ->values()
             ->all();
     }
 
     /**
-     * @return array<int, array{id: int, author: string, content: string, created_at: string}>
+     * @return array<int, array{id: int, variant: string, author: string, content: string, created_at: string}>
      */
     public function expandedCommentsFor(int $taskId): array
     {

@@ -13,6 +13,10 @@ use Illuminate\Support\Facades\Schema;
 
 /**
  * Szybkie przypisanie pilota (modal / slideOver) — bez pełnej strony Pilot.
+ *
+ * Źródło prawdy tożsamości: kontrahent (`pilot_contractor_id`).
+ * `assigned_to` to opcjonalne konto portalu — ustawiane tylko gdy da się je rozwiązać;
+ * brak konta NIE kasuje istniejącego Usera (jak ManageEventPilot).
  */
 final class AssignEventPilotAction
 {
@@ -26,23 +30,29 @@ final class AssignEventPilotAction
                 : null;
 
             $assignmentService = app(PilotContractorAssignmentService::class);
-            $assignedTo = $data->assignedTo;
+            $payload = [];
+            $assignedTo = $previousPilot;
 
             if (Schema::hasColumn('events', 'pilot_contractor_id') && $data->pilotContractorId !== null) {
-                $contractor = $data->pilotContractorId > 0
-                    ? Contractor::query()->find($data->pilotContractorId)
-                    : null;
-                $assignedTo = $assignmentService->resolvePortalUserId($contractor);
-            }
+                $contractorId = $data->pilotContractorId > 0 ? $data->pilotContractorId : null;
+                $payload['pilot_contractor_id'] = $contractorId;
 
-            $payload = [
-                'assigned_to' => $assignedTo,
-            ];
+                if ($contractorId !== null) {
+                    $contractor = Contractor::query()->find($contractorId);
+                    $resolved = $assignmentService->resolvePortalUserId($contractor);
 
-            if (Schema::hasColumn('events', 'pilot_contractor_id') && $data->pilotContractorId !== null) {
-                $payload['pilot_contractor_id'] = $data->pilotContractorId > 0
-                    ? $data->pilotContractorId
-                    : null;
+                    // Konto portalu tylko gdy istnieje — inaczej zachowaj previous assigned_to.
+                    if ($resolved !== null) {
+                        $payload['assigned_to'] = $resolved;
+                        $assignedTo = $resolved;
+                    }
+                } else {
+                    $payload['assigned_to'] = null;
+                    $assignedTo = null;
+                }
+            } else {
+                $assignedTo = $data->assignedTo;
+                $payload['assigned_to'] = $assignedTo;
             }
 
             if (Schema::hasColumn('events', 'shared_with_pilot') && $data->sharedWithPilot !== null) {

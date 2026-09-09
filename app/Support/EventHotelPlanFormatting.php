@@ -33,14 +33,22 @@ final class EventHotelPlanFormatting
             return max(1, (int) $line['people_count']);
         }
 
-        $roomId = $line['hotel_room_id'] ?? null;
-        if ($roomId && $hotelRoomsById?->has($roomId)) {
-            $room = $hotelRoomsById->get($roomId);
-
-            return max(1, (int) ($room->capacity ?? $room->people_count ?? 1));
+        $roomId = filled($line['hotel_room_id'] ?? null) ? (int) $line['hotel_room_id'] : null;
+        if (! $roomId) {
+            return 1;
         }
 
-        return 1;
+        $room = $hotelRoomsById?->get($roomId);
+        if (! $room instanceof HotelRoom) {
+            // Bez kolekcji (sumy nocy / settlement) — dociągamy z katalogu.
+            $room = HotelRoom::query()->find($roomId);
+        }
+
+        if (! $room) {
+            return 1;
+        }
+
+        return max(1, (int) ($room->capacity ?? $room->people_count ?? 1));
     }
 
     /**
@@ -265,6 +273,7 @@ final class EventHotelPlanFormatting
         ?string $eventPricingMode = 'lines',
         ?Collection $currenciesById = null,
         int $peoplePerNight = 0,
+        ?Collection $hotelRoomsById = null,
     ): float {
         if (self::isEventFlatPricing($eventPricingMode)) {
             return 0.0;
@@ -289,7 +298,7 @@ final class EventHotelPlanFormatting
 
         $total = 0.0;
         foreach ($stay['room_lines'] ?? [] as $line) {
-            $total += self::lineTotalPln($line, $currenciesById);
+            $total += self::lineTotalPln($line, $currenciesById, $hotelRoomsById);
         }
 
         return round($total, 2);
@@ -306,6 +315,7 @@ final class EventHotelPlanFormatting
         bool $flatStayConvertToPln = true,
         ?Collection $currenciesById = null,
         int $peoplePerNight = 0,
+        ?Collection $hotelRoomsById = null,
     ): float {
         if (self::isEventFlatPricing($eventPricingMode) && $flatStayAmount !== null) {
             $amount = self::resolveFlatNativeAmount($flatStayAmount, $eventPricingMode, $peoplePerNight);
@@ -323,7 +333,7 @@ final class EventHotelPlanFormatting
         }
 
         return round(collect($stays)->sum(
-            fn (array $stay) => self::stayTotalPln($stay, $eventPricingMode, $currenciesById, $peoplePerNight)
+            fn (array $stay) => self::stayTotalPln($stay, $eventPricingMode, $currenciesById, $peoplePerNight, $hotelRoomsById)
         ), 2);
     }
 
@@ -335,6 +345,7 @@ final class EventHotelPlanFormatting
         ?string $eventPricingMode = 'lines',
         ?Collection $currenciesById = null,
         int $peoplePerNight = 0,
+        ?Collection $hotelRoomsById = null,
     ): string {
         if (self::isEventFlatPricing($eventPricingMode)) {
             return '—';
@@ -357,6 +368,7 @@ final class EventHotelPlanFormatting
             collect($stay['room_lines'] ?? [])->all(),
             $currenciesById,
             0,
+            $hotelRoomsById,
         );
     }
 
@@ -371,6 +383,7 @@ final class EventHotelPlanFormatting
         bool $flatStayConvertToPln = true,
         ?Collection $currenciesById = null,
         int $peoplePerNight = 0,
+        ?Collection $hotelRoomsById = null,
     ): string {
         if (self::isEventFlatPricing($eventPricingMode) && $flatStayAmount !== null) {
             $currency = self::resolveCurrency($flatStayCurrencyId, $currenciesById);
@@ -402,7 +415,7 @@ final class EventHotelPlanFormatting
             }
 
             foreach ($stay['room_lines'] ?? [] as $line) {
-                $total = self::lineNativeTotal($line);
+                $total = self::lineNativeTotal($line, $hotelRoomsById);
                 $currency = self::resolveCurrency($line['currency_id'] ?? null, $currenciesById);
                 $symbol = CurrencyAmountDisplay::symbol($currency);
                 $pln = CurrencyAmountDisplay::plnEquivalent($total, $currency, (bool) ($line['convert_to_pln'] ?? true));
@@ -435,6 +448,7 @@ final class EventHotelPlanFormatting
         bool $flatStayConvertToPln = true,
         ?Collection $currenciesById = null,
         int $peoplePerNight = 0,
+        ?Collection $hotelRoomsById = null,
     ): array {
         $buckets = [];
 
@@ -483,7 +497,7 @@ final class EventHotelPlanFormatting
             }
 
             foreach ($stay['room_lines'] ?? [] as $line) {
-                $total = self::lineNativeTotal($line);
+                $total = self::lineNativeTotal($line, $hotelRoomsById);
                 $currency = self::resolveCurrency($line['currency_id'] ?? null, $currenciesById);
                 $symbol = CurrencyAmountDisplay::symbol($currency);
                 $pln = CurrencyAmountDisplay::plnEquivalent(
@@ -506,13 +520,17 @@ final class EventHotelPlanFormatting
     /**
      * @param  array<int, array<string, mixed>>  $lines
      */
-    protected static function formatMixedBreakdown(array $lines, ?Collection $currenciesById = null, int $decimals = 0): string
-    {
+    protected static function formatMixedBreakdown(
+        array $lines,
+        ?Collection $currenciesById = null,
+        int $decimals = 0,
+        ?Collection $hotelRoomsById = null,
+    ): string {
         $plnPart = 0.0;
         $foreignBuckets = [];
 
         foreach ($lines as $line) {
-            $total = self::lineNativeTotal($line);
+            $total = self::lineNativeTotal($line, $hotelRoomsById);
             $currency = self::resolveCurrency($line['currency_id'] ?? null, $currenciesById);
             $symbol = CurrencyAmountDisplay::symbol($currency);
             $pln = CurrencyAmountDisplay::plnEquivalent($total, $currency, (bool) ($line['convert_to_pln'] ?? true));

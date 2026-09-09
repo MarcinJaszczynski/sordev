@@ -30,6 +30,9 @@ final class OfficeMailRecipients
         $out = [];
         foreach ($emails as $email) {
             $email = strtolower(trim($email));
+            // Legacy / import: czasem trafia „mailto:foo@bar.pl”
+            $email = preg_replace('/^mailto:/i', '', $email) ?? $email;
+            $email = trim($email);
             if ($email !== '' && filter_var($email, FILTER_VALIDATE_EMAIL)) {
                 $out[] = $email;
             }

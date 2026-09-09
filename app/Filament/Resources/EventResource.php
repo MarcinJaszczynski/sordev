@@ -850,7 +850,41 @@ class EventResource extends Resource
                 Tables\Columns\TextColumn::make('client_name')
                     ->label('Start / Klient')
                     ->visibleFrom('md')
-                    ->searchable()
+                    ->searchable(query: function (Builder $query, string $search): Builder {
+                        $term = trim($search);
+                        if ($term === '') {
+                            return $query;
+                        }
+
+                        $like = '%'.$term.'%';
+
+                        return $query->where(function (Builder $outer) use ($like, $term): void {
+                            $outer->where('events.client_name', 'like', $like)
+                                ->orWhere('events.client_email', 'like', $like)
+                                ->orWhere('events.client_phone', 'like', $like);
+
+                            \App\Support\PhoneValidation::orWhereDigitsLike($outer, 'events.client_phone', $term);
+
+                            $outer->orWhereHas('orderingContractors', function (Builder $contractorQuery) use ($like, $term): void {
+                                $contractorQuery->where(function (Builder $c) use ($like, $term): void {
+                                    $c->where('contractors.name', 'like', $like)
+                                        ->orWhere('contractors.firstname', 'like', $like)
+                                        ->orWhere('contractors.surname', 'like', $like)
+                                        ->orWhere('contractors.email', 'like', $like)
+                                        ->orWhere('contractors.phone', 'like', $like);
+                                    \App\Support\PhoneValidation::orWhereDigitsLike($c, 'contractors.phone', $term);
+                                })->orWhereHas('contacts', function (Builder $contactQuery) use ($like, $term): void {
+                                    $contactQuery->where(function (Builder $contact) use ($like, $term): void {
+                                        $contact->where('contacts.first_name', 'like', $like)
+                                            ->orWhere('contacts.last_name', 'like', $like)
+                                            ->orWhere('contacts.email', 'like', $like)
+                                            ->orWhere('contacts.phone', 'like', $like);
+                                        \App\Support\PhoneValidation::orWhereDigitsLike($contact, 'contacts.phone', $term);
+                                    });
+                                });
+                            });
+                        });
+                    })
                     ->sortable(query: function (Builder $query, string $direction): Builder {
                         return $query
                             ->leftJoin('places', 'events.start_place_id', '=', 'places.id')
@@ -971,7 +1005,9 @@ class EventResource extends Resource
                     ->visibleFrom('lg')
                     ->html()
                     ->state(function (Event $record): string {
-                        $pilot = e($record->assignedUser?->name ?? '—');
+                        $pilot = e(
+                            app(PilotContractorAssignmentService::class)->pilotDisplayNameForEvent($record) ?? '—'
+                        );
 
                         $transportContractor = $record->transportContractor;
                         $transportLocation = $transportContractor?->usesBusinessLocations()
@@ -1140,7 +1176,8 @@ class EventResource extends Resource
                         true: fn (Builder $query) => $query->where('pilot_funds_paid', true),
                         false: fn (Builder $query) => $query
                             ->where('pilot_funds_paid', false)
-                            ->whereNotNull('assigned_to'),
+                            ->tap(fn (Builder $q) => app(PilotContractorAssignmentService::class)
+                                ->constrainEventsWithAssignedPilot($q)),
                         blank: fn (Builder $query) => $query,
                     ),
 
@@ -1211,7 +1248,7 @@ class EventResource extends Resource
                                     ),
                                     Forms\Components\Toggle::make('shared_with_pilot')
                                         ->label('Udostępnij w panelu pilota')
-                                        ->helperText('Impreza widoczna u pilota dopiero po udostępnieniu i gdy pilot ma konto użytkownika z tym samym e-mailem.')
+                                        ->helperText('Wymaga konta użytkownika z tym samym e-mailem co kontrahent. Sam kontrahent wystarczy do zaliczki i gotowości.')
                                         ->visible(fn (): bool => Schema::hasColumn('events', 'shared_with_pilot')),
                                 ];
                             }
@@ -1412,6 +1449,7 @@ class EventResource extends Resource
                 'eventTemplate',
                 'startPlace',
                 'assignedUser',
+                Schema::hasColumn('events', 'pilot_contractor_id') ? 'pilotContractor' : null,
                 Schema::hasTable('contractor_locations')
                     ? 'transportContractor.activeLocations'
                     : 'transportContractor',
@@ -1419,6 +1457,7 @@ class EventResource extends Resource
                 'bus',
                 'markup:id,percent',
             ];
+            $relations = array_values(array_filter($relations));
 
             if (Schema::hasTable('event_hotel_stays')) {
                 $relations[] = 'hotelStays.contractor';
@@ -1458,6 +1497,7 @@ class EventResource extends Resource
             'eventTemplate',
             'startPlace',
             'assignedUser',
+            Schema::hasColumn('events', 'pilot_contractor_id') ? 'pilotContractor' : null,
             Schema::hasTable('contractor_locations')
                 ? 'transportContractor.activeLocations'
                 : 'transportContractor',
@@ -1465,6 +1505,7 @@ class EventResource extends Resource
             'bus',
             'markup:id,percent',
         ];
+        $relations = array_values(array_filter($relations));
 
         if (Schema::hasTable('event_hotel_stays')) {
             $relations[] = 'hotelStays.contractor';

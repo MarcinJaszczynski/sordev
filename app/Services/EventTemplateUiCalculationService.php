@@ -317,39 +317,13 @@ final class EventTemplateUiCalculationService
 
                         continue;
                     }
-                    $rooms = \App\Models\HotelRoom::whereIn('id', $roomIds)->get();
+                    $allocatedLines = app(EventHotelPlanService::class)->allocateRoomLines(
+                        (int) $peopleCount,
+                        is_array($roomIds) ? $roomIds : [],
+                        $groupType,
+                    );
 
-                    $roomTypeCount = [];
-                    foreach ($rooms as $room) {
-                        $roomTypeCount[$room->id] = 0;
-                    }
-
-                    $maxPeople = $peopleCount;
-                    $maxCapacity = $rooms->sum('people_count') * ($peopleCount); // duży zapas
-                    $dp = array_fill(0, $maxCapacity + 1, INF);
-                    $dp[0] = 0;
-                    $choice = array_fill(0, $maxCapacity + 1, null);
-
-                    foreach ($rooms as $room) {
-                        for ($i = $room->people_count; $i <= $maxCapacity; $i++) {
-                            if ($dp[$i] > $dp[$i - $room->people_count] + $room->price) {
-                                $dp[$i] = $dp[$i - $room->people_count] + $room->price;
-                                $choice[$i] = $room->id;
-                            }
-                        }
-                    }
-
-                    // Szukaj najtańszego rozwiązania dla liczby miejsc >= liczba osób
-                    $minCost = INF;
-                    $bestI = null;
-                    for ($i = $peopleCount; $i <= $maxCapacity; $i++) {
-                        if ($dp[$i] < $minCost) {
-                            $minCost = $dp[$i];
-                            $bestI = $i;
-                        }
-                    }
-
-                    if ($minCost === INF) {
+                    if ($allocatedLines === []) {
                         // Nie udało się przydzielić żadnej kombinacji
                         $roomAlloc[] = [
                             'room' => null,
@@ -362,25 +336,15 @@ final class EventTemplateUiCalculationService
                             'warning' => 'Brak możliwej kombinacji pokoi dla tej grupy ('.$groupType.') w noclegu.',
                         ];
                     } else {
-                        // Odtwarzanie wyboru pokoi
-                        $allocRooms = [];
-                        $i = $bestI;
-                        while ($i > 0 && $choice[$i] !== null) {
-                            $room = $rooms->firstWhere('id', $choice[$i]);
-                            $allocRooms[] = $room;
-                            $i -= $room->people_count;
-                        }
-
-                        // Zlicz ile razy każdy pokój został użyty
-                        $roomCounts = [];
-                        foreach ($allocRooms as $room) {
-                            $roomCounts[$room->id] = ($roomCounts[$room->id] ?? 0) + 1;
-                        }
-
                         $peopleAssigned = 0;
-                        foreach ($roomCounts as $roomId => $count) {
-                            $room = $rooms->firstWhere('id', $roomId);
-                            for ($j = 0; $j < $count; $j++) {
+                        foreach ($allocatedLines as $line) {
+                            $room = \App\Models\HotelRoom::query()->find($line['hotel_room_id'] ?? null);
+                            if (! $room) {
+                                continue;
+                            }
+
+                            $quantity = max(1, (int) ($line['quantity'] ?? 1));
+                            for ($j = 0; $j < $quantity; $j++) {
                                 $alloc = [
                                     'qty' => 0,
                                     'gratis' => 0,
@@ -389,7 +353,7 @@ final class EventTemplateUiCalculationService
                                 ];
 
                                 // Przydzielaj tylko tyle osób, ile jeszcze potrzeba
-                                $toAssign = min($room->people_count, $peopleCount - $peopleAssigned);
+                                $toAssign = min((int) $room->people_count, $peopleCount - $peopleAssigned);
                                 $alloc[$groupType] = $toAssign;
 
                                 $roomAlloc[] = [
@@ -413,7 +377,6 @@ final class EventTemplateUiCalculationService
                                 } else {
                                     $dayTotalForeign[$roomCurrency] = ($dayTotalForeign[$roomCurrency] ?? 0) + $room->price;
                                 }
-                                $roomTypeCount[$room->id]++;
                                 $peopleAssigned += $toAssign;
 
                                 if ($peopleAssigned >= $peopleCount) {

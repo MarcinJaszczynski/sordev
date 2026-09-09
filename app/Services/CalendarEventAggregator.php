@@ -457,7 +457,8 @@ class CalendarEventAggregator
         }
 
         return Event::query()
-            ->whereNotNull('assigned_to')
+            ->tap(fn ($query) => app(\App\Services\PilotContractorAssignmentService::class)
+                ->constrainEventsWithAssignedPilot($query))
             ->whereNotNull('start_date')
             ->whereBetween('start_date', [$from, $to])
             ->where('pilot_funds_paid', false)

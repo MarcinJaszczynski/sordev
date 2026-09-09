@@ -178,9 +178,23 @@ class EventOfferWordController extends Controller
                 $justified
             );
         } else {
+            // Wszystkie dni > core to jeden slot fakultatywny (jak w UI) —
+            // inaczej set z dziećmi na day=core+1 i core+2 daje dwa nagłówki.
+            $facultativeDay = $event->facultativeProgramDay();
             $byDay = $programPoints
-                ->groupBy(fn (EventProgramPoint $point) => (int) ($point->day ?? 1))
+                ->groupBy(function (EventProgramPoint $point) use ($event, $facultativeDay): int {
+                    $day = (int) ($point->day ?? 1);
+
+                    return $event->isFacultativeProgramDay($day) ? $facultativeDay : $day;
+                })
                 ->sortKeys();
+
+            /** @var Collection<int, Collection<int, EventProgramPoint>> $childrenByParent */
+            $childrenByParent = $programPoints
+                ->whereNotNull('parent_id')
+                ->groupBy('parent_id');
+
+            $printedChildIds = [];
 
             foreach ($byDay as $day => $dayPoints) {
                 $dayLabel = $event->isFacultativeProgramDay((int) $day)
@@ -189,13 +203,6 @@ class EventOfferWordController extends Controller
                 $normalSection->addText($dayLabel, ['bold' => true, 'color' => '0070C0']);
 
                 $parents = $dayPoints->whereNull('parent_id')->values();
-                $childrenByParent = $dayPoints
-                    ->whereNotNull('parent_id')
-                    ->groupBy('parent_id');
-                $orphanChildren = $dayPoints
-                    ->whereNotNull('parent_id')
-                    ->filter(fn (EventProgramPoint $child) => ! $parents->contains('id', $child->parent_id))
-                    ->values();
 
                 foreach ($parents as $point) {
                     $this->addProgramPointListItem($normalSection, $point, 0, $listStyle, $justified);
@@ -204,8 +211,20 @@ class EventOfferWordController extends Controller
                     $children = $childrenByParent->get($point->id, collect());
                     foreach ($children as $child) {
                         $this->addProgramPointListItem($normalSection, $child, 1, $listStyle, $justified);
+                        $printedChildIds[(int) $child->id] = true;
                     }
                 }
+
+                $orphanChildren = $dayPoints
+                    ->whereNotNull('parent_id')
+                    ->filter(function (EventProgramPoint $child) use ($parents, $printedChildIds): bool {
+                        if (isset($printedChildIds[(int) $child->id])) {
+                            return false;
+                        }
+
+                        return ! $parents->contains('id', $child->parent_id);
+                    })
+                    ->values();
 
                 foreach ($orphanChildren as $child) {
                     $this->addProgramPointListItem($normalSection, $child, 0, $listStyle, $justified);
@@ -352,12 +371,11 @@ class EventOfferWordController extends Controller
                 $cell->addText('', $valueStyle, $para);
             }
 
+            // Okładka: bez tel./e-mail — zostaje firma, dział i osoba kontaktowa.
             $lines = array_values(array_filter([
                 trim((string) ($party['institution'] ?? '')),
                 trim((string) ($party['department'] ?? '')),
                 trim((string) ($party['person'] ?? '')),
-                trim((string) ($party['phone'] ?? '')),
-                trim((string) ($party['email'] ?? '')),
             ], fn (string $line): bool => $line !== ''));
 
             if ($lines === []) {

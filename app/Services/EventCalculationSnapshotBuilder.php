@@ -613,7 +613,7 @@ final class EventCalculationSnapshotBuilder
 
             if ($hasHotelPlan) {
                 app(EventHotelPlanService::class)
-                    ->applyEventHotelStructureToCalculations($detailedCalculations, $event);
+                    ->applyEventHotelStructureToCalculations($detailedCalculations, $event, $qtyVariants);
             }
 
             foreach ($qtyVariants as $qty => $variant) {
