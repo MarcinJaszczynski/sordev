@@ -85,7 +85,12 @@
     <div id="task-full-editor-form" class="fi-form grid gap-y-6">
         {{ $this->form }}
 
-        <div class="mt-4 flex justify-end">
+        <div class="mt-4 flex flex-wrap items-center justify-end gap-2">
+            @if ($record->exists)
+                <x-filament::button type="button" color="gray" wire:click="markAsUnread">
+                    Oznacz jako nieprzeczytane
+                </x-filament::button>
+            @endif
             <x-filament::button type="button" wire:click="save">
                 Zapisz
             </x-filament::button>

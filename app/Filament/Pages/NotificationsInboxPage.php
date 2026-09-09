@@ -121,6 +121,23 @@ class NotificationsInboxPage extends Page
             ->send();
     }
 
+    public function markUnread(string $fingerprint): void
+    {
+        $userId = (int) Auth::id();
+
+        if ($userId <= 0 || $fingerprint === '') {
+            return;
+        }
+
+        NotificationService::markAsUnread($userId, $fingerprint);
+        unset($this->inboxData);
+
+        Notification::make()
+            ->title('Oznaczono jako nieprzeczytane')
+            ->success()
+            ->send();
+    }
+
     public function markAllRead(): void
     {
         $userId = (int) Auth::id();

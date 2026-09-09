@@ -344,6 +344,7 @@ Route::middleware(['auth', 'web'])->prefix('portal')->group(function () {
 Route::middleware(['auth', 'web', 'office'])->prefix('admin')->group(function () {
     Route::get('/notifications/counts', [NotificationController::class, 'getCounts'])->name('admin.notifications.counts');
     Route::post('/notifications/mark-read', [NotificationController::class, 'markRead'])->name('admin.notifications.mark-read');
+    Route::post('/notifications/mark-unread', [NotificationController::class, 'markUnread'])->name('admin.notifications.mark-unread');
     Route::get('/contracts/{contract}/agreement-pdf', AgreementPdfDownloadController::class)
         ->name('admin.contracts.agreement-pdf');
     Route::get('/contracts/{contract}/agreement-pdf-package', [AgreementPdfDownloadController::class, 'package'])

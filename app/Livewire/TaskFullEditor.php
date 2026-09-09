@@ -183,6 +183,28 @@ class TaskFullEditor extends Component implements HasForms
         $this->dispatchTopbarNotificationRefresh();
     }
 
+    public function markAsUnread(): void
+    {
+        if (! $this->record->exists) {
+            return;
+        }
+
+        $userId = (int) Auth::id();
+
+        if ($userId <= 0) {
+            return;
+        }
+
+        $this->record->refresh();
+        NotificationService::markTaskAsUnread($userId, $this->record);
+        $this->dispatchTopbarNotificationRefresh();
+
+        Notification::make()
+            ->title('Zadanie oznaczone jako nieprzeczytane')
+            ->success()
+            ->send();
+    }
+
     public function openParentTask(): void
     {
         $this->record->loadMissing('parent');

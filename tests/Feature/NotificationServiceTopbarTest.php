@@ -12,6 +12,7 @@ use App\Models\TaskComment;
 use App\Models\TaskStatus;
 use App\Models\User;
 use App\Models\UserNotificationRead;
+use App\Services\EventInquiryNotificationService;
 use App\Services\NotificationService;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Schema;
@@ -41,7 +42,7 @@ class NotificationServiceTopbarTest extends TestCase
             'start_place_id' => $place->id,
         ]);
 
-        return Event::create([
+        $event = Event::create([
             'event_template_id' => $template->id,
             'start_place_id' => $place->id,
             'created_by' => $user->id,
@@ -55,6 +56,13 @@ class NotificationServiceTopbarTest extends TestCase
             'total_cost' => 3000,
             'status' => $status,
         ]);
+
+        // Licznik „Nowe imprezy” wymaga taska event-inquiry (jak przy „Powiadom biuro” / WWW).
+        if ($status === Event::STATUS_INQUIRY) {
+            app(EventInquiryNotificationService::class)->notifyOfficeAboutNewInquiry($event, $user);
+        }
+
+        return $event;
     }
 
     public function test_topbar_counts_include_new_and_pending_cancellation_events(): void
@@ -255,6 +263,7 @@ class NotificationServiceTopbarTest extends TestCase
         $user = User::factory()->create([
             'tasks_last_seen_at' => now(),
         ]);
+        $this->actingAs($user);
         $statusId = TaskStatus::query()->where('name', 'Do zrobienia')->value('id');
 
         Task::factory()->create([
@@ -267,9 +276,33 @@ class NotificationServiceTopbarTest extends TestCase
         NotificationService::clearCacheForUser($user->id);
         $data = NotificationService::getTopbarDataForUser($user->id, limitPerType: 15, combinedLimit: 15, taskQueryLimit: 30, fresh: true);
 
-        $this->assertSame(1, $data['counts']['tasks']);
-        $this->assertCount(1, $data['items_by_type']['task']);
-        $this->assertSame('Wlasnie utworzone', $data['items_by_type']['task'][0]['title']);
+        // Własne utworzenie (Auth = author) nie podbija licznika autora.
+        $this->assertSame(0, $data['counts']['tasks']);
+        $this->assertSame([], $data['items_by_type']['task']);
+    }
+
+    public function test_assigned_task_from_other_author_bumps_counter(): void
+    {
+        $assignee = User::factory()->create();
+        $author = User::factory()->create();
+        $this->actingAs($author);
+        $statusId = TaskStatus::query()->where('name', 'Do zrobienia')->value('id');
+
+        Task::factory()->create([
+            'assignee_id' => $assignee->id,
+            'author_id' => $author->id,
+            'status_id' => $statusId,
+            'title' => 'Dla przypisanego',
+        ]);
+
+        NotificationService::clearCacheForUser($assignee->id);
+        NotificationService::clearCacheForUser($author->id);
+
+        $assigneeData = NotificationService::getTopbarDataForUser($assignee->id, fresh: true);
+        $authorData = NotificationService::getTopbarDataForUser($author->id, fresh: true);
+
+        $this->assertSame(1, $assigneeData['counts']['tasks']);
+        $this->assertSame(0, $authorData['counts']['tasks']);
     }
 
     public function test_task_count_respects_query_limit_not_display_limit(): void
@@ -524,7 +557,7 @@ class NotificationServiceTopbarTest extends TestCase
         $this->assertCount(1, $data['items_by_type']['comment']);
     }
 
-    public function test_own_comment_on_owned_task_bumps_activity_counter(): void
+    public function test_own_comment_on_owned_task_does_not_bump_activity_counter(): void
     {
         $owner = User::factory()->create();
         $statusId = TaskStatus::query()->where('name', 'Do zrobienia')->value('id');
@@ -537,12 +570,13 @@ class NotificationServiceTopbarTest extends TestCase
         ]);
         $task->forceFill(['updated_at' => now()->subDay()])->saveQuietly();
 
-        $updatedBefore = $task->fresh()->updated_at?->timestamp ?? 0;
-
+        NotificationService::markTaskAsRead($owner->id, $task->fresh());
         NotificationService::clearCacheForUser($owner->id);
+
         $before = NotificationService::getTopbarDataForUser($owner->id, fresh: true);
         $beforeWork = (int) ($before['counts']['work'] ?? 0);
         $this->assertSame(0, $before['counts']['comments']);
+        $this->assertSame(0, $before['counts']['tasks']);
 
         TaskComment::query()->create([
             'task_id' => $task->id,
@@ -555,22 +589,79 @@ class NotificationServiceTopbarTest extends TestCase
         $comment = TaskComment::query()->where('task_id', $task->id)->latest('id')->firstOrFail();
         NotificationService::clearCacheForTaskCommentStakeholders($comment);
 
-        $task->refresh();
-        $this->assertGreaterThan($updatedBefore, $task->updated_at?->timestamp ?? 0);
-
         $after = NotificationService::getTopbarDataForUser($owner->id, fresh: true);
         $commentItem = collect($after['items_by_type']['comment'] ?? [])
             ->first(fn (array $item): bool => (int) ($item['task_id'] ?? 0) === (int) $task->id);
 
-        $this->assertNotNull($commentItem, 'Własny komentarz powinien wejść do kafelka Zadania.');
-        $this->assertStringContainsString('dodał komentarz do zadania', $commentItem['title'] ?? '');
-        $this->assertStringContainsString('Moje zadanie', $commentItem['title'] ?? '');
-        $this->assertSame(1, $after['counts']['comments']);
-        $this->assertGreaterThan(
+        $this->assertNull($commentItem, 'Własny komentarz nie powinien wejść do kafelka Zadania.');
+        $this->assertSame(0, $after['counts']['comments']);
+        $this->assertSame(0, $after['counts']['tasks']);
+        $this->assertSame(
             $beforeWork,
             (int) ($after['counts']['work'] ?? 0),
-            'Licznik Zadania (work) ma wzrosnąć po dodaniu komentarza.',
+            'Licznik Zadania (work) nie ma rosnąć po własnym komentarzu.',
         );
+    }
+
+    public function test_mark_as_unread_restores_task_counter(): void
+    {
+        $user = User::factory()->create();
+        $other = User::factory()->create();
+        $statusId = TaskStatus::query()->where('name', 'Do zrobienia')->value('id');
+
+        $task = Task::factory()->create([
+            'assignee_id' => $user->id,
+            'author_id' => $other->id,
+            'status_id' => $statusId,
+            'title' => 'Do ponownego odczytu',
+        ]);
+
+        NotificationService::clearCacheForUser($user->id);
+        $before = NotificationService::getTopbarDataForUser($user->id, fresh: true);
+        $this->assertSame(1, $before['counts']['tasks']);
+
+        NotificationService::markTaskAsRead($user->id, $task);
+        $read = NotificationService::getTopbarDataForUser($user->id, fresh: true);
+        $this->assertSame(0, $read['counts']['tasks']);
+
+        NotificationService::markTaskAsUnread($user->id, $task->fresh());
+        $unread = NotificationService::getTopbarDataForUser($user->id, fresh: true);
+        $this->assertSame(1, $unread['counts']['tasks']);
+        $this->assertCount(1, $unread['items_by_type']['task']);
+    }
+
+    public function test_mark_unread_endpoint_restores_counter(): void
+    {
+        $user = User::factory()->create();
+        $user->assignRole('admin');
+        $this->actingAs($user);
+
+        $event = $this->createEventForUser($user, Event::STATUS_INQUIRY, 'Do ponownego odczytu');
+        NotificationService::clearCacheForUser($user->id);
+
+        $before = $this->getJson(route('admin.notifications.counts'));
+        $before->assertOk();
+        $this->assertSame(1, $before->json('new_events'));
+
+        $item = collect($before->json('items_by_type.new_event'))
+            ->first(fn (array $row): bool => (int) ($row['id'] ?? 0) === $event->id);
+        $this->assertNotNull($item);
+
+        $this->postJson(route('admin.notifications.mark-read'), [
+            'fingerprint' => $item['fingerprint'],
+        ])->assertOk()->assertJson(['ok' => true]);
+
+        $afterRead = $this->getJson(route('admin.notifications.counts'));
+        $afterRead->assertOk();
+        $this->assertSame(0, $afterRead->json('new_events'));
+
+        $this->postJson(route('admin.notifications.mark-unread'), [
+            'fingerprint' => $item['fingerprint'],
+        ])->assertOk()->assertJson(['ok' => true]);
+
+        $afterUnread = $this->getJson(route('admin.notifications.counts'));
+        $afterUnread->assertOk();
+        $this->assertSame(1, $afterUnread->json('new_events'));
     }
 
     public function test_closing_task_modal_marks_comment_notifications_as_read(): void

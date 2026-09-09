@@ -4,6 +4,7 @@ namespace App\Models;
 
 use App\Enums\TaskPriority;
 use App\Enums\TaskSource;
+use App\Services\NotificationService;
 use App\Support\Tasks\TaskContextRegistry;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
@@ -69,6 +70,10 @@ class Task extends Model implements Sortable
 
             $task->normalizeTaskableContext();
             $task->inheritTaskableContextFromParent();
+        });
+
+        static::created(function (Task $task): void {
+            NotificationService::acknowledgeOwnTaskCreation($task);
         });
 
         // forceDelete + cascade DB omija Eloquent events na attachments — kasujemy pliki jawnie.

@@ -2,6 +2,7 @@
 
 namespace App\Services;
 
+use App\Enums\TaskSource;
 use App\Models\ClientInvoiceRequest;
 use App\Models\Event;
 use App\Models\Task;
@@ -14,6 +15,7 @@ use App\Support\Tasks\TaskListColumn;
 use App\Support\Tasks\TaskNavigation;
 use App\Support\Tasks\TaskQueryFilters;
 use Illuminate\Support\Collection;
+use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Schema;
 use Illuminate\Support\Str;
@@ -321,16 +323,12 @@ class NotificationService
 
     /**
      * Komentarze w topbarze: do zadań widocznych jak w liczniku zadań.
-     * Własne komentarze z ostatniej doby też wchodzą — inaczej autor nie widzi
-     * wzrostu licznika (zadanie było już nieprzeczytane, a touch() nic nie dodaje).
+     * Własne komentarze są wykluczone — licznik ma pokazywać tylko cudzą aktywność.
      */
     private static function commentsQueryFor(User $user)
     {
         return TaskComment::query()
-            ->where(function ($query) use ($user): void {
-                $query->where('user_id', '!=', $user->id)
-                    ->orWhere('created_at', '>=', now()->subDay());
-            })
+            ->where('user_id', '!=', $user->id)
             ->whereIn('task_id', static::visibleTasksQueryFor($user)->select('id'));
     }
 
@@ -524,16 +522,23 @@ class NotificationService
         return static::getTopbarDataForUser($userId)['counts'];
     }
 
-    public static function getTopbarDataForUser(int $userId, int $limitPerType = 4, int $combinedLimit = 10, int $taskQueryLimit = 30, bool $fresh = false): array
-    {
-        $cacheKey = "user_notifications_{$userId}_{$limitPerType}_{$combinedLimit}_{$taskQueryLimit}";
+    public static function getTopbarDataForUser(
+        int $userId,
+        int $limitPerType = 4,
+        int $combinedLimit = 10,
+        int $taskQueryLimit = 30,
+        bool $fresh = false,
+        bool $includeReadItems = false,
+    ): array {
+        $cacheKey = "user_notifications_{$userId}_{$limitPerType}_{$combinedLimit}_{$taskQueryLimit}"
+            .($includeReadItems ? '_all' : '');
 
         try {
             if ($fresh) {
                 Cache::forget($cacheKey);
             }
 
-            return Cache::remember($cacheKey, now()->addSeconds(30), function () use ($userId, $limitPerType, $combinedLimit, $taskQueryLimit) {
+            return Cache::remember($cacheKey, now()->addSeconds(30), function () use ($userId, $limitPerType, $combinedLimit, $taskQueryLimit, $includeReadItems) {
                 $user = User::find($userId);
 
                 if (! $user) {
@@ -575,14 +580,29 @@ class NotificationService
                 $invoiceRequestsCount = static::unreadCount($invoiceItems);
                 $unreadMessagesCount = (int) $messageData['unread_messages'];
 
+                $listForType = function (array $items) use ($limitPerType, $includeReadItems): array {
+                    if ($includeReadItems) {
+                        return collect($items)
+                            ->sortBy([
+                                fn (array $item): int => ($item['is_read'] ?? false) ? 1 : 0,
+                                fn (array $item): int => -((int) ($item['revision'] ?? 0)),
+                            ])
+                            ->take($limitPerType)
+                            ->values()
+                            ->all();
+                    }
+
+                    return self::unreadList($items, $limitPerType);
+                };
+
                 $itemsByType = [
-                    'task' => static::unreadList($taskItems, $limitPerType),
-                    'comment' => static::unreadList($commentItems, $limitPerType),
-                    'new_event' => static::unreadList($newEventItems, $limitPerType),
-                    'event' => static::unreadList($eventItems, $limitPerType),
-                    'pending_cancellation_event' => static::unreadList($pendingCancellationItems, $limitPerType),
-                    'invoice_request' => static::unreadList($invoiceItems, $limitPerType),
-                    'message' => static::unreadList($messageItems, $limitPerType),
+                    'task' => $listForType($taskItems),
+                    'comment' => $listForType($commentItems),
+                    'new_event' => $listForType($newEventItems),
+                    'event' => $listForType($eventItems),
+                    'pending_cancellation_event' => $listForType($pendingCancellationItems),
+                    'invoice_request' => $listForType($invoiceItems),
+                    'message' => $listForType($messageItems),
                 ];
 
                 $items = collect(array_merge(
@@ -658,6 +678,48 @@ class NotificationService
         ]));
     }
 
+    public static function markTaskAsUnread(int $userId, Task $task): void
+    {
+        static::markAsUnread($userId, UserNotificationRead::fingerprintFor([
+            'type' => 'task',
+            'id' => (int) $task->id,
+            'revision' => (string) ($task->updated_at?->timestamp ?? 0),
+        ]));
+    }
+
+    public static function markCommentAsRead(int $userId, TaskComment $comment): void
+    {
+        static::markAsRead($userId, UserNotificationRead::fingerprintFor([
+            'type' => 'comment',
+            'id' => (int) $comment->id,
+            'revision' => (string) ($comment->created_at?->timestamp ?? 0),
+        ]));
+    }
+
+    /**
+     * Własne utworzenie zadania biurowego nie ma podbijać licznika autora.
+     * Zadania systemowe / checklisty pilota zostawiamy — assignee ma je zobaczyć.
+     */
+    public static function acknowledgeOwnTaskCreation(Task $task): void
+    {
+        $authorId = (int) ($task->author_id ?? 0);
+        $authId = (int) (Auth::id() ?? 0);
+
+        if ($authId <= 0 || $authId !== $authorId) {
+            return;
+        }
+
+        $source = $task->source instanceof TaskSource
+            ? $task->source
+            : TaskSource::tryFrom((string) ($task->source ?? ''));
+
+        if (in_array($source, [TaskSource::System, TaskSource::PilotChecklist], true)) {
+            return;
+        }
+
+        static::markTaskAsRead($authorId, $task);
+    }
+
     public static function markTaskCommentNotificationsAsRead(int $userId, int $taskId): void
     {
         if (! Schema::hasTable('user_notification_reads') || ! Schema::hasTable('task_comments')) {
@@ -706,6 +768,15 @@ class NotificationService
 
         // Touch → kolumna „Modyfikacja” i revision zadania też się ruszają.
         $task->touch();
+        $task->refresh();
+
+        // Autor komentarza nie powinien dostać powiadomienia o własnej aktywności
+        // (nowy fingerprint zadania po touch + własny komentarz).
+        $commenterId = (int) ($comment->user_id ?? 0);
+        if ($commenterId > 0) {
+            static::markCommentAsRead($commenterId, $comment);
+            static::markTaskAsRead($commenterId, $task);
+        }
 
         // Czyść cache wszystkich stakeholderów, w tym autora komentarza —
         // gdy owner=assignee=autor, inaczej nikt nie dostaje odświeżenia topbara.
@@ -735,6 +806,20 @@ class NotificationService
         static::clearCacheForUser($userId);
     }
 
+    public static function markAsUnread(int $userId, string $fingerprint): void
+    {
+        if (! Schema::hasTable('user_notification_reads') || $fingerprint === '') {
+            return;
+        }
+
+        UserNotificationRead::query()
+            ->where('user_id', $userId)
+            ->where('fingerprint', $fingerprint)
+            ->delete();
+
+        static::clearCacheForUser($userId);
+    }
+
     public static function isRead(int $userId, string $fingerprint): bool
     {
         if (! Schema::hasTable('user_notification_reads') || $fingerprint === '') {
@@ -752,7 +837,8 @@ class NotificationService
      */
     public static function getInboxDataForUser(int $userId, ?string $typeFilter = null, bool $unreadOnly = false): array
     {
-        $data = static::getTopbarDataForUser($userId, 50, 200);
+        // Inbox pokazuje też przeczytane (żeby dało się oznaczyć jako nieprzeczytane).
+        $data = static::getTopbarDataForUser($userId, 50, 200, taskQueryLimit: 50, includeReadItems: true);
 
         $items = collect();
 
@@ -831,8 +917,9 @@ class NotificationService
             self::TOPBAR_TASK_QUERY_LIMIT,
         ));
 
-        foreach ([[4, 10, 30], [15, 15, 30], [50, 200, 30]] as [$perType, $combined, $taskQueryLimit]) {
+        foreach ([[4, 10, 30], [15, 15, 30], [50, 200, 30], [50, 200, 50]] as [$perType, $combined, $taskQueryLimit]) {
             Cache::forget("user_notifications_{$userId}_{$perType}_{$combined}_{$taskQueryLimit}");
+            Cache::forget("user_notifications_{$userId}_{$perType}_{$combined}_{$taskQueryLimit}_all");
         }
 
         foreach ([[4, 10], [15, 15], [50, 50], [50, 200]] as [$perType, $combined]) {

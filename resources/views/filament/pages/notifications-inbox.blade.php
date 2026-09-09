@@ -137,6 +137,14 @@
                                 >
                                     Przeczytane
                                 </x-filament::button>
+                            @elseif ($isRead && ! empty($item['fingerprint']))
+                                <x-filament::button
+                                    wire:click="markUnread('{{ $item['fingerprint'] }}')"
+                                    size="sm"
+                                    color="gray"
+                                >
+                                    Nieprzeczytane
+                                </x-filament::button>
                             @endif
                         </div>
                     </li>

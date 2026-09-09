@@ -112,4 +112,23 @@ class NotificationController extends Controller
 
         return response()->json(['ok' => true]);
     }
+
+    public function markUnread(): JsonResponse
+    {
+        $user = Auth::user();
+
+        if (! $user) {
+            return response()->json(['ok' => false], 401);
+        }
+
+        $fingerprint = (string) request()->input('fingerprint', '');
+
+        if ($fingerprint === '') {
+            return response()->json(['ok' => false], 422);
+        }
+
+        NotificationService::markAsUnread($user->id, $fingerprint);
+
+        return response()->json(['ok' => true]);
+    }
 }
