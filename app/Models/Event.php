@@ -92,6 +92,8 @@ class Event extends Model
         'hotel_flat_stay_amount',
         'hotel_flat_stay_currency_id',
         'hotel_flat_stay_convert_to_pln',
+        'hotel_calculation_source',
+        'hotel_offer_flat_stay_amount',
         'pilot_notes',
         'driver_notes',
         'departure_time',
@@ -162,6 +164,7 @@ class Event extends Model
         'pilot_trip_email_sent_at' => 'datetime',
         'driver_pickup_info_sent_at' => 'datetime',
         'hotel_flat_stay_convert_to_pln' => 'boolean',
+        'hotel_offer_flat_stay_amount' => 'decimal:2',
         'program_day_start_times' => 'array',
         'program_day_routes' => 'array',
     ];

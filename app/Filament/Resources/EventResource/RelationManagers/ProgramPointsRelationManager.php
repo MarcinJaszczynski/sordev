@@ -964,6 +964,8 @@ class ProgramPointsRelationManager extends RelationManager
                             'order' => $this->nextProgramPointOrderForDay($day),
                             'include_in_program' => true,
                             'include_in_calculation' => true,
+                            'show_title_style' => true,
+                            'show_description' => true,
                             'include_gratis_in_cost' => false,
                             'include_pilot_in_cost' => false,
                             'include_driver_in_cost' => false,
@@ -1190,6 +1192,8 @@ class ProgramPointsRelationManager extends RelationManager
                                     'pilot_notes' => $data['pilot_notes'] ?? $templatePoint->pilot_notes ?? null,
                                     'include_in_program' => (bool) ($data['include_in_program'] ?? true),
                                     'include_in_calculation' => (bool) ($data['include_in_calculation'] ?? true),
+                                    'show_title_style' => (bool) ($data['show_title_style'] ?? true),
+                                    'show_description' => (bool) ($data['show_description'] ?? true),
                                     'include_gratis_in_cost' => (bool) ($data['include_gratis_in_cost'] ?? $templatePoint->include_gratis_in_cost ?? false),
                                     'include_pilot_in_cost' => (bool) ($data['include_pilot_in_cost'] ?? $templatePoint->include_pilot_in_cost ?? false),
                                     'include_driver_in_cost' => (bool) ($data['include_driver_in_cost'] ?? $templatePoint->include_driver_in_cost ?? false),
@@ -1214,6 +1218,8 @@ class ProgramPointsRelationManager extends RelationManager
                             $createdPoint->update([
                                 'include_in_program' => (bool) ($data['include_in_program'] ?? true),
                                 'include_in_calculation' => (bool) ($data['include_in_calculation'] ?? true),
+                                'show_title_style' => (bool) ($data['show_title_style'] ?? true),
+                                'show_description' => (bool) ($data['show_description'] ?? true),
                                 'active' => (bool) ($data['active'] ?? true),
                             ]);
                         } else {
@@ -1238,6 +1244,8 @@ class ProgramPointsRelationManager extends RelationManager
                                 'pilot_notes' => $data['pilot_notes'] ?? null,
                                 'include_in_program' => (bool) ($data['include_in_program'] ?? true),
                                 'include_in_calculation' => (bool) ($data['include_in_calculation'] ?? true),
+                                'show_title_style' => (bool) ($data['show_title_style'] ?? true),
+                                'show_description' => (bool) ($data['show_description'] ?? true),
                                 'include_gratis_in_cost' => (bool) ($data['include_gratis_in_cost'] ?? false),
                                 'include_pilot_in_cost' => (bool) ($data['include_pilot_in_cost'] ?? false),
                                 'include_driver_in_cost' => (bool) ($data['include_driver_in_cost'] ?? false),
@@ -1981,6 +1989,16 @@ class ProgramPointsRelationManager extends RelationManager
                 Forms\Components\Toggle::make('include_in_calculation')
                     ->label('W kosztach')
                     ->helperText('Wchodzi do kosztów i rozliczenia.')
+                    ->default(true)
+                    ->inline(false),
+                Forms\Components\Toggle::make('show_title_style')
+                    ->label('Styl tytułu')
+                    ->helperText('Pogrubienie tytułu w ofercie Word / PDF.')
+                    ->default(true)
+                    ->inline(false),
+                Forms\Components\Toggle::make('show_description')
+                    ->label('Opis')
+                    ->helperText('Czy doklejać opis punktu w ofercie Word / PDF.')
                     ->default(true)
                     ->inline(false),
             ])

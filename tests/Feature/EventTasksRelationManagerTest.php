@@ -47,6 +47,43 @@ class EventTasksRelationManagerTest extends TestCase
             ->assertSuccessful();
     }
 
+    /**
+     * Regresja: skrypt scroll jako osobny root Livewire sprawiał, że wire:click="selectTask"
+     * lądował na ManageEventTasks (bez metody) zamiast na TasksRelationManager.
+     */
+    public function test_event_tasks_split_view_keeps_single_livewire_root_around_select_task(): void
+    {
+        $user = User::factory()->create();
+        $user->assignRole('admin');
+
+        $event = Event::factory()->create();
+        $task = Task::factory()->create([
+            'title' => 'Split root probe',
+            'taskable_type' => Event::class,
+            'taskable_id' => $event->id,
+            'author_id' => $user->id,
+            'assignee_id' => $user->id,
+            'status_id' => Task::getDefaultStatusId(),
+        ]);
+
+        $html = Livewire::actingAs($user)
+            ->test(ManageEventTasks::class, ['record' => $event->getKey()])
+            ->assertSeeHtml('selectTask('.$task->id.')')
+            ->html();
+
+        $this->assertDoesNotMatchRegularExpression(
+            '/<script\b[^>]*\bwire:id=/i',
+            $html,
+            'wire:id nie może być na <script> — wtedy selectTask wychodzi poza RM',
+        );
+
+        $this->assertMatchesRegularExpression(
+            '/wire:id="[^"]+"[^>]*\bclass="[^"]*\btasks-split-view\b/s',
+            $html,
+            'Root RM musi być div.tasks-split-view obejmującym tabelę',
+        );
+    }
+
     public function test_event_tasks_use_admin_list_layout_and_open_create_modal(): void
     {
         $user = User::factory()->create();

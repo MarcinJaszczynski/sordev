@@ -1151,14 +1151,14 @@ final class EventFinanceOverviewService
 
         if ($planCost->source_type === 'accommodation_hotel' && $planCost->source_id) {
             return app(HotelStaySettlementSync::class)
-                ->referenceTotalPlnForContractor($event, (int) $planCost->source_id);
+                ->offerTotalPlnForContractor($event, (int) $planCost->source_id);
         }
 
         if ($planCost->source_type === 'accommodation_hotel_stay' && $planCost->source_id) {
             $stay = EventHotelStay::query()->with('roomLines.currency')->find((int) $planCost->source_id);
 
             return $stay
-                ? app(HotelStaySettlementSync::class)->referenceTotalPlnForStay($event, $stay)
+                ? app(HotelStaySettlementSync::class)->offerTotalPlnForStay($event, $stay)
                 : $this->health->plannedPlnForCost($planCost);
         }
 

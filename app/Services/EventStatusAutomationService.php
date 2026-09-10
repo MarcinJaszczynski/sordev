@@ -8,8 +8,10 @@ use App\Enums\TaskPriority;
 use App\Events\EventStatusChanged;
 use App\Models\Event;
 use App\Support\AdminPanelUrls;
+use App\Support\HotelCalculationSource;
 use App\Support\Tasks\SystemTaskFactory;
 use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Facades\Schema;
 
 /**
  * Automatyzacje po zmianie statusu imprezy (zadania biurowe).
@@ -30,6 +32,8 @@ final class EventStatusAutomationService
             'to' => $to,
         ]);
 
+        $this->switchHotelCalculationToNegotiatedIfNeeded($event, $to);
+
         match ($to) {
             Event::STATUS_CONFIRMED => $this->createOfficeTask(
                 $event,
@@ -40,6 +44,35 @@ final class EventStatusAutomationService
             // Oferta / rezerwacja wstępna / do rozliczenia — bez auto-taska (zaśmiecało skrzynkę).
             default => null,
         };
+    }
+
+    /**
+     * Od wstępnej rezerwacji / potwierdzenia liczymy już cenę uzgodnioną z hotelem (P).
+     */
+    private function switchHotelCalculationToNegotiatedIfNeeded(Event $event, string $to): void
+    {
+        if (! Schema::hasColumn('events', 'hotel_calculation_source')) {
+            return;
+        }
+
+        if (! in_array($to, [
+            Event::STATUS_PROVISIONAL_RESERVATION,
+            Event::STATUS_CONFIRMED,
+            Event::STATUS_ODPRAWA_OK,
+            Event::STATUS_TO_SETTLE,
+            Event::STATUS_SETTLED,
+        ], true)) {
+            return;
+        }
+
+        $hotelService = app(EventHotelPlanService::class);
+        $hotelService->ensureNegotiatedSeededFromOffer($event);
+
+        if (HotelCalculationSource::normalize($event->hotel_calculation_source) === HotelCalculationSource::NEGOTIATED) {
+            return;
+        }
+
+        $hotelService->setCalculationSource($event, HotelCalculationSource::NEGOTIATED);
     }
 
     private function label(Event $event): string

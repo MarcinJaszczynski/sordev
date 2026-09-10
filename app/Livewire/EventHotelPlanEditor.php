@@ -21,6 +21,7 @@ use App\Services\EventHotelPlanService;
 use App\Services\HotelStayReservationSync;
 use App\Support\ContractorContactDetails;
 use App\Support\EventHotelPlanFormatting;
+use App\Support\HotelCalculationSource;
 use Filament\Notifications\Notification;
 use Illuminate\Support\Str;
 use Livewire\Component;
@@ -56,6 +57,20 @@ class EventHotelPlanEditor extends Component
     public ?int $hotelFlatStayCurrencyId = null;
 
     public bool $hotelFlatStayConvertToPln = true;
+
+    /** offer | negotiated — źródło ceny w kalkulacji oferty */
+    public string $hotelCalculationSource = HotelCalculationSource::OFFER;
+
+    public ?string $hotelOfferFlatStayAmount = null;
+
+    /** Prosty cennik uzgodniony: cena pokoju 1/2/3-os. */
+    public ?string $negotiatedRate1 = null;
+
+    public ?string $negotiatedRate2 = null;
+
+    public ?string $negotiatedRate3 = null;
+
+    public bool $applyNegotiatedRatesToAllStays = true;
 
     public string $hotelContractorSearch = '';
 
@@ -131,8 +146,15 @@ class EventHotelPlanEditor extends Component
         $this->hotelFlatStayCurrencyId = $event->hotel_flat_stay_currency_id
             ?: Currency::defaultPlnId();
         $this->hotelFlatStayConvertToPln = (bool) ($event->hotel_flat_stay_convert_to_pln ?? true);
+        $this->hotelCalculationSource = HotelCalculationSource::normalize(
+            $event->hotel_calculation_source ?? HotelCalculationSource::OFFER
+        );
+        $this->hotelOfferFlatStayAmount = $event->hotel_offer_flat_stay_amount !== null
+            ? (string) $event->hotel_offer_flat_stay_amount
+            : ($this->hotelFlatStayAmount);
 
         $this->stays = app(EventHotelPlanService::class)->staysToPayload($event);
+        $this->syncNegotiatedRateInputsFromActiveStay();
 
         if ($this->stays === []) {
             $this->stays = [];
@@ -170,6 +192,24 @@ class EventHotelPlanEditor extends Component
         $this->activeStayIndex = max(0, min($index, count($this->stays) - 1));
         $this->resetHotelSearch();
         $this->syncHotelReservationFormFromActiveStay();
+        $this->syncNegotiatedRateInputsFromActiveStay();
+    }
+
+    protected function syncNegotiatedRateInputsFromActiveStay(): void
+    {
+        $stay = $this->stays[$this->activeStayIndex] ?? null;
+        $rates = [1 => null, 2 => null, 3 => null];
+
+        foreach ($stay['room_lines'] ?? [] as $line) {
+            $people = max(1, (int) ($line['people_count'] ?? 0));
+            if ($people >= 1 && $people <= 3 && $rates[$people] === null) {
+                $rates[$people] = isset($line['unit_price']) ? (string) $line['unit_price'] : null;
+            }
+        }
+
+        $this->negotiatedRate1 = $rates[1];
+        $this->negotiatedRate2 = $rates[2];
+        $this->negotiatedRate3 = $rates[3];
     }
 
     public function updatedHotelContractorSearch(): void
@@ -439,6 +479,7 @@ class EventHotelPlanEditor extends Component
             'quantity' => 1,
             'people_count' => null,
             'unit_price' => 0,
+            'offer_unit_price' => 0,
             'price_basis' => \App\Models\EventHotelRoomLine::PRICE_BASIS_PER_ROOM,
             'currency_id' => Currency::query()->where('symbol', 'PLN')->value('id'),
             'convert_to_pln' => true,
@@ -487,15 +528,61 @@ class EventHotelPlanEditor extends Component
             if ($roomId) {
                 $room = HotelRoom::find($roomId);
                 if ($room) {
-                    $this->stays[$stayIndex]['room_lines'][$lineIndex]['unit_price'] = (float) $room->price;
-                    $this->stays[$stayIndex]['room_lines'][$lineIndex]['people_count'] = (int) ($room->capacity ?? $room->people_count ?? 1);
-                    $this->stays[$stayIndex]['room_lines'][$lineIndex]['currency_id'] = Currency::query()
+                    $catalogPrice = (float) $room->price;
+                    $line = &$this->stays[$stayIndex]['room_lines'][$lineIndex];
+                    $previousOffer = (float) ($line['offer_unit_price'] ?? $line['unit_price'] ?? 0);
+                    $previousNegotiated = (float) ($line['unit_price'] ?? 0);
+
+                    // Oferta (S) zawsze z katalogu przy zmianie typu.
+                    $line['offer_unit_price'] = $catalogPrice;
+                    // Uzgodniona (P): aktualizuj z katalogu tylko gdy była równa starej ofercie (jeszcze nie negocjowana).
+                    if (abs($previousNegotiated - $previousOffer) < 0.0001) {
+                        $line['unit_price'] = $catalogPrice;
+                    }
+
+                    $line['people_count'] = (int) ($room->capacity ?? $room->people_count ?? 1);
+                    $line['currency_id'] = Currency::query()
                         ->where('symbol', $room->currency)->value('id');
-                    $this->stays[$stayIndex]['room_lines'][$lineIndex]['convert_to_pln'] = (bool) ($room->convert_to_pln ?? true);
-                    $this->stays[$stayIndex]['room_lines'][$lineIndex]['label'] = null;
+                    $line['convert_to_pln'] = (bool) ($room->convert_to_pln ?? true);
+                    $line['label'] = null;
+                    unset($line);
                 }
             }
         }
+    }
+
+    public function applyNegotiatedRates(): void
+    {
+        if (! $this->save(showNotification: false)) {
+            return;
+        }
+
+        $event = Event::findOrFail($this->eventId);
+        $rates = [
+            1 => $this->negotiatedRate1,
+            2 => $this->negotiatedRate2,
+            3 => $this->negotiatedRate3,
+        ];
+
+        $stayDay = $this->applyNegotiatedRatesToAllStays
+            ? null
+            : (int) ($this->stays[$this->activeStayIndex]['day'] ?? 0);
+
+        app(EventHotelPlanService::class)->applyNegotiatedRoomRates(
+            $event,
+            $rates,
+            allStays: $this->applyNegotiatedRatesToAllStays,
+            stayDay: $stayDay ?: null,
+        );
+
+        $this->loadPlan();
+        $this->dispatch('event-price-table-refresh');
+
+        Notification::make()
+            ->title('Zastosowano ceny uzgodnione')
+            ->body('Cena ofertowa (S) pozostała bez zmian. Kalkulacja oferty zależy od wybranego źródła.')
+            ->success()
+            ->send();
     }
 
     public function updateSlotOccupant(int $lineIndex, int $unitIndex, int $bedIndex, ?string $name): void
@@ -666,6 +753,8 @@ class EventHotelPlanEditor extends Component
                 'hotel_flat_stay_amount' => $this->hotelFlatStayAmount,
                 'hotel_flat_stay_currency_id' => $this->hotelFlatStayCurrencyId,
                 'hotel_flat_stay_convert_to_pln' => $this->hotelFlatStayConvertToPln,
+                'hotel_calculation_source' => $this->hotelCalculationSource,
+                'hotel_offer_flat_stay_amount' => $this->hotelOfferFlatStayAmount,
             ]);
             app(EventHotelPlanService::class)->savePlan($event, $this->stays);
             app(EventHotelPlanService::class)->linkStaysToProgramPoints($event->fresh());
@@ -931,13 +1020,23 @@ class EventHotelPlanEditor extends Component
     {
         $currencies = Currency::query()->pluck('symbol', 'id');
         $people = $this->peoplePerNightForPricing();
-
-        return EventHotelPlanFormatting::eventTotalDisplay(
+        $projected = EventHotelPlanFormatting::projectStaysForSource(
             $this->stays,
-            $this->hotelPricingMode,
+            $this->hotelCalculationSource,
             $this->hotelFlatStayAmount !== null && $this->hotelFlatStayAmount !== ''
                 ? (float) $this->hotelFlatStayAmount
                 : null,
+            $this->hotelOfferFlatStayAmount !== null && $this->hotelOfferFlatStayAmount !== ''
+                ? (float) $this->hotelOfferFlatStayAmount
+                : ($this->hotelFlatStayAmount !== null && $this->hotelFlatStayAmount !== ''
+                    ? (float) $this->hotelFlatStayAmount
+                    : null),
+        );
+
+        return EventHotelPlanFormatting::eventTotalDisplay(
+            $projected['stays'],
+            $this->hotelPricingMode,
+            $projected['flat_stay_amount'],
             $this->hotelFlatStayCurrencyId,
             $this->hotelFlatStayConvertToPln,
             $currencies,
@@ -1138,6 +1237,7 @@ class EventHotelPlanEditor extends Component
             'currencyOptions' => Currency::filamentSelectOptions(),
             'roles' => \App\Models\EventHotelRoomLine::ROLES,
             'priceBasisOptions' => \App\Models\EventHotelRoomLine::priceBasisOptions(),
+            'hotelCalculationSourceOptions' => HotelCalculationSource::options(),
             'participants' => app(EventHotelPlanService::class)->availableParticipants($event),
             'formatting' => EventHotelPlanFormatting::class,
             'activeContractor' => $activeContractor,

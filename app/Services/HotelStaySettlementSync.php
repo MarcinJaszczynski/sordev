@@ -10,6 +10,7 @@ use App\Models\EventSettlement;
 use App\Models\EventSettlementCost;
 use App\Models\Reservation;
 use App\Support\EventHotelPlanFormatting;
+use App\Support\HotelCalculationSource;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\Schema;
 
@@ -196,20 +197,52 @@ class HotelStaySettlementSync
     }
 
     /**
+     * Suma ofertowa (S) — kolumna „kalkulacja” w overview.
+     */
+    public function offerTotalPlnForContractor(Event $event, int $contractorId): float
+    {
+        $event->loadMissing(['hotelStays.roomLines.currency']);
+
+        $stays = $event->hotelStays->filter(
+            fn (EventHotelStay $stay): bool => (int) ($stay->contractor_id ?? 0) === $contractorId
+        );
+
+        return $this->pricedTotalPlnForStays($event, $stays, HotelCalculationSource::OFFER);
+    }
+
+    public function offerTotalPlnForStay(Event $event, EventHotelStay $stay): float
+    {
+        $stay->loadMissing(['roomLines.currency']);
+
+        return $this->pricedTotalPlnForStays($event, collect([$stay]), HotelCalculationSource::OFFER);
+    }
+
+    /**
      * @param  Collection<int, EventHotelStay>  $stays
      */
     protected function referenceTotalPlnForStays(Event $event, Collection $stays): float
+    {
+        // Planowane / reference settlement — zawsze warstwa uzgodniona (P).
+        return $this->pricedTotalPlnForStays($event, $stays, HotelCalculationSource::NEGOTIATED);
+    }
+
+    /**
+     * @param  Collection<int, EventHotelStay>  $stays
+     */
+    protected function pricedTotalPlnForStays(Event $event, Collection $stays, string $priceSource): float
     {
         if ($stays->isEmpty()) {
             return 0.0;
         }
 
         $eventMode = $event->hotel_pricing_mode ?? 'lines';
+        $source = HotelCalculationSource::normalize($priceSource);
 
         // Stała kwota za pobyt (impreza) — nie liczymy z cennika pokoi.
         if (EventHotelPlanFormatting::isEventFlatPricing($eventMode)) {
             $event->loadMissing('hotelStays');
-            $totalFlat = app(EventHotelPlanService::class)->totalPlnForEvent($event);
+            $totals = app(EventHotelPlanService::class)->totalsByCurrencyForEvent($event, $source);
+            $totalFlat = round((float) ($totals['PLN'] ?? 0), 2);
             $allCount = $event->hotelStays->count();
             $groupCount = $stays->count();
 
@@ -226,8 +259,10 @@ class HotelStaySettlementSync
 
         $total = 0.0;
         foreach ($stays as $stay) {
+            $payload = $this->stayPayload($stay);
+            $projected = EventHotelPlanFormatting::projectStaysForSource([$payload], $source);
             $total += EventHotelPlanFormatting::stayTotalPln(
-                $this->stayPayload($stay),
+                $projected['stays'][0] ?? $payload,
                 $eventMode,
                 $currencies,
                 $peoplePerNight,
@@ -734,6 +769,7 @@ class HotelStaySettlementSync
         return [
             'pricing_mode' => $stay->pricing_mode ?? 'lines',
             'flat_amount' => $stay->flat_amount,
+            'offer_flat_amount' => $stay->offer_flat_amount ?? $stay->flat_amount,
             'flat_currency_id' => $stay->flat_currency_id,
             'flat_convert_to_pln' => $stay->flat_convert_to_pln,
             'room_lines' => $stay->roomLines->map(static fn ($line): array => [
@@ -742,6 +778,7 @@ class HotelStaySettlementSync
                 'quantity' => $line->quantity,
                 'people_count' => $line->people_count,
                 'unit_price' => $line->unit_price,
+                'offer_unit_price' => $line->offer_unit_price ?? $line->unit_price,
                 'price_basis' => $line->resolvedPriceBasis(),
                 'currency_id' => $line->currency_id,
                 'convert_to_pln' => $line->convert_to_pln,

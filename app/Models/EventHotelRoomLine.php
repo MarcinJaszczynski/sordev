@@ -27,6 +27,7 @@ class EventHotelRoomLine extends Model
         'quantity',
         'people_count',
         'unit_price',
+        'offer_unit_price',
         'price_basis',
         'currency_id',
         'convert_to_pln',
@@ -37,9 +38,28 @@ class EventHotelRoomLine extends Model
         'quantity' => 'integer',
         'people_count' => 'integer',
         'unit_price' => 'decimal:2',
+        'offer_unit_price' => 'decimal:2',
         'convert_to_pln' => 'boolean',
         'order' => 'integer',
     ];
+
+    protected static function booted(): void
+    {
+        static::saving(function (EventHotelRoomLine $line): void {
+            if (! \Illuminate\Support\Facades\Schema::hasColumn('event_hotel_room_lines', 'offer_unit_price')) {
+                return;
+            }
+
+            // Create / legacy: brak jawnej oferty (default 0) przy niezerowym unit_price → zamroź S = P.
+            if (
+                ! $line->isDirty('offer_unit_price')
+                && (float) ($line->offer_unit_price ?? 0) === 0.0
+                && (float) $line->unit_price > 0
+            ) {
+                $line->offer_unit_price = $line->unit_price;
+            }
+        });
+    }
 
     public function stay(): BelongsTo
     {
@@ -132,19 +152,44 @@ class EventHotelRoomLine extends Model
         return round($unitPrice * $qty, 2);
     }
 
-    public function lineTotal(): float
+    /**
+     * Cena jednostkowa wg źródła: offer = zamrożona oferta, negotiated = unit_price.
+     */
+    public function effectiveUnitPrice(?string $source = null): float
+    {
+        $source = \App\Support\HotelCalculationSource::normalize($source);
+        $negotiated = round((float) $this->unit_price, 2);
+
+        if ($source === \App\Support\HotelCalculationSource::OFFER) {
+            if ($this->offer_unit_price === null) {
+                return $negotiated;
+            }
+
+            $offer = round((float) $this->offer_unit_price, 2);
+            // Legacy: oferta 0 przy niezerowym P → jeszcze nie zamrożona.
+            if ($offer === 0.0 && $negotiated > 0.0) {
+                return $negotiated;
+            }
+
+            return $offer;
+        }
+
+        return $negotiated;
+    }
+
+    public function lineTotal(?string $source = null): float
     {
         return self::calculateLineTotal(
-            (float) $this->unit_price,
+            $this->effectiveUnitPrice($source ?? \App\Support\HotelCalculationSource::NEGOTIATED),
             (int) $this->quantity,
             $this->effectivePeopleCount(),
             $this->resolvedPriceBasis(),
         );
     }
 
-    public function lineTotalPln(): float
+    public function lineTotalPln(?string $source = null): float
     {
-        $total = $this->lineTotal();
+        $total = $this->lineTotal($source);
         $currency = $this->currency;
 
         if (! $currency || $currency->symbol === 'PLN') {

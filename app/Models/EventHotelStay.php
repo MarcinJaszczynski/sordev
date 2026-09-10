@@ -22,6 +22,7 @@ class EventHotelStay extends Model
         'same_as_day',
         'pricing_mode',
         'flat_amount',
+        'offer_flat_amount',
         'flat_currency_id',
         'flat_convert_to_pln',
     ];
@@ -30,6 +31,7 @@ class EventHotelStay extends Model
         'day' => 'integer',
         'same_as_day' => 'integer',
         'flat_amount' => 'decimal:2',
+        'offer_flat_amount' => 'decimal:2',
         'flat_convert_to_pln' => 'boolean',
     ];
 
@@ -63,16 +65,27 @@ class EventHotelStay extends Model
         return $this->hasMany(EventHotelRoomLine::class)->orderBy('order');
     }
 
-    public function totalPln(?string $eventPricingMode = 'lines', ?int $peoplePerNight = null): float
-    {
+    public function totalPln(
+        ?string $eventPricingMode = 'lines',
+        ?int $peoplePerNight = null,
+        ?string $priceSource = null,
+    ): float {
+        $source = \App\Support\HotelCalculationSource::normalize(
+            $priceSource ?? \App\Support\HotelCalculationSource::NEGOTIATED
+        );
+
         if (EventHotelPlanFormatting::isEventFlatPricing($eventPricingMode)) {
             return 0.0;
         }
 
-        if (EventHotelPlanFormatting::isStayFlatPricing($this->pricing_mode) && $this->flat_amount !== null) {
+        $flatAmount = $source === \App\Support\HotelCalculationSource::OFFER
+            ? ($this->offer_flat_amount ?? $this->flat_amount)
+            : $this->flat_amount;
+
+        if (EventHotelPlanFormatting::isStayFlatPricing($this->pricing_mode) && $flatAmount !== null) {
             $people = $peoplePerNight ?? $this->requiredBedsForPricing();
             $amount = EventHotelPlanFormatting::resolveFlatNativeAmount(
-                (float) $this->flat_amount,
+                (float) $flatAmount,
                 $this->pricing_mode,
                 $people,
             );
@@ -91,7 +104,9 @@ class EventHotelStay extends Model
             return round($amount * (float) ($currency->exchange_rate ?? 1), 2);
         }
 
-        return round((float) $this->roomLines->sum(fn (EventHotelRoomLine $line) => $line->lineTotalPln()), 2);
+        return round((float) $this->roomLines->sum(
+            fn (EventHotelRoomLine $line) => $line->lineTotalPln($source)
+        ), 2);
     }
 
     protected function requiredBedsForPricing(): int

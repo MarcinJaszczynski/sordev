@@ -1,5 +1,4 @@
-@include('filament.tasks.partials.tasks-split-scroll-script')
-
+{{-- Jeden root: skrypt jako rodzeństwo psuł wire:id (selectTask szedł w stronę rodzica). --}}
 <div
     @class([
         'fi-resource-relation-manager flex flex-col gap-y-4',
@@ -21,6 +20,8 @@
         });
     "
 >
+    @include('filament.tasks.partials.tasks-split-scroll-script')
+
     <x-filament-panels::resources.tabs />
 
     {{ \Filament\Support\Facades\FilamentView::renderHook(\Filament\View\PanelsRenderHook::RESOURCE_RELATION_MANAGER_BEFORE, scopes: $this->getRenderHookScopes()) }}
