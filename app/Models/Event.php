@@ -2390,6 +2390,37 @@ class Event extends Model
     }
 
     /**
+     * Automatyczna migawka przy generowaniu oferty Word dla klienta.
+     */
+    public function createOfferSnapshot(?string $description = null): EventSnapshot
+    {
+        return EventSnapshot::createSnapshot(
+            $this,
+            'offer',
+            'Stan przy generowaniu oferty '.now()->format('d.m.Y H:i'),
+            $description ?? 'Automatyczna migawka przy utworzeniu oferty wycieczki'
+        );
+    }
+
+    /**
+     * Automatyczna migawka przy generowaniu umowy (Contract / EventAgreement).
+     */
+    public function createContractSnapshot(
+        ?string $name = null,
+        ?string $description = null,
+        ?int $createdBy = null,
+    ): EventSnapshot {
+        return EventSnapshot::createSnapshot(
+            $this,
+            'contract',
+            $name ?? 'Stan przy generowaniu umowy '.now()->format('d.m.Y H:i'),
+            $description ?? 'Automatyczna migawka przy utworzeniu umowy',
+            null,
+            $createdBy,
+        );
+    }
+
+    /**
      * Przywróć do pierwotnego stanu
      */
     public function restoreToOriginal(): bool

@@ -58,7 +58,7 @@ final class GenerateEventContractAction
     {
         $mode = (string) ($data['generation_mode'] ?? self::MODE_GROUP_ORDERING);
 
-        return match ($mode) {
+        $result = match ($mode) {
             self::MODE_INDIVIDUAL, self::MODE_GROUP_PARTICIPANTS => [
                 'primary' => $this->createIndividualTemplate($event, $data, $createdBy, $mode),
                 'companion' => null,
@@ -69,6 +69,17 @@ final class GenerateEventContractAction
             self::MODE_GROUP_ORDERING => $this->createGroupOrdering($event, $data, $createdBy),
             default => throw new InvalidArgumentException('Nieznany tryb generowania umowy.'),
         };
+
+        $primary = $result['primary'];
+        $number = $primary->contract_number ?: ('#'.$primary->id);
+
+        $event->createContractSnapshot(
+            'Stan przy generowaniu umowy '.$number,
+            'Automatyczna migawka przy utworzeniu umowy (tryb: '.$result['mode'].').',
+            $createdBy,
+        );
+
+        return $result;
     }
 
     /**

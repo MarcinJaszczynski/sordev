@@ -108,11 +108,12 @@
             $subtasksManager = \App\Filament\Resources\TaskResource\RelationManagers\SubtasksRelationManager::class;
         @endphp
 
-        <div class="fi-task-editor-panels-row">
-            <div class="fi-task-editor-panel">
-                @include('livewire.partials.task-editor-comments')
-            </div>
+        {{-- Komentarze pełna szerokość; załączniki + podzadania dwukolumnowo pod spodem. --}}
+        <div class="fi-task-editor-panel fi-task-editor-panel--comments">
+            @include('livewire.partials.task-editor-comments')
+        </div>
 
+        <div class="fi-task-editor-panels-row">
             <section
                 wire:key="task-editor-attachments-{{ $record->getKey() }}"
                 class="fi-task-editor-panel rounded-xl bg-white shadow-sm ring-1 ring-gray-950/5 dark:bg-gray-900 dark:ring-white/10"
@@ -138,11 +139,22 @@
     @endif
 
     <style>
+        .fi-task-full-editor .fi-task-editor-panel--comments {
+            margin-top: 0.25rem;
+        }
+
         .fi-task-full-editor .fi-task-editor-panels-row {
             display: grid;
-            grid-template-columns: repeat(3, minmax(0, 1fr));
+            grid-template-columns: 1fr;
             gap: 0.75rem;
             align-items: stretch;
+            margin-top: 0.75rem;
+        }
+
+        @media (min-width: 768px) {
+            .fi-task-full-editor .fi-task-editor-panels-row {
+                grid-template-columns: repeat(2, minmax(0, 1fr));
+            }
         }
 
         .fi-task-full-editor .fi-task-editor-panel {

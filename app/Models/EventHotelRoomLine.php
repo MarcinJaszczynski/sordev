@@ -12,6 +12,12 @@ class EventHotelRoomLine extends Model
 
     public const PRICE_BASIS_PER_PERSON = 'per_person';
 
+    /** Warstwa oferty (S) — struktura + ceny z szablonu. */
+    public const LAYER_OFFER = 'offer';
+
+    /** Warstwa uzgodniona (P) — struktura + ceny z hotelem; obsada / numery pokoi. */
+    public const LAYER_NEGOTIATED = 'negotiated';
+
     public const ROLES = [
         'qty' => 'Uczestnicy',
         'gratis' => \App\Support\EventParticipantGroupLabels::GRATIS,
@@ -21,6 +27,7 @@ class EventHotelRoomLine extends Model
 
     protected $fillable = [
         'event_hotel_stay_id',
+        'price_layer',
         'hotel_room_id',
         'label',
         'role',
@@ -46,11 +53,22 @@ class EventHotelRoomLine extends Model
     protected static function booted(): void
     {
         static::saving(function (EventHotelRoomLine $line): void {
+            if (\Illuminate\Support\Facades\Schema::hasColumn('event_hotel_room_lines', 'price_layer')) {
+                $line->price_layer = self::normalizeLayer($line->price_layer);
+            }
+
             if (! \Illuminate\Support\Facades\Schema::hasColumn('event_hotel_room_lines', 'offer_unit_price')) {
                 return;
             }
 
-            // Create / legacy: brak jawnej oferty (default 0) przy niezerowym unit_price → zamroź S = P.
+            // Legacy dual-price na jednej linii: brak S przy niezerowym P → zamroź S = P.
+            // Przy rozdzielonych warstwach offer_unit_price na linii offer = unit_price.
+            if ($line->isOfferLayer()) {
+                $line->offer_unit_price = $line->unit_price;
+
+                return;
+            }
+
             if (
                 ! $line->isDirty('offer_unit_price')
                 && (float) ($line->offer_unit_price ?? 0) === 0.0
@@ -59,6 +77,58 @@ class EventHotelRoomLine extends Model
                 $line->offer_unit_price = $line->unit_price;
             }
         });
+    }
+
+    public static function normalizeLayer(?string $layer): string
+    {
+        return $layer === self::LAYER_OFFER ? self::LAYER_OFFER : self::LAYER_NEGOTIATED;
+    }
+
+    public function isOfferLayer(): bool
+    {
+        if (! \Illuminate\Support\Facades\Schema::hasColumn('event_hotel_room_lines', 'price_layer')) {
+            return false;
+        }
+
+        return self::normalizeLayer($this->price_layer) === self::LAYER_OFFER;
+    }
+
+    public function isNegotiatedLayer(): bool
+    {
+        return ! $this->isOfferLayer();
+    }
+
+    /**
+     * @param  \Illuminate\Database\Eloquent\Builder<\App\Models\EventHotelRoomLine>  $query
+     * @return \Illuminate\Database\Eloquent\Builder<\App\Models\EventHotelRoomLine>
+     */
+    public function scopeForLayer($query, ?string $layer)
+    {
+        $normalized = self::normalizeLayer($layer);
+
+        if (! \Illuminate\Support\Facades\Schema::hasColumn('event_hotel_room_lines', 'price_layer')) {
+            return $query;
+        }
+
+        return $query->where('price_layer', $normalized);
+    }
+
+    /**
+     * @param  \Illuminate\Database\Eloquent\Builder<\App\Models\EventHotelRoomLine>  $query
+     * @return \Illuminate\Database\Eloquent\Builder<\App\Models\EventHotelRoomLine>
+     */
+    public function scopeOffer($query)
+    {
+        return $query->forLayer(self::LAYER_OFFER);
+    }
+
+    /**
+     * @param  \Illuminate\Database\Eloquent\Builder<\App\Models\EventHotelRoomLine>  $query
+     * @return \Illuminate\Database\Eloquent\Builder<\App\Models\EventHotelRoomLine>
+     */
+    public function scopeNegotiated($query)
+    {
+        return $query->forLayer(self::LAYER_NEGOTIATED);
     }
 
     public function stay(): BelongsTo
@@ -153,28 +223,34 @@ class EventHotelRoomLine extends Model
     }
 
     /**
-     * Cena jednostkowa wg źródła: offer = zamrożona oferta, negotiated = unit_price.
+     * Cena jednostkowa linii.
+     * Przy rozdzielonych warstwach (price_layer) każda linia ma własne unit_price —
+     * source służy tylko do legacy dual-price na jednej linii.
      */
     public function effectiveUnitPrice(?string $source = null): float
     {
+        $unit = round((float) $this->unit_price, 2);
+
+        if (\Illuminate\Support\Facades\Schema::hasColumn('event_hotel_room_lines', 'price_layer')) {
+            return $unit;
+        }
+
         $source = \App\Support\HotelCalculationSource::normalize($source);
-        $negotiated = round((float) $this->unit_price, 2);
 
         if ($source === \App\Support\HotelCalculationSource::OFFER) {
             if ($this->offer_unit_price === null) {
-                return $negotiated;
+                return $unit;
             }
 
             $offer = round((float) $this->offer_unit_price, 2);
-            // Legacy: oferta 0 przy niezerowym P → jeszcze nie zamrożona.
-            if ($offer === 0.0 && $negotiated > 0.0) {
-                return $negotiated;
+            if ($offer === 0.0 && $unit > 0.0) {
+                return $unit;
             }
 
             return $offer;
         }
 
-        return $negotiated;
+        return $unit;
     }
 
     public function lineTotal(?string $source = null): float

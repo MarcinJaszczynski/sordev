@@ -99,7 +99,23 @@ class EventAgreementWordContentTest extends TestCase
         $this->assertNotFalse($content);
         $this->assertSame('PK', substr($content, 0, 2));
 
-        $xml = $this->docxDocumentXml($path);
+        $rawXml = $this->docxRawDocumentXml($path);
+        libxml_use_internal_errors(true);
+        $parsed = simplexml_load_string($rawXml);
+        $xmlErrors = libxml_get_errors();
+        libxml_clear_errors();
+        $this->assertNotFalse($parsed, 'document.xml musi być poprawnym XML (Word/LibreOffice).');
+        $this->assertSame([], $xmlErrors);
+        $this->assertStringContainsString('&amp;from=PL', $rawXml);
+        $this->assertStringNotContainsString('32015L2302&from=PL', $rawXml);
+
+        $headerXml = $this->docxPartXml($path, 'word/header1.xml');
+        if ($headerXml !== null && str_contains($headerXml, 'logo')) {
+            $this->assertStringContainsString('<w:drawing>', $headerXml);
+            $this->assertStringNotContainsString('<w:pict>', $headerXml);
+        }
+
+        $xml = html_entity_decode(strip_tags($rawXml), ENT_QUOTES | ENT_HTML5, 'UTF-8');
 
         $this->assertStringContainsString('Potwierdzenie zawarcia umowy o organizację imprezy turystycznej', $xml);
         $this->assertStringContainsString('20260420/1001', $xml);
@@ -128,17 +144,23 @@ class EventAgreementWordContentTest extends TestCase
         $this->assertMatchesRegularExpression('/^[A-ZĄĆĘŁŃÓŚŹŻ]/u', $words);
     }
 
-    private function docxDocumentXml(string $path): string
+    private function docxRawDocumentXml(string $path): string
+    {
+        $xml = $this->docxPartXml($path, 'word/document.xml');
+        $this->assertNotNull($xml);
+
+        return $xml;
+    }
+
+    private function docxPartXml(string $path, string $part): ?string
     {
         $this->assertTrue(class_exists(ZipArchive::class), 'ZipArchive required');
 
         $zip = new ZipArchive;
         $this->assertTrue($zip->open($path) === true);
-        $xml = $zip->getFromName('word/document.xml');
+        $xml = $zip->getFromName($part);
         $zip->close();
 
-        $this->assertNotFalse($xml);
-
-        return html_entity_decode(strip_tags($xml), ENT_QUOTES | ENT_HTML5, 'UTF-8');
+        return $xml === false ? null : $xml;
     }
 }

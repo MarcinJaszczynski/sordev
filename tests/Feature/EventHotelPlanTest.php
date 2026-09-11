@@ -459,6 +459,7 @@ class EventHotelPlanTest extends TestCase
 
     public function test_flat_stay_pricing_overrides_line_totals(): void
     {
+        $this->markTestSkipped('Flat pricing wycofane — kalkulacja tylko z linii pokoi (S/P).');
         $event = Event::factory()->create([
             'duration_days' => 3,
             'hotel_pricing_mode' => 'flat_stay',
@@ -482,6 +483,7 @@ class EventHotelPlanTest extends TestCase
 
     public function test_flat_night_pricing_overrides_line_totals_for_stay(): void
     {
+        $this->markTestSkipped('Flat pricing wycofane — kalkulacja tylko z linii pokoi (S/P).');
         $event = Event::factory()->create(['duration_days' => 3]);
 
         $stay = EventHotelStay::create([
@@ -505,6 +507,7 @@ class EventHotelPlanTest extends TestCase
 
     public function test_flat_night_per_person_multiplies_by_required_beds(): void
     {
+        $this->markTestSkipped('Flat pricing wycofane — kalkulacja tylko z linii pokoi (S/P).');
         $event = Event::factory()->create([
             'duration_days' => 2,
             'participant_count' => 10,
@@ -540,6 +543,7 @@ class EventHotelPlanTest extends TestCase
 
     public function test_flat_stay_per_person_multiplies_by_required_beds_once(): void
     {
+        $this->markTestSkipped('Flat pricing wycofane — kalkulacja tylko z linii pokoi (S/P).');
         $event = Event::factory()->create([
             'duration_days' => 3,
             'participant_count' => 10,
@@ -564,6 +568,7 @@ class EventHotelPlanTest extends TestCase
 
     public function test_flat_night_eur_without_convert_flows_to_calculation_and_settlement(): void
     {
+        $this->markTestSkipped('Flat pricing wycofane — kalkulacja tylko z linii pokoi (S/P).');
         $eur = Currency::query()->firstOrCreate(
             ['symbol' => 'EUR'],
             ['exchange_rate' => 4.3, 'name' => 'Euro']

@@ -57,12 +57,16 @@ class SnapshotsRelationManager extends RelationManager
                         'original' => 'Pierwotny',
                         'manual' => 'Ręczny',
                         'status_change' => 'Zmiana statusu',
+                        'offer' => 'Oferta',
+                        'contract' => 'Umowa',
                         default => ucfirst((string) $state),
                     })
                     ->color(fn (?string $state): string => match ($state) {
                         'original' => 'info',
                         'manual' => 'success',
                         'status_change' => 'warning',
+                        'offer' => 'primary',
+                        'contract' => 'primary',
                         default => 'gray',
                     }),
                 Tables\Columns\TextColumn::make('name')
@@ -109,6 +113,8 @@ class SnapshotsRelationManager extends RelationManager
                         'original' => 'Pierwotny',
                         'manual' => 'Ręczny',
                         'status_change' => 'Zmiana statusu',
+                        'offer' => 'Oferta',
+                        'contract' => 'Umowa',
                     ]),
                 Tables\Filters\Filter::make('snapshot_date')
                     ->label('Data utworzenia')

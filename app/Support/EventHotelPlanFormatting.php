@@ -11,19 +11,66 @@ use Illuminate\Support\Str;
 final class EventHotelPlanFormatting
 {
     /**
-     * Cena jednostkowa linii wg źródła (offer vs negotiated).
+     * Projekcja payloadu stayów na jedną warstwę struktury (offer_room_lines vs room_lines).
      *
+     * @param  array<int, array<string, mixed>>  $stays
+     * @return array{stays: array<int, array<string, mixed>>, flat_stay_amount: float|null}
+     */
+    public static function projectStaysForSource(
+        array $stays,
+        ?string $source,
+        ?float $negotiatedFlatStayAmount = null,
+        ?float $offerFlatStayAmount = null,
+    ): array {
+        $source = HotelCalculationSource::normalize($source);
+        $useOffer = $source === HotelCalculationSource::OFFER;
+        $projected = [];
+
+        foreach ($stays as $stay) {
+            $copy = $stay;
+            $copy['pricing_mode'] = 'lines';
+            $copy['flat_amount'] = null;
+
+            if ($useOffer && array_key_exists('offer_room_lines', $stay)) {
+                $copy['room_lines'] = $stay['offer_room_lines'] ?? [];
+            } else {
+                $copy['room_lines'] = $stay['room_lines'] ?? [];
+            }
+
+            // Ujednolić unit_price (legacy dual-price na jednej linii).
+            $lines = [];
+            foreach ($copy['room_lines'] as $line) {
+                $lineCopy = $line;
+                $lineCopy['unit_price'] = self::resolveLineUnitPrice($line, $source);
+                $lines[] = $lineCopy;
+            }
+            $copy['room_lines'] = $lines;
+            $projected[] = $copy;
+        }
+
+        return [
+            'stays' => $projected,
+            'flat_stay_amount' => null,
+        ];
+    }
+
+    /**
      * @param  array<string, mixed>  $line
      */
     public static function resolveLineUnitPrice(array $line, ?string $source = null): float
     {
+        // Przy rozdzielonych warstwach każda linia ma własne unit_price.
+        if (array_key_exists('price_layer', $line) || ! array_key_exists('offer_unit_price', $line)) {
+            return round((float) ($line['unit_price'] ?? 0), 2);
+        }
+
         $source = HotelCalculationSource::normalize(
             $source ?? HotelCalculationSource::NEGOTIATED
         );
         $negotiated = round((float) ($line['unit_price'] ?? 0), 2);
 
         if ($source === HotelCalculationSource::OFFER) {
-            if (! array_key_exists('offer_unit_price', $line) || $line['offer_unit_price'] === null || $line['offer_unit_price'] === '') {
+            if ($line['offer_unit_price'] === null || $line['offer_unit_price'] === '') {
                 return $negotiated;
             }
 
@@ -36,71 +83,6 @@ final class EventHotelPlanFormatting
         }
 
         return $negotiated;
-    }
-
-    /**
-     * Flat amount nocy wg źródła.
-     *
-     * @param  array<string, mixed>  $stay
-     */
-    public static function resolveStayFlatAmount(array $stay, ?string $source = null): ?float
-    {
-        $source = HotelCalculationSource::normalize(
-            $source ?? HotelCalculationSource::NEGOTIATED
-        );
-
-        if ($source === HotelCalculationSource::OFFER) {
-            if (array_key_exists('offer_flat_amount', $stay) && $stay['offer_flat_amount'] !== null && $stay['offer_flat_amount'] !== '') {
-                return (float) $stay['offer_flat_amount'];
-            }
-        }
-
-        if (! isset($stay['flat_amount']) || $stay['flat_amount'] === '') {
-            return null;
-        }
-
-        return (float) $stay['flat_amount'];
-    }
-
-    /**
-     * Projekcja payloadu stayów na jedną warstwę cenową (unit_price / flat_amount),
-     * żeby istniejące helpery sumujące po unit_price działały bez zmian API.
-     *
-     * @param  array<int, array<string, mixed>>  $stays
-     * @return array{stays: array<int, array<string, mixed>>, flat_stay_amount: float|null}
-     */
-    public static function projectStaysForSource(
-        array $stays,
-        ?string $source,
-        ?float $negotiatedFlatStayAmount = null,
-        ?float $offerFlatStayAmount = null,
-    ): array {
-        $source = HotelCalculationSource::normalize($source);
-        $projected = [];
-
-        foreach ($stays as $stay) {
-            $copy = $stay;
-            $flat = self::resolveStayFlatAmount($stay, $source);
-            $copy['flat_amount'] = $flat;
-
-            $lines = [];
-            foreach ($stay['room_lines'] ?? [] as $line) {
-                $lineCopy = $line;
-                $lineCopy['unit_price'] = self::resolveLineUnitPrice($line, $source);
-                $lines[] = $lineCopy;
-            }
-            $copy['room_lines'] = $lines;
-            $projected[] = $copy;
-        }
-
-        $flatStay = $source === HotelCalculationSource::OFFER
-            ? ($offerFlatStayAmount ?? $negotiatedFlatStayAmount)
-            : $negotiatedFlatStayAmount;
-
-        return [
-            'stays' => $projected,
-            'flat_stay_amount' => $flatStay,
-        ];
     }
 
     /**

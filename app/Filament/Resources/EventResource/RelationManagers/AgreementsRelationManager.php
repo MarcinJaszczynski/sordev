@@ -492,6 +492,11 @@ class AgreementsRelationManager extends RelationManager
                             app(ContractOrderingPartyService::class)->partiesFromEvent($event),
                         );
 
+                        $event->createContractSnapshot(
+                            'Stan przy generowaniu umowy '.($agreement->agreement_number ?: ('#'.$agreement->id)),
+                            'Automatyczna migawka przy utworzeniu umowy (EventAgreement, grupowa).',
+                        );
+
                         Notification::make()
                             ->title('Umowa wygenerowana')
                             ->body('Utworzono umowę i link do zawarcia dla klienta.')
@@ -599,6 +604,11 @@ class AgreementsRelationManager extends RelationManager
                         $this->syncOrderingPartiesForEventAgreement(
                             $agreement,
                             app(ContractOrderingPartyService::class)->partiesFromEvent($event),
+                        );
+
+                        $event->createContractSnapshot(
+                            'Stan przy generowaniu umowy '.($agreement->agreement_number ?: ('#'.$agreement->id)),
+                            'Automatyczna migawka przy utworzeniu szablonu umowy indywidualnej (EventAgreement).',
                         );
 
                         Notification::make()

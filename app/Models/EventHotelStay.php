@@ -2,8 +2,6 @@
 
 namespace App\Models;
 
-use App\Services\EventHotelOccupancyService;
-use App\Support\EventHotelPlanFormatting;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
@@ -60,9 +58,40 @@ class EventHotelStay extends Model
         return $this->belongsTo(Reservation::class);
     }
 
+    /**
+     * Linie uzgodnione (P) — operacyjna struktura, obsada, numery pokoi.
+     * Domyślna relacja zachowana dla kompatybilności (occupancy / settlement).
+     */
     public function roomLines(): HasMany
     {
-        return $this->hasMany(EventHotelRoomLine::class)->orderBy('order');
+        $relation = $this->hasMany(EventHotelRoomLine::class)->orderBy('order');
+
+        if (\Illuminate\Support\Facades\Schema::hasColumn('event_hotel_room_lines', 'price_layer')) {
+            $relation->where('price_layer', EventHotelRoomLine::LAYER_NEGOTIATED);
+        }
+
+        return $relation;
+    }
+
+    /** Linie ofertowe (S) — struktura i ceny z szablonu. */
+    public function offerRoomLines(): HasMany
+    {
+        $relation = $this->hasMany(EventHotelRoomLine::class)->orderBy('order');
+
+        if (\Illuminate\Support\Facades\Schema::hasColumn('event_hotel_room_lines', 'price_layer')) {
+            $relation->where('price_layer', EventHotelRoomLine::LAYER_OFFER);
+        } else {
+            // Bez warstw — brak osobnej struktury ofertowej.
+            $relation->whereRaw('0 = 1');
+        }
+
+        return $relation;
+    }
+
+    /** Wszystkie linie (S + P). */
+    public function allRoomLines(): HasMany
+    {
+        return $this->hasMany(EventHotelRoomLine::class)->orderBy('price_layer')->orderBy('order');
     }
 
     public function totalPln(
@@ -74,51 +103,19 @@ class EventHotelStay extends Model
             $priceSource ?? \App\Support\HotelCalculationSource::NEGOTIATED
         );
 
-        if (EventHotelPlanFormatting::isEventFlatPricing($eventPricingMode)) {
-            return 0.0;
+        // Flat modes wycofane z kalkulacji — zawsze suma z linii wybranej warstwy.
+        $lines = $source === \App\Support\HotelCalculationSource::OFFER
+            && \Illuminate\Support\Facades\Schema::hasColumn('event_hotel_room_lines', 'price_layer')
+            ? $this->offerRoomLines
+            : $this->roomLines;
+
+        if ($source === \App\Support\HotelCalculationSource::OFFER && $lines->isEmpty()) {
+            $lines = $this->roomLines;
         }
 
-        $flatAmount = $source === \App\Support\HotelCalculationSource::OFFER
-            ? ($this->offer_flat_amount ?? $this->flat_amount)
-            : $this->flat_amount;
-
-        if (EventHotelPlanFormatting::isStayFlatPricing($this->pricing_mode) && $flatAmount !== null) {
-            $people = $peoplePerNight ?? $this->requiredBedsForPricing();
-            $amount = EventHotelPlanFormatting::resolveFlatNativeAmount(
-                (float) $flatAmount,
-                $this->pricing_mode,
-                $people,
-            );
-            $currency = $this->flat_currency_id
-                ? Currency::query()->find($this->flat_currency_id)
-                : null;
-
-            if (! $currency || $currency->symbol === 'PLN') {
-                return $amount;
-            }
-
-            if (! (bool) ($this->flat_convert_to_pln ?? true)) {
-                return 0.0;
-            }
-
-            return round($amount * (float) ($currency->exchange_rate ?? 1), 2);
-        }
-
-        return round((float) $this->roomLines->sum(
+        return round((float) $lines->sum(
             fn (EventHotelRoomLine $line) => $line->lineTotalPln($source)
         ), 2);
-    }
-
-    protected function requiredBedsForPricing(): int
-    {
-        $this->loadMissing('event');
-
-        if (! $this->event) {
-            return 0;
-        }
-
-        return (int) app(EventHotelOccupancyService::class)
-            ->forEvent($this->event)['required_beds_per_night'];
     }
 
     public function isComplete(): bool

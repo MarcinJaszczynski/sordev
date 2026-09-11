@@ -846,5 +846,10 @@ class AgreementFlowTest extends TestCase
         $this->assertNotNull($offerDocument);
         $this->assertSame('draft', $offerDocument->offer_status);
         $this->assertStringContainsString('event-offers/', (string) $offerDocument->file_path);
+
+        $this->assertDatabaseHas('event_snapshots', [
+            'event_id' => $agreement->event_id,
+            'type' => 'offer',
+        ]);
     }
 }

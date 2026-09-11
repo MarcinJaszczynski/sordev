@@ -56,8 +56,14 @@ class EventSnapshot extends Model
     /**
      * Utwórz snapshot imprezy
      */
-    public static function createSnapshot(Event $event, string $type = 'original', ?string $name = null, ?string $description = null, ?array $templatePrices = null): self
-    {
+    public static function createSnapshot(
+        Event $event,
+        string $type = 'original',
+        ?string $name = null,
+        ?string $description = null,
+        ?array $templatePrices = null,
+        ?int $createdBy = null,
+    ): self {
         // Pobierz punkty programu z pełnymi danymi
         $programPoints = $event->programPoints()
             ->with('templatePoint')
@@ -116,6 +122,8 @@ class EventSnapshot extends Model
             'original' => 'Pierwotny stan imprezy',
             'manual' => 'Snapshot ręczny',
             'status_change' => 'Zmiana statusu',
+            'offer' => 'Stan przy generowaniu oferty',
+            'contract' => 'Stan przy generowaniu umowy',
             default => 'Snapshot',
         };
 
@@ -132,7 +140,7 @@ class EventSnapshot extends Model
             'currency_rates' => $currencyRates,
             'template_prices_snapshot' => $templatePrices,
             'total_cost_snapshot' => $totalCostSnapshot,
-            'created_by' => Auth::id(),
+            'created_by' => $createdBy ?? Auth::id(),
             'snapshot_date' => now(),
         ]);
     }
@@ -381,6 +389,8 @@ class EventSnapshot extends Model
             'original' => 'Pierwotny',
             'manual' => 'Ręczny',
             'status_change' => 'Zmiana statusu',
+            'offer' => 'Oferta',
+            'contract' => 'Umowa',
             default => ucfirst($this->type),
         };
     }

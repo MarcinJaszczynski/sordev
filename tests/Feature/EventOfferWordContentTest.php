@@ -137,6 +137,11 @@ class EventOfferWordContentTest extends TestCase
         $this->assertNotNull($document);
         $this->assertStringContainsString('Oferta wycieczki - ', (string) $document->name);
 
+        $this->assertDatabaseHas('event_snapshots', [
+            'event_id' => $event->id,
+            'type' => 'offer',
+        ]);
+
         $path = storage_path('app/public/'.$document->file_path);
         $this->assertFileExists($path);
 

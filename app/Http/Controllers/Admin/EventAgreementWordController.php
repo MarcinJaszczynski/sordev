@@ -16,10 +16,16 @@ use PhpOffice\PhpWord\PhpWord;
 use PhpOffice\PhpWord\Settings;
 use PhpOffice\PhpWord\SimpleType\Jc;
 use PhpOffice\PhpWord\Style\Language;
+use PhpOffice\PhpWord\Style\ListItem;
 use ZipArchive;
 
 /**
  * Generuje DOCX „Potwierdzenie zawarcia umowy…” z poziomu imprezy (wzór PDF RAFA).
+ *
+ * Kompatybilność Word / LibreOffice:
+ * - escapowanie XML (bare `&` w URL SFI psuje document.xml — Pages to łyknie, MS Word nie),
+ * - A4 / marginesy jako int (float z defaultów PhpWord psuje LO),
+ * - logo w nagłówku jako DrawingML zamiast VML.
  */
 class EventAgreementWordController extends Controller
 {
@@ -43,6 +49,7 @@ class EventAgreementWordController extends Controller
         ]);
 
         Settings::setCompatibility(true);
+        Settings::setOutputEscapingEnabled(true);
         if (class_exists(ZipArchive::class)) {
             Settings::setZipClass(Settings::ZIPARCHIVE);
         }
@@ -52,13 +59,15 @@ class EventAgreementWordController extends Controller
             (new Language('pl-PL'))->setLangId(1045)
         );
         $phpWord->setDefaultFontName('Calibri');
-        $phpWord->setDefaultFontSize(11);
+        $phpWord->setDefaultFontSize(10);
 
+        // A4 w twipach jako int — float z defaultów PhpWord psuje LibreOffice / doxswap.
+        // Marginesy ~2 cm jak we wzorze PDF.
         $sectionOptions = [
             'pageSizeW' => 11906,
             'pageSizeH' => 16838,
-            'marginTop' => 1000,
-            'marginBottom' => 1200,
+            'marginTop' => 1134,
+            'marginBottom' => 1134,
             'marginLeft' => 1134,
             'marginRight' => 1134,
         ];
@@ -111,12 +120,14 @@ class EventAgreementWordController extends Controller
      */
     protected function buildConfirmationSection($section, array $payload): void
     {
-        $titleStyle = ['bold' => true, 'size' => 16];
-        $headingStyle = ['bold' => true, 'size' => 12];
-        $bodyStyle = ['size' => 11];
-        $center = ['alignment' => Jc::CENTER, 'spaceAfter' => 120];
-        $para = ['spaceBefore' => 40, 'spaceAfter' => 40, 'alignment' => Jc::BOTH];
-        $paraLeft = ['spaceBefore' => 40, 'spaceAfter' => 40];
+        $titleStyle = ['bold' => true, 'size' => 14];
+        $headingStyle = ['bold' => true, 'size' => 11];
+        $bodyStyle = ['size' => 10];
+        $labelStyle = ['bold' => true, 'size' => 10];
+        $center = ['alignment' => Jc::CENTER, 'spaceBefore' => 0, 'spaceAfter' => 160];
+        $para = ['spaceBefore' => 40, 'spaceAfter' => 60, 'alignment' => Jc::BOTH, 'lineHeight' => 1.15];
+        $paraLeft = ['spaceBefore' => 20, 'spaceAfter' => 40, 'lineHeight' => 1.15];
+        $tightLeft = ['spaceBefore' => 0, 'spaceAfter' => 20, 'lineHeight' => 1.1];
 
         $section->addText(
             $this->escapeText('Potwierdzenie zawarcia umowy o organizację imprezy turystycznej nr '.$payload['contract_number']),
@@ -130,20 +141,23 @@ class EventAgreementWordController extends Controller
             $paraLeft
         );
 
-        $section->addText('zamawiającym:', ['bold' => true, 'size' => 11], $paraLeft);
+        $section->addText($this->escapeText('zamawiającym:'), $labelStyle, [
+            'spaceBefore' => 80,
+            'spaceAfter' => 20,
+        ]);
         foreach ($payload['ordering_party_lines'] as $line) {
-            $section->addText($this->escapeText((string) $line), $bodyStyle, $paraLeft);
+            $section->addText($this->escapeText((string) $line), $bodyStyle, $tightLeft);
         }
 
-        $section->addText('a organizatorem:', ['bold' => true, 'size' => 11], [
+        $section->addText($this->escapeText('a organizatorem:'), $labelStyle, [
             'spaceBefore' => 120,
-            'spaceAfter' => 40,
+            'spaceAfter' => 20,
         ]);
         foreach ($payload['organizer_lines'] as $line) {
-            $section->addText($this->escapeText((string) $line), $bodyStyle, $paraLeft);
+            $section->addText($this->escapeText((string) $line), $bodyStyle, $tightLeft);
         }
 
-        $section->addText('Informacje o imprezie turystycznej', $headingStyle, [
+        $section->addText($this->escapeText('Informacje o imprezie turystycznej'), $headingStyle, [
             'spaceBefore' => 200,
             'spaceAfter' => 80,
         ]);
@@ -161,20 +175,21 @@ class EventAgreementWordController extends Controller
         $this->addLabelValue($section, 'Ubezpieczenie:', (string) $payload['insurance'], $bodyStyle, $para);
         $this->addLabelValue($section, 'Dodatkowe informacje:', (string) $payload['additional_info'], $bodyStyle, $para);
 
-        $section->addText('Podstawienie i miejsce zbiórki', $headingStyle, [
+        $section->addText($this->escapeText('Podstawienie i miejsce zbiórki'), $headingStyle, [
             'spaceBefore' => 200,
             'spaceAfter' => 80,
         ]);
         $this->addLabelValue($section, 'Miejsce podstawienia autokaru:', (string) $payload['pickup_place'], $bodyStyle, $paraLeft);
         $this->addLabelValue($section, 'Godzina podstawienia:', (string) $payload['pickup_time'], $bodyStyle, $paraLeft);
 
-        $section->addText(
-            $this->escapeText('Uwaga! Autokar zostanie podstawiony w miejscu wskazanym w umowie. Zamawiający lub Podróżny mają prawo do poproszenia odpowiednich służb o przeprowadzenie kontroli stanu technicznego autokaru oraz trzeźwości kierowcy. Kontrola taka odbywa się w miejscu podstawienia autokaru na 30 minut przed planowaną godziną wyjazdu. Wszelkie formalności związane z wezwaniem służb uprawnionych do kontroli pozostają po stronie Zamawiającego/Podróżnego zlecającego kontrolę.'),
-            $bodyStyle,
-            $para
+        $warningRun = $section->addTextRun($para);
+        $warningRun->addText($this->escapeText('Uwaga! '), ['bold' => true, 'size' => 10]);
+        $warningRun->addText(
+            $this->escapeText('Autokar zostanie podstawiony w miejscu wskazanym w umowie. Zamawiający lub Podróżny mają prawo do poproszenia odpowiednich służb o przeprowadzenie kontroli stanu technicznego autokaru oraz trzeźwości kierowcy. Kontrola taka odbywa się w miejscu podstawienia autokaru na 30 minut przed planowaną godziną wyjazdu. Wszelkie formalności związane z wezwaniem służb uprawnionych do kontroli pozostają po stronie Zamawiającego/Podróżnego zlecającego kontrolę.'),
+            $bodyStyle
         );
 
-        $section->addText('Cena imprezy i harmonogram wpłat', $headingStyle, [
+        $section->addText($this->escapeText('Cena imprezy i harmonogram wpłat'), $headingStyle, [
             'spaceBefore' => 200,
             'spaceAfter' => 80,
         ]);
@@ -183,12 +198,16 @@ class EventAgreementWordController extends Controller
         $this->addLabelValue($section, 'Sposób płatności:', (string) $payload['payment_method'], $bodyStyle, $paraLeft);
         $this->addLabelValue($section, 'Cena obejmuje:', (string) $payload['price_includes'], $bodyStyle, $para);
 
-        $section->addText('Terminy rozliczenia harmonogramu wpłat:', ['bold' => true, 'size' => 11], [
+        $section->addText($this->escapeText('Terminy rozliczenia harmonogramu wpłat:'), $labelStyle, [
             'spaceBefore' => 120,
             'spaceAfter' => 40,
         ]);
         foreach ($payload['payment_schedule_lines'] as $line) {
-            $section->addText($this->escapeText((string) $line), $bodyStyle, $paraLeft);
+            $section->addText(
+                $this->escapeText((string) $line),
+                $bodyStyle,
+                ['spaceBefore' => 0, 'spaceAfter' => 40, 'indentation' => ['left' => 200]]
+            );
         }
 
         $section->addText($this->escapeText((string) $payload['bank_account_line']), $bodyStyle, [
@@ -208,12 +227,16 @@ class EventAgreementWordController extends Controller
             $para
         );
 
-        $section->addText('Załączniki do umowy', $headingStyle, [
+        $section->addText($this->escapeText('Załączniki do umowy'), $headingStyle, [
             'spaceBefore' => 200,
             'spaceAfter' => 80,
         ]);
         foreach (WordAgreementContent::ATTACHMENTS as $attachment) {
-            $section->addText($this->escapeText($attachment), $bodyStyle, $paraLeft);
+            $section->addText(
+                $this->escapeText($attachment),
+                $bodyStyle,
+                ['spaceBefore' => 0, 'spaceAfter' => 40, 'indentation' => ['left' => 200]]
+            );
         }
     }
 
@@ -222,24 +245,28 @@ class EventAgreementWordController extends Controller
      */
     protected function buildTermsSection($section): void
     {
-        $section->addPageBreak();
-
-        $bodyStyle = ['size' => 10];
-        $para = ['spaceBefore' => 40, 'spaceAfter' => 40, 'alignment' => Jc::BOTH];
-        $paraLeft = ['spaceBefore' => 40, 'spaceAfter' => 40];
-        $subPara = ['spaceBefore' => 20, 'spaceAfter' => 20, 'indentation' => ['left' => 360]];
+        // Jak w PDF: OWU płynie zaraz po załącznikach (bez sztucznego page break).
+        $bodyStyle = ['size' => 9];
+        $para = ['spaceBefore' => 20, 'spaceAfter' => 40, 'alignment' => Jc::BOTH, 'lineHeight' => 1.1];
+        $subPara = [
+            'spaceBefore' => 0,
+            'spaceAfter' => 20,
+            'alignment' => Jc::BOTH,
+            'indentation' => ['left' => 360, 'hanging' => 180],
+            'lineHeight' => 1.1,
+        ];
 
         foreach ($this->content->termsOfParticipationBlocks() as $block) {
             $text = $this->escapeText($block['text']);
             match ($block['type']) {
-                'title' => $section->addText($text, ['bold' => true, 'size' => 13], [
+                'title' => $section->addText($text, ['bold' => true, 'size' => 12], [
                     'alignment' => Jc::CENTER,
-                    'spaceBefore' => 80,
+                    'spaceBefore' => 240,
                     'spaceAfter' => 160,
                 ]),
-                'heading' => $section->addText($text, ['bold' => true, 'size' => 11], [
-                    'spaceBefore' => 160,
-                    'spaceAfter' => 60,
+                'heading' => $section->addText($text, ['bold' => true, 'size' => 10], [
+                    'spaceBefore' => 140,
+                    'spaceAfter' => 40,
                 ]),
                 'sub' => $section->addText($text, $bodyStyle, $subPara),
                 default => $section->addText($text, $bodyStyle, $para),
@@ -252,20 +279,27 @@ class EventAgreementWordController extends Controller
      */
     protected function buildStandardFormSection($section): void
     {
-        $section->addPageBreak();
-
-        $bodyStyle = ['size' => 10];
-        $para = ['spaceBefore' => 60, 'spaceAfter' => 60, 'alignment' => Jc::BOTH];
+        // Jak w PDF: SFI zaraz po OWU, bez osobnej strony.
+        $bodyStyle = ['size' => 9];
+        $para = ['spaceBefore' => 40, 'spaceAfter' => 60, 'alignment' => Jc::BOTH, 'lineHeight' => 1.15];
+        $listStyle = ['listType' => ListItem::TYPE_BULLET_FILLED];
+        $listPara = ['spaceBefore' => 20, 'spaceAfter' => 40, 'alignment' => Jc::BOTH, 'lineHeight' => 1.15];
 
         foreach ($this->content->standardInformationFormBlocks() as $block) {
             $text = $this->escapeText($block['text']);
             match ($block['type']) {
-                'title' => $section->addText($text, ['bold' => true, 'size' => 13], [
+                'title' => $section->addText($text, ['bold' => true, 'size' => 12], [
                     'alignment' => Jc::CENTER,
-                    'spaceBefore' => 80,
+                    'spaceBefore' => 240,
                     'spaceAfter' => 160,
                 ]),
-                'link' => $section->addText($text, ['size' => 9, 'color' => '0563C1'], $para),
+                'bullet' => $section->addListItem($text, 0, $bodyStyle, $listStyle, $listPara),
+                'link' => $section->addLink($text, $text, ['size' => 8, 'color' => '0563C1', 'underline' => 'single'], $para),
+                'footer' => $section->addText($text, ['bold' => true, 'size' => 9, 'italic' => true], [
+                    'alignment' => Jc::CENTER,
+                    'spaceBefore' => 200,
+                    'spaceAfter' => 40,
+                ]),
                 default => $section->addText($text, $bodyStyle, $para),
             };
         }
@@ -279,7 +313,7 @@ class EventAgreementWordController extends Controller
     protected function addLabelValue($section, string $label, string $value, array $font, array $para): void
     {
         $run = $section->addTextRun($para);
-        $run->addText($this->escapeText($label).' ', ['bold' => true, 'size' => $font['size'] ?? 11]);
+        $run->addText($this->escapeText($label).' ', ['bold' => true, 'size' => $font['size'] ?? 10]);
         $run->addText($this->escapeText($value), $font);
     }
 
@@ -331,6 +365,10 @@ class EventAgreementWordController extends Controller
         );
     }
 
+    /**
+     * PhpWord osadza logo jako VML (&lt;w:pict&gt;) — Word Desktop / LibreOffice często tego nie łykają.
+     * Podmieniamy na DrawingML (jak w Oferta Word).
+     */
     protected function injectLogoIntoDocx(string $docxPath): void
     {
         $logoPath = public_path('uploads/logo.png');
@@ -339,24 +377,65 @@ class EventAgreementWordController extends Controller
         }
 
         $zip = new ZipArchive;
-        if ($zip->open($docxPath, ZipArchive::CREATE) !== true) {
+        if ($zip->open($docxPath) !== true) {
             return;
         }
 
-        $headerXml = $zip->getFromName('word/header1.xml');
-        if ($headerXml === false) {
-            $zip->close();
+        [$imgW, $imgH] = @getimagesize($logoPath) ?: [300, 76];
+        $displayW = 90;
+        $displayH = (int) round($imgH * ($displayW / max(1, $imgW)));
+        $widthEmu = (int) round($displayW * 9525);
+        $heightEmu = (int) round($displayH * 9525);
 
-            return;
+        for ($i = 0; $i < $zip->numFiles; $i++) {
+            $name = (string) $zip->getNameIndex($i);
+            if (! preg_match('#^word/header\d+\.xml$#', $name)) {
+                continue;
+            }
+
+            $headerXml = $zip->getFromIndex($i);
+            if ($headerXml === false) {
+                continue;
+            }
+
+            if (! str_contains($headerXml, '<w:pict>') && ! str_contains($headerXml, '<v:shape>')) {
+                continue;
+            }
+
+            if (! preg_match('/r:id=["\'](rId\d+)["\']/', $headerXml, $m)) {
+                continue;
+            }
+
+            $rId = $m[1];
+            $drawingMl = '<w:drawing>'
+                .'<wp:inline distT="0" distB="0" distL="0" distR="0">'
+                .'<wp:extent cx="'.$widthEmu.'" cy="'.$heightEmu.'"/>'
+                .'<wp:docPr id="1" name="logo"/>'
+                .'<a:graphic xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main">'
+                .'<a:graphicData uri="http://schemas.openxmlformats.org/drawingml/2006/picture">'
+                .'<pic:pic xmlns:pic="http://schemas.openxmlformats.org/drawingml/2006/picture">'
+                .'<pic:nvPicPr><pic:cNvPr id="0" name="logo.png"/><pic:cNvPicPr/></pic:nvPicPr>'
+                .'<pic:blipFill>'
+                .'<a:blip r:embed="'.$rId.'"/>'
+                .'<a:stretch><a:fillRect/></a:stretch>'
+                .'</pic:blipFill>'
+                .'<pic:spPr>'
+                .'<a:xfrm><a:off x="0" y="0"/><a:ext cx="'.$widthEmu.'" cy="'.$heightEmu.'"/></a:xfrm>'
+                .'<a:prstGeom prst="rect"><a:avLst/></a:prstGeom>'
+                .'<a:ln><a:noFill/></a:ln>'
+                .'</pic:spPr>'
+                .'</pic:pic>'
+                .'</a:graphicData>'
+                .'</a:graphic>'
+                .'</wp:inline>'
+                .'</w:drawing>';
+
+            $newHeaderXml = preg_replace('/<w:pict>.*?<\/w:pict>/s', $drawingMl, $headerXml);
+            if ($newHeaderXml !== null && $newHeaderXml !== $headerXml) {
+                $zip->addFromString($name, $newHeaderXml);
+            }
         }
 
-        if (! str_contains($headerXml, '<w:pict>') && ! str_contains($headerXml, '<v:shape>')) {
-            $zip->close();
-
-            return;
-        }
-
-        // Logo już osadzone przez PhpWord — nic do poprawki.
         $zip->close();
     }
 
@@ -364,7 +443,7 @@ class EventAgreementWordController extends Controller
     {
         $text = html_entity_decode($text, ENT_QUOTES | ENT_HTML5, 'UTF-8');
         $text = strip_tags($text);
-        $text = preg_replace('/[\\x00-\\x08\\x0B\\x0C\\x0E-\\x1F]/u', '', $text) ?? $text;
+        $text = preg_replace('/[\x00-\x08\x0B\x0C\x0E-\x1F]/u', '', $text) ?? $text;
 
         return trim($text);
     }

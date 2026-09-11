@@ -332,6 +332,10 @@ class EventOfferWordController extends Controller
             'created_by' => auth()->id(),
         ]);
 
+        $event->createOfferSnapshot(
+            'Automatyczna migawka przy utworzeniu oferty Word: '.$fileName
+        );
+
         return response()->download(
             $absolutePath,
             $fileName,

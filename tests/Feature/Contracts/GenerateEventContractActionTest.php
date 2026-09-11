@@ -53,6 +53,11 @@ class GenerateEventContractActionTest extends TestCase
         $this->assertSame('sent', $contract->status);
         $this->assertNotEmpty($contract->public_token);
         $this->assertFalse((bool) data_get($contract->meta, 'participants_fill_separately'));
+
+        $this->assertDatabaseHas('event_snapshots', [
+            'event_id' => $event->id,
+            'type' => 'contract',
+        ]);
     }
 
     public function test_group_ordering_with_participants_fill_creates_companion_template(): void

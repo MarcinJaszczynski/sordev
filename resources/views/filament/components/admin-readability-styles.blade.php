@@ -4686,8 +4686,8 @@
 
     @media (min-width: 1024px) {
         .tasks-split-view__list {
-            width: 380px;
-            max-width: 380px;
+            width: 50%;
+            max-width: 50%;
         }
     }
 
@@ -5264,7 +5264,7 @@
     }
 
     .task-split-detail__editor .fi-task-full-editor {
-        max-width: 52rem;
+        max-width: none;
     }
 
     .task-split-detail__empty {

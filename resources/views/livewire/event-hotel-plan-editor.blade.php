@@ -78,14 +78,14 @@
                         $stayDay = (int) ($stay['day'] ?? 0);
                         $isBedDeficient = $deficientDays->has($stayDay);
                         $hotelLabel = $hotelLabels[$stay['contractor_id']] ?? null;
-                        $isFlatStayMode = $formatting::isStayFlatPricing($stay['pricing_mode'] ?? 'lines')
-                            || $formatting::isEventFlatPricing($hotelPricingMode);
-                        $costLabel = $formatting::isEventFlatPricing($hotelPricingMode)
-                            ? $this->totalDisplay
-                            : $formatting::stayTotalDisplay($stay, $hotelPricingMode, $currencies, $peoplePerNight, $hotelRoomsById);
-                        $summary = $isFlatStayMode
-                            ? null
-                            : $formatting::staySummary($stay, $hotelRoomsById, $currencies);
+                        $projectedStay = $formatting::projectStaysForSource([$stay], $hotelCalculationSource)['stays'][0] ?? $stay;
+                        $costLabel = $formatting::stayTotalDisplay($projectedStay, 'lines', $currencies, $peoplePerNight, $hotelRoomsById);
+                        $summaryP = $formatting::staySummary($stay, $hotelRoomsById, $currencies);
+                        $summaryS = $formatting::staySummary(
+                            array_merge($stay, ['room_lines' => $stay['offer_room_lines'] ?? []]),
+                            $hotelRoomsById,
+                            $currencies
+                        );
                     @endphp
                     <button
                         type="button"
@@ -134,12 +134,9 @@
                                 · {{ $namedCount }} wpisane
                                 · zostało {{ $remaining }}
                             </p>
-                        @elseif ($activeStep === 1 && filled($summary))
-                            <p class="hotel-night-card-sub">{{ $summary }}</p>
-                        @elseif ($activeStep === 1 && $isFlatStayMode && ($stay['pricing_mode'] ?? '') === 'flat_night_per_person')
-                            <p class="hotel-night-card-sub">stała × {{ $peoplePerNight }} os.</p>
-                        @elseif ($activeStep === 1 && $isFlatStayMode && $formatting::isStayFlatPricing($stay['pricing_mode'] ?? 'lines'))
-                            <p class="hotel-night-card-sub">stała kwota za noc</p>
+                        @elseif ($activeStep === 1)
+                            <p class="hotel-night-card-sub">S: {{ $summaryS }}</p>
+                            <p class="hotel-night-card-sub">P: {{ $summaryP }}</p>
                         @endif
                     </button>
                 @endforeach
@@ -375,161 +372,146 @@
                             </div>
                         </x-filament::section>
 
-                        <x-filament::section heading="Cennik noclegów">
-                            <div class="space-y-4">
-                                <div class="rounded-lg border border-sky-200 bg-sky-50/80 px-3 py-3 dark:border-sky-800 dark:bg-sky-950/30">
-                                    <p class="text-sm font-medium text-gray-900 dark:text-gray-100">Źródło ceny w kalkulacji oferty</p>
-                                    <p class="mt-0.5 text-xs text-gray-600 dark:text-gray-400">
-                                        S = cena z szablonu (oferta dla klienta). P = cena uzgodniona z hotelem (plan / rozliczenie).
-                                        Po potwierdzeniu imprezy system przełącza się automatycznie na P.
-                                    </p>
-                                    <div class="mt-2 flex flex-wrap gap-4">
-                                        @foreach ($hotelCalculationSourceOptions as $sourceKey => $sourceLabel)
-                                            <label class="inline-flex items-center gap-2 text-sm">
-                                                <input type="radio" wire:model.live="hotelCalculationSource" value="{{ $sourceKey }}" class="rounded border-gray-300" />
-                                                {{ $sourceLabel }}
-                                            </label>
-                                        @endforeach
-                                    </div>
-                                </div>
-
-                                <div class="rounded-lg border border-amber-200 bg-amber-50/70 px-3 py-3 dark:border-amber-800 dark:bg-amber-950/20">
-                                    <p class="text-sm font-medium text-gray-900 dark:text-gray-100">Ceny uzgodnione z hotelem (P) — pokój 1 / 2 / 3-os.</p>
-                                    <p class="mt-0.5 text-xs text-gray-600 dark:text-gray-400">
-                                        Wpisz stawki za pokój. System nadpisze tylko cenę uzgodnioną (P) na liniach o danej pojemności — cena ofertowa (S) zostaje.
-                                    </p>
-                                    <div class="mt-3 flex flex-wrap items-end gap-3">
-                                        <div>
-                                            <label class="block text-xs text-gray-600">1-os.</label>
-                                            <input type="number" step="0.01" min="0" wire:model="negotiatedRate1" class="mt-0.5 block w-24 rounded-lg border-gray-300 text-sm" />
-                                        </div>
-                                        <div>
-                                            <label class="block text-xs text-gray-600">2-os.</label>
-                                            <input type="number" step="0.01" min="0" wire:model="negotiatedRate2" class="mt-0.5 block w-24 rounded-lg border-gray-300 text-sm" />
-                                        </div>
-                                        <div>
-                                            <label class="block text-xs text-gray-600">3-os.</label>
-                                            <input type="number" step="0.01" min="0" wire:model="negotiatedRate3" class="mt-0.5 block w-24 rounded-lg border-gray-300 text-sm" />
-                                        </div>
-                                        <label class="inline-flex items-center gap-2 text-sm text-gray-700 dark:text-gray-300 pb-1">
-                                            <input type="checkbox" wire:model="applyNegotiatedRatesToAllStays" class="rounded border-gray-400" />
-                                            Wszystkie noce
-                                        </label>
-                                        <x-filament::button size="sm" color="warning" wire:click="applyNegotiatedRates">
-                                            Zastosuj ceny P
-                                        </x-filament::button>
-                                    </div>
-                                </div>
-
-                                <div>
-                                    <p class="text-sm font-medium text-gray-900">Cała impreza</p>
-                                    <div class="mt-2 flex flex-wrap gap-4">
-                                        <label class="inline-flex items-center gap-2 text-sm">
-                                            <input type="radio" wire:model.live="hotelPricingMode" value="lines" class="rounded border-gray-300" />
-                                            Z linii pokoi (ilość × cena)
-                                        </label>
-                                        <label class="inline-flex items-center gap-2 text-sm">
-                                            <input type="radio" wire:model.live="hotelPricingMode" value="flat_stay" class="rounded border-gray-300" />
-                                            Stała kwota za cały pobyt
-                                        </label>
-                                        <label class="inline-flex items-center gap-2 text-sm">
-                                            <input type="radio" wire:model.live="hotelPricingMode" value="flat_stay_per_person" class="rounded border-gray-300" />
-                                            Stała kwota za pobyt za osobę
-                                        </label>
-                                    </div>
-                                    @if ($formatting::isEventFlatPricing($hotelPricingMode))
-                                        <div class="mt-3 flex flex-wrap items-center gap-3">
-                                            <div>
-                                                <label class="block text-xs text-gray-600">P — uzgodniona</label>
-                                                <input type="number" step="0.01" min="0" wire:model.blur="hotelFlatStayAmount" class="mt-0.5 block w-full max-w-[10rem] rounded-lg border-gray-300 text-sm" placeholder="np. 28500" />
-                                            </div>
-                                            <div>
-                                                <label class="block text-xs text-gray-600">S — oferta</label>
-                                                <input type="number" step="0.01" min="0" wire:model.blur="hotelOfferFlatStayAmount" class="mt-0.5 block w-full max-w-[10rem] rounded-lg border-gray-300 text-sm" placeholder="oferta" />
-                                            </div>
-                                            <select wire:model.live="hotelFlatStayCurrencyId" class="rounded-lg border-gray-300 text-sm shadow-sm">
-                                                @foreach ($currencyOptions as $id => $label)
-                                                    <option value="{{ $id }}">{{ $label }}</option>
-                                                @endforeach
-                                            </select>
-                                            <label class="inline-flex items-center gap-2 text-sm text-gray-700">
-                                                <input type="checkbox" wire:model.live="hotelFlatStayConvertToPln" class="rounded border-gray-400" />
-                                                Przelicz na PLN
-                                            </label>
-                                        </div>
-                                        @if ($hotelPricingMode === 'flat_stay_per_person')
-                                            <p class="mt-1 text-xs text-amber-700">
-                                                Stawka × {{ $peoplePerNight }} osób (potrzebne miejsca na noc) = {{ $this->totalDisplay }}.
-                                                Ceny w tabeli pokoi są tylko informacyjne.
-                                            </p>
-                                        @else
-                                            <p class="mt-1 text-xs text-amber-700">Ceny w tabeli pokoi są tylko informacyjne — do kalkulacji liczy się kwota grupowa.</p>
-                                        @endif
-                                    @endif
-                                </div>
-
-                                @if (! $formatting::isEventFlatPricing($hotelPricingMode))
-                                    <div class="rounded-lg border border-gray-200 p-3">
-                                        <p class="text-sm font-medium text-gray-900">Noc {{ $stay['day'] }}</p>
-                                        <div class="mt-2 flex flex-wrap gap-4">
-                                            <label class="inline-flex items-center gap-2 text-sm">
-                                                <input type="radio" wire:model.live="stays.{{ $activeStayIndex }}.pricing_mode" value="lines" class="rounded border-gray-300" />
-                                                Z linii pokoi
-                                            </label>
-                                            <label class="inline-flex items-center gap-2 text-sm">
-                                                <input type="radio" wire:model.live="stays.{{ $activeStayIndex }}.pricing_mode" value="flat_night" class="rounded border-gray-300" />
-                                                Stała kwota za tę noc
-                                            </label>
-                                            <label class="inline-flex items-center gap-2 text-sm">
-                                                <input type="radio" wire:model.live="stays.{{ $activeStayIndex }}.pricing_mode" value="flat_night_per_person" class="rounded border-gray-300" />
-                                                Stała kwota za noc za osobę
-                                            </label>
-                                        </div>
-                                        @if ($formatting::isStayFlatPricing($stay['pricing_mode'] ?? 'lines'))
-                                            <div class="mt-3 flex flex-wrap items-center gap-3">
-                                                <input type="number" step="0.01" min="0" wire:model.blur="stays.{{ $activeStayIndex }}.flat_amount" class="block w-full max-w-[10rem] rounded-lg border-gray-300 text-sm" />
-                                                <select wire:model.live="stays.{{ $activeStayIndex }}.flat_currency_id" class="rounded-lg border-gray-300 text-sm shadow-sm">
-                                                    @foreach ($currencyOptions as $id => $label)
-                                                        <option value="{{ $id }}">{{ $label }}</option>
-                                                    @endforeach
-                                                </select>
-                                                <label class="inline-flex items-center gap-2 text-sm text-gray-700">
-                                                    <input type="checkbox" wire:model.live="stays.{{ $activeStayIndex }}.flat_convert_to_pln" class="rounded border-gray-400" />
-                                                    Przelicz na PLN
-                                                </label>
-                                            </div>
-                                            @if (($stay['pricing_mode'] ?? '') === 'flat_night_per_person')
-                                                <p class="mt-1 text-xs text-amber-700">
-                                                    Stawka × {{ $peoplePerNight }} osób =
-                                                    {{ $formatting::stayTotalDisplay($stay, $hotelPricingMode, $currencies, $peoplePerNight, $hotelRoomsById) }}.
-                                                    Ceny pokoi w tej nocy nie wchodzą do sumy.
-                                                </p>
-                                            @else
-                                                <p class="mt-1 text-xs text-amber-700">Ceny pokoi w tej nocy nie wchodzą do sumy.</p>
-                                            @endif
-                                        @endif
-                                    </div>
-                                @endif
+                        <x-filament::section heading="Źródło ceny w kalkulacji oferty">
+                            <p class="text-xs text-gray-600 dark:text-gray-400">
+                                S = struktura i cena z szablonu (oferta dla klienta). P = struktura i cena uzgodniona z hotelem (plan / rozliczenie).
+                                Po potwierdzeniu imprezy system przełącza się automatycznie na P.
+                            </p>
+                            <div class="mt-2 flex flex-wrap gap-4">
+                                @foreach ($hotelCalculationSourceOptions as $sourceKey => $sourceLabel)
+                                    <label class="inline-flex items-center gap-2 text-sm">
+                                        <input type="radio" wire:model.live="hotelCalculationSource" value="{{ $sourceKey }}" class="rounded border-gray-300" />
+                                        {{ $sourceLabel }}
+                                    </label>
+                                @endforeach
                             </div>
+                            <p class="mt-2 text-sm font-semibold text-gray-900 dark:text-gray-100">
+                                Suma wg źródła: {{ $this->totalDisplay }}
+                            </p>
                         </x-filament::section>
 
-                        <x-filament::section heading="Struktura pokoi — noc {{ $stay['day'] }}">
+                        @php
+                            $offerStay = array_merge($stay, ['room_lines' => $stay['offer_room_lines'] ?? []]);
+                            $offerTotal = $formatting::stayTotalDisplay($offerStay, 'lines', $currencies, $peoplePerNight, $hotelRoomsById);
+                            $negotiatedTotal = $formatting::stayTotalDisplay($stay, 'lines', $currencies, $peoplePerNight, $hotelRoomsById);
+                        @endphp
+
+                        <x-filament::section heading="Struktura ofertowa (S) — noc {{ $stay['day'] }}">
                             <div class="mb-3 flex flex-wrap items-center justify-between gap-2">
-                                <p class="text-sm font-medium text-gray-800">{{ $formatting::staySummary($stay, $hotelRoomsById, $currencies) }}</p>
-                                <x-filament::button wire:click="addRoomLine" size="sm" icon="heroicon-o-plus">Dodaj typ pokoju</x-filament::button>
+                                <p class="text-sm text-gray-600">Ceny i ilości wg szablonu dla zadanej liczby osób. Niezależna od uzgodnień z hotelem.</p>
+                                <x-filament::button wire:click="addOfferRoomLine" size="sm" icon="heroicon-o-plus">Dodaj typ (S)</x-filament::button>
                             </div>
 
-                            @if (! empty($stay['room_lines']))
-                                <div class="overflow-x-auto rounded-lg border border-gray-200">
+                            @if (! empty($stay['offer_room_lines']))
+                                <div class="overflow-x-auto rounded-lg border border-sky-200">
                                     <table class="min-w-full divide-y divide-gray-200 text-sm">
-                                        <thead class="bg-gray-50 text-left text-xs uppercase tracking-wide text-gray-500">
+                                        <thead class="bg-sky-50 text-left text-xs uppercase tracking-wide text-gray-500">
                                             <tr>
                                                 <th class="px-3 py-2">Typ pokoju</th>
                                                 <th class="px-3 py-2 w-24">Ilość</th>
                                                 <th class="px-3 py-2 w-24">Osób/pokój</th>
                                                 <th class="px-3 py-2 w-28">Cena za</th>
-                                                <th class="px-3 py-2 w-28">S oferta</th>
-                                                <th class="px-3 py-2 w-28">P uzgodn.</th>
+                                                <th class="px-3 py-2 w-28">Cena S</th>
+                                                <th class="px-3 py-2 w-24">Waluta</th>
+                                                <th class="px-3 py-2 w-28">PLN</th>
+                                                <th class="px-3 py-2 w-32">Suma</th>
+                                                <th class="px-3 py-2 w-32">Rola</th>
+                                                <th class="px-3 py-2 w-20"></th>
+                                            </tr>
+                                        </thead>
+                                        <tbody class="divide-y divide-gray-100 bg-white">
+                                            @foreach ($stay['offer_room_lines'] as $lineIndex => $line)
+                                                <tr wire:key="offer-{{ $activeStayIndex }}-{{ $lineIndex }}">
+                                                    <td class="px-3 py-2 align-top">
+                                                        <select wire:model.live="stays.{{ $activeStayIndex }}.offer_room_lines.{{ $lineIndex }}.hotel_room_id" class="block w-full min-w-[10rem] rounded-lg border-gray-300 text-sm">
+                                                            <option value="">— własna nazwa —</option>
+                                                            @foreach ($hotelRooms as $room)
+                                                                <option value="{{ $room->id }}">{{ $room->name }}</option>
+                                                            @endforeach
+                                                        </select>
+                                                        @if (empty($line['hotel_room_id']))
+                                                            <input type="text" wire:model.blur="stays.{{ $activeStayIndex }}.offer_room_lines.{{ $lineIndex }}.label" placeholder="np. Triple, Double" class="mt-1 block w-full rounded-lg border-gray-300 text-sm" />
+                                                        @endif
+                                                    </td>
+                                                    <td class="px-3 py-2 align-top">
+                                                        <input type="number" min="1" wire:model.blur="stays.{{ $activeStayIndex }}.offer_room_lines.{{ $lineIndex }}.quantity" class="block w-full rounded-lg border-gray-300 text-sm" />
+                                                    </td>
+                                                    <td class="px-3 py-2 align-top">
+                                                        <input type="number" min="1" wire:model.blur="stays.{{ $activeStayIndex }}.offer_room_lines.{{ $lineIndex }}.people_count" placeholder="{{ $formatting::linePeopleCount($line, $hotelRoomsById) }}" class="block w-full rounded-lg border-gray-300 text-sm" />
+                                                    </td>
+                                                    <td class="px-3 py-2 align-top">
+                                                        <select wire:model.live="stays.{{ $activeStayIndex }}.offer_room_lines.{{ $lineIndex }}.price_basis" class="block w-full rounded-lg border-gray-300 text-sm">
+                                                            @foreach ($priceBasisOptions as $basisKey => $basisLabel)
+                                                                <option value="{{ $basisKey }}">{{ $basisLabel }}</option>
+                                                            @endforeach
+                                                        </select>
+                                                    </td>
+                                                    <td class="px-3 py-2 align-top">
+                                                        <input type="number" step="0.01" min="0" wire:model.blur="stays.{{ $activeStayIndex }}.offer_room_lines.{{ $lineIndex }}.unit_price" class="block w-full rounded-lg border-gray-300 text-sm" />
+                                                    </td>
+                                                    <td class="px-3 py-2 align-top">
+                                                        <select wire:model.live="stays.{{ $activeStayIndex }}.offer_room_lines.{{ $lineIndex }}.currency_id" class="block w-full rounded-lg border-gray-300 text-sm">
+                                                            @foreach ($currencyOptions as $id => $label)
+                                                                <option value="{{ $id }}">{{ $label }}</option>
+                                                            @endforeach
+                                                        </select>
+                                                    </td>
+                                                    <td class="px-3 py-2 align-top">
+                                                        <label class="inline-flex items-center gap-1 text-xs text-gray-700">
+                                                            <input type="checkbox" wire:model.live="stays.{{ $activeStayIndex }}.offer_room_lines.{{ $lineIndex }}.convert_to_pln" class="rounded border-gray-400" />
+                                                            Tak
+                                                        </label>
+                                                    </td>
+                                                    <td class="px-3 py-2 align-top font-semibold text-gray-900">
+                                                        {{ $formatting::lineTotalDisplay($line, $currencies, $hotelRoomsById) }}
+                                                    </td>
+                                                    <td class="px-3 py-2 align-top">
+                                                        <select wire:model.live="stays.{{ $activeStayIndex }}.offer_room_lines.{{ $lineIndex }}.role" class="block w-full rounded-lg border-gray-300 text-sm">
+                                                            @foreach ($roles as $roleKey => $roleLabel)
+                                                                <option value="{{ $roleKey }}">{{ $roleLabel }}</option>
+                                                            @endforeach
+                                                        </select>
+                                                    </td>
+                                                    <td class="px-3 py-2 align-top">
+                                                        <button type="button" wire:click="removeOfferRoomLine({{ $lineIndex }})" class="text-xs text-red-600 hover:underline">Usuń</button>
+                                                    </td>
+                                                </tr>
+                                            @endforeach
+                                        </tbody>
+                                        <tfoot class="bg-sky-50">
+                                            <tr>
+                                                <td colspan="7" class="px-3 py-2 text-right text-xs font-semibold uppercase text-gray-500">Razem S</td>
+                                                <td class="px-3 py-2 font-bold text-gray-900">{{ $offerTotal }}</td>
+                                                <td colspan="2"></td>
+                                            </tr>
+                                        </tfoot>
+                                    </table>
+                                </div>
+                            @else
+                                <p class="text-sm text-gray-500">Brak linii ofertowych — dodaj typ lub odśwież ze szablonu (zmiana liczby uczestników).</p>
+                            @endif
+                        </x-filament::section>
+
+                        <x-filament::section heading="Struktura uzgodniona (P) — noc {{ $stay['day'] }}">
+                            <div class="mb-3 flex flex-wrap items-center justify-between gap-2">
+                                <p class="text-sm text-gray-600">Może być zupełnie inna niż S. Idzie do kosztów / settlement. Obsada i numery pokoi tylko tutaj.</p>
+                                <div class="flex flex-wrap gap-2">
+                                    <x-filament::button wire:click="copyOfferToNegotiated" size="sm" color="gray" icon="heroicon-o-document-duplicate">Skopiuj S → P</x-filament::button>
+                                    <x-filament::button wire:click="addRoomLine" size="sm" icon="heroicon-o-plus">Dodaj typ (P)</x-filament::button>
+                                </div>
+                            </div>
+                            <p class="mb-2 text-sm font-medium text-gray-800">{{ $formatting::staySummary($stay, $hotelRoomsById, $currencies) }}</p>
+
+                            @if (! empty($stay['room_lines']))
+                                <div class="overflow-x-auto rounded-lg border border-amber-200">
+                                    <table class="min-w-full divide-y divide-gray-200 text-sm">
+                                        <thead class="bg-amber-50 text-left text-xs uppercase tracking-wide text-gray-500">
+                                            <tr>
+                                                <th class="px-3 py-2">Typ pokoju</th>
+                                                <th class="px-3 py-2 w-24">Ilość</th>
+                                                <th class="px-3 py-2 w-24">Osób/pokój</th>
+                                                <th class="px-3 py-2 w-28">Cena za</th>
+                                                <th class="px-3 py-2 w-28">Cena P</th>
                                                 <th class="px-3 py-2 w-24">Waluta</th>
                                                 <th class="px-3 py-2 w-28">PLN</th>
                                                 <th class="px-3 py-2 w-32">Suma</th>
@@ -539,7 +521,7 @@
                                         </thead>
                                         <tbody class="divide-y divide-gray-100 bg-white">
                                             @foreach ($stay['room_lines'] as $lineIndex => $line)
-                                                <tr wire:key="struct-{{ $activeStayIndex }}-{{ $lineIndex }}">
+                                                <tr wire:key="neg-{{ $activeStayIndex }}-{{ $lineIndex }}">
                                                     <td class="px-3 py-2 align-top">
                                                         <select wire:model.live="stays.{{ $activeStayIndex }}.room_lines.{{ $lineIndex }}.hotel_room_id" class="block w-full min-w-[10rem] rounded-lg border-gray-300 text-sm">
                                                             <option value="">— własna nazwa —</option>
@@ -556,9 +538,8 @@
                                                     </td>
                                                     <td class="px-3 py-2 align-top">
                                                         <input type="number" min="1" wire:model.blur="stays.{{ $activeStayIndex }}.room_lines.{{ $lineIndex }}.people_count" placeholder="{{ $formatting::linePeopleCount($line, $hotelRoomsById) }}" class="block w-full rounded-lg border-gray-300 text-sm" />
-                                                        <p class="mt-0.5 text-[0.65rem] text-gray-500">Miejsca w pokoju</p>
                                                     </td>
-                                                    <td class="px-3 py-2 align-top @if (! $this->activeStayUsesLinePricing) opacity-50 @endif">
+                                                    <td class="px-3 py-2 align-top">
                                                         <select wire:model.live="stays.{{ $activeStayIndex }}.room_lines.{{ $lineIndex }}.price_basis" class="block w-full rounded-lg border-gray-300 text-sm">
                                                             @foreach ($priceBasisOptions as $basisKey => $basisLabel)
                                                                 <option value="{{ $basisKey }}">{{ $basisLabel }}</option>
@@ -566,45 +547,26 @@
                                                         </select>
                                                     </td>
                                                     <td class="px-3 py-2 align-top">
-                                                        <div class="flex items-center gap-1 @if (! $this->activeStayUsesLinePricing) opacity-50 @endif">
-                                                            <input type="number" step="0.01" min="0" wire:model.blur="stays.{{ $activeStayIndex }}.room_lines.{{ $lineIndex }}.offer_unit_price" class="block w-full rounded-lg border-gray-300 text-sm" title="Cena ofertowa (S)" />
-                                                        </div>
-                                                        <p class="mt-0.5 text-[0.65rem] text-sky-700">szablon / oferta</p>
+                                                        <input type="number" step="0.01" min="0" wire:model.blur="stays.{{ $activeStayIndex }}.room_lines.{{ $lineIndex }}.unit_price" class="block w-full rounded-lg border-gray-300 text-sm" />
+                                                        <p class="mt-0.5 text-[0.65rem] text-gray-500">
+                                                            @if (($line['price_basis'] ?? 'per_room') === 'per_person') za osobę @else za pokój @endif
+                                                        </p>
                                                     </td>
                                                     <td class="px-3 py-2 align-top">
-                                                        <div class="flex items-center gap-1 @if (! $this->activeStayUsesLinePricing) opacity-50 @endif">
-                                                            <input type="number" step="0.01" min="0" wire:model.blur="stays.{{ $activeStayIndex }}.room_lines.{{ $lineIndex }}.unit_price" class="block w-full rounded-lg border-gray-300 text-sm" title="Cena uzgodniona (P)" />
-                                                        </div>
-                                                        <p class="mt-0.5 text-[0.65rem] text-gray-500">
-                                                            @if (($line['price_basis'] ?? 'per_room') === 'per_person')
-                                                                za osobę
-                                                            @else
-                                                                za pokój
-                                                            @endif
-                                                        </p>
-                                                        @if (! $this->activeStayUsesLinePricing)
-                                                            <p class="mt-0.5 text-[0.65rem] text-amber-700">nie liczy się</p>
-                                                        @endif
-                                                    </td>
-                                                    <td class="px-3 py-2 align-top @if (! $this->activeStayUsesLinePricing) opacity-50 @endif">
                                                         <select wire:model.live="stays.{{ $activeStayIndex }}.room_lines.{{ $lineIndex }}.currency_id" class="block w-full rounded-lg border-gray-300 text-sm">
                                                             @foreach ($currencyOptions as $id => $label)
                                                                 <option value="{{ $id }}">{{ $label }}</option>
                                                             @endforeach
                                                         </select>
                                                     </td>
-                                                    <td class="px-3 py-2 align-top @if (! $this->activeStayUsesLinePricing) opacity-50 @endif">
+                                                    <td class="px-3 py-2 align-top">
                                                         <label class="inline-flex items-center gap-1 text-xs text-gray-700">
                                                             <input type="checkbox" wire:model.live="stays.{{ $activeStayIndex }}.room_lines.{{ $lineIndex }}.convert_to_pln" class="rounded border-gray-400" />
                                                             Tak
                                                         </label>
                                                     </td>
-                                                    <td class="px-3 py-2 align-top font-semibold text-gray-900 @if (! $this->activeStayUsesLinePricing) text-gray-400 @endif">
-                                                        @if ($this->activeStayUsesLinePricing)
-                                                            {{ $formatting::lineTotalDisplay($line, $currencies, $hotelRoomsById) }}
-                                                        @else
-                                                            —
-                                                        @endif
+                                                    <td class="px-3 py-2 align-top font-semibold text-gray-900">
+                                                        {{ $formatting::lineTotalDisplay($line, $currencies, $hotelRoomsById) }}
                                                     </td>
                                                     <td class="px-3 py-2 align-top">
                                                         <select wire:model.live="stays.{{ $activeStayIndex }}.room_lines.{{ $lineIndex }}.role" class="block w-full rounded-lg border-gray-300 text-sm">
@@ -619,28 +581,22 @@
                                                 </tr>
                                             @endforeach
                                         </tbody>
-                                        <tfoot class="bg-gray-50">
+                                        <tfoot class="bg-amber-50">
                                             <tr>
-                                                <td colspan="6" class="px-3 py-2 text-right text-xs font-semibold uppercase text-gray-500">Razem noc {{ $stay['day'] }}</td>
-                                                <td class="px-3 py-2 font-bold text-gray-900">
-                                                    @if ($formatting::isEventFlatPricing($hotelPricingMode))
-                                                        —
-                                                    @else
-                                                        {{ $formatting::stayTotalDisplay($stay, $hotelPricingMode, $currencies, $peoplePerNight, $hotelRoomsById) }}
-                                                    @endif
-                                                </td>
+                                                <td colspan="7" class="px-3 py-2 text-right text-xs font-semibold uppercase text-gray-500">Razem P</td>
+                                                <td class="px-3 py-2 font-bold text-gray-900">{{ $negotiatedTotal }}</td>
                                                 <td colspan="2"></td>
                                             </tr>
                                         </tfoot>
                                     </table>
                                 </div>
                             @else
-                                <p class="text-sm text-gray-500">Brak pokoi — dodaj pierwszy typ lub skopiuj strukturę z innej nocy.</p>
+                                <p class="text-sm text-gray-500">Brak pokoi uzgodnionych — dodaj typ lub skopiuj z oferty (S → P).</p>
                             @endif
                         </x-filament::section>
 
                         <x-filament::section heading="Szybkie kopiowanie ułożonej struktury" compact>
-                            <p class="text-sm text-gray-600 mb-4">Kopiuje ułożenie pokoi (typy, ilości, ceny). Hotel, rezerwacja i zaliczki na nocy docelowej zostają bez zmian — do skopiowania hotelu użyj „Ten sam hotel na wszystkie noce”.</p>
+                            <p class="text-sm text-gray-600 mb-4">Kopiuje obie struktury (S i P: typy, ilości, ceny) oraz obsadę z P. Hotel, rezerwacja i zaliczki na nocy docelowej zostają bez zmian — do skopiowania hotelu użyj „Ten sam hotel na wszystkie noce”.</p>
                             <div class="flex flex-col sm:flex-row sm:items-start gap-4 p-4 bg-gray-50 dark:bg-gray-800/50 rounded-lg border border-gray-200 dark:border-gray-700">
                                 <div>
                                     <label class="block text-xs font-semibold text-gray-700 dark:text-gray-300 uppercase tracking-wider mb-1.5">Źródło</label>

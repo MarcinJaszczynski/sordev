@@ -215,54 +215,18 @@ class EditEvent extends EditRecord
 
     protected function beforeSave(): void
     {
-        if ($this->refreshRoomStructureOnSave !== null) {
-            return;
-        }
-
-        $newCount = max(1, (int) data_get($this->data, 'participant_count', 1));
-        $oldCount = max(1, (int) ($this->record->participant_count ?? 1));
-
-        if ($newCount === $oldCount) {
-            return;
-        }
-
-        if (! app(EventHotelPlanService::class)->eventHasRoomStructureWorthProtecting($this->record)) {
-            return;
-        }
-
-        $this->mountAction('confirmParticipantCountRoomRefresh', [
-            'oldCount' => $oldCount,
-            'newCount' => $newCount,
-        ]);
-
-        $this->halt();
+        // Struktura ofertowa (S) odświeża się po zapisie automatycznie.
+        // Warstwa uzgodniona (P) + obsada nie są kasowane — bez potwierdzenia modalnego.
     }
 
     public function confirmParticipantCountRoomRefreshAction(): Actions\Action
     {
+        // Legacy action — zachowana na wypadek starego stanu UI; nie blokuje zapisu.
         return Actions\Action::make('confirmParticipantCountRoomRefresh')
             ->label('Struktura pokoi')
-            ->modalHeading('Zmiana liczby uczestników a struktura pokoi')
-            ->modalDescription(function (array $arguments): string {
-                $oldCount = (int) ($arguments['oldCount'] ?? 0);
-                $newCount = (int) ($arguments['newCount'] ?? 0);
-
-                return "Zmieniasz liczbę uczestników z {$oldCount} na {$newCount}. "
-                    .'Przebudowa struktury pokoi ze szablonu usunie ręczne poprawki pokoi i obsadę. '
-                    .'Przy małej zmianie możesz zapisać liczbę bez przebudowy i skorygować plan hotelowy ręcznie.';
-            })
-            ->modalSubmitActionLabel('Zapisz i przebuduj pokoje')
-            ->modalCancelActionLabel('Anuluj')
-            ->color('warning')
-            ->extraModalFooterActions([
-                Actions\Action::make('saveWithoutRoomRefresh')
-                    ->label('Zapisz bez przebudowy')
-                    ->color('gray')
-                    ->action(function (): void {
-                        $this->refreshRoomStructureOnSave = false;
-                        $this->save();
-                    }),
-            ])
+            ->modalHeading('Zmiana liczby uczestników')
+            ->modalDescription('Warstwa ofertowa (S) zostanie przebudowana ze szablonu. Struktura uzgodniona (P) i obsada pozostaną bez zmian.')
+            ->modalSubmitActionLabel('Kontynuuj')
             ->action(function (): void {
                 $this->refreshRoomStructureOnSave = true;
                 $this->save();
