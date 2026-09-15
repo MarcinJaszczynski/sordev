@@ -5,12 +5,12 @@ namespace App\Filament\Resources\TaskResource\RelationManagers;
 use App\Enums\TaskPriority;
 use App\Enums\TaskSource;
 use App\Filament\Concerns\DispatchesTopbarNotificationRefresh;
+use App\Filament\Forms\TaskFormFields;
 use App\Filament\Resources\TaskResource;
 use App\Models\Task;
 use App\Services\NotificationService;
-use App\Support\Tasks\TaskDueDates;
+use App\Support\Tasks\TaskAttachmentStore;
 use App\Support\Tasks\TaskListColumn;
-use Filament\Forms;
 use Filament\Forms\Form;
 use Filament\Resources\RelationManagers\RelationManager;
 use Filament\Tables;
@@ -29,6 +29,9 @@ class SubtasksRelationManager extends RelationManager
 
     public bool $panelMode = false;
 
+    /** @var array<int, string|null> */
+    protected array $pendingSubtaskAttachments = [];
+
     protected function dispatchPanelUpdated(): void
     {
         if (! $this->panelMode) {
@@ -46,33 +49,11 @@ class SubtasksRelationManager extends RelationManager
 
     public function form(Form $form): Form
     {
+        // Ten sam zestaw pól co modal zadania (w tym Tiptap) — bez parent/taskable
+        // (dziedziczone z zadania nadrzędnego w mutateFormDataUsing / relacji).
         return $form
-            ->schema([
-                Forms\Components\TextInput::make('title')
-                    ->label('Tytuł')
-                    ->required()
-                    ->maxLength(255)
-                    ->columnSpanFull(),
-                Forms\Components\Textarea::make('description')
-                    ->label('Treść')
-                    ->rows(4)
-                    ->columnSpanFull(),
-                Forms\Components\Select::make('status_id')
-                    ->label('Status')
-                    ->relationship('status', 'name')
-                    ->default(fn () => Task::getDefaultStatusId())
-                    ->searchable()
-                    ->preload()
-                    ->required(),
-                Forms\Components\Select::make('assignee_id')
-                    ->label('Przypisane do')
-                    ->relationship('assignee', 'name')
-                    ->searchable()
-                    ->preload(),
-                Forms\Components\DateTimePicker::make('due_date')
-                    ->label('Termin')
-                    ->default(fn () => TaskDueDates::defaultForNew()),
-            ]);
+            ->schema(TaskFormFields::coreFields(compact: true, forSubtask: true))
+            ->columns(1);
     }
 
     public function table(Table $table): Table
@@ -124,15 +105,27 @@ class SubtasksRelationManager extends RelationManager
                         ->iconButton())
                     ->modalHeading('Nowe podzadanie')
                     ->mutateFormDataUsing(function (array $data): array {
+                        $this->pendingSubtaskAttachments = is_array($data['pending_attachments'] ?? null)
+                            ? $data['pending_attachments']
+                            : [];
+                        unset($data['pending_attachments']);
+
                         $data['author_id'] = Auth::id();
                         $data['taskable_type'] = $this->getOwnerRecord()->taskable_type;
                         $data['taskable_id'] = $this->getOwnerRecord()->taskable_id;
                         $data['source'] = TaskSource::Office->value;
-                        $data['priority'] = TaskPriority::Normal->value;
+                        $data['priority'] ??= TaskPriority::Normal->value;
 
                         return $data;
                     })
                     ->after(function (Task $record): void {
+                        TaskAttachmentStore::storeMany(
+                            $record,
+                            $this->pendingSubtaskAttachments,
+                            Auth::id(),
+                        );
+                        $this->pendingSubtaskAttachments = [];
+
                         // Podzadanie jest pełnoprawnym Task — nie touchujemy rodzica,
                         // żeby topbar/lista prowadziły do podzadania, a nie do zadania głównego.
                         $record->moveToStart();
@@ -146,6 +139,11 @@ class SubtasksRelationManager extends RelationManager
             ->actions([
                 $this->panelMode
                     ? Tables\Actions\EditAction::make()
+                        ->mutateFormDataUsing(function (array $data): array {
+                            unset($data['pending_attachments']);
+
+                            return $data;
+                        })
                         ->after(function (Task $record): void {
                             $this->refreshTopbarAfterSubtaskChange($record);
                             $this->dispatchPanelUpdated();

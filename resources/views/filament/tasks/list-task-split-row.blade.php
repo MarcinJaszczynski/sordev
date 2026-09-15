@@ -219,7 +219,11 @@
                         <span x-text="bodyOpen ? 'Zwiń wiadomość' : 'Rozwiń wiadomość'"></span>
                     </button>
                 @endif
+
+                @include('filament.tasks.partials.list-task-quick-actions', ['record' => $record])
             </div>
+        @else
+            @include('filament.tasks.partials.list-task-quick-actions', ['record' => $record])
         @endif
 
         @if ($attachments->isNotEmpty())

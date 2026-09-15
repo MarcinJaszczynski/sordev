@@ -3,6 +3,7 @@
 namespace App\Filament\Resources\EventResource\Pages;
 
 use App\Actions\Events\ChangeEventStatusAction;
+use App\Actions\Events\CloneEventAction;
 use App\Actions\Events\RecalculateEventTotalsAction;
 use App\Data\ChangeEventStatusData;
 use App\Data\RecalculateEventTotalsData;
@@ -121,6 +122,26 @@ class EditEvent extends EditRecord
                         ->title('Zmieniono status')
                         ->success()
                         ->send();
+                }),
+            Actions\Action::make('clone')
+                ->label('Klonuj')
+                ->icon('heroicon-o-document-duplicate')
+                ->color('gray')
+                ->tooltip('Kopia imprezy z nowym kodem: program, hotel, daty i zamawiający. Bez uczestników i rozliczeń.')
+                ->requiresConfirmation()
+                ->modalHeading('Klonuj imprezę')
+                ->modalDescription('Powstanie kopia z nowym kodem — ten sam program, hotel, daty i zamawiający. Bez uczestników, faktur i rozliczeń.')
+                ->modalSubmitActionLabel('Klonuj')
+                ->action(function () {
+                    $clone = app(CloneEventAction::class)($this->record);
+
+                    Notification::make()
+                        ->title('Impreza została sklonowana')
+                        ->body('Nowy kod: '.($clone->code ?? '—'))
+                        ->success()
+                        ->send();
+
+                    return redirect(EventResource::getUrl('edit', ['record' => $clone]));
                 }),
         ];
     }

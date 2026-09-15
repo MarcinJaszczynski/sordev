@@ -5,6 +5,7 @@ namespace App\Services;
 use App\Models\Bus;
 use App\Models\Event;
 use App\Models\EventProgramPoint;
+use App\Models\Markup;
 use App\Support\ProgramPointCostPricing;
 
 /**
@@ -19,6 +20,8 @@ use App\Support\ProgramPointCostPricing;
  *  - baza → marża → podatki → SUMA KOŃCOWA,
  *  - punkty programu: domyślnie od płacących; opiekunowie / pilot / kierowca
  *    tylko gdy odpowiednie flagi na punkcie są włączone,
+ *  - punkt z use_planned_price_in_calculation: oferta bierze planned_price
+ *    (skala implied unit do wariantu qty); inaczej unit_price ze szablonu,
  *  - cena za osobę = SUMA KOŃCOWA ÷ liczba osób PŁACĄCYCH (bez gratisów/obsługi/kierowcy).
  */
 class EventCostCalculator
@@ -172,8 +175,16 @@ class EventCostCalculator
 
         $base = round(array_sum(array_column($lines, 'cost_pln')), 2);
 
-        $markupPercent = (float) ($event->markup?->percent ?? $event->eventTemplate?->markup?->percent ?? 0);
-        $markup = round($base * ($markupPercent / 100), 2);
+        $markupModel = $event->markup ?? $event->eventTemplate?->markup;
+        $markupPercent = (float) ($markupModel?->percent ?? 0);
+        $markupDays = max(1, (int) ($event->duration_days ?? $event->eventTemplate?->duration_days ?? 1));
+        $markupCalc = Markup::calculateAmount(
+            $base,
+            $markupPercent,
+            (float) ($markupModel?->min_daily_amount_pln ?? 0),
+            $markupDays,
+        );
+        $markup = $markupCalc['amount'];
 
         [$taxTotal, $taxBreakdown] = $this->taxes($base, $markup);
 
@@ -205,6 +216,7 @@ class EventCostCalculator
             'base_pln' => $base,
             'markup_percent' => $markupPercent,
             'markup_pln' => $markup,
+            'min_daily_applied' => $markupCalc['min_daily_applied'],
             'tax_pln' => round($taxTotal, 2),
             'tax_breakdown' => $taxBreakdown,
             'total_pln' => $total,

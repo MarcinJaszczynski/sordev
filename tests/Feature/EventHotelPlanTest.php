@@ -1066,6 +1066,47 @@ class EventHotelPlanTest extends TestCase
         $this->assertSame($hotelPoint->id, (int) $stay->event_program_point_id);
     }
 
+    public function test_link_stays_detaches_orphan_point_from_day_without_hotel(): void
+    {
+        $event = Event::factory()->create(['duration_days' => 3]);
+        $contractor = Contractor::create(['name' => 'Hotel Duch', 'status' => 'active']);
+
+        $day2Point = \App\Models\EventProgramPoint::factory()->create([
+            'event_id' => $event->id,
+            'day' => 2,
+            'order' => 1,
+            'name' => 'Nocleg D2',
+            'is_hotel' => true,
+            'contractor_id' => $contractor->id,
+        ]);
+
+        // Noc 1 (przejazd) błędnie podpięta pod punkt hotelowy z dnia 2.
+        $stayDay1 = EventHotelStay::create([
+            'event_id' => $event->id,
+            'day' => 1,
+            'contractor_id' => null,
+            'event_program_point_id' => $day2Point->id,
+        ]);
+
+        $stayDay2 = EventHotelStay::create([
+            'event_id' => $event->id,
+            'day' => 2,
+            'contractor_id' => $contractor->id,
+            'event_program_point_id' => $day2Point->id,
+        ]);
+
+        app(\App\Services\EventHotelPlanService::class)->linkStaysToProgramPoints($event->fresh(['hotelStays']));
+
+        $stayDay1->refresh();
+        $stayDay2->refresh();
+        $day2Point->refresh();
+
+        $this->assertNull($stayDay1->event_program_point_id, 'Noc bez punktu hotelowego w programie nie może trzymać hotelu z innego dnia');
+        $this->assertNull($stayDay1->contractor_id);
+        $this->assertSame($day2Point->id, (int) $stayDay2->event_program_point_id);
+        $this->assertSame($contractor->id, (int) $day2Point->contractor_id);
+    }
+
     public function test_copy_to_selected_days_uses_user_selection_not_day_one(): void
     {
         $user = User::factory()->create();

@@ -105,12 +105,15 @@ class ClientLookupService
 
     /**
      * Jedno wyszukiwanie po wszystkich polach (zamiast 6 osobnych LIKE).
+     * Kontrahenci: ContractorLookupService (firstname/surname, tokeny, telefon).
+     * Filtr typu „klient” zostaje — kontrahenci typu pilot nie są klientami imprezy
+     * (chyba że searchAll). Wybór pilota do imprezy idzie osobnym selectem
+     * (TypedContractorSelect typeNames: ['pilot'] → ten sam ContractorLookupService).
      *
      * @return Collection<int, array<string, mixed>>
      */
     private function searchUnified(string $term, bool $searchAll = false): Collection
     {
-        $like = '%'.$term.'%';
         $clientTypeNames = $searchAll ? [] : \App\Models\ContractorType::clientTypeNames();
 
         $contractorsQuery = Contractor::query();
@@ -119,50 +122,42 @@ class ClientLookupService
             $contractorsQuery->withAnyTypeName($clientTypeNames);
         }
 
+        app(ContractorLookupService::class)->constrainQuery($contractorsQuery, $term);
+
         $contractors = $contractorsQuery
-            ->where(function ($builder) use ($like, $term): void {
-                $builder->where('name', 'like', $like)
-                    ->orWhere('email', 'like', $like);
-
-                PhoneValidation::orWhereDigitsLike($builder, 'phone', $term);
-
-                if (Schema::hasColumn('contractors', 'street')) {
-                    $builder->orWhere('street', 'like', $like);
-                }
-
-                if (Schema::hasColumn('contractors', 'city')) {
-                    $builder->orWhere('city', 'like', $like);
-                }
-
-                if (Schema::hasColumn('contractors', 'postal_code')) {
-                    $builder->orWhere('postal_code', 'like', $like);
-                }
-
-                if (Schema::hasColumn('contractors', 'nip')) {
-                    $builder->orWhere('nip', 'like', $like);
-                }
-            })
             ->orderBy('name')
             ->limit(self::RESULT_LIMIT)
             ->get();
 
         // Kontakty: domyślnie tylko powiązane z typem „klient”; przy searchAll — też sieroty.
-        $contactsQuery = Contact::query()
-            ->where(function ($builder) use ($like, $term): void {
-                $builder->where('first_name', 'like', $like)
-                    ->orWhere('last_name', 'like', $like)
-                    ->orWhere('email', 'like', $like);
+        $contactsQuery = Contact::query();
 
-                PhoneValidation::orWhereDigitsLike($builder, 'phone', $term);
-
-                if (Schema::hasColumn('contacts', 'address')) {
-                    $builder->orWhere('address', 'like', $like);
-                }
-
-                if (Schema::hasColumn('contacts', 'notes')) {
-                    $builder->orWhere('notes', 'like', $like);
-                }
+        if (PhoneValidation::looksLikePhone($term)) {
+            $contactsQuery->where(function ($builder) use ($term): void {
+                PhoneValidation::constrainDigitsLike($builder, 'phone', $term);
             });
+        } else {
+            $tokens = preg_split('/\s+/u', trim($term), -1, PREG_SPLIT_NO_EMPTY) ?: [];
+
+            foreach ($tokens as $token) {
+                $like = '%'.$token.'%';
+                $contactsQuery->where(function ($builder) use ($like, $token): void {
+                    $builder->where('first_name', 'like', $like)
+                        ->orWhere('last_name', 'like', $like)
+                        ->orWhere('email', 'like', $like);
+
+                    PhoneValidation::orWhereDigitsLike($builder, 'phone', $token);
+
+                    if (Schema::hasColumn('contacts', 'address')) {
+                        $builder->orWhere('address', 'like', $like);
+                    }
+
+                    if (Schema::hasColumn('contacts', 'notes')) {
+                        $builder->orWhere('notes', 'like', $like);
+                    }
+                });
+            }
+        }
 
         if ($clientTypeNames !== []) {
             $contactsQuery->whereHas('contractors', fn ($q) => $q->withAnyTypeName($clientTypeNames));

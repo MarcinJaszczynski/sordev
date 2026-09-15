@@ -7,8 +7,10 @@ use App\Models\Event;
 use App\Models\EventDocument;
 use App\Models\EventProgramPoint;
 use App\Services\Documents\WordOfferContent;
+use App\Services\EventCostCalculator;
 use App\Services\EventOrderingPartyService;
 use App\Services\EventProgramPointOrderService;
+use App\Services\PriceRoundingService;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\Gate;
 use Illuminate\Support\Facades\Storage;
@@ -654,6 +656,11 @@ class EventOfferWordController extends Controller
     }
 
     /**
+     * Cennik oferty imprezy — źródło jak w Finanse / umowie Word:
+     * 1) kalkulacja imprezy (resolvedPricePerPerson / EventCostCalculator),
+     * 2) zapisane event.pricePerPerson,
+     * 3) dopiero fallback: cennik / kalkulacja szablonu WWW.
+     *
      * @return list<array{from: int, to: int, price: int, amount: string, detail: string}>
      */
     protected function buildEventPriceRanges(Event $event): array
@@ -666,6 +673,21 @@ class EventOfferWordController extends Controller
         $uniqueQtys = array_values(array_unique(array_map(fn (array $t): int => $t['qty'], $tiers)));
 
         foreach ($uniqueQtys as $qty) {
+            $eventCalculated = $this->calculateEventPriceForQty($event, $qty);
+            if ($eventCalculated > 0) {
+                $pricesByQty[$qty] = $eventCalculated;
+                $extrasByQty[$qty] = $this->lookupEventCalculatedExtraCurrencyLabels($event, $qty);
+
+                continue;
+            }
+
+            if (($eventPrices[$qty] ?? 0) > 0) {
+                $pricesByQty[$qty] = $eventPrices[$qty];
+                $extrasByQty[$qty] = $this->lookupEventExtraCurrencyLabels($event, $qty);
+
+                continue;
+            }
+
             $templatePrice = $this->lookupTemplatePriceForQty($event, $qty);
             if ($templatePrice > 0) {
                 $pricesByQty[$qty] = $templatePrice;
@@ -678,21 +700,6 @@ class EventOfferWordController extends Controller
             if ($templateCalculated > 0) {
                 $pricesByQty[$qty] = $templateCalculated;
                 $extrasByQty[$qty] = $this->lookupTemplateExtraCurrencyLabels($event, $qty);
-
-                continue;
-            }
-
-            if (($eventPrices[$qty] ?? 0) > 0) {
-                $pricesByQty[$qty] = $eventPrices[$qty];
-                $extrasByQty[$qty] = $this->lookupEventExtraCurrencyLabels($event, $qty);
-
-                continue;
-            }
-
-            $eventCalculated = $this->calculateEventPriceForQty($event, $qty);
-            if ($eventCalculated > 0) {
-                $pricesByQty[$qty] = $eventCalculated;
-                $extrasByQty[$qty] = $this->lookupEventExtraCurrencyLabels($event, $qty);
             }
         }
 
@@ -703,7 +710,11 @@ class EventOfferWordController extends Controller
                 continue;
             }
 
-            $rounded = (int) ceil($price / 5) * 5;
+            $rounded = (int) (PriceRoundingService::roundPerPerson($price, 'PLN') ?? 0);
+            if ($rounded <= 0) {
+                continue;
+            }
+
             $extras = $extrasByQty[$tier['qty']] ?? [];
 
             $parts = $this->content->formatPriceLineParts(
@@ -836,6 +847,67 @@ class EventOfferWordController extends Controller
         }
 
         return $labels;
+    }
+
+    /**
+     * Waluty obce z bieżącej kalkulacji imprezy; przy braku — zapisane event.pricePerPerson.
+     *
+     * @return list<string>
+     */
+    protected function lookupEventCalculatedExtraCurrencyLabels(Event $event, int $qty): array
+    {
+        if ($qty <= 0) {
+            return [];
+        }
+
+        try {
+            $gratis = $event->resolveGratisCountForParticipantCount($qty);
+            $calc = EventCostCalculator::for($event)->calculate($qty, $gratis);
+            $grouped = [];
+
+            foreach ($calc['foreign'] ?? [] as $code => $bucket) {
+                $ppp = (float) ($bucket['price_per_person'] ?? 0);
+                if ($ppp <= 0) {
+                    continue;
+                }
+
+                $currency = strtoupper(trim((string) $code));
+                if ($currency === '' || $currency === 'PLN') {
+                    continue;
+                }
+
+                $amount = (int) (PriceRoundingService::roundPerPerson($ppp, $currency) ?? 0);
+                if ($amount <= 0) {
+                    $amount = (int) ceil($ppp);
+                }
+                if ($amount <= 0) {
+                    continue;
+                }
+
+                if (! isset($grouped[$currency]) || $amount < $grouped[$currency]) {
+                    $grouped[$currency] = $amount;
+                }
+            }
+
+            if ($grouped !== []) {
+                if (isset($grouped['EUR'])) {
+                    $eur = $grouped['EUR'];
+                    unset($grouped['EUR']);
+                    $grouped = ['EUR' => $eur] + $grouped;
+                }
+
+                $labels = [];
+                foreach ($grouped as $currency => $amount) {
+                    $labels[] = '+ '.$amount.' '.$currency;
+                }
+
+                return $labels;
+            }
+        } catch (\Throwable) {
+            // fallback poniżej
+        }
+
+        return $this->lookupEventExtraCurrencyLabels($event, $qty);
     }
 
     /**

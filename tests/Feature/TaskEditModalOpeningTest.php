@@ -108,6 +108,22 @@ class TaskEditModalOpeningTest extends TestCase
             ->assertSet('mountedActions', ['createTask']);
     }
 
+    public function test_list_tasks_header_delegates_create_without_duplicating_modal_action(): void
+    {
+        $component = Livewire::actingAs($this->user)->test(ListTasks::class);
+
+        $component
+            ->assertActionExists('openCreateTask')
+            ->assertActionExists('createTask');
+
+        $headerNames = collect($component->instance()->getCachedHeaderActions())
+            ->map(fn ($action) => $action->getName())
+            ->all();
+
+        $this->assertContains('openCreateTask', $headerNames);
+        $this->assertNotContains('createTask', $headerNames);
+    }
+
     public function test_event_tasks_open_edit_modal_via_livewire_method(): void
     {
         $event = Event::factory()->create();

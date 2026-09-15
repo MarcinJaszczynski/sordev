@@ -7,8 +7,11 @@ use App\Filament\Resources\EventSettlementResource;
 use App\Models\Event;
 use App\Models\EventPricePerPerson;
 use App\Models\EventSettlement;
+use App\Services\EventHotelPlanService;
 use App\Services\EventManualPricePerPersonService;
+use App\Support\HotelCalculationSource;
 use Filament\Widgets\Widget;
+use Illuminate\Support\Facades\Schema;
 use Livewire\Attributes\On;
 
 class EventPriceTable extends Widget
@@ -359,6 +362,21 @@ class EventPriceTable extends Widget
     public function refreshCalculations()
     {
         $this->record->refresh();
+
+        // Przy źródle „Cena z szablonu” synchronizuj ceny S z katalogu (stare imprezy mogły mieć
+        // w S ceny negocjowane po migracji). P bez zmian.
+        if (Schema::hasColumn('events', 'hotel_calculation_source')
+            && HotelCalculationSource::isOffer($this->record->hotel_calculation_source)
+            && $this->record->hotelStays()->exists()
+        ) {
+            app(EventHotelPlanService::class)->refreshOfferLayerFromTemplate(
+                $this->record,
+                syncFinance: false,
+                rebuildStructure: false,
+            );
+            $this->record->refresh();
+        }
+
         $this->record->calculateTotalCost();
         $this->loadCalculations();
     }

@@ -41,7 +41,15 @@ class ListEventTemplates extends ListRecords
                 ->icon('heroicon-o-scale')
                 ->color('gray')
                 ->url(fn (): string => \App\Filament\Pages\EventTemplatePriceComparisonPage::getUrl())
-                ->visible(fn (): bool => \App\Filament\Pages\EventTemplatePriceComparisonPage::canAccess()),
+                ->visible(function (): bool {
+                    // Bez zarejestrowanej trasy getUrl() wywala 500 na całej liście szablonów
+                    // (np. po stale filament:cache / bootstrap/cache/filament).
+                    if (! \Illuminate\Support\Facades\Route::has('filament.admin.pages.event-template-price-comparison-page')) {
+                        return false;
+                    }
+
+                    return \App\Filament\Pages\EventTemplatePriceComparisonPage::canAccess();
+                }),
             Action::make('removeDuplicates')
                 ->label('Usuń duplikaty cen')
                 ->icon('heroicon-o-scissors')

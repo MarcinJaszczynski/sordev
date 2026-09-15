@@ -405,6 +405,8 @@ final class EventFinanceOverviewService
                 'plan_unit_price' => $point ? (float) ($point->unit_price ?? 0) : null,
                 'plan_group_size' => $point !== null ? (int) ($point->group_size ?? 1) : null,
                 'plan_quantity' => $point ? max(1, (int) ($point->quantity ?? 1)) : null,
+                'use_planned_price_in_calculation' => $point instanceof EventProgramPoint
+                    && $point->usesPlannedPriceInCalculation(),
                 'plan_unit_price_label' => $point
                     ? ProgramPointPricingCalculator::unitPriceLabel($point->group_size).' (szablon)'
                     : null,
@@ -1002,6 +1004,33 @@ final class EventFinanceOverviewService
             }
         }
 
+        if ($planCost->source_type === 'accommodation_hotel' && $planCost->source_id) {
+            $pln = app(HotelStaySettlementSync::class)
+                ->offerTotalPlnForContractor($event, (int) $planCost->source_id);
+
+            return [
+                $pln,
+                'Oferta S — cena z szablonu / katalogu',
+                MoneyFormatter::format($pln, 'PLN'),
+            ];
+        }
+
+        if ($planCost->source_type === 'accommodation_hotel_stay' && $planCost->source_id) {
+            $stay = EventHotelStay::query()
+                ->with(['roomLines.currency', 'offerRoomLines.currency'])
+                ->find((int) $planCost->source_id);
+
+            $pln = $stay
+                ? app(HotelStaySettlementSync::class)->offerTotalPlnForStay($event, $stay)
+                : $this->health->plannedPlnForCost($planCost);
+
+            return [
+                $pln,
+                'Oferta S — cena z szablonu / katalogu',
+                MoneyFormatter::format($pln, 'PLN'),
+            ];
+        }
+
         $pln = $this->calculationPlnForPlanCost($planCost, $event, $preloadedPoint);
 
         return [$pln, null, MoneyFormatter::format($pln, 'PLN')];
@@ -1155,7 +1184,9 @@ final class EventFinanceOverviewService
         }
 
         if ($planCost->source_type === 'accommodation_hotel_stay' && $planCost->source_id) {
-            $stay = EventHotelStay::query()->with('roomLines.currency')->find((int) $planCost->source_id);
+            $stay = EventHotelStay::query()
+                ->with(['roomLines.currency', 'offerRoomLines.currency'])
+                ->find((int) $planCost->source_id);
 
             return $stay
                 ? app(HotelStaySettlementSync::class)->offerTotalPlnForStay($event, $stay)

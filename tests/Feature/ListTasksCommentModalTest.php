@@ -121,11 +121,12 @@ class ListTasksCommentModalTest extends TestCase
             ->call('selectTask', $task->id)
             ->assertSet('selectedTaskId', $task->id)
             ->assertSee('Dyskusja')
+            ->assertSee('Starszy komentarz')
             ->assertSee('Najnowszy komentarz')
             ->assertSee('Wyślij');
     }
 
-    public function test_side_editor_comment_thread_collapses_after_reply(): void
+    public function test_side_editor_comment_thread_stays_expanded_after_reply(): void
     {
         $user = User::factory()->create();
         $user->assignRole('admin');
@@ -148,12 +149,13 @@ class ListTasksCommentModalTest extends TestCase
 
         Livewire::actingAs($user)
             ->test(TaskFullEditor::class, ['taskId' => $task->id])
-            ->call('toggleEarlierComments')
             ->assertSet('showEarlierComments', true)
+            ->assertSee('Pierwszy')
             ->set('newCommentContent', 'Nowa odpowiedź z panelu')
             ->call('addComment')
-            ->assertSet('showEarlierComments', false)
+            ->assertSet('showEarlierComments', true)
             ->assertSet('newCommentContent', '')
+            ->assertSee('Pierwszy')
             ->assertSee('Nowa odpowiedź z panelu');
 
         $this->assertDatabaseHas('task_comments', [
@@ -199,6 +201,8 @@ class ListTasksCommentModalTest extends TestCase
             ->assertSee('Podgląd ostatniej wiadomości na liście')
             ->assertSee('brief.pdf')
             ->assertSee('Załączniki')
+            ->assertSeeHtml('openAddCommentModal('.$task->id.')')
+            ->assertSeeHtml('openAddAttachmentModal('.$task->id.')')
             ->assertSeeHtml('admin/task-attachments/')
             ->set('listSort', 'title_asc')
             ->assertSet('listSort', 'title_asc')

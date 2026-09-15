@@ -4,7 +4,10 @@ namespace App\Filament\Forms;
 
 use App\Enums\TaskPriority;
 use App\Models\Task;
+use App\Models\User;
 use App\Support\Tasks\TaskDueDates;
+use App\Support\Tasks\TaskListColumn;
+use App\Support\UserRoleManagement;
 use Filament\Forms;
 use Filament\Forms\Get;
 use Filament\Forms\Set;
@@ -17,7 +20,7 @@ class TaskFormFields
      *
      * @return array<int, Forms\Components\Component>
      */
-    public static function coreFields(bool $compact = false): array
+    public static function coreFields(bool $compact = false, bool $forSubtask = false): array
     {
         $title = Forms\Components\TextInput::make('title')
             ->label('Tytuł')
@@ -54,17 +57,65 @@ class TaskFormFields
             ->default(TaskPriority::Normal->value)
             ->required();
 
+        $author = Forms\Components\Placeholder::make('author_display')
+            ->label('Autor')
+            ->content(function (?Task $record): string {
+                if (! $record?->exists) {
+                    return '—';
+                }
+
+                return TaskListColumn::authorLabel($record);
+            })
+            ->visible(fn (?Task $record): bool => (bool) $record?->exists);
+
         $assignee = Forms\Components\Select::make('assignee_id')
             ->label('Przypisane do')
-            ->relationship('assignee', 'name')
+            ->relationship(
+                'assignee',
+                'name',
+                modifyQueryUsing: fn (Builder $query): Builder => UserRoleManagement::constrainAssignableToOfficeTasks($query)
+                    ->orderBy('name'),
+            )
             ->searchable()
-            ->preload();
+            ->preload()
+            // Jawny search: name+email — stabilniejszy w zagnieżdżonym TaskFullEditor (modal).
+            ->getSearchResultsUsing(function (string $search): array {
+                $search = trim($search);
+                $query = UserRoleManagement::constrainAssignableToOfficeTasks(User::query())
+                    ->orderBy('name');
+
+                if ($search !== '') {
+                    $query->where(function (Builder $builder) use ($search): void {
+                        $builder->where('name', 'like', '%'.$search.'%')
+                            ->orWhere('email', 'like', '%'.$search.'%');
+                    });
+                }
+
+                return $query
+                    ->limit(50)
+                    ->get()
+                    ->mapWithKeys(fn (User $user): array => [
+                        (int) $user->id => self::formatUserOptionLabel($user),
+                    ])
+                    ->all();
+            })
+            ->getOptionLabelUsing(function ($value): ?string {
+                if (! filled($value)) {
+                    return null;
+                }
+
+                $user = User::query()->find($value);
+
+                return $user ? self::formatUserOptionLabel($user) : null;
+            });
 
         $parent = Forms\Components\Select::make('parent_id')
             ->label('Zadanie nadrzędne')
             ->relationship('parent', 'title', modifyQueryUsing: fn (Builder $query) => $query->whereNull('parent_id'))
             ->searchable()
-            ->preload();
+            ->preload()
+            ->hidden($forSubtask)
+            ->dehydrated(! $forSubtask);
 
         $taskableType = Forms\Components\Select::make('taskable_type')
             ->label('Powiązane z')
@@ -74,9 +125,11 @@ class TaskFormFields
             ->live()
             ->afterStateUpdated(function (Set $set): void {
                 $set('taskable_id', null);
-            });
+            })
+            ->hidden($forSubtask)
+            ->dehydrated(! $forSubtask);
 
-        if (! $compact) {
+        if (! $compact && ! $forSubtask) {
             $taskableType = $taskableType->helperText('Zostaw puste, aby zadanie było wolne / nieprzypisane.');
         }
 
@@ -86,8 +139,9 @@ class TaskFormFields
             ->default(fn () => request()->query('taskable_id'))
             ->searchable()
             ->preload()
-            ->visible(fn (Get $get): bool => filled($get('taskable_type')))
-            ->required(fn (Get $get): bool => filled($get('taskable_type')));
+            ->visible(fn (Get $get): bool => ! $forSubtask && filled($get('taskable_type')))
+            ->required(fn (Get $get): bool => ! $forSubtask && filled($get('taskable_type')))
+            ->dehydrated(! $forSubtask);
 
         if ($compact) {
             $taskableId = $taskableId->columnSpanFull();
@@ -110,10 +164,21 @@ class TaskFormFields
         if ($compact) {
             $attachments = $attachments->columnSpanFull();
 
+            if ($forSubtask) {
+                return [
+                    $title,
+                    Forms\Components\Grid::make(3)->schema([$dueDate, $status, $priority]),
+                    Forms\Components\Grid::make(2)->schema([$author, $assignee]),
+                    $description,
+                    $attachments,
+                ];
+            }
+
             return [
                 $title,
                 Forms\Components\Grid::make(3)->schema([$dueDate, $status, $priority]),
-                Forms\Components\Grid::make(3)->schema([$assignee, $parent, $taskableType]),
+                Forms\Components\Grid::make(2)->schema([$author, $assignee]),
+                Forms\Components\Grid::make(2)->schema([$parent, $taskableType]),
                 $taskableId,
                 $description,
                 $attachments,
@@ -145,6 +210,7 @@ class TaskFormFields
                         ->columns(['default' => 1, 'md' => 2]),
                     Forms\Components\Section::make('Przypisanie')
                         ->schema([
+                            $author,
                             $assignee,
                             $parent,
                             $taskableType,
@@ -163,5 +229,10 @@ class TaskFormFields
                 ->columnSpan(['lg' => 1])
                 ->visible(fn (?Task $record): bool => ! $record?->exists),
         ];
+    }
+
+    private static function formatUserOptionLabel(User $user): string
+    {
+        return $user->name.(filled($user->email) ? ' ('.$user->email.')' : '');
     }
 }

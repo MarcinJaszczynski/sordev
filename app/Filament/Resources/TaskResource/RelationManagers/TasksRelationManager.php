@@ -82,16 +82,6 @@ class TasksRelationManager extends RelationManager
     public function table(Table $table): Table
     {
         return $this->configureTaskSplitTable($table)
-            ->header(fn (): \Illuminate\Contracts\View\View => view('filament.tasks.ownership-quick-filters', [
-                'tasksScope' => $this->tasksScope,
-                'dueFilter' => $this->dueFilter,
-                'tasksOnlyUrgent' => $this->tasksOnlyUrgent,
-                'showFinishedTasks' => $this->showFinishedTasks,
-                'sourceFilter' => $this->sourceFilter,
-                'showSource' => true,
-                'showFinishedToggle' => true,
-                'hasActive' => $this->hasActiveTaskQuickFilters(),
-            ]))
             ->modifyQueryUsing(function (Builder $query): Builder {
                 TaskQueryFilters::applyDefaultListScopes($query, officeOnly: true);
                 TaskQueryFilters::withLatestActivityAtColumn($query);
@@ -101,18 +91,18 @@ class TasksRelationManager extends RelationManager
             })
             ->searchable()
             ->headerActions([
-                Tables\Actions\Action::make('createTask')
+                Tables\Actions\Action::make('openCreateTask')
                     ->label('Nowe zadanie')
                     ->icon('heroicon-m-plus')
-                    ->action(fn () => $this->mountAction('createTask')),
+                    ->action(fn () => $this->mountCachedCreateTaskAction()),
             ])
             ->emptyStateHeading('Brak zadań')
             ->emptyStateDescription('Dodaj pierwsze zadanie powiązane z tą imprezą, punktem programu lub rezerwacją.')
             ->emptyStateActions([
-                Tables\Actions\Action::make('createTaskEmpty')
+                Tables\Actions\Action::make('openCreateTaskEmpty')
                     ->label('Nowe zadanie')
                     ->icon('heroicon-m-plus')
-                    ->action(fn () => $this->mountAction('createTask')),
+                    ->action(fn () => $this->mountCachedCreateTaskAction()),
             ]);
     }
 

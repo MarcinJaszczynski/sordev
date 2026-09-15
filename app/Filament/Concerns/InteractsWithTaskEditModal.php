@@ -92,9 +92,7 @@ trait InteractsWithTaskEditModal
     {
         $this->pendingCreateFormData = $defaultFormData;
         $this->pendingCreateDueDate = $defaultDueDate;
-        $this->clearConflictingMountedTableAction();
-        $this->mountAction('createTask');
-        $this->ensureMountedActionModalVisible();
+        $this->mountCachedCreateTaskAction();
     }
 
     public function openCreateTaskForProgramPoint(int $programPointId): void
@@ -195,9 +193,7 @@ trait InteractsWithTaskEditModal
 
     public function mountDeferredCreateTaskModal(): void
     {
-        $this->clearConflictingMountedTableAction();
-        $this->mountAction('createTask');
-        $this->ensureMountedActionModalVisible();
+        $this->mountCachedCreateTaskAction();
     }
 
     /**
@@ -242,12 +238,53 @@ trait InteractsWithTaskEditModal
             });
     }
 
+    /**
+     * Przycisk w headerze/tabeli — tylko montuje cache'owaną akcję `createTask`.
+     * Pełny Action w getHeaderActions() dublował modal i psuł livesearch w zagnieżdżonym TaskFullEditor.
+     *
+     * Ważne: z callbacku innej Action trzeba replaceMountedAction(), nie mountAction().
+     * mountAction() dokłada nazwę do stosu → Filament szuka child-action i czyści modal.
+     */
+    protected function makeCreateTaskHeaderAction(?string $tooltip = null): Action
+    {
+        $action = Action::make('openCreateTask')
+            ->label('Dodaj zadanie')
+            ->icon('heroicon-m-plus')
+            ->action(function (): void {
+                $this->mountCachedCreateTaskAction();
+            });
+
+        if (filled($tooltip)) {
+            $action->tooltip($tooltip);
+        }
+
+        return $action;
+    }
+
     protected function makeCreateTaskTableAction(?callable $defaultDueDate = null, ?callable $defaultFormData = null): Tables\Actions\Action
     {
         return Tables\Actions\Action::make('createTask')
             ->label('Dodaj zadanie')
             ->icon('heroicon-m-plus')
-            ->action(fn () => $this->mountAction('createTask'));
+            ->action(function (): void {
+                $this->mountCachedCreateTaskAction();
+            });
+    }
+
+    /**
+     * Montuje cache'owaną akcję createTask z poziomu innej Action / table Action.
+     */
+    protected function mountCachedCreateTaskAction(): void
+    {
+        $this->clearConflictingMountedTableAction();
+
+        if (! empty($this->mountedActions ?? [])) {
+            $this->replaceMountedAction('createTask');
+        } else {
+            $this->mountAction('createTask');
+        }
+
+        $this->ensureMountedActionModalVisible();
     }
 
     /**

@@ -511,6 +511,7 @@ class EventHotelPlanEditor extends Component
 
         $this->loadPlan();
         $this->dispatch('event-price-table-refresh');
+        $this->dispatch('event-hotel-plan-changed');
 
         Notification::make()
             ->title('Skopiowano strukturę S → P')
@@ -740,6 +741,7 @@ class EventHotelPlanEditor extends Component
             app(EventHotelPlanService::class)->linkStaysToProgramPoints($event->fresh());
             $this->loadPlan();
             $this->dispatch('event-price-table-refresh');
+            $this->dispatch('event-hotel-plan-changed');
 
             if ($showNotification) {
                 Notification::make()->title('Plan hoteli zapisany')->success()->send();
@@ -796,6 +798,7 @@ class EventHotelPlanEditor extends Component
             $stay->update($update);
             app(EventHotelPlanService::class)->linkStaysToProgramPoints($event->fresh(['hotelStays']));
             app(EventHotelPlanService::class)->syncEventFinanceAfterHotelChange($event->fresh());
+            $this->dispatch('event-hotel-plan-changed');
 
             $freshStay = $event->fresh(['hotelStays'])->hotelStays->firstWhere('id', (int) $stayPayload['id']);
 
@@ -908,7 +911,41 @@ class EventHotelPlanEditor extends Component
         app(EventHotelPlanService::class)->linkStaysToProgramPoints($event->fresh());
         app(EventHotelPlanService::class)->syncEventFinanceAfterHotelChange($event->fresh());
         $this->loadPlan();
+        $this->dispatch('event-hotel-plan-changed');
         Notification::make()->title('Przywrócono plan z szablonu')->success()->send();
+    }
+
+    /**
+     * Przebudowuje tylko warstwę S ze szablonu/katalogu. P (uzgodnienia) bez zmian.
+     */
+    public function refreshOfferFromTemplate(): void
+    {
+        $event = Event::findOrFail($this->eventId);
+        $changed = app(EventHotelPlanService::class)->refreshOfferLayerFromTemplate(
+            $event,
+            syncFinance: true,
+            rebuildStructure: true,
+        );
+
+        $this->loadPlan();
+        $this->dispatch('event-price-table-refresh');
+        $this->dispatch('event-hotel-plan-changed');
+
+        if ($changed) {
+            Notification::make()
+                ->title('Odświeżono ofertę S ze szablonu')
+                ->body('Ceny i struktura ofertowa (S) zaktualizowane. Uzgodnienia z hotelem (P) bez zmian.')
+                ->success()
+                ->send();
+
+            return;
+        }
+
+        Notification::make()
+            ->title('Brak zmian w warstwie S')
+            ->body('Nie znaleziono szablonu hotelowego lub ceny S już są aktualne względem katalogu.')
+            ->warning()
+            ->send();
     }
 
     public function applySameHotelEverywhere(): void

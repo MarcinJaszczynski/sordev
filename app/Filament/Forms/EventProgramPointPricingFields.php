@@ -312,27 +312,66 @@ class EventProgramPointPricingFields
         }
     }
 
-    public static function applyTemplateDefaults(Set $set, EventTemplateProgramPoint $template): void
-    {
+    /**
+     * Domyślne ceny z szablonu dla formularza imprezy.
+     * Plan i kalkulacja = suma dla headcountu imprezy (z extras wg flag szablonu), nie cena za 1 osobę.
+     */
+    public static function applyTemplateDefaults(
+        Set $set,
+        EventTemplateProgramPoint $template,
+        int $participantCount = 1,
+        int $gratisCount = 0,
+        int $pilotCount = 0,
+        int $driverCount = 0,
+    ): void {
         $groupSize = (int) ($template->group_size ?? 1);
+        $storedGroupSize = $groupSize > 0 ? $groupSize : 1;
 
         $set('unit_price', $template->unit_price);
-        $set('group_size', $groupSize > 0 ? $groupSize : 1);
+        $set('group_size', $storedGroupSize);
         $set('quantity', 1);
         $set('currency_id', $template->currency_id);
         $set('convert_to_pln', (bool) ($template->convert_to_pln ?? false));
+        $set('include_gratis_in_cost', (bool) ($template->include_gratis_in_cost ?? false));
+        $set('include_pilot_in_cost', (bool) ($template->include_pilot_in_cost ?? false));
+        $set('include_driver_in_cost', (bool) ($template->include_driver_in_cost ?? false));
 
-        $total = ProgramPointPricingCalculator::totalPrice(
-            (float) ($template->unit_price ?? 0),
-            1,
-            $groupSize > 0 ? $groupSize : 1,
+        $total = self::defaultTotalFromTemplate(
+            $template,
+            $participantCount,
+            $gratisCount,
+            $pilotCount,
+            $driverCount,
         );
 
         $set('planned_price', $total);
         $set('calculated_price', $total);
-        $set('include_gratis_in_cost', (bool) ($template->include_gratis_in_cost ?? false));
-        $set('include_pilot_in_cost', (bool) ($template->include_pilot_in_cost ?? false));
-        $set('include_driver_in_cost', (bool) ($template->include_driver_in_cost ?? false));
+    }
+
+    /**
+     * Suma kosztowa szablonu dla danej imprezy (uczestnicy + zaznaczone extras).
+     */
+    public static function defaultTotalFromTemplate(
+        EventTemplateProgramPoint $template,
+        int $participantCount = 1,
+        int $gratisCount = 0,
+        int $pilotCount = 0,
+        int $driverCount = 0,
+    ): float {
+        $groupSize = (int) ($template->group_size ?? 1);
+        $storedGroupSize = $groupSize > 0 ? $groupSize : 1;
+        $unit = (float) ($template->unit_price ?? 0);
+        $headcount = ProgramPointCostPricing::applyIncludedExtras(
+            max(1, $participantCount),
+            max(0, $gratisCount),
+            max(0, $pilotCount),
+            max(0, $driverCount),
+            (bool) ($template->include_gratis_in_cost ?? false),
+            (bool) ($template->include_pilot_in_cost ?? false),
+            (bool) ($template->include_driver_in_cost ?? false),
+        );
+
+        return ProgramPointPricingCalculator::totalPrice($unit, $headcount, $storedGroupSize, 1);
     }
 
     public static function applyEventPointDefaults(Set $set, EventProgramPoint $point): void

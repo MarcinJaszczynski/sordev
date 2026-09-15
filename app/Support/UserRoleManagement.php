@@ -107,6 +107,28 @@ final class UserRoleManagement
         );
     }
 
+    /**
+     * Osoby, którym można zlecić zadanie biurowe.
+     * Czysty pilot (tylko panel) odpada; pilot + biuro/admin/super_admin zostaje.
+     *
+     * @param  Builder<\App\Models\User>  $query
+     * @return Builder<\App\Models\User>
+     */
+    public static function constrainAssignableToOfficeTasks(Builder $query): Builder
+    {
+        return $query->where(function (Builder $inner): void {
+            $inner
+                ->whereDoesntHave(
+                    'roles',
+                    fn (Builder $roles) => $roles->where('name', self::DEFAULT_ROLE),
+                )
+                ->orWhereHas(
+                    'roles',
+                    fn (Builder $roles) => $roles->whereIn('name', self::staffRoleNames()),
+                );
+        });
+    }
+
     /** @param  array<string, mixed>  $data */
     public static function applyPilotDefaults(array $data): array
     {

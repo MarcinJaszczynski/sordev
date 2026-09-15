@@ -26,6 +26,20 @@
 
     {{ \Filament\Support\Facades\FilamentView::renderHook(\Filament\View\PanelsRenderHook::RESOURCE_RELATION_MANAGER_BEFORE, scopes: $this->getRenderHookScopes()) }}
 
+    {{-- Szybkie filtry nad całym split-view (jak ListTasks), nie w headerze tabeli. --}}
+    <div class="mb-0 shrink-0 rounded-none border-b border-gray-200 bg-white px-3 py-2 dark:border-gray-700 dark:bg-gray-900">
+        @include('filament.tasks.ownership-quick-filters', [
+            'tasksScope' => $this->tasksScope,
+            'dueFilter' => $this->dueFilter,
+            'tasksOnlyUrgent' => $this->tasksOnlyUrgent,
+            'showFinishedTasks' => $this->showFinishedTasks,
+            'sourceFilter' => $this->sourceFilter,
+            'showSource' => true,
+            'showFinishedToggle' => true,
+            'hasActive' => $this->hasActiveTaskQuickFilters(),
+        ])
+    </div>
+
     <div class="tasks-split-view__shell">
         <div class="tasks-split-view__list min-h-0 overflow-auto">
             <div class="tasks-split-view__list-toolbar">

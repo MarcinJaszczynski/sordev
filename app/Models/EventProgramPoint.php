@@ -67,6 +67,7 @@ class EventProgramPoint extends Model
         'total_price',
         'calculated_price',
         'planned_price',
+        'use_planned_price_in_calculation',
         'paid_price',
         'notes',
         'include_in_program',
@@ -94,6 +95,7 @@ class EventProgramPoint extends Model
         'total_price' => 'decimal:2',
         'calculated_price' => 'decimal:2',
         'planned_price' => 'decimal:2',
+        'use_planned_price_in_calculation' => 'boolean',
         'paid_price' => 'decimal:2',
         'currency_id' => 'integer',
         'include_in_program' => 'boolean',
@@ -122,6 +124,7 @@ class EventProgramPoint extends Model
         'include_gratis_in_cost' => false,
         'include_pilot_in_cost' => false,
         'include_driver_in_cost' => false,
+        'use_planned_price_in_calculation' => false,
     ];
 
     /**
@@ -170,11 +173,9 @@ class EventProgramPoint extends Model
                 $point->quantity = ProgramPointPricingCalculator::billableUnits($costHeadcount, $groupSize);
             }
 
-            // Automatycznie oblicz total_price
-            $point->total_price = $point->resolveEffectiveTotalPrice($costHeadcount);
-
-            // Kalkulacja (kosztorys) — zawsze live z unit_price × osoby koszowe.
-            // Plan (ustalenia) NIE jest tu nadpisywany przy zmianie ceny.
+            // total_price / calculated_price zostają szablonem (unit_price × osoby koszowe).
+            // Oferta może brać plan — to resolveEffectiveTotalPrice(), nie te kolumny.
+            $point->total_price = $point->resolveTemplateTotalPrice($costHeadcount);
             $point->calculated_price = $point->resolveCalculationTotal($paying);
         });
 
@@ -183,6 +184,7 @@ class EventProgramPoint extends Model
             $point->include_pilot_in_cost = (bool) ($point->include_pilot_in_cost ?? false);
             $point->include_driver_in_cost = (bool) ($point->include_driver_in_cost ?? false);
             $point->include_gratis_in_cost = (bool) ($point->include_gratis_in_cost ?? false);
+            $point->use_planned_price_in_calculation = (bool) ($point->use_planned_price_in_calculation ?? false);
 
             if (is_null($point->planned_price) || (float) $point->planned_price == 0.0) {
                 $participants = max(1, (int) ($point->event?->participant_count ?? 1));
@@ -495,7 +497,15 @@ class EventProgramPoint extends Model
         );
     }
 
-    public function resolveEffectiveTotalPrice(?int $participantCount = null): float
+    public function usesPlannedPriceInCalculation(): bool
+    {
+        return (bool) ($this->use_planned_price_in_calculation ?? false);
+    }
+
+    /**
+     * Koszt z ceny szablonowej (unit_price × jednostki) — kolumna Szablon / total_price.
+     */
+    public function resolveTemplateTotalPrice(?int $participantCount = null): float
     {
         $count = max(1, (int) ($participantCount ?? $this->event?->participant_count ?? 1));
 
@@ -505,6 +515,67 @@ class EventProgramPoint extends Model
             $this->group_size,
             max(1, (int) ($this->quantity ?? 1)),
         );
+    }
+
+    /**
+     * Koszt punktu w ofercie i wariantach.
+     * Domyślnie szablon; po fladze — planned_price przeskalowany implied unit do podanego headcountu.
+     */
+    public function resolveEffectiveTotalPrice(?int $participantCount = null): float
+    {
+        if (! $this->usesPlannedPriceInCalculation()) {
+            return $this->resolveTemplateTotalPrice($participantCount);
+        }
+
+        $targetHeadcount = $participantCount;
+        if ($targetHeadcount === null) {
+            $event = $this->event;
+            $paying = max(1, (int) ($event?->participant_count ?? 1));
+            $targetHeadcount = $event
+                ? ProgramPointCostPricing::costHeadcountForPoint($this, $event, $paying)
+                : $paying;
+        }
+
+        return $this->scalePlannedPriceToHeadcount(max(1, (int) $targetHeadcount));
+    }
+
+    /**
+     * Skala planned_price (suma dla bieżącej grupy) do innego headcountu tym samym group_size.
+     * Za sztukę: kwota stała. Brak planu: fallback do szablonu.
+     */
+    public function scalePlannedPriceToHeadcount(int $targetHeadcount): float
+    {
+        $planned = round((float) ($this->planned_price ?? 0), 2);
+        $targetHeadcount = max(1, $targetHeadcount);
+        if ($planned <= 0.009) {
+            return $this->resolveTemplateTotalPrice($targetHeadcount);
+        }
+
+        $groupSize = $this->group_size === null ? null : (int) $this->group_size;
+        $fixedQty = max(1, (int) ($this->quantity ?? 1));
+
+        if (ProgramPointPricingCalculator::usesFixedQuantity($groupSize)) {
+            return $planned;
+        }
+
+        $event = $this->event;
+        $basePaying = max(1, (int) ($event?->participant_count ?? $targetHeadcount));
+        $baseHeadcount = $event
+            ? ProgramPointCostPricing::costHeadcountForPoint($this, $event, $basePaying)
+            : $basePaying;
+
+        $baseUnits = ProgramPointPricingCalculator::billableUnits($baseHeadcount, $groupSize, $fixedQty);
+        $targetUnits = ProgramPointPricingCalculator::billableUnits($targetHeadcount, $groupSize, $fixedQty);
+
+        if ($baseUnits <= 0) {
+            return $planned;
+        }
+
+        if ($targetUnits === $baseUnits) {
+            return $planned;
+        }
+
+        return round(($planned / $baseUnits) * $targetUnits, 2);
     }
 
     public function resolveCalculationTotal(?int $participantCount = null): float

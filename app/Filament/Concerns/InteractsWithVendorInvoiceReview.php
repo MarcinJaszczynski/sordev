@@ -7,6 +7,7 @@ use App\Models\Contractor;
 use App\Models\Event;
 use App\Models\EventProgramPoint;
 use App\Models\VendorInvoice;
+use App\Services\ContractorLookupService;
 use App\Services\Invoices\VendorInvoiceProgramPointSync;
 use Filament\Forms\Components\Select;
 use Filament\Notifications\Notification;
@@ -107,12 +108,19 @@ trait InteractsWithVendorInvoiceReview
                     ->label('Kontrahent')
                     ->searchable()
                     ->default(fn (VendorInvoice $record) => $record->contractor_id)
-                    ->getSearchResultsUsing(fn (string $search) => Contractor::query()
-                        ->where('name', 'like', "%{$search}%")
-                        ->orWhere('nip', 'like', "%{$search}%")
-                        ->limit(20)
-                        ->pluck('name', 'id'))
-                    ->getOptionLabelUsing(fn ($value) => Contractor::find($value)?->name),
+                    ->getSearchResultsUsing(fn (string $search): array => app(ContractorLookupService::class)
+                        ->searchOptions(search: $search, limit: 20))
+                    ->getOptionLabelUsing(function ($value): ?string {
+                        if (! $value) {
+                            return null;
+                        }
+
+                        $contractor = Contractor::query()->find($value);
+
+                        return $contractor
+                            ? app(ContractorLookupService::class)->formatOptionLabel($contractor)
+                            : null;
+                    }),
             ])
             ->fillForm(function (VendorInvoice $record) {
                 $record->loadMissing('programPoints');

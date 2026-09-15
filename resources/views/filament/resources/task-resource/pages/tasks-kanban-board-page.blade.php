@@ -644,21 +644,8 @@
                 });
             };
 
-            const initKeyboardShortcuts = () => {
-                document.addEventListener('keydown', (e) => {
-                    if (e.ctrlKey && e.key === 'n') {
-                        e.preventDefault();
-                        window.location.href = '{{ \App\Support\Tasks\TaskNavigation::createUrl($eventFilter ? \App\Models\Event::class : null, $eventFilter) }}';
-                    } else if (e.key === 'r' && !e.ctrlKey && !e.altKey) {
-                        e.preventDefault();
-                        @this.refreshBoard();
-                    }
-                });
-            };
-
             const boot = () => {
                 initDragAndDrop();
-                initKeyboardShortcuts();
 
                 if (window.Livewire?.hook) {
                     Livewire.hook('morph.updated', () => {

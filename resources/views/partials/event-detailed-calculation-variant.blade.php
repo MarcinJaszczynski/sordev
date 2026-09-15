@@ -151,6 +151,9 @@
                                                     <tr class="{{ $point['is_child'] ? 'bg-blue-50' : '' }}">
                                                         <td class="px-3 py-2 border-b {{ $point['is_child'] ? 'text-blue-700 pl-6' : 'font-medium' }}">
                                                             {{ $point['name'] }}
+                                                            @if (! empty($point['uses_planned_price']))
+                                                                <span class="ml-1 text-[10px] font-semibold uppercase tracking-wide text-amber-700">plan</span>
+                                                            @endif
                                                         </td>
                                                         <td class="px-3 py-2 border-b text-right">
                                                             @php $unitPrice = $point['unit_price'] ?? null; @endphp

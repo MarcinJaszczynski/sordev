@@ -42,7 +42,7 @@ class TaskFullEditor extends Component implements HasForms
 
     public string $newCommentContent = '';
 
-    public bool $showEarlierComments = false;
+    public bool $showEarlierComments = true;
 
     public function mount(
         ?int $taskId = null,
@@ -56,7 +56,7 @@ class TaskFullEditor extends Component implements HasForms
 
         if ($taskId) {
             $this->record = Task::query()
-                ->with(['taskable', 'parent', 'status', 'assignee', 'comments.author'])
+                ->with(['taskable', 'parent', 'status', 'assignee', 'author', 'comments.author'])
                 ->findOrFail($taskId);
             $this->form->fill($this->record->attributesToArray());
 
@@ -169,7 +169,6 @@ class TaskFullEditor extends Component implements HasForms
         NotificationService::clearCacheForTaskCommentStakeholders($comment);
 
         $this->newCommentContent = '';
-        $this->showEarlierComments = false;
         $this->record->load(['comments.author']);
         unset($this->comments, $this->latestComment, $this->earlierComments);
 

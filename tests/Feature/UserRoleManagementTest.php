@@ -19,6 +19,7 @@ class UserRoleManagementTest extends TestCase
         Role::findOrCreate('pilot');
         Role::findOrCreate('admin');
         Role::findOrCreate('biuro');
+        Role::findOrCreate('super_admin');
     }
 
     public function test_non_admin_cannot_manage_roles_and_permissions(): void
@@ -61,5 +62,33 @@ class UserRoleManagementTest extends TestCase
 
         $this->assertTrue(UserRoleManagement::isPilotOnlyUser($pilot));
         $this->assertFalse(UserRoleManagement::isPilotOnlyUser($mixed));
+    }
+
+    public function test_office_task_assignee_scope_keeps_staff_with_pilot_role(): void
+    {
+        $pilotOnly = User::factory()->create(['name' => 'Czysty Pilot']);
+        $pilotOnly->syncRoles(['pilot']);
+
+        $biuroPilot = User::factory()->create(['name' => 'Biuro Pilot']);
+        $biuroPilot->syncRoles(['pilot', 'biuro']);
+
+        $adminPilot = User::factory()->create(['name' => 'Admin Pilot']);
+        $adminPilot->syncRoles(['pilot', 'admin']);
+
+        $superAdminPilot = User::factory()->create(['name' => 'Superadmin Pilot']);
+        $superAdminPilot->syncRoles(['pilot', 'super_admin']);
+
+        $office = User::factory()->create(['name' => 'Tylko Biuro']);
+        $office->syncRoles(['biuro']);
+
+        $ids = UserRoleManagement::constrainAssignableToOfficeTasks(User::query())
+            ->pluck('id')
+            ->all();
+
+        $this->assertNotContains($pilotOnly->id, $ids);
+        $this->assertContains($biuroPilot->id, $ids);
+        $this->assertContains($adminPilot->id, $ids);
+        $this->assertContains($superAdminPilot->id, $ids);
+        $this->assertContains($office->id, $ids);
     }
 }

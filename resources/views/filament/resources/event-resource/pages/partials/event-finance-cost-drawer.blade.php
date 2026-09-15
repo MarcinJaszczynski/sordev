@@ -46,7 +46,13 @@
                     <h4 class="mb-2 text-[11px] font-semibold uppercase tracking-wide text-gray-500">Kwoty</h4>
                     <div class="grid grid-cols-2 gap-2 text-center text-xs">
                         <div class="rounded-lg border border-gray-100 bg-gray-50 p-2.5 dark:border-gray-800 dark:bg-gray-800/80">
-                            <div class="text-[10px] uppercase tracking-wide text-gray-500">Szablon</div>
+                            <div class="text-[10px] uppercase tracking-wide text-gray-500">
+                                @if (in_array($selected['source_type'] ?? '', ['accommodation_hotel', 'accommodation_hotel_stay'], true))
+                                    Szablon (S)
+                                @else
+                                    Szablon
+                                @endif
+                            </div>
                             <div class="mt-0.5 font-semibold tabular-nums text-gray-800 dark:text-gray-100">{{ $selected['calculation_label'] }}</div>
                             @if (! empty($selected['pricing_hint']))
                                 <div class="mt-1 text-[10px] leading-snug text-gray-500">{{ $selected['pricing_hint'] }}</div>
@@ -58,8 +64,17 @@
                             class="rounded-lg border border-primary-100 bg-primary-50/50 p-2.5 text-center transition hover:bg-primary-50 dark:border-primary-900/40 dark:bg-primary-950/20 dark:hover:bg-primary-950/40"
                             title="Edytuj kwotę planowaną"
                         >
-                            <div class="text-[10px] uppercase tracking-wide text-primary-700 dark:text-primary-300">Planowane</div>
+                            <div class="text-[10px] uppercase tracking-wide text-primary-700 dark:text-primary-300">
+                                @if (in_array($selected['source_type'] ?? '', ['accommodation_hotel', 'accommodation_hotel_stay'], true))
+                                    Planowane (P)
+                                @else
+                                    Planowane
+                                @endif
+                            </div>
                             <div class="mt-0.5 font-semibold tabular-nums text-primary-900 dark:text-primary-100">{{ $selected['planned_label'] }}</div>
+                            @if (! empty($selected['use_planned_price_in_calculation']))
+                                <div class="mt-1 text-[10px] font-medium text-amber-800 dark:text-amber-200">w kalkulacji</div>
+                            @endif
                         </button>
                         <div class="rounded-lg border border-emerald-100 bg-emerald-50/60 p-2.5 dark:border-emerald-900/40 dark:bg-emerald-950/20">
                             <div class="text-[10px] uppercase tracking-wide text-emerald-700">Zapłacono</div>
@@ -79,6 +94,23 @@
                             @endif
                         </div>
                     </div>
+
+                    @if (! empty($selected['is_program_point']))
+                        <label class="mt-2 flex cursor-pointer items-start gap-2 rounded-lg border border-amber-100 bg-amber-50/60 p-2.5 text-left dark:border-amber-900/40 dark:bg-amber-950/20">
+                            <input
+                                type="checkbox"
+                                class="mt-0.5 rounded border-amber-300 text-amber-700 focus:ring-amber-500"
+                                wire:click="toggleUsePlannedPriceInCalculation"
+                                @checked(! empty($selected['use_planned_price_in_calculation']))
+                            />
+                            <span class="text-xs text-amber-950 dark:text-amber-100">
+                                <span class="font-medium">Użyj ceny planowanej w kalkulacji</span>
+                                <span class="mt-0.5 block text-[10px] leading-snug text-amber-800/80 dark:text-amber-200/80">
+                                    Oferta i warianty liczą ten punkt z kwoty planowanej (proporcjonalnie do liczby osób). Domyślnie: cena z szablonu.
+                                </span>
+                            </span>
+                        </label>
+                    @endif
 
                     <div class="mt-2 flex flex-wrap items-center gap-2 text-xs">
                         <span @class(['inline-flex rounded-full px-2 py-0.5 font-semibold', $statusColors[$selected['ui_status']] ?? 'bg-gray-100 text-gray-700'])>

@@ -73,9 +73,9 @@
             <div class="min-w-0 flex-1">
                 <textarea
                     wire:model="newCommentContent"
-                    rows="2"
+                    rows="5"
                     placeholder="Napisz komentarz..."
-                    class="block w-full resize-y rounded-lg border-gray-300 text-sm shadow-sm focus:border-primary-500 focus:ring-primary-500 dark:border-gray-600 dark:bg-gray-800 dark:text-white dark:focus:border-primary-500"
+                    class="block w-full min-h-[7.5rem] resize-y rounded-lg border-gray-300 text-sm shadow-sm focus:border-primary-500 focus:ring-primary-500 dark:border-gray-600 dark:bg-gray-800 dark:text-white dark:focus:border-primary-500"
                 ></textarea>
                 @error('newCommentContent')
                     <p class="mt-1 text-sm text-danger-600 dark:text-danger-400">{{ $message }}</p>

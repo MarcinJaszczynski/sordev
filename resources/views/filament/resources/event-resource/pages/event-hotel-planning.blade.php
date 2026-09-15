@@ -126,10 +126,12 @@
         </div>
 
         <div @class(['hidden' => $hotelTab !== 'overview'])>
-            @livewire('event-hotel-stays-finance-panel', [
-                'eventId' => $this->record->id,
-                'variant' => 'overview',
-            ], key('hotel-stays-overview-'.$this->record->id))
+            @if ($hotelTab === 'overview')
+                @livewire('event-hotel-stays-finance-panel', [
+                    'eventId' => $this->record->id,
+                    'variant' => 'overview',
+                ], key('hotel-stays-overview-'.$this->record->id))
+            @endif
         </div>
 
         <div @class(['hidden' => $hotelTab !== 'planning'])>

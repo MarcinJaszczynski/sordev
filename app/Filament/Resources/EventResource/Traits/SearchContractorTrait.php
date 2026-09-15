@@ -3,6 +3,7 @@
 namespace App\Filament\Resources\EventResource\Traits;
 
 use App\Models\Contractor;
+use App\Services\ContractorLookupService;
 use App\Support\PhoneValidation;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\Schema;
@@ -105,31 +106,16 @@ trait SearchContractorTrait
 
     /**
      * Zwróć listę kontrahentów do wyboru w dropdown (dla Form::make()->relationship())
-     * Wyllowaj na podstawie current search query
+     * Deleguje do ContractorLookupService (telefon, firstname/surname, tokeny AND, kontakty).
+     * Bez filtra typu — tu szukamy całej bazy (umowy / zamawiający).
+     * Select pilota na imprezie nadal używa TypedContractorSelect z typeNames: ['pilot']
+     * (ten sam silnik, tylko zawężony typ — kontrahent, nie osobna encja).
      */
     public static function getContractorOptions(string $searchQuery = ''): Collection
     {
-        $query = Contractor::query();
-
-        if (! empty($searchQuery)) {
-            $query->where(function ($q) use ($searchQuery) {
-                $q->where('name', 'like', "%{$searchQuery}%")
-                    ->orWhere('email', 'like', "%{$searchQuery}%")
-                    ->orWhere('nip', 'like', "%{$searchQuery}%")
-                    ->orWhere('street', 'like', "%{$searchQuery}%")
-                    ->orWhere('city', 'like', "%{$searchQuery}%")
-                    ->orWhere('postal_code', 'like', "%{$searchQuery}%");
-
-                PhoneValidation::orWhereDigitsLike($q, 'phone', $searchQuery);
-            });
-        }
-
-        return $query
-            ->orderBy('name')
-            ->limit(50)
-            ->get()
-            ->mapWithKeys(fn (Contractor $c) => [
-                $c->id => "{$c->name} (".($c->city ?? 'brak miasta').')',
-            ]);
+        return collect(app(ContractorLookupService::class)->searchOptions(
+            search: $searchQuery,
+            limit: 50,
+        ));
     }
 }

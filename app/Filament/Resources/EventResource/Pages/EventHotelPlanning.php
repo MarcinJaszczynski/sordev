@@ -51,6 +51,11 @@ class EventHotelPlanning extends Page
         }
 
         $this->hotelTab = $tab;
+
+        // Overview trzyma cache Livewire — po powrocie z planu wymuś odświeżenie kwot.
+        if ($tab === 'overview') {
+            $this->dispatch('event-hotel-plan-changed');
+        }
     }
 
     public function hotelStickyNotesCount(): int
@@ -101,24 +106,14 @@ class EventHotelPlanning extends Page
             'hotelStays.contractor',
             'hotelStays.contractorLocation',
             'hotelStays.roomLines',
+            'hotelStays.offerRoomLines',
         ]);
 
         $stays = $this->record->hotelStays->sortBy('day')->values();
-        $currencies = Currency::query()->pluck('symbol', 'id');
-        $staysPayload = $stays->map(fn (EventHotelStay $stay): array => $this->stayToFormattingPayload($stay))->all();
         $peoplePerNight = (int) ($this->occupancySummary()['required_beds_per_night'] ?? 0);
 
-        $lodgingTotal = EventHotelPlanFormatting::eventTotalDisplay(
-            $staysPayload,
-            $this->record->hotel_pricing_mode ?? 'lines',
-            $this->record->hotel_flat_stay_amount !== null
-                ? (float) $this->record->hotel_flat_stay_amount
-                : null,
-            $this->record->hotel_flat_stay_currency_id,
-            (bool) ($this->record->hotel_flat_stay_convert_to_pln ?? true),
-            $currencies,
-            $peoplePerNight,
-        );
+        // Ta sama ścieżka co drawer / kalkulacja oferty (S lub P wg hotel_calculation_source).
+        $lodgingTotal = $this->lodgingTotalLabelFromPlanService($peoplePerNight);
 
         $nightHotels = [];
         foreach ($stays as $stay) {
@@ -144,6 +139,50 @@ class EventHotelPlanning extends Page
             'lodging_total_label' => $lodgingTotal,
             'night_hotels' => $nightHotels,
         ];
+    }
+
+    /**
+     * Etykieta sumy noclegów — ta sama baza co drawer (S/P) i EventHotelPlanService.
+     */
+    protected function lodgingTotalLabelFromPlanService(int $peoplePerNight): string
+    {
+        $event = $this->record;
+        $mode = $event->hotel_pricing_mode ?? 'lines';
+        $currencies = Currency::query()->pluck('symbol', 'id');
+        $plan = app(\App\Services\EventHotelPlanService::class);
+
+        if (EventHotelPlanFormatting::isEventFlatPricing($mode)) {
+            $source = \App\Support\HotelCalculationSource::normalize(
+                $event->hotel_calculation_source ?? \App\Support\HotelCalculationSource::OFFER
+            );
+            $useOffer = $source === \App\Support\HotelCalculationSource::OFFER
+                && \Illuminate\Support\Facades\Schema::hasColumn('events', 'hotel_offer_flat_stay_amount');
+            $flat = $useOffer
+                ? ($event->hotel_offer_flat_stay_amount ?? $event->hotel_flat_stay_amount)
+                : $event->hotel_flat_stay_amount;
+
+            return EventHotelPlanFormatting::eventTotalDisplay(
+                [],
+                $mode,
+                $flat !== null ? (float) $flat : null,
+                $event->hotel_flat_stay_currency_id ? (int) $event->hotel_flat_stay_currency_id : null,
+                (bool) ($event->hotel_flat_stay_convert_to_pln ?? true),
+                $currencies,
+                $peoplePerNight,
+            );
+        }
+
+        $totals = $plan->totalsByCurrencyForEvent($event);
+        $pln = (float) ($totals['PLN'] ?? 0);
+        $foreign = [];
+        foreach ($totals as $symbol => $amount) {
+            if (strtoupper((string) $symbol) === 'PLN') {
+                continue;
+            }
+            $foreign[strtoupper((string) $symbol)] = (float) $amount;
+        }
+
+        return CurrencyAmountDisplay::formatMixedTotal($pln, $foreign, 0);
     }
 
     /**

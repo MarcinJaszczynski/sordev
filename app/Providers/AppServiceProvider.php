@@ -30,18 +30,20 @@ use App\Services\Tfg\MockTfgFeedClient;
 use App\Services\Tfg\TfgFeedClientInterface;
 use App\Support\Filament\PatchedSelectAlpineComponent;
 use App\Support\FilamentFormBinding;
+use App\Support\SafeTiptapConverter;
 use App\Support\ViteAssetResolver;
 use Filament\Support\Assets\AssetManager;
 use Filament\Support\Assets\Css;
 use Filament\Support\Facades\FilamentAsset;
+use FilamentTiptapEditor\TiptapConverter;
 use Illuminate\Support\Facades\Event as EventFacade;
 use Illuminate\Support\Facades\Mail;
 use Illuminate\Support\Facades\Schema;
 use Illuminate\Support\Facades\URL;
 use Illuminate\Support\Facades\Vite;
 use Illuminate\Support\ServiceProvider;
-use ReflectionClass;
 use Livewire\Livewire;
+use ReflectionClass;
 
 class AppServiceProvider extends ServiceProvider
 {
@@ -57,6 +59,9 @@ class AppServiceProvider extends ServiceProvider
         });
 
         $this->app->bind(SmsChannelInterface::class, LogSmsChannel::class);
+
+        // Tiptap PHP json_decode'uje skalary (np. notes="570") i sypie TypeError przy hydrate/save.
+        $this->app->bind(TiptapConverter::class, SafeTiptapConverter::class);
     }
 
     /**

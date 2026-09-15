@@ -601,7 +601,7 @@ final class EventSettlementImportService
         // Plan = planned_price; fallback = kalkulacja z osobami koszowymi (płacący + gratis).
         $plannedAmount = $event
             ? $this->resolveProgramPointPlanAmount($point, $event)
-            : round((float) ($point->planned_price ?: $point->resolveEffectiveTotalPrice()), 2);
+            : round((float) ($point->planned_price ?: $point->resolveTemplateTotalPrice()), 2);
 
         $currency = $point->currency;
         $currencyCode = strtoupper((string) ($currency?->code ?? $currency?->symbol ?? 'PLN'));
@@ -733,7 +733,7 @@ final class EventSettlementImportService
         $paying = max(1, (int) ($event->participant_count ?? 1));
         $headcount = ProgramPointCostPricing::costHeadcountForPoint($point, $event, $paying);
 
-        return round($point->resolveEffectiveTotalPrice($headcount), 2);
+        return round($point->resolveTemplateTotalPrice($headcount), 2);
     }
 
     private function plannedAmountToPln(

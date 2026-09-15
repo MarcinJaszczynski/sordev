@@ -1092,7 +1092,38 @@ trait InteractsWithSettlementCostDrawer
 
         $this->showPlanForm = false;
         $this->invalidateSettlementCostCaches();
+        $this->dispatch('event-price-table-refresh');
         Notification::make()->title('Zapisano kwotę planowaną')->success()->send();
+    }
+
+    public function toggleUsePlannedPriceInCalculation(): void
+    {
+        $row = $this->selectedRow;
+        if (! is_array($row) || ! ($row['is_program_point'] ?? false)) {
+            return;
+        }
+
+        $point = $this->selectedProgramPointForDrawer();
+        if (! $point) {
+            Notification::make()->title('Brak powiązanego punktu programu')->danger()->send();
+
+            return;
+        }
+
+        $enabled = ! $point->usesPlannedPriceInCalculation();
+        $point->update([
+            'use_planned_price_in_calculation' => $enabled,
+        ]);
+
+        $this->invalidateSettlementCostCaches();
+        $this->dispatch('event-price-table-refresh');
+
+        Notification::make()
+            ->title($enabled
+                ? 'Kalkulacja używa ceny planowanej'
+                : 'Kalkulacja używa ceny z szablonu')
+            ->success()
+            ->send();
     }
 
     protected function resetPaymentForm(): void

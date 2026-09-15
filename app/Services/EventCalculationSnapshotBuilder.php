@@ -597,13 +597,16 @@ final class EventCalculationSnapshotBuilder
                             (bool) ($point->include_driver_in_cost ?? false),
                         );
 
+                        $offer = $this->programPointOfferFields($point, $costHeadcount);
+
                         return [
                             'name' => $name,
                             'day' => (int) ($point->day ?? 0),
                             'order' => (float) ($point->order ?? 0),
-                            'unit_price' => (float) ($point->unit_price ?? 0),
+                            'unit_price' => $offer['unit_price'],
                             'quantity' => (float) ($point->quantity ?? 1),
-                            'cost' => (float) $point->resolveEffectiveTotalPrice($costHeadcount),
+                            'cost' => $offer['cost'],
+                            'uses_planned_price' => $offer['uses_planned_price'],
                             'currency_symbol' => $point->currency?->symbol ?? 'PLN',
                         ];
                     })
@@ -663,6 +666,31 @@ final class EventCalculationSnapshotBuilder
     }
 
     /**
+     * @return array{uses_planned_price: bool, unit_price: float, cost: float}
+     */
+    private function programPointOfferFields(EventProgramPoint $point, int $costHeadcount): array
+    {
+        $usesPlanned = $point->usesPlannedPriceInCalculation();
+        $cost = (float) $point->resolveEffectiveTotalPrice($costHeadcount);
+        $unitPrice = (float) ($point->unit_price ?? 0);
+
+        if ($usesPlanned) {
+            $units = ProgramPointPricingCalculator::billableUnits(
+                $costHeadcount,
+                $point->group_size,
+                max(1, (int) ($point->quantity ?? 1)),
+            );
+            $unitPrice = $units > 0 ? round($cost / $units, 2) : 0.0;
+        }
+
+        return [
+            'uses_planned_price' => $usesPlanned,
+            'unit_price' => $unitPrice,
+            'cost' => $cost,
+        ];
+    }
+
+    /**
      * @return array{bucket: string, point: array<string, mixed>}|null
      */
     private function programPointDetailLine(
@@ -682,8 +710,8 @@ final class EventCalculationSnapshotBuilder
             (bool) ($point->include_pilot_in_cost ?? false),
             (bool) ($point->include_driver_in_cost ?? false),
         );
-        $cost = (float) $point->resolveEffectiveTotalPrice($costHeadcount);
-        if ($cost <= 0) {
+        $offer = $this->programPointOfferFields($point, $costHeadcount);
+        if ($offer['cost'] <= 0) {
             return null;
         }
 
@@ -705,26 +733,28 @@ final class EventCalculationSnapshotBuilder
                 'bucket' => 'PLN',
                 'point' => [
                     'name' => $name,
-                    'unit_price' => (float) ($point->unit_price ?? 0),
+                    'unit_price' => $offer['unit_price'],
                     'group_size' => (float) ($point->group_size ?? 1),
-                    'cost' => round($cost, 2),
+                    'cost' => round($offer['cost'], 2),
                     'is_child' => (bool) ($point->parent_id ?? false),
+                    'uses_planned_price' => $offer['uses_planned_price'],
                     'currency_symbol' => 'PLN',
                 ],
             ];
         }
 
         if ($convert) {
-            $plnCost = $rate > 0 ? round($cost * $rate, 2) : round($cost, 2);
+            $plnCost = $rate > 0 ? round($offer['cost'] * $rate, 2) : round($offer['cost'], 2);
 
             return [
                 'bucket' => 'PLN',
                 'point' => [
                     'name' => $name.' (przeliczone na PLN, kurs: '.$rate.')',
-                    'unit_price' => ($point->unit_price ?? 0).' '.$symbol,
+                    'unit_price' => $offer['unit_price'].' '.$symbol,
                     'group_size' => (float) ($point->group_size ?? 1),
                     'cost' => $plnCost,
                     'is_child' => (bool) ($point->parent_id ?? false),
+                    'uses_planned_price' => $offer['uses_planned_price'],
                     'currency_symbol' => 'PLN',
                     'original_currency' => $symbol,
                     'exchange_rate' => $rate,
@@ -736,10 +766,11 @@ final class EventCalculationSnapshotBuilder
             'bucket' => $code,
             'point' => [
                 'name' => $name,
-                'unit_price' => (float) ($point->unit_price ?? 0),
+                'unit_price' => $offer['unit_price'],
                 'group_size' => (float) ($point->group_size ?? 1),
-                'cost' => round($cost, 2),
+                'cost' => round($offer['cost'], 2),
                 'is_child' => (bool) ($point->parent_id ?? false),
+                'uses_planned_price' => $offer['uses_planned_price'],
                 'currency_symbol' => $symbol,
             ],
         ];
@@ -755,7 +786,15 @@ final class EventCalculationSnapshotBuilder
         Event $event,
     ): void {
         $plnBase = round((float) ($detailedCalculations[$qty]['PLN']['total'] ?? 0), 2);
-        $markupAmount = round($plnBase * ($markupPercent / 100), 2);
+        $markupModel = $this->resolveMarkupModel($event);
+        $days = max(1, (int) ($event->duration_days ?? $event->eventTemplate?->duration_days ?? 1));
+        $markupCalc = Markup::calculateAmount(
+            $plnBase,
+            $markupPercent,
+            (float) ($markupModel?->min_daily_amount_pln ?? 0),
+            $days,
+        );
+        $markupAmount = $markupCalc['amount'];
 
         $taxCalculations = [];
         $totalTaxAmount = 0.0;
@@ -785,7 +824,7 @@ final class EventCalculationSnapshotBuilder
             'percent_applied' => $markupPercent,
             'discount_applied' => false,
             'discount_percent' => 0,
-            'min_daily_applied' => false,
+            'min_daily_applied' => $markupCalc['min_daily_applied'],
         ];
         $detailedCalculations[$qty]['taxes'] = [
             'total_amount' => round($totalTaxAmount, 2),
@@ -821,19 +860,24 @@ final class EventCalculationSnapshotBuilder
         }
     }
 
+    private function resolveMarkupModel(Event $event): ?Markup
+    {
+        if ($event->markup instanceof Markup) {
+            return $event->markup;
+        }
+
+        if ($event->eventTemplate?->markup instanceof Markup) {
+            return $event->eventTemplate->markup;
+        }
+
+        return Markup::query()->where('is_default', true)->first();
+    }
+
     private function resolveMarkupPercent(Event $event): float
     {
-        if ($event->markup?->percent !== null) {
-            return (float) $event->markup->percent;
-        }
+        $markup = $this->resolveMarkupModel($event);
 
-        if ($event->eventTemplate?->markup?->percent !== null) {
-            return (float) $event->eventTemplate->markup->percent;
-        }
-
-        $default = Markup::query()->where('is_default', true)->first();
-
-        return (float) ($default?->percent ?? 0);
+        return (float) ($markup?->percent ?? 0);
     }
 
     private function isAccommodationProgramPoint(mixed $point): bool

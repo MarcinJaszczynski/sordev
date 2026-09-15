@@ -143,6 +143,22 @@ class TaskFullEditorTest extends TestCase
         ], $component->instance()->getInlineRelationManagers());
     }
 
+    public function test_full_editor_shows_task_author(): void
+    {
+        $user = User::factory()->create(['name' => 'Anna Autor']);
+        $task = Task::create([
+            'title' => 'Zadanie z autorem',
+            'status_id' => Task::getDefaultStatusId(),
+            'priority' => 'normal',
+            'author_id' => $user->id,
+        ]);
+
+        Livewire::actingAs($user)
+            ->test(TaskFullEditor::class, ['taskId' => $task->id])
+            ->assertSee('Autor')
+            ->assertSee('Anna Autor');
+    }
+
     public function test_full_editor_can_add_comment(): void
     {
         $user = User::factory()->create();

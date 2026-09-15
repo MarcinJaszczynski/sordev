@@ -613,42 +613,53 @@ class EventTemplateCalculationEngine
         return $total;
     }
 
+    private function resolveMarkupForTemplate(EventTemplate $template): ?\App\Models\Markup
+    {
+        if (isset($template->markup) && $template->markup instanceof \App\Models\Markup) {
+            return $template->markup;
+        }
+
+        if (! empty($template->markup_id)) {
+            $markup = \App\Models\Markup::find($template->markup_id);
+            if ($markup) {
+                return $markup;
+            }
+        }
+
+        return \App\Models\Markup::where('is_default', true)->first();
+    }
+
     private function getMarkupPercentForTemplate(EventTemplate $template): float
     {
-        // Prefer explicitly assigned Markup model if present
-        $percent = null;
-
-        // If relation is loaded or available, prefer it
-        if (isset($template->markup) && $template->markup?->percent !== null) {
-            $percent = $template->markup->percent;
+        $markup = $this->resolveMarkupForTemplate($template);
+        if ($markup?->percent !== null) {
+            return (float) $markup->percent;
         }
 
-        // If markup_id is set but relation not loaded, try to resolve it
-        if ($percent === null && ! empty($template->markup_id)) {
-            $markup = \App\Models\Markup::find($template->markup_id);
-            $percent = $markup?->percent;
+        // Legacy field on template (bez min. dziennego — brak modelu Markup)
+        if (isset($template->markup_percent) && $template->markup_percent !== null) {
+            return (float) $template->markup_percent;
         }
 
-        // Fallback to legacy field on template
-        if ($percent === null && isset($template->markup_percent) && $template->markup_percent !== null) {
-            $percent = $template->markup_percent;
-        }
-
-        // Final fallback: system default markup (ensure some value)
-        if ($percent === null) {
-            $default = \App\Models\Markup::where('is_default', true)->first();
-            $percent = $default?->percent ?? 20;
-        }
-
-        return $percent;
+        return 20.0;
     }
 
     private function calculateMarkupForTemplate(EventTemplate $template, float $base): float
     {
+        $markup = $this->resolveMarkupForTemplate($template);
         $percent = $this->getMarkupPercentForTemplate($template);
-        \Illuminate\Support\Facades\Log::info("[MARKUP] Using markup percent={$percent} for event_template_id={$template->id}");
+        $days = max(1, (int) ($template->duration_days ?? 1));
+        $minDaily = (float) ($markup?->min_daily_amount_pln ?? 0);
 
-        return $base * ($percent / 100);
+        $calc = \App\Models\Markup::calculateAmount($base, $percent, $minDaily, $days);
+
+        \Illuminate\Support\Facades\Log::info(
+            "[MARKUP] percent={$percent}, min_daily={$minDaily}, days={$days}, amount={$calc['amount']}, min_applied=".
+            ($calc['min_daily_applied'] ? '1' : '0').
+            " for event_template_id={$template->id}"
+        );
+
+        return $calc['amount'];
     }
 
     /**

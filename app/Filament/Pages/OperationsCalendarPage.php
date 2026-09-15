@@ -113,13 +113,9 @@ class OperationsCalendarPage extends Page
     protected function getHeaderActions(): array
     {
         return [
-            $this->makeCreateTaskAction(
-                defaultDueDate: fn (): mixed => $this->createTaskDefaultDueDate(),
-                defaultFormData: fn (): array => array_merge(
-                    $this->createTaskDefaultFormData(),
-                    $this->pendingCreateFormData,
-                ),
-            )->tooltip('Utwórz zadanie z terminem na wybrany dzień kalendarza.'),
+            $this->makeCreateTaskHeaderAction(
+                tooltip: 'Utwórz zadanie z terminem na wybrany dzień kalendarza.',
+            ),
         ];
     }
 
@@ -145,10 +141,13 @@ class OperationsCalendarPage extends Page
             });
     }
 
-    public function openCreateTaskModal(string $date): void
+    /**
+     * Klik w dzień FullCalendar — nie mylić z traitowym openCreateTaskModal(array).
+     */
+    public function openCreateTaskModalForDate(string $date): void
     {
         $this->clickedDate = $date;
-        $this->mountAction('createTask');
+        $this->mountCachedCreateTaskAction();
     }
 
     protected function createTaskDefaultDueDate(): mixed

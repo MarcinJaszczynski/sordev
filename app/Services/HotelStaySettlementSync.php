@@ -31,7 +31,11 @@ class HotelStaySettlementSync
             return;
         }
 
-        $event->loadMissing(['hotelStays.contractor', 'hotelStays.roomLines.currency']);
+        $event->loadMissing([
+            'hotelStays.contractor',
+            'hotelStays.roomLines.currency',
+            'hotelStays.offerRoomLines.currency',
+        ]);
         if ($event->hotelStays->isEmpty()) {
             return;
         }
@@ -201,7 +205,7 @@ class HotelStaySettlementSync
      */
     public function offerTotalPlnForContractor(Event $event, int $contractorId): float
     {
-        $event->loadMissing(['hotelStays.roomLines.currency']);
+        $event->loadMissing(['hotelStays.roomLines.currency', 'hotelStays.offerRoomLines.currency']);
 
         $stays = $event->hotelStays->filter(
             fn (EventHotelStay $stay): bool => (int) ($stay->contractor_id ?? 0) === $contractorId
@@ -212,7 +216,7 @@ class HotelStaySettlementSync
 
     public function offerTotalPlnForStay(Event $event, EventHotelStay $stay): float
     {
-        $stay->loadMissing(['roomLines.currency']);
+        $stay->loadMissing(['roomLines.currency', 'offerRoomLines.currency']);
 
         return $this->pricedTotalPlnForStays($event, collect([$stay]), HotelCalculationSource::OFFER);
     }
@@ -222,7 +226,7 @@ class HotelStaySettlementSync
      */
     protected function referenceTotalPlnForStays(Event $event, Collection $stays): float
     {
-        // Planowane / reference settlement — zawsze warstwa uzgodniona (P).
+        // Planowane / settlement — zawsze warstwa uzgodniona (P).
         return $this->pricedTotalPlnForStays($event, $stays, HotelCalculationSource::NEGOTIATED);
     }
 
@@ -239,18 +243,20 @@ class HotelStaySettlementSync
         $source = HotelCalculationSource::normalize($priceSource);
 
         // Stała kwota za pobyt (impreza) — nie liczymy z cennika pokoi.
+        // Udział tylko dla nocy z hotelem; noc bez kontrahenta (np. dojazd) = 0.
         if (EventHotelPlanFormatting::isEventFlatPricing($eventMode)) {
             $event->loadMissing('hotelStays');
             $totals = app(EventHotelPlanService::class)->totalsByCurrencyForEvent($event, $source);
             $totalFlat = round((float) ($totals['PLN'] ?? 0), 2);
-            $allCount = $event->hotelStays->count();
-            $groupCount = $stays->count();
+            $billableAll = $this->billableStaysForEventFlat($event->hotelStays);
+            $billableGroup = $this->billableStaysForEventFlat($stays);
+            $allCount = $billableAll->count();
+            $groupCount = $billableGroup->count();
 
-            if ($totalFlat <= 0 || $allCount <= 0) {
+            if ($totalFlat <= 0 || $allCount <= 0 || $groupCount <= 0) {
                 return 0.0;
             }
 
-            // Jedna kwota na imprezę — rozdzielamy proporcjonalnie do liczby nocy w grupie.
             return round($totalFlat * ($groupCount / $allCount), 2);
         }
 
@@ -387,6 +393,11 @@ class HotelStaySettlementSync
 
     protected function shouldRefreshPlannedAmount(EventSettlementCost $existing): bool
     {
+        // Hotel: plan noclegów (P / flat) jest SSoT dla planned_* — wpłaty żyją w osobnych wierszach.
+        if (in_array($existing->source_type, [self::SOURCE_HOTEL, self::SOURCE_STAY], true)) {
+            return true;
+        }
+
         if (in_array((string) $existing->payment_status, ['paid', 'advance_paid', 'partially_paid'], true)) {
             return false;
         }
@@ -521,8 +532,10 @@ class HotelStaySettlementSync
         ?int $plnCurrencyId,
     ): array {
         $event->loadMissing('hotelStays');
-        $allCount = $event->hotelStays->count();
-        $groupCount = $stays->count();
+        $billableAll = $this->billableStaysForEventFlat($event->hotelStays);
+        $billableGroup = $this->billableStaysForEventFlat($stays);
+        $allCount = $billableAll->count();
+        $groupCount = $billableGroup->count();
         $share = ($allCount > 0 && $groupCount > 0) ? ($groupCount / $allCount) : 0.0;
 
         $flatAmount = $event->hotel_flat_stay_amount !== null
@@ -544,6 +557,20 @@ class HotelStaySettlementSync
             : (bool) ($event->hotel_flat_stay_convert_to_pln ?? true);
 
         return $this->buildPlannedAttributes($nativeShare, $currencyId, $convert, $plnCurrencyId);
+    }
+
+    /**
+     * Noce objęte flatem imprezy: tylko z przypisanym hotelem.
+     * Noc bez kontrahenta (dojazd / 0 zł) nie bierze udziału w podziale.
+     *
+     * @param  Collection<int, EventHotelStay>  $stays
+     * @return Collection<int, EventHotelStay>
+     */
+    protected function billableStaysForEventFlat(Collection $stays): Collection
+    {
+        return $stays
+            ->filter(fn (EventHotelStay $stay): bool => filled($stay->contractor_id))
+            ->values();
     }
 
     /**
@@ -762,27 +789,43 @@ class HotelStaySettlementSync
     }
 
     /**
+     * Payload do kalkulacji: room_lines = P (uzgodniona), offer_room_lines = S (szablon).
+     *
      * @return array<string, mixed>
      */
     protected function stayPayload(EventHotelStay $stay): array
     {
+        $stay->loadMissing(['roomLines', 'offerRoomLines']);
+
+        $mapLine = static fn ($line): array => [
+            'hotel_room_id' => $line->hotel_room_id,
+            'label' => $line->label,
+            'quantity' => $line->quantity,
+            'people_count' => $line->people_count,
+            'unit_price' => $line->unit_price,
+            'offer_unit_price' => $line->offer_unit_price ?? $line->unit_price,
+            'price_layer' => $line->price_layer ?? null,
+            'price_basis' => $line->resolvedPriceBasis(),
+            'currency_id' => $line->currency_id,
+            'convert_to_pln' => $line->convert_to_pln,
+        ];
+
+        $negotiatedLines = $stay->roomLines->map($mapLine)->all();
+        $offerLines = $stay->offerRoomLines->map($mapLine)->all();
+
+        // Legacy / częściowy seed: brak warstwy S → licz ofertę z P (jak EventHotelPlanService).
+        if ($offerLines === []) {
+            $offerLines = $negotiatedLines;
+        }
+
         return [
             'pricing_mode' => $stay->pricing_mode ?? 'lines',
             'flat_amount' => $stay->flat_amount,
             'offer_flat_amount' => $stay->offer_flat_amount ?? $stay->flat_amount,
             'flat_currency_id' => $stay->flat_currency_id,
             'flat_convert_to_pln' => $stay->flat_convert_to_pln,
-            'room_lines' => $stay->roomLines->map(static fn ($line): array => [
-                'hotel_room_id' => $line->hotel_room_id,
-                'label' => $line->label,
-                'quantity' => $line->quantity,
-                'people_count' => $line->people_count,
-                'unit_price' => $line->unit_price,
-                'offer_unit_price' => $line->offer_unit_price ?? $line->unit_price,
-                'price_basis' => $line->resolvedPriceBasis(),
-                'currency_id' => $line->currency_id,
-                'convert_to_pln' => $line->convert_to_pln,
-            ])->all(),
+            'room_lines' => $negotiatedLines,
+            'offer_room_lines' => $offerLines,
         ];
     }
 }

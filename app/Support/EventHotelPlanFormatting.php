@@ -469,6 +469,7 @@ final class EventHotelPlanFormatting
 
         $plnPart = 0.0;
         $foreignBuckets = [];
+        $convertedNativeBuckets = [];
 
         foreach ($stays as $stay) {
             $stayMode = $stay['pricing_mode'] ?? 'lines';
@@ -480,6 +481,9 @@ final class EventHotelPlanFormatting
 
                 if ($pln !== null) {
                     $plnPart += $pln;
+                    if ($symbol !== 'PLN') {
+                        $convertedNativeBuckets[$symbol] = ($convertedNativeBuckets[$symbol] ?? 0) + $amount;
+                    }
                 } elseif ($symbol !== 'PLN') {
                     $foreignBuckets[$symbol] = ($foreignBuckets[$symbol] ?? 0) + $amount;
                 } else {
@@ -497,6 +501,9 @@ final class EventHotelPlanFormatting
 
                 if ($pln !== null) {
                     $plnPart += $pln;
+                    if ($symbol !== 'PLN') {
+                        $convertedNativeBuckets[$symbol] = ($convertedNativeBuckets[$symbol] ?? 0) + $total;
+                    }
                 } elseif ($symbol !== 'PLN') {
                     $foreignBuckets[$symbol] = ($foreignBuckets[$symbol] ?? 0) + $total;
                 } else {
@@ -505,7 +512,7 @@ final class EventHotelPlanFormatting
             }
         }
 
-        return CurrencyAmountDisplay::formatMixedTotal($plnPart, $foreignBuckets, 0);
+        return CurrencyAmountDisplay::formatMixedTotal($plnPart, $foreignBuckets, 0, $convertedNativeBuckets);
     }
 
     /**
@@ -603,6 +610,7 @@ final class EventHotelPlanFormatting
     ): string {
         $plnPart = 0.0;
         $foreignBuckets = [];
+        $convertedNativeBuckets = [];
 
         foreach ($lines as $line) {
             $total = self::lineNativeTotal($line, $hotelRoomsById);
@@ -612,6 +620,9 @@ final class EventHotelPlanFormatting
 
             if ($pln !== null) {
                 $plnPart += $pln;
+                if ($symbol !== 'PLN') {
+                    $convertedNativeBuckets[$symbol] = ($convertedNativeBuckets[$symbol] ?? 0) + $total;
+                }
             } elseif ($symbol !== 'PLN') {
                 $foreignBuckets[$symbol] = ($foreignBuckets[$symbol] ?? 0) + $total;
             } else {
@@ -619,7 +630,7 @@ final class EventHotelPlanFormatting
             }
         }
 
-        return CurrencyAmountDisplay::formatMixedTotal($plnPart, $foreignBuckets, $decimals);
+        return CurrencyAmountDisplay::formatMixedTotal($plnPart, $foreignBuckets, $decimals, $convertedNativeBuckets);
     }
 
     /**

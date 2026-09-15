@@ -314,9 +314,21 @@ class EventTemplatePriceTable extends Widget
 
     private function calculateMarkup($basePrice): float
     {
-        $markupPercent = $this->getMarkupPercent();
+        $markup = null;
+        if (isset($this->record->markup) && $this->record->markup instanceof \App\Models\Markup) {
+            $markup = $this->record->markup;
+        } elseif (! empty($this->record->markup_id)) {
+            $markup = \App\Models\Markup::find($this->record->markup_id);
+        }
+        if (! $markup) {
+            $markup = \App\Models\Markup::where('is_default', true)->first();
+        }
 
-        return $basePrice * ($markupPercent / 100);
+        $percent = $this->getMarkupPercent();
+        $days = max(1, (int) ($this->record->duration_days ?? 1));
+        $minDaily = (float) ($markup?->min_daily_amount_pln ?? 0);
+
+        return \App\Models\Markup::calculateAmount((float) $basePrice, $percent, $minDaily, $days)['amount'];
     }
 
     /**

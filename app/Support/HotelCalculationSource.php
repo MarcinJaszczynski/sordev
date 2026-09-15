@@ -7,8 +7,8 @@ namespace App\Support;
 /**
  * Źródło ceny hotelu w kalkulacji oferty dla klienta.
  *
- * offer      = zamrożona cena z szablonu / katalogu (S)
- * negotiated = cena uzgodniona z hotelem (P) — też baza planowanego w settlement
+ * offer      = warstwa S (cena ofertowa ze szablonu/katalogu) — idzie do ceny całej imprezy
+ * negotiated = warstwa P (uzgodniona z hotelem) — settlement zawsze; cena imprezy tylko gdy wybrane
  */
 final class HotelCalculationSource
 {
@@ -32,8 +32,8 @@ final class HotelCalculationSource
     public static function options(): array
     {
         return [
-            self::OFFER => 'Cena z szablonu (oferta)',
-            self::NEGOTIATED => 'Cena uzgodniona z hotelem',
+            self::OFFER => 'Cena z szablonu (oferta S)',
+            self::NEGOTIATED => 'Cena uzgodniona z hotelem (P)',
         ];
     }
 

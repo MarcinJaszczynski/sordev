@@ -79,11 +79,11 @@ final class CurrencyAmountDisplay
         return $base.' (≈ '.number_format($pln, $decimals, ',', ' ').' PLN)';
     }
 
-/**
- * Kwota w walucie źródłowej; dla obcej zawsze dopisuje orientacyjne PLN (kurs).
- * Używane gdy trzeba pokazać ekwiwalent niezależnie od convert_to_pln
- * (np. porównania wewnętrzne). Etykiety UI z flagą: {@see format()}.
- */
+    /**
+     * Kwota w walucie źródłowej; dla obcej zawsze dopisuje orientacyjne PLN (kurs).
+     * Używane gdy trzeba pokazać ekwiwalent niezależnie od convert_to_pln
+     * (np. porównania wewnętrzne). Etykiety UI z flagą: {@see format()}.
+     */
     public static function formatIndicative(
         float $amount,
         ?Currency $currency,
@@ -108,10 +108,15 @@ final class CurrencyAmountDisplay
     }
 
     /**
-     * @param  array<string, float>  $foreignBuckets  symbol => amount
+     * @param  array<string, float>  $foreignBuckets  waluty bez przeliczenia na PLN
+     * @param  array<string, float>  $convertedNativeBuckets  natywne kwoty obcych walut wliczone do $plnPart
      */
-    public static function formatMixedTotal(float $plnPart, array $foreignBuckets, int $decimals = 0): string
-    {
+    public static function formatMixedTotal(
+        float $plnPart,
+        array $foreignBuckets,
+        int $decimals = 0,
+        array $convertedNativeBuckets = [],
+    ): string {
         $parts = [];
 
         if ($plnPart > 0) {
@@ -124,6 +129,21 @@ final class CurrencyAmountDisplay
             }
         }
 
-        return $parts !== [] ? implode(' + ', $parts) : '0 PLN';
+        $main = $parts !== [] ? implode(' + ', $parts) : '0 PLN';
+
+        $convertedParts = [];
+        foreach ($convertedNativeBuckets as $symbol => $amount) {
+            $code = strtoupper((string) $symbol);
+            if ($code === 'PLN' || $amount <= 0) {
+                continue;
+            }
+            $convertedParts[] = number_format((float) $amount, $decimals, ',', ' ').' '.$code;
+        }
+
+        if ($convertedParts === []) {
+            return $main;
+        }
+
+        return $main.' ('.implode(' + ', $convertedParts).')';
     }
 }

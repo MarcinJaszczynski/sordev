@@ -32,6 +32,8 @@ class ListTasks extends ListRecords
 
     protected static string $view = 'filament.resources.task-resource.pages.list-tasks';
 
+    protected ?string $maxContentWidth = 'full';
+
     public function getSubheading(): ?string
     {
         return 'Skrzynka cross-event — zadania jednej imprezy: zakładka Zadania na karcie imprezy.';
@@ -115,13 +117,7 @@ class ListTasks extends ListRecords
     protected function getHeaderActions(): array
     {
         return [
-            $this->makeCreateTaskAction(
-                defaultDueDate: fn (): mixed => $this->createTaskDefaultDueDate(),
-                defaultFormData: fn (): array => array_merge(
-                    $this->createTaskDefaultFormData(),
-                    $this->pendingCreateFormData,
-                ),
-            ),
+            $this->makeCreateTaskHeaderAction(),
             Actions\Action::make('board')
                 ->label('Widok tablicy')
                 ->icon('heroicon-m-view-columns')

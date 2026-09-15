@@ -68,6 +68,11 @@
                 <br><b>Najbliższe predefiniowane:</b>
                 {{ collect($nearestVariants)->map(fn ($v) => $v['qty'] . '+' . $v['gratis'])->join(', ') }}
             @endif
+            @if(\Illuminate\Support\Facades\Schema::hasColumn('events', 'hotel_calculation_source') && $record->hotelStays()->exists())
+                <br><b>Nocleg w kalkulacji:</b>
+                {{ \App\Support\HotelCalculationSource::label($record->hotel_calculation_source) }}
+                — źródło ustawiasz w panelu Hotele. Przy „Cena z szablonu” odświeżenie synchronizuje ceny S z katalogu (P bez zmian).
+            @endif
         </div>
 
         @if(!empty($detailedCalculations))

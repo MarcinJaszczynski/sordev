@@ -3,6 +3,7 @@
 namespace App\Filament\Resources\ContractorResource\RelationManagers;
 
 use App\Filament\Forms\PhoneInput;
+use App\Support\PhoneValidation;
 use Filament\Forms;
 use Filament\Forms\Components\Select;
 use Filament\Forms\Form;
@@ -167,14 +168,35 @@ class ContactsRelationManager extends RelationManager
                                 $partialQuery = (clone $relationshipQuery);
 
                                 if ($term !== '') {
-                                    $partialQuery->where(function (Builder $q) use ($searchCols, $term) {
-                                        $first = true;
-                                        foreach ($searchCols as $col) {
-                                            $method = $first ? 'where' : 'orWhere';
-                                            $q->{$method}("contacts.{$col}", 'like', "%{$term}%");
-                                            $first = false;
+                                    if (PhoneValidation::looksLikePhone($term) && in_array('phone', $searchCols, true)) {
+                                        $partialQuery->where(function (Builder $q) use ($term): void {
+                                            PhoneValidation::constrainDigitsLike($q, 'contacts.phone', $term);
+                                        });
+                                    } else {
+                                        $tokens = preg_split('/\s+/u', $term, -1, PREG_SPLIT_NO_EMPTY) ?: [$term];
+
+                                        foreach ($tokens as $token) {
+                                            $partialQuery->where(function (Builder $q) use ($searchCols, $token): void {
+                                                $first = true;
+                                                foreach ($searchCols as $col) {
+                                                    if ($col === 'phone') {
+                                                        if ($first) {
+                                                            PhoneValidation::constrainDigitsLike($q, "contacts.{$col}", $token);
+                                                            $first = false;
+                                                        } else {
+                                                            PhoneValidation::orWhereDigitsLike($q, "contacts.{$col}", $token);
+                                                        }
+
+                                                        continue;
+                                                    }
+
+                                                    $method = $first ? 'where' : 'orWhere';
+                                                    $q->{$method}("contacts.{$col}", 'like', "%{$token}%");
+                                                    $first = false;
+                                                }
+                                            });
                                         }
-                                    });
+                                    }
                                 }
 
                                 if (count($results)) {

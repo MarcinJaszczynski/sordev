@@ -25,6 +25,7 @@ class EventProgramPointCreator
         'currency_id',
         'convert_to_pln',
         'planned_price',
+        'use_planned_price_in_calculation',
         'paid_price',
         'group_size',
         'notes',
@@ -150,13 +151,21 @@ class EventProgramPointCreator
             throw new \InvalidArgumentException('Punkt musi należeć do podanej imprezy.');
         }
 
-        $source->loadMissing(['children']);
+        // Świeży model bez atrybutów z withCount / selectów tabeli Filament.
+        $source = EventProgramPoint::query()
+            ->with(['children'])
+            ->findOrFail($source->id);
 
-        $clone = $source->replicate([
+        // Nie kopiujemy kwot rozliczeniowych ani rezerwacji — kopia to osobna pozycja programu.
+        $except = [
             'paid_price',
             'calculated_price',
             'planned_price',
-        ]);
+            'use_planned_price_in_calculation',
+            'reservation_id',
+        ];
+
+        $clone = $source->replicate($except);
         $clone->order = $this->nextOrder($event, (int) $source->day, $source->parent_id);
 
         if (filled($clone->name)) {
@@ -167,11 +176,7 @@ class EventProgramPointCreator
 
         if ($withChildren && $source->parent_id === null && $source->children->isNotEmpty()) {
             foreach ($source->children as $child) {
-                $childClone = $child->replicate([
-                    'paid_price',
-                    'calculated_price',
-                    'planned_price',
-                ]);
+                $childClone = $child->replicate($except);
                 $childClone->parent_id = $clone->id;
                 $childClone->day = $clone->day;
                 $childClone->order = $child->order;

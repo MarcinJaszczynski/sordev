@@ -197,14 +197,24 @@ class EventOrderingPartyService
         $query = Contact::query();
 
         if ($search !== '') {
-            $query->where(function ($builder) use ($search): void {
-                $builder
-                    ->where('first_name', 'like', '%'.$search.'%')
-                    ->orWhere('last_name', 'like', '%'.$search.'%')
-                    ->orWhere('email', 'like', '%'.$search.'%');
+            if (PhoneValidation::looksLikePhone($search)) {
+                $query->where(function ($builder) use ($search): void {
+                    PhoneValidation::constrainDigitsLike($builder, 'phone', $search);
+                });
+            } else {
+                $tokens = preg_split('/\s+/u', trim($search), -1, PREG_SPLIT_NO_EMPTY) ?: [];
 
-                PhoneValidation::orWhereDigitsLike($builder, 'phone', $search);
-            });
+                foreach ($tokens as $token) {
+                    $like = '%'.$token.'%';
+                    $query->where(function ($inner) use ($like, $token): void {
+                        $inner->where('first_name', 'like', $like)
+                            ->orWhere('last_name', 'like', $like)
+                            ->orWhere('email', 'like', $like);
+
+                        PhoneValidation::orWhereDigitsLike($inner, 'phone', $token);
+                    });
+                }
+            }
         } elseif ($linkedIds->isNotEmpty()) {
             // Bez wyszukiwania: tylko kontakty wybranej firmy (ładują się w preload).
             $query->whereIn('id', $linkedIds->all());
@@ -254,15 +264,10 @@ class EventOrderingPartyService
         $query = Contractor::query();
 
         if ($search !== '') {
-            $query->where(function ($builder) use ($search): void {
-                $builder
-                    ->where('name', 'like', '%'.$search.'%')
-                    ->orWhere('nip', 'like', '%'.$search.'%')
-                    ->orWhere('city', 'like', '%'.$search.'%')
-                    ->orWhere('email', 'like', '%'.$search.'%');
-
-                PhoneValidation::orWhereDigitsLike($builder, 'phone', $search);
-            });
+            // Ten sam silnik co TypedContractorSelect (m.in. firstname/surname, telefon).
+            // Bez filtra typu — zamawiający może być dowolnym kontrahentem.
+            // Pilot na imprezę: EventKeyInfoFields → TypedContractorSelect typeNames: ['pilot'].
+            app(ContractorLookupService::class)->constrainQuery($query, $search);
         }
 
         if ($linkedIds->isNotEmpty()) {

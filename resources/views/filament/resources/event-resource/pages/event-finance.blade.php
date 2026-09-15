@@ -326,9 +326,9 @@
                             @endphp
                             <table class="w-full min-w-[88rem] table-fixed divide-y divide-gray-200 text-sm dark:divide-gray-700">
                                 <colgroup>
+                                    {{-- drag, checkbox, Pozycja, Kontrahent, Płatnik, Szablon, Planowane, Zapłacono, Status, Termin, OK, Dok. --}}
                                     <col style="width:2.25rem" />
                                     <col style="width:2.25rem" />
-                                    <col style="width:3rem" />
                                     <col style="width:14%" />
                                     <col style="width:13%" />
                                     <col style="width:6rem" />
@@ -337,6 +337,7 @@
                                     <col style="width:10%" />
                                     <col style="width:7rem" />
                                     <col style="width:6.5rem" />
+                                    <col style="width:3rem" />
                                     <col style="width:7rem" />
                                 </colgroup>
                                 <thead class="bg-white text-left text-xs uppercase tracking-wide text-gray-500 dark:bg-gray-900">
@@ -479,7 +480,12 @@
                                                 </label>
                                             </td>
                                             <td class="px-3 py-2 text-right text-xs leading-snug tabular-nums cursor-pointer" wire:click="openCost({{ (int) $row['cost_id'] }})">{{ $row['calculation_label'] }}</td>
-                                            <td class="px-3 py-2 text-right text-xs leading-snug tabular-nums font-medium cursor-pointer" wire:click="openCost({{ (int) $row['cost_id'] }})">{{ $row['planned_label'] }}</td>
+                                            <td class="px-3 py-2 text-right text-xs leading-snug tabular-nums font-medium cursor-pointer" wire:click="openCost({{ (int) $row['cost_id'] }})">
+                                                {{ $row['planned_label'] }}
+                                                @if (! empty($row['use_planned_price_in_calculation']))
+                                                    <div class="text-[10px] font-medium text-amber-700 dark:text-amber-300">w kalkulacji</div>
+                                                @endif
+                                            </td>
                                             <td class="px-3 py-2 text-right text-xs leading-snug tabular-nums cursor-pointer" wire:click="openCost({{ (int) $row['cost_id'] }})">
                                                 <div class="text-emerald-700">{{ $row['paid_label'] }}</div>
                                                 @if (! empty($row['payment_hint']))

@@ -10,6 +10,7 @@ use App\Models\Event;
 use App\Models\EventProgramPoint;
 use App\Models\EventSettlementCost;
 use App\Models\VendorInvoice;
+use App\Services\ContractorLookupService;
 use App\Services\Invoices\ContractorResolver;
 use App\Services\Invoices\VendorInvoiceProgramPointSync;
 use App\Services\Invoices\VendorInvoiceSettlementSync;
@@ -125,12 +126,19 @@ class VendorInvoiceResource extends Resource
                 Forms\Components\Select::make('contractor_id')
                     ->label('Kontrahent')
                     ->searchable()
-                    ->getSearchResultsUsing(fn (string $search) => Contractor::query()
-                        ->where('name', 'like', "%{$search}%")
-                        ->orWhere('nip', 'like', "%{$search}%")
-                        ->limit(20)
-                        ->pluck('name', 'id'))
-                    ->getOptionLabelUsing(fn ($value) => Contractor::find($value)?->name),
+                    ->getSearchResultsUsing(fn (string $search): array => app(ContractorLookupService::class)
+                        ->searchOptions(search: $search, limit: 20))
+                    ->getOptionLabelUsing(function ($value): ?string {
+                        if (! $value) {
+                            return null;
+                        }
+
+                        $contractor = Contractor::query()->find($value);
+
+                        return $contractor
+                            ? app(ContractorLookupService::class)->formatOptionLabel($contractor)
+                            : null;
+                    }),
                 Forms\Components\Select::make('event_id')
                     ->label('Impreza')
                     ->searchable()

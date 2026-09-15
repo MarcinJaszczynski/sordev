@@ -160,6 +160,37 @@ class EventProgramPointCreatorTest extends TestCase
         $this->assertSame('Podpunkt', $clonedChild->name);
     }
 
+    public function test_duplicate_does_not_copy_reservation_id(): void
+    {
+        $user = \App\Models\User::factory()->create();
+        $event = Event::factory()->create();
+
+        $point = EventProgramPoint::create([
+            'event_id' => $event->id,
+            'day' => 1,
+            'order' => 1,
+            'name' => 'Hotel',
+            'include_in_program' => true,
+            'active' => true,
+        ]);
+
+        $reservation = \App\Models\Reservation::create([
+            'program_point_id' => $point->id,
+            'event_id' => $event->id,
+            'status' => 'pending',
+            'reserved_amount' => 100,
+            'created_by' => $user->id,
+        ]);
+
+        $point->update(['reservation_id' => $reservation->id]);
+
+        $clone = app(EventProgramPointCreator::class)->duplicate($event, $point->fresh());
+
+        $this->assertNull($clone->reservation_id);
+        $this->assertSame('Hotel (kopia)', $clone->name);
+        $this->assertSame($reservation->id, (int) $point->fresh()->reservation_id);
+    }
+
     public function test_search_template_points_distinguishes_set_from_point_and_city_tag(): void
     {
         $krakow = \App\Models\Tag::query()->create([

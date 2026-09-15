@@ -373,7 +373,14 @@ class ProgramPointsRelationManager extends RelationManager
                             $set('name', $templatePoint->name);
                         }
 
-                        EventProgramPointPricingFields::applyTemplateDefaults($set, $templatePoint);
+                        EventProgramPointPricingFields::applyTemplateDefaults(
+                            $set,
+                            $templatePoint,
+                            max(1, (int) ($this->getOwnerRecord()->participant_count ?? 1)),
+                            max(0, $this->getOwnerRecord()->resolveGratisCountForParticipantCount()),
+                            ProgramPointCostPricing::pilotCount($this->getOwnerRecord()),
+                            max(0, $this->getOwnerRecord()->resolveDriverCountForParticipantCount()),
+                        );
                     })
                     ->required(),
 
@@ -994,7 +1001,14 @@ class ProgramPointsRelationManager extends RelationManager
                                         if ($templatePoint) {
                                             $set('name', $templatePoint->name);
                                             $set('description', $templatePoint->description);
-                                            EventProgramPointPricingFields::applyTemplateDefaults($set, $templatePoint);
+                                            EventProgramPointPricingFields::applyTemplateDefaults(
+                                                $set,
+                                                $templatePoint,
+                                                max(1, (int) ($this->getOwnerRecord()->participant_count ?? 1)),
+                                                max(0, $this->getOwnerRecord()->resolveGratisCountForParticipantCount()),
+                                                ProgramPointCostPricing::pilotCount($this->getOwnerRecord()),
+                                                max(0, $this->getOwnerRecord()->resolveDriverCountForParticipantCount()),
+                                            );
                                         }
                                     } elseif (str_starts_with($state, 'event_')) {
                                         $id = (int) str_replace('event_', '', $state);
@@ -1409,6 +1423,56 @@ class ProgramPointsRelationManager extends RelationManager
                                 }),
                         ]),
 
+                    Tables\Actions\Action::make('duplicate')
+                        ->label('Duplikuj')
+                        ->icon('heroicon-o-document-duplicate')
+                        ->color('gray')
+                        ->requiresConfirmation()
+                        ->modalHeading(function (EventProgramPoint $record): string {
+                            $label = $record->name ?? $record->templatePoint?->name ?? ('#'.$record->id);
+                            $childCount = $record->parent_id === null
+                                ? $record->children()->count()
+                                : 0;
+
+                            return $childCount > 0
+                                ? 'Duplikować set „'.$label.'” z podpunktami?'
+                                : 'Duplikować punkt „'.$label.'”?';
+                        })
+                        ->modalDescription(function (EventProgramPoint $record): ?string {
+                            if ($record->parent_id !== null) {
+                                return 'Powstanie kopia w tym samym secie, na końcu listy podpunktów.';
+                            }
+
+                            $childCount = $record->children()->count();
+
+                            return $childCount > 0
+                                ? 'Skopiuje set wraz z '.$childCount.' podpunktami (bez rezerwacji i kwot rozliczeniowych).'
+                                : 'Kopia trafi do tego samego dnia, na koniec kolejności.';
+                        })
+                        ->modalSubmitActionLabel('Duplikuj')
+                        ->action(function (EventProgramPoint $record): void {
+                            $event = $this->getOwnerRecord();
+                            $clone = app(EventProgramPointCreator::class)->duplicate(
+                                $event,
+                                $record,
+                                withChildren: $record->parent_id === null,
+                            );
+
+                            $label = $clone->name
+                                ?? $record->name
+                                ?? $record->templatePoint?->name
+                                ?? ('#'.$clone->id);
+
+                            \Filament\Notifications\Notification::make()
+                                ->title('Zduplikowano punkt programu')
+                                ->body($label)
+                                ->success()
+                                ->send();
+
+                            $this->dispatch('event-program-points-refresh');
+                        })
+                        ->visible(fn (EventProgramPoint $record): bool => ! $record->trashed()),
+
                     Tables\Actions\DeleteAction::make()
                         ->modalHeading(function (EventProgramPoint $record): string {
                             return app(EventProgramPointDeletionService::class)
@@ -1812,7 +1876,7 @@ class ProgramPointsRelationManager extends RelationManager
 
         $participantCount = (int) ($this->getOwnerRecord()->participant_count ?? 1);
         $quantity = $record->resolveCalculatedQuantity($participantCount);
-        $total = $record->resolveEffectiveTotalPrice($participantCount);
+        $total = $record->resolveTemplateTotalPrice($participantCount);
 
         $record->update([
             'quantity' => $quantity,

@@ -4,6 +4,7 @@ namespace App\Filament\Resources;
 
 use App\Actions\Events\AssignEventPilotAction;
 use App\Actions\Events\ChangeEventStatusAction;
+use App\Actions\Events\CloneEventAction;
 use App\Data\AssignEventPilotData;
 use App\Data\ChangeEventStatusData;
 use App\Filament\Forms\EventKeyInfoFields;
@@ -36,6 +37,7 @@ use App\Support\FilamentNavigation;
 use App\Support\MoneyFormatter;
 use Filament\Forms;
 use Filament\Forms\Form;
+use Filament\Notifications\Notification;
 use Filament\Pages\SubNavigationPosition;
 use Filament\Resources\Pages\Page;
 use Filament\Resources\Resource;
@@ -1303,6 +1305,25 @@ class EventResource extends Resource
                                 status: (string) $data['status'],
                                 reason: $data['reason'] ?? null,
                             ));
+                        }),
+                    Tables\Actions\Action::make('clone')
+                        ->label('Klonuj')
+                        ->icon('heroicon-o-document-duplicate')
+                        ->tooltip('Kopia imprezy z nowym kodem: program, hotel, daty i zamawiający. Bez uczestników i rozliczeń.')
+                        ->requiresConfirmation()
+                        ->modalHeading('Klonuj imprezę')
+                        ->modalDescription('Powstanie kopia z nowym kodem — ten sam program, hotel, daty i zamawiający. Bez uczestników, faktur i rozliczeń.')
+                        ->modalSubmitActionLabel('Klonuj')
+                        ->action(function (Event $record) {
+                            $clone = app(CloneEventAction::class)($record);
+
+                            Notification::make()
+                                ->title('Impreza została sklonowana')
+                                ->body('Nowy kod: '.($clone->code ?? '—'))
+                                ->success()
+                                ->send();
+
+                            return redirect(static::getUrl('edit', ['record' => $clone]));
                         }),
                     Tables\Actions\EditAction::make(),
                     Tables\Actions\DeleteAction::make()

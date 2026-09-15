@@ -582,6 +582,129 @@ class EventHotelPlanService
     }
 
     /**
+     * Odświeża warstwę ofertową (S) pod „Cenę z szablonu”, bez nadpisywania uzgodnień (P).
+     *
+     * - $rebuildStructure=false (domyślnie przy przeliczeniu kalkulacji): uzupełnia puste S ze szablonu
+     *   i synchronizuje unit_price/walutę istniejących linii S z aktualnego katalogu HotelRoom.
+     * - $rebuildStructure=true (akcja w panelu hotelowym): pełna przebudowa S ze szablonu.
+     *
+     * Naprawia stare imprezy, w których migracja dual-pricing skopiowała ceny negocjowane do S.
+     */
+    public function refreshOfferLayerFromTemplate(Event $event, bool $syncFinance = true, bool $rebuildStructure = false): bool
+    {
+        if (! Schema::hasTable('event_hotel_stays')) {
+            return false;
+        }
+
+        $changed = false;
+
+        if ($rebuildStructure) {
+            $changed = $this->refreshRoomStructureFromTemplate($event, onlyEmptyStays: false) || $changed;
+        } else {
+            $changed = $this->refreshRoomStructureFromTemplate($event, onlyEmptyStays: true) || $changed;
+        }
+
+        $changed = ($this->resyncOfferLinePricesFromCatalog($event) > 0) || $changed;
+
+        if ($changed && $syncFinance) {
+            $this->syncEventFinanceAfterHotelChange($event->fresh());
+        }
+
+        return $changed;
+    }
+
+    /**
+     * Ustawia ceny/walutę linii S z aktualnego katalogu HotelRoom (po hotel_room_id).
+     * Nie zmienia ilości, ról ani warstwy P.
+     *
+     * @return int liczba zaktualizowanych linii
+     */
+    public function resyncOfferLinePricesFromCatalog(Event $event): int
+    {
+        if (! Schema::hasTable('event_hotel_room_lines')) {
+            return 0;
+        }
+
+        $event->loadMissing(['hotelStays.offerRoomLines', 'hotelStays.roomLines']);
+
+        $offerLines = $event->hotelStays->flatMap(
+            fn (EventHotelStay $stay) => Schema::hasColumn('event_hotel_room_lines', 'price_layer')
+                ? $stay->offerRoomLines
+                : $stay->roomLines
+        );
+
+        $roomIds = $offerLines
+            ->pluck('hotel_room_id')
+            ->filter()
+            ->map(fn ($id) => (int) $id)
+            ->filter(fn (int $id) => $id > 0)
+            ->unique()
+            ->values()
+            ->all();
+
+        if ($roomIds === []) {
+            return 0;
+        }
+
+        $rooms = HotelRoom::query()->whereIn('id', $roomIds)->get()->keyBy('id');
+        if ($rooms->isEmpty()) {
+            return 0;
+        }
+
+        $currencyIdsBySymbol = Currency::query()
+            ->whereIn('symbol', $rooms->pluck('currency')->filter()->unique()->all())
+            ->pluck('id', 'symbol');
+
+        $updated = 0;
+        $hasOfferUnitPrice = Schema::hasColumn('event_hotel_room_lines', 'offer_unit_price');
+        $hasPriceLayer = Schema::hasColumn('event_hotel_room_lines', 'price_layer');
+
+        foreach ($offerLines as $line) {
+            if ($hasPriceLayer && $line->price_layer !== EventHotelRoomLine::LAYER_OFFER) {
+                continue;
+            }
+
+            $roomId = (int) ($line->hotel_room_id ?? 0);
+            $room = $rooms->get($roomId);
+            if (! $room) {
+                continue;
+            }
+
+            $price = round((float) $room->price, 2);
+            $symbol = (string) ($room->currency ?? 'PLN');
+            $currencyId = $currencyIdsBySymbol->get($symbol);
+            $convert = (bool) ($room->convert_to_pln ?? true);
+
+            $attrs = [
+                'unit_price' => $price,
+                'convert_to_pln' => $convert,
+            ];
+            if ($currencyId) {
+                $attrs['currency_id'] = (int) $currencyId;
+            }
+            if ($hasOfferUnitPrice) {
+                $attrs['offer_unit_price'] = $price;
+            }
+
+            $priceChanged = abs((float) $line->unit_price - $price) > 0.009;
+            $convertChanged = (bool) $line->convert_to_pln !== $convert;
+            $currencyChanged = $currencyId
+                && (int) ($line->currency_id ?? 0) !== (int) $currencyId;
+            $offerPriceChanged = $hasOfferUnitPrice
+                && abs((float) ($line->offer_unit_price ?? 0) - $price) > 0.009;
+
+            if (! $priceChanged && ! $convertChanged && ! $currencyChanged && ! $offerPriceChanged) {
+                continue;
+            }
+
+            $line->update($attrs);
+            $updated++;
+        }
+
+        return $updated;
+    }
+
+    /**
      * @param  array{qty: int, gratis: int, staff: int, driver: int}  $allocationCounts
      */
     private function replaceStayRoomLines(EventHotelStay $stay, EventTemplateHotelDay $hotelDay, array $allocationCounts): void
@@ -1600,6 +1723,23 @@ class EventHotelPlanService
                     : HotelCalculationSource::OFFER)
         );
 
+        $eventMode = $event->hotel_pricing_mode ?? 'lines';
+
+        // Stała kwota za cały pobyt — ta sama baza co nagłówek „Suma noclegów” / settlement.
+        if (EventHotelPlanFormatting::isEventFlatPricing($eventMode)) {
+            $flatAmount = $this->eventFlatAmountForSource($event, $source);
+
+            return EventHotelPlanFormatting::eventTotalsByCurrency(
+                [],
+                $eventMode,
+                $flatAmount,
+                $event->hotel_flat_stay_currency_id ? (int) $event->hotel_flat_stay_currency_id : null,
+                (bool) ($event->hotel_flat_stay_convert_to_pln ?? true),
+                $currencies,
+                $peoplePerNight,
+            );
+        }
+
         $useOfferLayer = $source === HotelCalculationSource::OFFER
             && Schema::hasColumn('event_hotel_room_lines', 'price_layer');
 
@@ -1610,12 +1750,16 @@ class EventHotelPlanService
                 $lines = $stay->roomLines;
             }
 
+            $flatAmount = $useOfferLayer
+                ? ($stay->offer_flat_amount ?? $stay->flat_amount)
+                : $stay->flat_amount;
+
             return [
-                'pricing_mode' => 'lines',
-                'flat_amount' => null,
-                'offer_flat_amount' => null,
-                'flat_currency_id' => null,
-                'flat_convert_to_pln' => true,
+                'pricing_mode' => $stay->pricing_mode ?? 'lines',
+                'flat_amount' => $flatAmount,
+                'offer_flat_amount' => $stay->offer_flat_amount ?? $stay->flat_amount,
+                'flat_currency_id' => $stay->flat_currency_id,
+                'flat_convert_to_pln' => $stay->flat_convert_to_pln,
                 'room_lines' => $lines->map(static fn (EventHotelRoomLine $line): array => [
                     'hotel_room_id' => $line->hotel_room_id,
                     'label' => $line->label,
@@ -1631,13 +1775,34 @@ class EventHotelPlanService
 
         return EventHotelPlanFormatting::eventTotalsByCurrency(
             $staysPayload,
-            'lines',
+            $eventMode,
             null,
             null,
             true,
             $currencies,
             $peoplePerNight,
         );
+    }
+
+    /**
+     * Kwota flat całego pobytu dla warstwy S albo P.
+     */
+    protected function eventFlatAmountForSource(Event $event, string $source): ?float
+    {
+        $useOffer = HotelCalculationSource::normalize($source) === HotelCalculationSource::OFFER
+            && Schema::hasColumn('events', 'hotel_offer_flat_stay_amount');
+
+        if ($useOffer) {
+            $offer = $event->hotel_offer_flat_stay_amount;
+
+            return $offer !== null
+                ? (float) $offer
+                : ($event->hotel_flat_stay_amount !== null ? (float) $event->hotel_flat_stay_amount : null);
+        }
+
+        return $event->hotel_flat_stay_amount !== null
+            ? (float) $event->hotel_flat_stay_amount
+            : null;
     }
 
     /**
@@ -1784,6 +1949,7 @@ class EventHotelPlanService
      * Prosty cennik 1/2/3-os. → nadpisuje unit_price na liniach uzgodnionych (P).
      *
      * @param  array<int, float|int|string|null>  $ratesByPeopleCount  np. [1 => 300, 2 => 400, 3 => 600]
+     *
      * @deprecated UI bulk usunięty — metoda zostaje dla kompatybilności / skryptów.
      */
     public function applyNegotiatedRoomRates(
@@ -2654,38 +2820,59 @@ class EventHotelPlanService
             ->filter(fn (EventProgramPoint $point): bool => (bool) $point->fresh()->is_hotel)
             ->groupBy('day');
 
+        // 1) Powiąż noce z punktami tego samego dnia; odłącz „duchowe” linki (np. D1 → punkt z D2).
         foreach ($event->hotelStays as $stay) {
             $dayPoints = $pointsByDay->get($stay->day);
+
             if (! $dayPoints || $dayPoints->isEmpty()) {
+                if ($stay->event_program_point_id !== null) {
+                    $stay->update(['event_program_point_id' => null]);
+                }
+
                 continue;
             }
 
-            $point = $dayPoints->first();
+            $point = $dayPoints->firstWhere('id', (int) ($stay->event_program_point_id ?? 0))
+                ?? $dayPoints->first();
 
-            // Plan hotelowy jest źródłem prawdy — nie przywracaj kontrahenta z punktu programu
-            // (inaczej clearHotelSelection / noc autokarowa nie da się utrzymać).
-            $stay->update([
-                'event_program_point_id' => $point->id,
-            ]);
+            if ((int) ($stay->event_program_point_id ?? 0) !== (int) $point->id) {
+                $stay->update(['event_program_point_id' => $point->id]);
+            }
+        }
 
-            $pointUpdate = ['is_hotel' => true];
+        // 2) Kontrahent na punkcie = plan hotelowy (stay). Pusty stay ⇒ pusty punkt (usunięcie hotelu z nocy).
+        $event->load('hotelStays');
+        $staysByPointId = $event->hotelStays
+            ->filter(fn (EventHotelStay $stay): bool => filled($stay->event_program_point_id))
+            ->groupBy(fn (EventHotelStay $stay): int => (int) $stay->event_program_point_id);
 
-            if ($stay->contractor_id) {
-                $pointUpdate['contractor_id'] = $stay->contractor_id;
+        $hotelPoints = $pointsByDay->flatten(1)->unique('id');
 
-                if (Schema::hasColumn('event_program_points', 'contractor_location_id')
-                    && Schema::hasColumn('event_hotel_stays', 'contractor_location_id')) {
-                    $pointUpdate['contractor_location_id'] = $stay->contractor_location_id;
+        EventProgramPoint::runWithoutSideEffects(function () use ($hotelPoints, $staysByPointId): void {
+            foreach ($hotelPoints as $point) {
+                $linkedStays = $staysByPointId->get((int) $point->id) ?? collect();
+                $contractorId = $linkedStays
+                    ->map(fn (EventHotelStay $stay) => $stay->contractor_id)
+                    ->first(fn ($id) => filled($id));
+                $locationId = null;
+
+                if ($contractorId && Schema::hasColumn('event_program_points', 'contractor_location_id')) {
+                    $locationId = $linkedStays
+                        ->first(fn (EventHotelStay $stay): bool => (int) ($stay->contractor_id ?? 0) === (int) $contractorId)
+                        ?->contractor_location_id;
                 }
-            } else {
-                $pointUpdate['contractor_id'] = null;
+
+                $pointUpdate = [
+                    'is_hotel' => true,
+                    'contractor_id' => $contractorId ? (int) $contractorId : null,
+                ];
 
                 if (Schema::hasColumn('event_program_points', 'contractor_location_id')) {
-                    $pointUpdate['contractor_location_id'] = null;
+                    $pointUpdate['contractor_location_id'] = $locationId ? (int) $locationId : null;
                 }
-            }
 
-            $point->update($pointUpdate);
-        }
+                $point->update($pointUpdate);
+            }
+        });
     }
 }

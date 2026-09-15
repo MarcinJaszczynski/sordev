@@ -213,6 +213,89 @@ class HotelDualPricingTest extends TestCase
         $this->assertEqualsWithDelta(1120.0, (float) ($variant['PLN'] ?? 0), 0.01);
     }
 
+    public function test_refresh_offer_layer_restores_catalog_price_without_touching_negotiated(): void
+    {
+        $catalogPrice = 400.0;
+        $contaminatedOffer = 360.0;
+        $negotiatedPrice = 350.0;
+
+        $event = $this->makeEventWithTwinLine(offer: $contaminatedOffer, negotiated: $negotiatedPrice);
+        $twin = HotelRoom::query()->where('name', 'Pokój 2-osobowy')->firstOrFail();
+        $twin->update(['price' => $catalogPrice]);
+
+        // Symulacja skażenia po migracji: S ma cenę negocjowaną, katalog ma 400.
+        $offerBefore = $event->hotelStays->first()->offerRoomLines->first();
+        $this->assertEqualsWithDelta($contaminatedOffer, (float) $offerBefore->unit_price, 0.01);
+
+        $service = app(EventHotelPlanService::class);
+        $changed = $service->refreshOfferLayerFromTemplate($event, syncFinance: false, rebuildStructure: false);
+        $this->assertTrue($changed);
+
+        $event = $event->fresh(['hotelStays.roomLines', 'hotelStays.offerRoomLines']);
+        $offerAfter = $event->hotelStays->first()->offerRoomLines->first();
+        $negotiatedAfter = $event->hotelStays->first()->roomLines->first();
+
+        $this->assertEqualsWithDelta($catalogPrice, (float) $offerAfter->unit_price, 0.01);
+        $this->assertEqualsWithDelta($negotiatedPrice, (float) $negotiatedAfter->unit_price, 0.01);
+
+        $calcPln = (float) ($service->totalsByCurrencyForEvent($event)['PLN'] ?? 0);
+        $this->assertEqualsWithDelta($catalogPrice, $calcPln, 0.01);
+    }
+
+    public function test_rebuild_offer_structure_from_template_keeps_negotiated(): void
+    {
+        $user = User::factory()->create();
+        $this->actingAs($user);
+
+        $place = Place::create(['name' => 'Sopot']);
+        $template = EventTemplate::factory()->create([
+            'duration_days' => 2,
+            'start_place_id' => $place->id,
+        ]);
+
+        $twin = HotelRoom::create([
+            'name' => 'Twin katalog',
+            'people_count' => 2,
+            'capacity' => 2,
+            'price' => 420,
+            'currency' => 'PLN',
+            'convert_to_pln' => true,
+        ]);
+
+        EventTemplateHotelDay::create([
+            'event_template_id' => $template->id,
+            'day' => 1,
+            'hotel_room_ids_qty' => [$twin->id],
+            'hotel_room_ids_gratis' => [],
+            'hotel_room_ids_staff' => [],
+            'hotel_room_ids_driver' => [],
+        ]);
+
+        $event = Event::createFromTemplate($template, [
+            'name' => 'Rebuild S test',
+            'client_name' => 'Klient',
+            'start_date' => now()->format('Y-m-d'),
+            'participant_count' => 2,
+        ]);
+
+        $negotiated = $event->hotelStays()->first()?->roomLines()->first();
+        $this->assertNotNull($negotiated);
+        $negotiated->update(['unit_price' => 300]);
+
+        $offer = $event->hotelStays()->first()?->offerRoomLines()->first();
+        $this->assertNotNull($offer);
+        $offer->update(['unit_price' => 300]); // skażone S
+
+        $twin->update(['price' => 420]);
+
+        $service = app(EventHotelPlanService::class);
+        $service->refreshOfferLayerFromTemplate($event->fresh(), syncFinance: false, rebuildStructure: true);
+
+        $event = $event->fresh(['hotelStays.roomLines', 'hotelStays.offerRoomLines']);
+        $this->assertEqualsWithDelta(420.0, (float) $event->hotelStays->first()->offerRoomLines->first()->unit_price, 0.01);
+        $this->assertEqualsWithDelta(300.0, (float) $event->hotelStays->first()->roomLines->first()->unit_price, 0.01);
+    }
+
     private function makeEventWithTwinLine(float $offer, float $negotiated): Event
     {
         $twin = HotelRoom::create([

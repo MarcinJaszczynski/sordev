@@ -144,7 +144,7 @@ trait ManagesProgramPointSettlementFinance
         }
 
         if ($total <= 0) {
-            $total = $record->resolveEffectiveTotalPrice($participantCount);
+            $total = $record->resolveTemplateTotalPrice($participantCount);
             $unitPrice = (float) ($record->unit_price ?? 0);
         }
 
@@ -189,7 +189,7 @@ trait ManagesProgramPointSettlementFinance
         $event = $this->settlementOwnerEvent();
         $participantCount = max(1, (int) ($event->participant_count ?? 1));
         $calculation = $this->resolveCalculationPricingForPoint($record, $participantCount);
-        $plannedTotal = $record->resolveEffectiveTotalPrice($participantCount);
+        $plannedTotal = (float) ($record->planned_price ?: $record->resolveTemplateTotalPrice($participantCount));
         $documentSync = app(ProgramPointSettlementDocumentSync::class);
 
         $existingCost = $event->settlements()

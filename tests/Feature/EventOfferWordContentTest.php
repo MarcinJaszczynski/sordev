@@ -177,6 +177,109 @@ class EventOfferWordContentTest extends TestCase
         $this->assertStringNotContainsString('ZAKWATEROWANIE', $xml);
     }
 
+    public function test_event_offer_word_prefers_event_calculation_over_template_catalog_price(): void
+    {
+        Role::firstOrCreate(['name' => 'admin', 'guard_name' => 'web']);
+        $user = User::factory()->create();
+        $user->assignRole('admin');
+        $this->actingAs($user);
+
+        $template = EventTemplate::factory()->create([
+            'is_active' => true,
+            'duration_days' => 1,
+            'name' => 'Szablon z cennikiem katalogowym',
+        ]);
+
+        $pln = Currency::factory()->create([
+            'code' => 'PLN',
+            'symbol' => 'PLN',
+            'name' => 'Polski złoty',
+            'exchange_rate' => 1,
+        ]);
+        $eur = Currency::factory()->create([
+            'code' => 'EUR',
+            'symbol' => 'EUR',
+            'name' => 'Euro',
+            'exchange_rate' => 4.0,
+        ]);
+
+        foreach ([20, 25, 30, 35, 40] as $qty) {
+            $variant = EventTemplateQty::query()->firstOrCreate(
+                ['qty' => $qty],
+                ['gratis' => (int) ceil($qty / 15), 'staff' => 0, 'driver' => 0]
+            );
+
+            // Cena katalogowa WWW — ma NIE trafić do oferty imprezy, gdy jest kalkulacja.
+            EventTemplatePricePerPerson::query()->create([
+                'event_template_id' => $template->id,
+                'event_template_qty_id' => $variant->id,
+                'start_place_id' => null,
+                'currency_id' => $pln->id,
+                'price_per_person' => 999,
+            ]);
+            EventTemplatePricePerPerson::query()->create([
+                'event_template_id' => $template->id,
+                'event_template_qty_id' => $variant->id,
+                'start_place_id' => null,
+                'currency_id' => $eur->id,
+                'price_per_person' => 77,
+            ]);
+        }
+
+        $event = Event::factory()->create([
+            'name' => 'Impreza po zmianie programu',
+            'event_template_id' => $template->id,
+            'duration_days' => 1,
+            'participant_count' => 20,
+            'start_date' => now()->addDays(10)->toDateString(),
+            'end_date' => now()->addDays(10)->toDateString(),
+            'created_by' => $user->id,
+            'assigned_to' => $user->id,
+        ]);
+
+        // Koszt programu: 100 PLN / płacący → cena ≠ 999 z szablonu.
+        EventProgramPoint::query()->create([
+            'event_id' => $event->id,
+            'name' => 'Bilet wstępu',
+            'day' => 1,
+            'order' => 1,
+            'unit_price' => 100,
+            'quantity' => 1,
+            'group_size' => 1,
+            'currency_id' => $pln->id,
+            'convert_to_pln' => true,
+            'include_in_calculation' => true,
+            'include_in_program' => true,
+            'include_gratis_in_cost' => false,
+            'active' => true,
+            'show_title_style' => true,
+            'show_description' => false,
+        ]);
+
+        $event = $event->fresh(['pricePerPerson.eventTemplateQty', 'pricePerPerson.currency', 'eventTemplate', 'qtyVariants', 'programPoints.currency']);
+
+        $expected20 = (int) round($event->resolvedPricePerPerson(20));
+        $this->assertGreaterThan(0, $expected20);
+        $this->assertNotSame(999, $expected20);
+
+        $response = $this->get(route('admin.events.offer.word', $event));
+        $response->assertOk();
+
+        $document = EventDocument::query()
+            ->where('event_id', $event->id)
+            ->where('is_offer', true)
+            ->latest('id')
+            ->first();
+
+        $this->assertNotNull($document);
+        $xml = $this->docxDocumentXml(storage_path('app/public/'.$document->file_path));
+
+        $formatted = number_format($expected20, 0, ',', ' ');
+        $this->assertStringContainsString($formatted.' PLN', $xml);
+        $this->assertStringNotContainsString('999 PLN', $xml);
+        $this->assertStringNotContainsString('+ 77 EUR', $xml);
+    }
+
     public function test_program_set_keeps_parent_then_children_order_like_on_page(): void
     {
         Role::firstOrCreate(['name' => 'admin', 'guard_name' => 'web']);

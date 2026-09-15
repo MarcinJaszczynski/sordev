@@ -30,6 +30,12 @@ class PhoneValidationTest extends TestCase
             'uk with parens' => ['+44 (0) 7700 900123'],
             'local digits' => ['606102243'],
             'us dashed' => ['+1-555-123-4567'],
+            'leading space before plus' => [' +44 7700 900123'],
+            'nbsp separators' => ["+44\u{00A0}7700\u{00A0}900123"],
+            'en dash separators' => ["+44\u{2013}7700\u{2013}900123"],
+            'em dash separators' => ["+44\u{2014}7700\u{2014}900123"],
+            'trailing space' => ['+49 30 12345678 '],
+            'double-zero country' => ['0044 7700 900123'],
         ];
     }
 
@@ -37,6 +43,20 @@ class PhoneValidationTest extends TestCase
     {
         $validator = Validator::make(
             ['phone' => 'abc-not-a-phone'],
+            ['phone' => PhoneValidation::optionalRules()],
+        );
+
+        $this->assertTrue($validator->fails());
+        $this->assertSame(
+            PhoneValidation::INVALID_MESSAGE,
+            $validator->errors()->first('phone'),
+        );
+    }
+
+    public function test_rejects_letters_in_extension(): void
+    {
+        $validator = Validator::make(
+            ['phone' => '+44 7700 900123 ext 12'],
             ['phone' => PhoneValidation::optionalRules()],
         );
 
@@ -53,6 +73,15 @@ class PhoneValidationTest extends TestCase
         $this->assertTrue($validator->passes());
     }
 
+    public function test_sanitize_cleans_paste_artifacts(): void
+    {
+        $this->assertSame('+44 7700 900123', PhoneValidation::sanitize(' +44 7700 900123 '));
+        $this->assertSame('+44 7700 900123', PhoneValidation::sanitize("+44\u{00A0}7700\u{00A0}900123"));
+        $this->assertSame('+44-7700-900123', PhoneValidation::sanitize("+44\u{2013}7700\u{2013}900123"));
+        $this->assertNull(PhoneValidation::sanitize('   '));
+        $this->assertNull(PhoneValidation::sanitize(null));
+    }
+
     public function test_normalize_strips_separators(): void
     {
         $this->assertSame('123456789', PhoneValidation::normalize('123 456 789'));
@@ -67,6 +96,7 @@ class PhoneValidationTest extends TestCase
         $this->assertTrue(PhoneValidation::looksLikePhone('123 456 789'));
         $this->assertTrue(PhoneValidation::looksLikePhone('123456789'));
         $this->assertTrue(PhoneValidation::looksLikePhone('+48 606 102 243'));
+        $this->assertTrue(PhoneValidation::looksLikePhone(" +44\u{00A0}7700\u{2013}900123 "));
         $this->assertFalse(PhoneValidation::looksLikePhone('Kowalski 603846062'));
         $this->assertFalse(PhoneValidation::looksLikePhone('12345'));
         $this->assertFalse(PhoneValidation::looksLikePhone(''));

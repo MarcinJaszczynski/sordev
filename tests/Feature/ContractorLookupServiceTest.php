@@ -225,6 +225,39 @@ class ContractorLookupServiceTest extends TestCase
         $this->assertArrayHasKey($contractor->id, $results);
     }
 
+    public function test_pilot_search_finds_by_firstname_surname_within_pilot_type(): void
+    {
+        $pilot = Contractor::create([
+            'name' => 'Biuro Pilotów Sp. z o.o.',
+            'firstname' => 'Adam',
+            'surname' => 'Kalisz',
+            'status' => 'active',
+            'phone' => '600 100 200',
+        ]);
+        $type = ContractorType::query()->firstOrCreate(['name' => 'pilot']);
+        $pilot->types()->sync([$type->id]);
+
+        $asClient = $this->createContractor('Adam Klient', 'klient');
+
+        $byPerson = $this->lookup->searchOptions(
+            search: 'Adam Kalisz',
+            typeNames: ['pilot'],
+        );
+        $byPhone = $this->lookup->searchOptions(
+            search: '600100200',
+            typeNames: ['pilot'],
+        );
+        $clientLookup = $this->lookup->searchOptions(
+            search: 'Adam',
+            typeNames: ['klient'],
+        );
+
+        $this->assertArrayHasKey($pilot->id, $byPerson);
+        $this->assertArrayHasKey($pilot->id, $byPhone);
+        $this->assertArrayNotHasKey($pilot->id, $clientLookup);
+        $this->assertArrayHasKey($asClient->id, $clientLookup);
+    }
+
     private function createContractor(string $name, string $typeName, ?string $phone = null): Contractor
     {
         $contractor = Contractor::create([

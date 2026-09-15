@@ -4530,7 +4530,11 @@
     .tasks-split-view {
         display: flex;
         gap: 0;
-        min-height: min(70vh, 52rem);
+        /* Pełny viewport zamiast sufitu 52rem — więcej wierszy zadań bez scrolla strony. */
+        --tasks-split-chrome: 11rem;
+        min-height: calc(100dvh - var(--tasks-split-chrome));
+        height: calc(100dvh - var(--tasks-split-chrome));
+        max-height: calc(100dvh - var(--tasks-split-chrome));
         border: 1px solid var(--task-border);
         border-radius: var(--task-radius-md);
         background: var(--task-bg);
@@ -4540,7 +4544,8 @@
     .tasks-split-view__shell {
         display: flex;
         flex: 1;
-        min-height: min(70vh, 52rem);
+        min-height: 0;
+        height: 100%;
         width: 100%;
         min-width: 0;
     }
@@ -4552,7 +4557,17 @@
         border-radius: var(--task-radius-md, 10px);
         overflow: hidden;
         background: var(--task-bg, #F5F6F8);
-        min-height: min(70vh, 52rem);
+        /* Wysokość na shellu — filtry/tabs są rodzeństwem nad shell. */
+        height: auto;
+        max-height: none;
+        min-height: 0;
+    }
+
+    .tasks-split-view--embedded .tasks-split-view__shell {
+        --tasks-split-chrome: 16rem;
+        min-height: calc(100dvh - var(--tasks-split-chrome));
+        height: calc(100dvh - var(--tasks-split-chrome));
+        max-height: calc(100dvh - var(--tasks-split-chrome));
     }
 
     .tasks-split-view--embedded .tasks-split-view__shell {
@@ -4927,6 +4942,58 @@
         flex-direction: column;
         gap: 0.45rem;
         margin-top: 0.15rem;
+    }
+
+    .task-split-row__comment .task-split-row__actions {
+        margin-top: 0.45rem;
+    }
+
+    .task-split-row__actions {
+        display: flex;
+        align-items: center;
+        gap: 0.4rem;
+        margin-top: 0.55rem;
+        flex-wrap: wrap;
+    }
+
+    .task-split-row__action {
+        display: inline-flex;
+        align-items: center;
+        gap: 0.3rem;
+        border-radius: 6px;
+        padding: 0.28rem 0.6rem;
+        font-size: 0.72rem;
+        font-weight: 600;
+        line-height: 1.2;
+        cursor: pointer;
+    }
+
+    .task-split-row__action--comment {
+        border: none;
+        background: #1C4E80;
+        color: #fff;
+        box-shadow: 0 1px 2px rgba(28, 78, 128, 0.18);
+    }
+
+    .task-split-row__action--comment:hover {
+        background: #163E66;
+    }
+
+    .task-split-row__action--attach {
+        border: 1px solid #FDBA74;
+        background: #FFF7ED;
+        color: #C2410C;
+    }
+
+    .task-split-row__action--attach:hover {
+        background: #FFEDD5;
+        border-color: #FB923C;
+        color: #9A3412;
+    }
+
+    .task-split-row__action:focus-visible {
+        outline: 2px solid var(--task-accent, #1C4E80);
+        outline-offset: 2px;
     }
 
     .task-split-row__comment-body.is-expanded {
@@ -5547,7 +5614,7 @@
         border: none;
         background: transparent;
         resize: vertical;
-        min-height: 2.75rem;
+        min-height: 7.5rem;
         padding: 0.75rem 0.875rem;
         font-size: 0.875rem;
         color: var(--task-text);

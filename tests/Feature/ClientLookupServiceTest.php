@@ -274,4 +274,53 @@ class ClientLookupServiceTest extends TestCase
         $this->assertSame('legacy@example.com', $selected['preview']['email']);
         $this->assertSame('500500500', $selected['preview']['phone']);
     }
+
+    public function test_search_from_query_excludes_pilot_contractors_by_default(): void
+    {
+        $pilot = Contractor::create([
+            'name' => 'Firma Pilotowa',
+            'firstname' => 'Ewa',
+            'surname' => 'Pilotowicz',
+            'status' => 'active',
+        ]);
+        $pilotType = ContractorType::query()->firstOrCreate(['name' => 'pilot']);
+        ContractorType::clearIdsForNamesCache();
+        $pilot->types()->syncWithoutDetaching([(int) $pilotType->id]);
+
+        $client = Contractor::create([
+            'name' => 'Ewa Klientowa',
+            'status' => 'active',
+        ]);
+        $this->markAsClient($client);
+
+        $default = app(ClientLookupService::class)->searchFromQuery('Ewa');
+        $all = app(ClientLookupService::class)->searchFromQuery('Ewa', searchAll: true);
+
+        $this->assertTrue($default->contains(
+            fn (array $row): bool => (int) ($row['contractor_id'] ?? 0) === $client->id
+        ));
+        $this->assertFalse($default->contains(
+            fn (array $row): bool => (int) ($row['contractor_id'] ?? 0) === $pilot->id
+        ));
+        $this->assertTrue($all->contains(
+            fn (array $row): bool => (int) ($row['contractor_id'] ?? 0) === $pilot->id
+        ));
+    }
+
+    public function test_search_from_query_matches_client_by_firstname_surname_tokens(): void
+    {
+        $client = Contractor::create([
+            'name' => 'Szkoła XYZ',
+            'firstname' => 'Barbara',
+            'surname' => 'Nowicka',
+            'status' => 'active',
+        ]);
+        $this->markAsClient($client);
+
+        $results = app(ClientLookupService::class)->searchFromQuery('Barbara Nowicka');
+
+        $this->assertTrue($results->contains(
+            fn (array $row): bool => (int) ($row['contractor_id'] ?? 0) === $client->id
+        ));
+    }
 }

@@ -21,6 +21,8 @@ class ManageEventTasks extends SingleRelationManagerPage
 
     protected static ?string $navigationIcon = 'heroicon-o-clipboard-document-list';
 
+    protected ?string $maxContentWidth = 'full';
+
     /**
      * @return array<int|string, string>
      */

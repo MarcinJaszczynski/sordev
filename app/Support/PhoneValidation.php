@@ -2,13 +2,15 @@
 
 namespace App\Support;
 
+use Closure;
 use Illuminate\Database\Eloquent\Builder as EloquentBuilder;
 use Illuminate\Database\Query\Builder as QueryBuilder;
 use InvalidArgumentException;
 
 /**
  * Walidacja numerów telefonu — format międzynarodowy (+48, +44 itd.), ze spacjami i myślnikami.
- * Dodatkowo normalizacja do wyszukiwania (ignorowanie separatorów).
+ * Dodatkowo normalizacja do wyszukiwania (ignorowanie separatorów)
+ * oraz sanityzacja typowych artefaktów wklejania (NBSP, en/em-dash).
  */
 final class PhoneValidation
 {
@@ -20,8 +22,13 @@ final class PhoneValidation
     /** Minimalna liczba cyfr w tokenie, by dorzucić porównanie znormalizowane. */
     public const MIN_FRAGMENT_DIGITS = 3;
 
-    /** @var string Prefiks +, cyfry, spacje, nawiasy, myślniki, kropki, ukośniki. */
-    public const REGEX = '/^[+]?[\d\s().\/-]{6,50}$/';
+    public const INVALID_MESSAGE = 'Niepoprawny numer telefonu. Użyj formatu międzynarodowego, np. +44 7700 900123.';
+
+    /**
+     * Prefiks +, cyfry, spacje, nawiasy, myślniki, kropki, ukośniki.
+     * Po sanitize() wartość jest już trimnięta — + musi być na początku albo wcale.
+     */
+    public const REGEX = '/^[+]?[\d\s().\/-]{6,50}$/u';
 
     /**
      * Separatory usuwane przy porównaniu w SQL (MySQL + SQLite: REPLACE).
@@ -32,19 +39,56 @@ final class PhoneValidation
     private const SEARCH_STRIP_CHARS = [' ', '-', '(', ')', '+', '.', '/', "\u{00A0}"];
 
     /**
-     * @return list<string|\Illuminate\Validation\Rules\Unique>
+     * @return list<string|Closure>
      */
     public static function optionalRules(): array
     {
-        return ['nullable', 'string', 'max:'.self::MAX_LENGTH, 'regex:'.self::REGEX];
+        return ['nullable', 'string', 'max:'.self::MAX_LENGTH, self::formatRule()];
     }
 
     /**
-     * @return list<string>
+     * @return list<string|Closure>
      */
     public static function requiredRules(): array
     {
-        return ['required', 'string', 'max:'.self::MAX_LENGTH, 'regex:'.self::REGEX];
+        return ['required', 'string', 'max:'.self::MAX_LENGTH, self::formatRule()];
+    }
+
+    /**
+     * Czyści typowe śmieci z wklejania: NBSP, en/em-dash, zero-width, nadmiar spacji.
+     */
+    public static function sanitize(?string $value): ?string
+    {
+        if ($value === null) {
+            return null;
+        }
+
+        $value = str_replace(
+            [
+                "\u{00A0}", // NBSP
+                "\u{202F}", // narrow NBSP
+                "\u{2007}", // figure space
+                "\u{2013}", // en-dash
+                "\u{2014}", // em-dash
+                "\u{2212}", // minus sign
+            ],
+            [
+                ' ',
+                ' ',
+                ' ',
+                '-',
+                '-',
+                '-',
+            ],
+            $value,
+        );
+
+        // Zero-width / soft hyphen — częste przy kopiowaniu z PDF/Word.
+        $value = preg_replace('/[\x{200B}-\x{200D}\x{FEFF}\x{00AD}]/u', '', $value) ?? $value;
+        $value = trim($value);
+        $value = preg_replace('/\s+/u', ' ', $value) ?? $value;
+
+        return $value === '' ? null : $value;
     }
 
     /**
@@ -67,17 +111,17 @@ final class PhoneValidation
      */
     public static function looksLikePhone(string $value): bool
     {
-        $trimmed = trim($value);
+        $sanitized = self::sanitize($value);
 
-        if ($trimmed === '') {
+        if ($sanitized === null) {
             return false;
         }
 
-        if (! preg_match('/^[+]?[\d\s().\/\-\x{00A0}]+$/u', $trimmed)) {
+        if (! preg_match('/^[+]?[\d\s().\/-]+$/u', $sanitized)) {
             return false;
         }
 
-        $digits = self::normalize($trimmed);
+        $digits = self::normalize($sanitized);
 
         return $digits !== null && strlen($digits) >= self::MIN_PHONE_DIGITS;
     }
@@ -137,5 +181,47 @@ final class PhoneValidation
                 $inner->orWhereRaw(self::digitsSql($column).' LIKE ?', ['%'.$digits.'%']);
             }
         });
+    }
+
+    /**
+     * Reguła formatu: najpierw sanitize (wklejki), potem regex + min. liczba cyfr.
+     */
+    private static function formatRule(): Closure
+    {
+        return function (string $attribute, mixed $value, Closure $fail): void {
+            if ($value === null || $value === '') {
+                return;
+            }
+
+            if (! is_string($value)) {
+                $fail(self::INVALID_MESSAGE);
+
+                return;
+            }
+
+            $sanitized = self::sanitize($value);
+
+            if ($sanitized === null) {
+                return;
+            }
+
+            if (mb_strlen($sanitized) > self::MAX_LENGTH) {
+                $fail(self::INVALID_MESSAGE);
+
+                return;
+            }
+
+            if (! preg_match(self::REGEX, $sanitized)) {
+                $fail(self::INVALID_MESSAGE);
+
+                return;
+            }
+
+            $digits = self::normalize($sanitized);
+
+            if ($digits === null || strlen($digits) < self::MIN_PHONE_DIGITS) {
+                $fail(self::INVALID_MESSAGE);
+            }
+        };
     }
 }

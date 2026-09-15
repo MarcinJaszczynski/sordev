@@ -64,7 +64,7 @@
             const dateClickHandler = function(info) {
                 const component = getLivewire();
                 if (component && typeof component.call === 'function') {
-                    component.call('openCreateTaskModal', info.dateStr);
+                    component.call('openCreateTaskModalForDate', info.dateStr);
                 }
             };
 

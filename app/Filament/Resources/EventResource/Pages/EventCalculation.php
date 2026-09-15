@@ -6,9 +6,12 @@ use App\Filament\Actions\CreateEventSnapshotAction;
 use App\Filament\Resources\EventResource;
 use App\Filament\Resources\EventResource\Concerns\HasEventFinanceSubNavigation;
 use App\Filament\Resources\EventResource\Concerns\InteractsWithEventRecord;
+use App\Services\EventHotelPlanService;
 use App\Services\EventPriceCalculator;
+use App\Support\HotelCalculationSource;
 use Filament\Actions;
 use Filament\Actions\ActionGroup;
+use Filament\Notifications\Notification;
 use Filament\Resources\Pages\Page;
 use Illuminate\Support\Facades\Schema;
 
@@ -53,11 +56,25 @@ class EventCalculation extends Page
                 ->label('Przelicz')
                 ->icon('heroicon-o-arrow-path')
                 ->color('primary')
-                ->tooltip('Przelicza koszty i ceny imprezy na podstawie programu i transportu.')
+                ->tooltip('Przelicza koszty i ceny imprezy na podstawie programu i transportu. Przy źródle „Cena z szablonu” odświeża też ceny hotelowe S z katalogu.')
                 ->requiresConfirmation()
                 ->action(function () {
-                    (new EventPriceCalculator)->calculateForEvent($this->record);
-                    \Filament\Notifications\Notification::make()->title('Kalkulacja wykonana')->success()->send();
+                    $event = $this->record->fresh();
+
+                    if (Schema::hasColumn('events', 'hotel_calculation_source')
+                        && HotelCalculationSource::isOffer($event?->hotel_calculation_source)
+                        && $event?->hotelStays()->exists()
+                    ) {
+                        app(EventHotelPlanService::class)->refreshOfferLayerFromTemplate(
+                            $event,
+                            syncFinance: false,
+                            rebuildStructure: false,
+                        );
+                        $event = $event->fresh();
+                    }
+
+                    (new EventPriceCalculator)->calculateForEvent($event ?? $this->record);
+                    Notification::make()->title('Kalkulacja wykonana')->success()->send();
                     $this->dispatch('event-price-table-refresh');
                 }),
             CreateEventSnapshotAction::make()

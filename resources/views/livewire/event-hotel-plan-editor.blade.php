@@ -374,7 +374,10 @@
 
                         <x-filament::section heading="Źródło ceny w kalkulacji oferty">
                             <p class="text-xs text-gray-600 dark:text-gray-400">
-                                S = struktura i cena z szablonu (oferta dla klienta). P = struktura i cena uzgodniona z hotelem (plan / rozliczenie).
+                                Decyduje, która warstwa hotelu wchodzi do <strong>ceny całej imprezy</strong>.
+                                <strong>S</strong> = oferta ze szablonu/katalogu.
+                                <strong>P</strong> = uzgodnienia z hotelem (zawsze do settlement; do ceny imprezy tylko gdy wybrane poniżej).
+                                Zmiana cen P <em>nie</em> zmienia ceny imprezy, dopóki źródłem jest S.
                                 Po potwierdzeniu imprezy system przełącza się automatycznie na P.
                             </p>
                             <div class="mt-2 flex flex-wrap gap-4">
@@ -386,7 +389,7 @@
                                 @endforeach
                             </div>
                             <p class="mt-2 text-sm font-semibold text-gray-900 dark:text-gray-100">
-                                Suma wg źródła: {{ $this->totalDisplay }}
+                                Suma wg źródła (do kalkulacji imprezy): {{ $this->totalDisplay }}
                             </p>
                         </x-filament::section>
 
@@ -398,8 +401,20 @@
 
                         <x-filament::section heading="Struktura ofertowa (S) — noc {{ $stay['day'] }}">
                             <div class="mb-3 flex flex-wrap items-center justify-between gap-2">
-                                <p class="text-sm text-gray-600">Ceny i ilości wg szablonu dla zadanej liczby osób. Niezależna od uzgodnień z hotelem.</p>
-                                <x-filament::button wire:click="addOfferRoomLine" size="sm" icon="heroicon-o-plus">Dodaj typ (S)</x-filament::button>
+                                <p class="text-sm text-gray-600">
+                                    Ceny ofertowe ze szablonu/katalogu. Przy źródle „Cena z szablonu” to właśnie one idą do ceny imprezy.
+                                    Niezależne od uzgodnień z hotelem (P).
+                                </p>
+                                <div class="flex flex-wrap gap-2">
+                                    <x-filament::button
+                                        wire:click="refreshOfferFromTemplate"
+                                        wire:confirm="Przebudować warstwę S ze szablonu i aktualnych cen katalogu? Uzgodnienia P pozostaną bez zmian."
+                                        size="sm"
+                                        color="gray"
+                                        icon="heroicon-o-arrow-path"
+                                    >Odśwież S ze szablonu</x-filament::button>
+                                    <x-filament::button wire:click="addOfferRoomLine" size="sm" icon="heroicon-o-plus">Dodaj typ (S)</x-filament::button>
+                                </div>
                             </div>
 
                             @if (! empty($stay['offer_room_lines']))
@@ -494,7 +509,11 @@
 
                         <x-filament::section heading="Struktura uzgodniona (P) — noc {{ $stay['day'] }}">
                             <div class="mb-3 flex flex-wrap items-center justify-between gap-2">
-                                <p class="text-sm text-gray-600">Może być zupełnie inna niż S. Idzie do kosztów / settlement. Obsada i numery pokoi tylko tutaj.</p>
+                                <p class="text-sm text-gray-600">
+                                    Może być zupełnie inna niż S. Zawsze idzie do kosztów / settlement.
+                                    Na cenę całej imprezy wpływa tylko gdy źródło = „Cena uzgodniona z hotelem (P)”.
+                                    Obsada i numery pokoi tylko tutaj. Walutę obcą ustawiasz w kolumnie Waluta.
+                                </p>
                                 <div class="flex flex-wrap gap-2">
                                     <x-filament::button wire:click="copyOfferToNegotiated" size="sm" color="gray" icon="heroicon-o-document-duplicate">Skopiuj S → P</x-filament::button>
                                     <x-filament::button wire:click="addRoomLine" size="sm" icon="heroicon-o-plus">Dodaj typ (P)</x-filament::button>

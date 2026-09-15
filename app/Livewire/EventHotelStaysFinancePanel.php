@@ -7,14 +7,14 @@ use App\Models\Currency;
 use App\Models\Event;
 use App\Models\EventHotelStay;
 use App\Models\EventSettlementCost;
+use App\Services\EventFinanceOverviewService;
 use App\Services\EventHotelOccupancyService;
 use App\Services\EventHotelPlanService;
 use App\Services\HotelStayReservationSync;
 use App\Services\HotelStaySettlementSync;
-use App\Services\ProgramPointListFinanceDisplay;
-use App\Services\ProgramPointSettlementCostCache;
 use App\Support\EventHotelPlanFormatting;
 use Filament\Notifications\Notification;
+use Livewire\Attributes\On;
 use Livewire\Component;
 use Livewire\WithFileUploads;
 
@@ -28,8 +28,6 @@ class EventHotelStaysFinancePanel extends Component
     /** @var 'default'|'overview' */
     public string $variant = 'default';
 
-    protected ?ProgramPointSettlementCostCache $settlementCostCache = null;
-
     /** @var array<int, array<string, mixed>> */
     protected array $stayFinanceViewDataCache = [];
 
@@ -41,12 +39,29 @@ class EventHotelStaysFinancePanel extends Component
         $this->eventId = $eventId;
         $this->variant = in_array($variant, ['default', 'overview'], true) ? $variant : 'default';
         $this->initializeSettlementCostDrawerForms();
+        $this->resyncHotelFinanceFromPlan();
+    }
 
-        $event = Event::query()->findOrFail($eventId);
+    /**
+     * Po zapisie planu / powrocie na zakładkę — bez tego zostają stare kwoty w cache Livewire.
+     */
+    #[On('event-hotel-plan-changed')]
+    public function refreshAfterHotelPlanChange(): void
+    {
+        $this->resyncHotelFinanceFromPlan();
+    }
+
+    protected function resyncHotelFinanceFromPlan(): void
+    {
+        $this->stayFinanceViewDataCache = [];
+        $this->hotelGroupFinanceViewDataCache = [];
+        unset($this->selectedRow);
 
         try {
+            $event = Event::query()->findOrFail($this->eventId);
             app(EventHotelPlanService::class)->linkStaysToProgramPoints($event);
             app(HotelStaySettlementSync::class)->syncForEvent($event);
+            EventFinanceOverviewService::forgetOverviewCacheForEvent($this->eventId);
         } catch (\Throwable $exception) {
             report($exception);
 
@@ -64,7 +79,8 @@ class EventHotelStaysFinancePanel extends Component
             ->with([
                 'hotelStays.contractor',
                 'hotelStays.programPoint',
-                'hotelStays.roomLines',
+                'hotelStays.roomLines.currency',
+                'hotelStays.offerRoomLines.currency',
                 'hotelStays.event',
                 'hotelStays.reservation',
                 'activeSettlement.costs',
@@ -81,25 +97,9 @@ class EventHotelStaysFinancePanel extends Component
     {
         \App\Services\EventFinanceOverviewService::forgetOverviewCacheForEvent((int) $this->getRecord()->id);
         unset($this->selectedRow);
-        $this->settlementCostCache = null;
         $this->stayFinanceViewDataCache = [];
         $this->hotelGroupFinanceViewDataCache = [];
         $this->dispatchSettlementFinanceChanged();
-    }
-
-    protected function settlementCosts(): ProgramPointSettlementCostCache
-    {
-        if ($this->settlementCostCache === null) {
-            $this->settlementCostCache = new ProgramPointSettlementCostCache;
-            $event = $this->getRecord();
-            $points = $event->hotelStays
-                ->map(fn (EventHotelStay $stay) => $stay->programPoint)
-                ->filter()
-                ->values();
-            $this->settlementCostCache->warm($points, $event);
-        }
-
-        return $this->settlementCostCache;
     }
 
     /**
@@ -113,36 +113,19 @@ class EventHotelStaysFinancePanel extends Component
         }
 
         $eventMode = $stay->event?->hotel_pricing_mode ?? 'lines';
-        $stay->loadMissing(['roomLines', 'event']);
+        $stay->loadMissing(['roomLines', 'offerRoomLines', 'event']);
         $currencies = Currency::query()->pluck('symbol', 'id');
         $peoplePerNight = (int) app(EventHotelOccupancyService::class)
             ->forEvent($this->getRecord())['required_beds_per_night'];
         $stayTotal = EventHotelPlanFormatting::stayTotalDisplay(
-            [
-                'pricing_mode' => $stay->pricing_mode ?? 'lines',
-                'flat_amount' => $stay->flat_amount,
-                'flat_currency_id' => $stay->flat_currency_id,
-                'flat_convert_to_pln' => $stay->flat_convert_to_pln,
-                'room_lines' => $stay->roomLines->map(static fn ($line): array => [
-                    'hotel_room_id' => $line->hotel_room_id,
-                    'label' => $line->label,
-                    'quantity' => $line->quantity,
-                    'people_count' => $line->people_count,
-                    'unit_price' => $line->unit_price,
-                    'price_basis' => $line->price_basis,
-                    'currency_id' => $line->currency_id,
-                    'convert_to_pln' => $line->convert_to_pln,
-                ])->all(),
-            ],
+            $this->stayToFormattingPayload($stay),
             $eventMode,
             $currencies,
             $peoplePerNight,
         );
 
-        $point = $stay->programPoint;
-        $hotelCost = filled($stay->contractor_id) || $stay->exists
-            ? app(HotelStaySettlementSync::class)->findForStay($this->getRecord(), $stay)
-            : null;
+        // Samo $stay->exists jest zawsze true dla zapisanej nocy — nie używać jako warunku kosztu.
+        $hotelCost = app(HotelStaySettlementSync::class)->findForStay($this->getRecord(), $stay);
 
         if ($hotelCost instanceof EventSettlementCost) {
             $allCosts = $this->getRecord()->activeSettlement?->costs ?? collect();
@@ -172,34 +155,15 @@ class EventHotelStaysFinancePanel extends Component
             ];
         }
 
-        if (! $point) {
-            return $this->stayFinanceViewDataCache[$id] = [
-                'planned' => '—',
-                'paid' => '—',
-                'statusLabel' => 'Brak punktu programu',
-                'statusColor' => 'gray',
-                'stayTotal' => $stayTotal,
-            ];
-        }
-
-        $summary = app(ProgramPointListFinanceDisplay::class)->summarizePoint(
-            $point,
-            $this->settlementCosts(),
-            max(1, (int) ($this->getRecord()->participant_count ?? 1)),
-        );
-        $baseCost = $this->settlementCosts()->baseCost((int) $point->id);
-        $statusRaw = $baseCost?->payment_status;
-        $summary['statusLabel'] = $statusRaw
-            ? (EventSettlementCost::$paymentStatuses[$statusRaw] ?? $statusRaw)
-            : '—';
-        $summary['statusColor'] = match ($statusRaw) {
-            'paid' => 'success',
-            'partially_paid', 'advance_paid' => 'warning',
-            default => 'gray',
-        };
-        $summary['stayTotal'] = $stayTotal;
-
-        return $this->stayFinanceViewDataCache[$id] = $summary;
+        // Noc w planie hotelowym bez własnego kosztu (brak hotelu / 0 zł).
+        // Nie bierz kwot z punktu programu — często ma contractor_id hotelu z innych nocy.
+        return $this->stayFinanceViewDataCache[$id] = [
+            'planned' => '—',
+            'paid' => '—',
+            'statusLabel' => filled($stay->contractor_id) ? 'Brak kosztu' : 'Bez hotelu / 0 zł',
+            'statusColor' => 'gray',
+            'stayTotal' => $stayTotal,
+        ];
     }
 
     /**
@@ -259,30 +223,49 @@ class EventHotelStaysFinancePanel extends Component
         $stayIds = $group['stay_ids'] ?? [];
         $stays = $event->hotelStays->whereIn('id', $stayIds)->sortBy('day')->values();
 
-        $stayTotalParts = [];
-        foreach ($stays as $stay) {
-            $stayTotalParts[] = $this->stayFinanceViewData($stay)['stayTotal'] ?? '—';
-        }
+        $currencies = Currency::query()->pluck('symbol', 'id');
+        $peoplePerNight = (int) app(EventHotelOccupancyService::class)->forEvent($event)['required_beds_per_night'];
+        $eventMode = $event->hotel_pricing_mode ?? 'lines';
+        // Suma nocy w grupie — NIE unique() (identyczne noce znikałyby z sumy).
+        $groupPlanTotal = EventHotelPlanFormatting::eventTotalDisplay(
+            $stays->map(fn (EventHotelStay $stay): array => $this->stayToFormattingPayload($stay))->all(),
+            $eventMode,
+            null,
+            null,
+            true,
+            $currencies,
+            $peoplePerNight,
+        );
 
         app(EventHotelPlanService::class)->linkStaysToProgramPoints($event->fresh(['hotelStays.programPoint']));
+        // Odczyt bez ensure — unikamy tworzenia kosztu dla nocy 0 zł przy samym renderze listy.
         $cost = filled($group['contractor_id'] ?? null)
-            ? app(HotelStaySettlementSync::class)->ensureForContractor($event, (int) $group['contractor_id'])
-            : ($stays->first() ? app(HotelStaySettlementSync::class)->ensureForStay($event, $stays->first()) : null);
+            ? app(HotelStaySettlementSync::class)->findForContractor($event, (int) $group['contractor_id'])
+            : ($stays->first() ? app(HotelStaySettlementSync::class)->findForStay($event, $stays->first()) : null);
+
+        if (! $cost instanceof EventSettlementCost) {
+            // Jednorazowo dociągnij koszt tylko gdy jest hotel (kontrahent) — noc bez hotelu zostaje 0.
+            if (filled($group['contractor_id'] ?? null)) {
+                $cost = app(HotelStaySettlementSync::class)->ensureForContractor($event, (int) $group['contractor_id']);
+            }
+        }
 
         if (! $cost instanceof EventSettlementCost) {
             return $this->hotelGroupFinanceViewDataCache[$cacheKey] = [
-                'stayTotal' => collect($stayTotalParts)->filter(fn ($part) => $part !== '—')->unique()->implode(' + ') ?: '—',
+                'stayTotal' => $groupPlanTotal !== '0 PLN' && $groupPlanTotal !== '—' ? $groupPlanTotal : '—',
                 'planned' => '—',
                 'paid' => '—',
-                'statusLabel' => 'Brak kosztu',
+                'statusLabel' => filled($group['contractor_id'] ?? null) ? 'Brak kosztu' : 'Bez hotelu / 0 zł',
                 'statusColor' => 'gray',
                 'cost_id' => null,
             ];
         }
 
-        $settlement = $event->activeSettlement;
-        $allCosts = $settlement?->costs ?? collect();
-        $plannedPln = (float) ($cost->planned_amount_pln ?? $cost->planned_amount ?? 0);
+        // Świeży koszt po syncu (unikamy stale activeSettlement z getRecord).
+        $cost->refresh();
+        $settlement = \App\Models\EventSettlement::findActiveForEvent($event);
+        $allCosts = $settlement?->costs()->get() ?? collect();
+        $plannedPln = (float) app(\App\Services\SettlementPaymentHealthService::class)->plannedPlnForCost($cost);
         $paidPln = (float) app(\App\Services\SettlementPaymentHealthService::class)
             ->paidPlnForPlanCost($cost, $allCosts);
 
@@ -296,13 +279,42 @@ class EventHotelStaysFinancePanel extends Component
             default => 'gray',
         };
 
+        $plannedLabel = $plannedPln > 0
+            ? app(\App\Services\EventFinanceOverviewService::class)->plannedAmountLabel($cost, $plannedPln)
+            : '—';
+
         return $this->hotelGroupFinanceViewDataCache[$cacheKey] = [
-            'stayTotal' => collect($stayTotalParts)->filter(fn ($part) => $part !== '—')->unique()->implode(' + ') ?: '—',
-            'planned' => $plannedPln > 0 ? number_format($plannedPln, 2, ',', ' ').' zł' : '—',
+            'stayTotal' => $groupPlanTotal !== '0 PLN' ? $groupPlanTotal : '—',
+            'planned' => $plannedLabel,
             'paid' => $paidPln > 0 ? number_format($paidPln, 2, ',', ' ').' zł' : '—',
             'statusLabel' => $statusLabel,
             'statusColor' => $statusColor,
             'cost_id' => (int) $cost->id,
+        ];
+    }
+
+    /**
+     * @return array<string, mixed>
+     */
+    protected function stayToFormattingPayload(EventHotelStay $stay): array
+    {
+        $stay->loadMissing(['roomLines']);
+
+        return [
+            'pricing_mode' => $stay->pricing_mode ?? 'lines',
+            'flat_amount' => $stay->flat_amount,
+            'flat_currency_id' => $stay->flat_currency_id,
+            'flat_convert_to_pln' => $stay->flat_convert_to_pln,
+            'room_lines' => $stay->roomLines->map(static fn ($line): array => [
+                'hotel_room_id' => $line->hotel_room_id,
+                'label' => $line->label,
+                'quantity' => $line->quantity,
+                'people_count' => $line->people_count,
+                'unit_price' => $line->unit_price,
+                'price_basis' => $line->resolvedPriceBasis(),
+                'currency_id' => $line->currency_id,
+                'convert_to_pln' => $line->convert_to_pln,
+            ])->all(),
         ];
     }
 

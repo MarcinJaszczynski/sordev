@@ -109,6 +109,21 @@ class ContractorLookupService
     }
 
     /**
+     * Wspólny filtr livesearch — używany też przez ClientLookup / OrderingParty / faktury.
+     * Zachowuje tokeny AND, firstname/surname (np. pilot) i telefon znormalizowany.
+     */
+    public function constrainQuery(Builder $query, string $search): void
+    {
+        $search = trim($search);
+
+        if ($search === '') {
+            return;
+        }
+
+        $this->applySearchFilter($query, $search);
+    }
+
+    /**
      * Każdy token z frazy musi pasować do któregoś z pól kontrahenta (AND).
      * Dzięki temu „Michał Chruściel” trafia w name / firstname+surname,
      * a nie wymaga dokładnego LIKE na całej frazie w jednej kolumnie.

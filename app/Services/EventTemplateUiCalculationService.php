@@ -450,9 +450,9 @@ final class EventTemplateUiCalculationService
                     $currenciesTotals[$busCurrency] += $busTransportCost * $busMultiplier;
                 }
             }            // OBLICZ NARZUT - po dodaniu wszystkich kosztów (włącznie z transportem)
-            // MARKUP (PLN): licz tylko od sumy PLN (w tym przeliczeń), bez walut obcych
-            $markupAmount = $this->calculateMarkup($template, $plnTotal);
-            $markupCalculation = ['amount' => $markupAmount];
+            // MARKUP (PLN): max(% od sumy PLN, min. kwota/dzień × dni); bez walut obcych
+            $markupCalculation = $this->calculateMarkupDetails($template, $plnTotal);
+            $markupPercent = $markupCalculation['percent_applied'];
 
             // Oblicz podatki
             $taxes = $template->taxes ?? collect();
@@ -477,18 +477,12 @@ final class EventTemplateUiCalculationService
                 }
             }
 
-            // Dodaj narzut do obliczeń
-            $calculations[$qty]['markup'] = $markupCalculation;
-
-            // Dodaj podatki do obliczeń
-            // Dodaj informacje o narzucie (użyj preferowanego źródła procentu)
-            $markupPercent = $this->getMarkupPercent($template);
             $calculations[$qty]['markup'] = [
                 'amount' => $markupCalculation['amount'],
                 'percent_applied' => $markupPercent,
-                'discount_applied' => false, // uproszczona wersja - bez skomplikowanej logiki rabatów
+                'discount_applied' => false,
                 'discount_percent' => 0,
-                'min_daily_applied' => false,
+                'min_daily_applied' => $markupCalculation['min_daily_applied'],
             ];
 
             $calculations[$qty]['taxes'] = [
@@ -547,37 +541,52 @@ final class EventTemplateUiCalculationService
         return $calculations;
     }
 
-    private function getMarkupPercent(EventTemplate $template): float
+    private function resolveMarkup(EventTemplate $template): ?Markup
     {
-        // If relation loaded
-        if (isset($template->markup) && $template->markup?->percent !== null) {
-            return (float) $template->markup->percent;
+        if (isset($template->markup) && $template->markup instanceof Markup) {
+            return $template->markup;
         }
 
-        // If markup_id set, try to resolve
         if (! empty($template->markup_id)) {
             $m = Markup::find($template->markup_id);
-            if ($m && $m->percent !== null) {
-                return (float) $m->percent;
+            if ($m) {
+                return $m;
             }
         }
 
-        // Legacy field on template
+        return Markup::where('is_default', true)->first();
+    }
+
+    private function getMarkupPercent(EventTemplate $template): float
+    {
+        $markup = $this->resolveMarkup($template);
+        if ($markup?->percent !== null) {
+            return (float) $markup->percent;
+        }
+
         if (isset($template->markup_percent) && $template->markup_percent !== null && $template->markup_percent !== '') {
             return (float) $template->markup_percent;
         }
 
-        // Fallback to default markup record
-        $default = Markup::where('is_default', true)->first();
+        return 20.0;
+    }
 
-        return (float) ($default?->percent ?? 20);
+    /**
+     * @return array{amount: float, percent_applied: float, min_daily_applied: bool, min_daily_floor: float}
+     */
+    private function calculateMarkupDetails(EventTemplate $template, float $basePrice): array
+    {
+        $markup = $this->resolveMarkup($template);
+        $percent = $this->getMarkupPercent($template);
+        $days = max(1, (int) ($template->duration_days ?? 1));
+        $minDaily = (float) ($markup?->min_daily_amount_pln ?? 0);
+
+        return Markup::calculateAmount($basePrice, $percent, $minDaily, $days);
     }
 
     private function calculateMarkup(EventTemplate $template, $basePrice): float
     {
-        $markupPercent = $this->getMarkupPercent($template);
-
-        return $basePrice * ($markupPercent / 100);
+        return $this->calculateMarkupDetails($template, (float) $basePrice)['amount'];
     }
 
     public function calculatePointCost($qty, $groupSize, $unitPrice): float
